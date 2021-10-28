@@ -125,6 +125,9 @@ they can serve as a baseline to improve upon.
 | [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) | 0.21 | 1 GPU TITAN RTX |  32min                      | [here](https://huggingface.co/patrickvonplaten/wav2vec2-base-timit-fine-tuned)  | [run.sh](https://huggingface.co/patrickvonplaten/wav2vec2-base-timit-fine-tuned/blob/main/run.sh) |
 | [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [unispeech-large-1500h-cv](https://huggingface.co/microsoft/unispeech-large-1500h-cv) | 0.22 | 1 GPU TITAN RTX |  35min                      | [here](https://huggingface.co/patrickvonplaten/unispeech-large-1500h-cv-timit)  | [run.sh](https://huggingface.co/patrickvonplaten/unispeech-large-1500h-cv-timit/blob/main/run.sh) |
 | [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [asapp/sew-mid-100k](https://huggingface.co/asapp/sew-mid-100k) | 0.30 | 1 GPU TITAN RTX |  28min                      | [here](https://huggingface.co/patrickvonplaten/sew-small-100k-timit)  | [run.sh](https://huggingface.co/patrickvonplaten/sew-small-100k-timit/blob/main/run.sh) |
+| [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [ntu-spml/distilhubert](https://huggingface.co/ntu-spml/distilhubert) | 0.68 | 1 GPU TITAN RTX |  26min                      | [here](https://huggingface.co/patrickvonplaten/distilhubert-timit)  | [run.sh](https://huggingface.co/patrickvonplaten/distilhubert-timit/blob/main/run.sh) |
+
+
 
 - [Librispeech](https://huggingface.co/datasets/librispeech_asr)
 
