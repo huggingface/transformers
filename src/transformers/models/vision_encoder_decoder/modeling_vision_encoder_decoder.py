@@ -113,9 +113,9 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
-            Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            For training, :obj:`decoder_input_ids` are automatically created by the model by shifting the :obj:`labels`
+            to the right, replacing -100 by the :obj:`pad_token_id` and prepending them with the
+            :obj:`decoder_start_token_id`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -428,9 +428,15 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
             >>> # training
-            >>> pixel_values = processor(image, return_tensors="pt").pixel_values  # Batch size 1
-            >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
-            >>> outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+            >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+            >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
+            >>> model.config.vocab_size = model.config.decoder.vocab_size
+
+            >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+            >>> text = "hello world"
+            >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
+            >>> outputs = model(pixel_values=pixel_values, labels=labels)
+            >>> loss = outputs.loss
 
             >>> # inference (generation)
             >>> generated_ids = model.generate(pixel_values)
