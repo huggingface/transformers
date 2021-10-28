@@ -278,73 +278,77 @@ Supported models
 60. :doc:`RoFormer <model_doc/roformer>` (from ZhuiyiTechnology), released together with the paper a `RoFormer:
     Enhanced Transformer with Rotary Position Embedding <https://arxiv.org/pdf/2104.09864v1.pdf>`__ by Jianlin Su and
     Yu Lu and Shengfeng Pan and Bo Wen and Yunfeng Liu.
-61. :doc:`SEW <model_doc/sew>` (from ASAPP) released with the paper `Performance-Efficiency Trade-offs in Unsupervised
+61. `SegFormer <https://huggingface.co/transformers/master/model_doc/segformer.html>`__ (from NVIDIA) released with the
+    paper `SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers
+    <https://arxiv.org/abs/2105.15203>`__ by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping
+    Luo.
+62. :doc:`SEW <model_doc/sew>` (from ASAPP) released with the paper `Performance-Efficiency Trade-offs in Unsupervised
     Pre-training for Speech Recognition <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu
     Han, Kilian Q. Weinberger, Yoav Artzi.
-62. :doc:`SEW-D <model_doc/sew_d>` (from ASAPP) released with the paper `Performance-Efficiency Trade-offs in
+63. :doc:`SEW-D <model_doc/sew_d>` (from ASAPP) released with the paper `Performance-Efficiency Trade-offs in
     Unsupervised Pre-training for Speech Recognition <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim,
     Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav Artzi.
-63. :doc:`SpeechToTextTransformer <model_doc/speech_to_text>` (from Facebook), released together with the paper
+64. :doc:`SpeechToTextTransformer <model_doc/speech_to_text>` (from Facebook), released together with the paper
     `fairseq S2T: Fast Speech-to-Text Modeling with fairseq <https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun
     Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
-64. :doc:`SpeechToTextTransformer2 <model_doc/speech_to_text_2>` (from Facebook), released together with the paper
+65. :doc:`SpeechToTextTransformer2 <model_doc/speech_to_text_2>` (from Facebook), released together with the paper
     `Large-Scale Self- and Semi-Supervised Learning for Speech Translation <https://arxiv.org/abs/2104.06678>`__ by
     Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis Conneau.
-65. :doc:`Splinter <model_doc/splinter>` (from Tel Aviv University), released together with the paper `Few-Shot
+66. :doc:`Splinter <model_doc/splinter>` (from Tel Aviv University), released together with the paper `Few-Shot
     Question Answering by Pretraining Span Selection <https://arxiv.org/abs/2101.00438>`__ by Ori Ram, Yuval Kirstain,
     Jonathan Berant, Amir Globerson, Omer Levy.
-66. :doc:`SqueezeBert <model_doc/squeezebert>` (from Berkeley) released with the paper `SqueezeBERT: What can computer
+67. :doc:`SqueezeBert <model_doc/squeezebert>` (from Berkeley) released with the paper `SqueezeBERT: What can computer
     vision teach NLP about efficient neural networks? <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola,
     Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer.
-67. :doc:`T5 <model_doc/t5>` (from Google AI) released with the paper `Exploring the Limits of Transfer Learning with a
+68. :doc:`T5 <model_doc/t5>` (from Google AI) released with the paper `Exploring the Limits of Transfer Learning with a
     Unified Text-to-Text Transformer <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel and Noam Shazeer and Adam
     Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu.
-68. :doc:`T5v1.1 <model_doc/t5v1.1>` (from Google AI) released in the repository
+69. :doc:`T5v1.1 <model_doc/t5v1.1>` (from Google AI) released in the repository
     `google-research/text-to-text-transfer-transformer
     <https://github.com/google-research/text-to-text-transfer-transformer/blob/main/released_checkpoints.md#t511>`__ by
     Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi
     Zhou and Wei Li and Peter J. Liu.
-69. :doc:`TAPAS <model_doc/tapas>` (from Google AI) released with the paper `TAPAS: Weakly Supervised Table Parsing via
+70. :doc:`TAPAS <model_doc/tapas>` (from Google AI) released with the paper `TAPAS: Weakly Supervised Table Parsing via
     Pre-training <https://arxiv.org/abs/2004.02349>`__ by Jonathan Herzig, Paweł Krzysztof Nowak, Thomas Müller,
     Francesco Piccinno and Julian Martin Eisenschlos.
-70. :doc:`Transformer-XL <model_doc/transformerxl>` (from Google/CMU) released with the paper `Transformer-XL:
+71. :doc:`Transformer-XL <model_doc/transformerxl>` (from Google/CMU) released with the paper `Transformer-XL:
     Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`__ by Zihang Dai*,
     Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-71. `TrOCR <https://huggingface.co/transformers/master/model_doc/trocr.html>`__ (from Microsoft), released together
+72. `TrOCR <https://huggingface.co/transformers/master/model_doc/trocr.html>`__ (from Microsoft), released together
     with the paper `TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models
     <https://arxiv.org/abs/2109.10282>`__ by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
     Zhoujun Li, Furu Wei.
-72. `UniSpeech <https://huggingface.co/transformers/master/model_doc/unispeech.html>`__ (from Microsoft Research)
+73. `UniSpeech <https://huggingface.co/transformers/master/model_doc/unispeech.html>`__ (from Microsoft Research)
     released with the paper `UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data
     <https://arxiv.org/abs/2101.07597>`__ by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei,
     Michael Zeng, Xuedong Huang.
-73. `UniSpeechSat <https://huggingface.co/transformers/master/model_doc/unispeech_sat.html>`__ (from Microsoft
+74. `UniSpeechSat <https://huggingface.co/transformers/master/model_doc/unispeech_sat.html>`__ (from Microsoft
     Research) released with the paper `UNISPEECH-SAT: UNIVERSAL SPEECH REPRESENTATION LEARNING WITH SPEAKER AWARE
     PRE-TRAINING <https://arxiv.org/abs/2110.05752>`__ by Sanyuan Chen, Yu Wu, Chengyi Wang, Zhengyang Chen, Zhuo Chen,
     Shujie Liu, Jian Wu, Yao Qian, Furu Wei, Jinyu Li, Xiangzhan Yu.
-74. :doc:`Vision Transformer (ViT) <model_doc/vit>` (from Google AI) released with the paper `An Image is Worth 16x16
+75. :doc:`Vision Transformer (ViT) <model_doc/vit>` (from Google AI) released with the paper `An Image is Worth 16x16
     Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`__ by Alexey Dosovitskiy,
     Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias
     Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, Neil Houlsby.
-75. :doc:`VisualBERT <model_doc/visual_bert>` (from UCLA NLP) released with the paper `VisualBERT: A Simple and
+76. :doc:`VisualBERT <model_doc/visual_bert>` (from UCLA NLP) released with the paper `VisualBERT: A Simple and
     Performant Baseline for Vision and Language <https://arxiv.org/pdf/1908.03557>`__ by Liunian Harold Li, Mark
     Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.
-76. :doc:`Wav2Vec2 <model_doc/wav2vec2>` (from Facebook AI) released with the paper `wav2vec 2.0: A Framework for
+77. :doc:`Wav2Vec2 <model_doc/wav2vec2>` (from Facebook AI) released with the paper `wav2vec 2.0: A Framework for
     Self-Supervised Learning of Speech Representations <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry
     Zhou, Abdelrahman Mohamed, Michael Auli.
-77. :doc:`XLM <model_doc/xlm>` (from Facebook) released together with the paper `Cross-lingual Language Model
+78. :doc:`XLM <model_doc/xlm>` (from Facebook) released together with the paper `Cross-lingual Language Model
     Pretraining <https://arxiv.org/abs/1901.07291>`__ by Guillaume Lample and Alexis Conneau.
-78. :doc:`XLM-ProphetNet <model_doc/xlmprophetnet>` (from Microsoft Research) released with the paper `ProphetNet:
+79. :doc:`XLM-ProphetNet <model_doc/xlmprophetnet>` (from Microsoft Research) released with the paper `ProphetNet:
     Predicting Future N-gram for Sequence-to-Sequence Pre-training <https://arxiv.org/abs/2001.04063>`__ by Yu Yan,
     Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang and Ming Zhou.
-79. :doc:`XLM-RoBERTa <model_doc/xlmroberta>` (from Facebook AI), released together with the paper `Unsupervised
+80. :doc:`XLM-RoBERTa <model_doc/xlmroberta>` (from Facebook AI), released together with the paper `Unsupervised
     Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`__ by Alexis Conneau*, Kartikay
     Khandelwal*, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke
     Zettlemoyer and Veselin Stoyanov.
-80. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
+81. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
     Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-81. :doc:`XLSR-Wav2Vec2 <model_doc/xlsr_wav2vec2>` (from Facebook AI) released with the paper `Unsupervised
+82. :doc:`XLSR-Wav2Vec2 <model_doc/xlsr_wav2vec2>` (from Facebook AI) released with the paper `Unsupervised
     Cross-Lingual Representation Learning For Speech Recognition <https://arxiv.org/abs/2006.13979>`__ by Alexis
     Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
@@ -368,7 +372,7 @@ Flax), PyTorch, and/or TensorFlow.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            BART             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
-|            BeiT             |       ❌       |       ❌       |       ✅        |         ❌         |      ✅      |
+|            BEiT             |       ❌       |       ❌       |       ✅        |         ❌         |      ✅      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            BERT             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -469,6 +473,8 @@ Flax), PyTorch, and/or TensorFlow.
 |           RoBERTa           |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |          RoFormer           |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|          SegFormer          |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |             SEW             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -654,6 +660,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/retribert
     model_doc/roberta
     model_doc/roformer
+    model_doc/segformer
     model_doc/sew
     model_doc/sew_d
     model_doc/speechencoderdecoder
