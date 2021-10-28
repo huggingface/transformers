@@ -105,17 +105,17 @@ Supported models
 3. :doc:`BARThez <model_doc/barthez>` (from École polytechnique) released with the paper `BARThez: a Skilled Pretrained
    French Sequence-to-Sequence Model <https://arxiv.org/abs/2010.12321>`__ by Moussa Kamal Eddine, Antoine J.-P.
    Tixier, Michalis Vazirgiannis.
-4. `BARTpho <https://huggingface.co/transformers/master/model_doc/bartpho.html>`__ (from VinAI Research) released with
-   the paper `BARTpho: Pre-trained Sequence-to-Sequence Models for Vietnamese <https://arxiv.org/abs/2109.09701>`__ by
-   Nguyen Luong Tran, Duong Minh Le and Dat Quoc Nguyen.
+4. :doc:`BARTpho <model_doc/bartpho>` (from VinAI Research) released with the paper `BARTpho: Pre-trained
+   Sequence-to-Sequence Models for Vietnamese <https://arxiv.org/abs/2109.09701>`__ by Nguyen Luong Tran, Duong Minh Le
+   and Dat Quoc Nguyen.
 5. :doc:`BEiT <model_doc/beit>` (from Microsoft) released with the paper `BEiT: BERT Pre-Training of Image Transformers
    <https://arxiv.org/abs/2106.08254>`__ by Hangbo Bao, Li Dong, Furu Wei.
 6. :doc:`BERT <model_doc/bert>` (from Google) released with the paper `BERT: Pre-training of Deep Bidirectional
    Transformers for Language Understanding <https://arxiv.org/abs/1810.04805>`__ by Jacob Devlin, Ming-Wei Chang,
    Kenton Lee and Kristina Toutanova.
-7. `BERTweet <https://huggingface.co/transformers/master/model_doc/bertweet.html>`__ (from VinAI Research) released
-   with the paper `BERTweet: A pre-trained language model for English Tweets
-   <https://aclanthology.org/2020.emnlp-demos.2/>`__ by Dat Quoc Nguyen, Thanh Vu and Anh Tuan Nguyen.
+7. :doc:`BERTweet <model_doc/bertweet>` (from VinAI Research) released with the paper `BERTweet: A pre-trained language
+   model for English Tweets <https://aclanthology.org/2020.emnlp-demos.2/>`__ by Dat Quoc Nguyen, Thanh Vu and Anh Tuan
+   Nguyen.
 8. :doc:`BERT For Sequence Generation <model_doc/bertgeneration>` (from Google) released with the paper `Leveraging
    Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi
    Narayan, Aliaksei Severyn.
@@ -261,9 +261,9 @@ Supported models
 54. :doc:`Pegasus <model_doc/pegasus>` (from Google) released with the paper `PEGASUS: Pre-training with Extracted
     Gap-sentences for Abstractive Summarization <https://arxiv.org/abs/1912.08777>`__ by Jingqing Zhang, Yao Zhao,
     Mohammad Saleh and Peter J. Liu.
-55. `PhoBERT <https://huggingface.co/transformers/master/model_doc/phobert.html>`__ (from VinAI Research) released with
-    the paper `PhoBERT: Pre-trained language models for Vietnamese
-    <https://www.aclweb.org/anthology/2020.findings-emnlp.92/>`__ by Dat Quoc Nguyen and Anh Tuan Nguyen.
+55. :doc:`PhoBERT <model_doc/phobert>` (from VinAI Research) released with the paper `PhoBERT: Pre-trained language
+    models for Vietnamese <https://www.aclweb.org/anthology/2020.findings-emnlp.92/>`__ by Dat Quoc Nguyen and Anh Tuan
+    Nguyen.
 56. :doc:`ProphetNet <model_doc/prophetnet>` (from Microsoft Research) released with the paper `ProphetNet: Predicting
     Future N-gram for Sequence-to-Sequence Pre-training <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi,
     Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang and Ming Zhou.
@@ -278,10 +278,9 @@ Supported models
 60. :doc:`RoFormer <model_doc/roformer>` (from ZhuiyiTechnology), released together with the paper a `RoFormer:
     Enhanced Transformer with Rotary Position Embedding <https://arxiv.org/pdf/2104.09864v1.pdf>`__ by Jianlin Su and
     Yu Lu and Shengfeng Pan and Bo Wen and Yunfeng Liu.
-61. `SegFormer <https://huggingface.co/transformers/master/model_doc/segformer.html>`__ (from NVIDIA) released with the
-    paper `SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers
-    <https://arxiv.org/abs/2105.15203>`__ by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping
-    Luo.
+61. :doc:`SegFormer <model_doc/segformer>` (from NVIDIA) released with the paper `SegFormer: Simple and Efficient
+    Design for Semantic Segmentation with Transformers <https://arxiv.org/abs/2105.15203>`__ by Enze Xie, Wenhai Wang,
+    Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo.
 62. :doc:`SEW <model_doc/sew>` (from ASAPP) released with the paper `Performance-Efficiency Trade-offs in Unsupervised
     Pre-training for Speech Recognition <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu
     Han, Kilian Q. Weinberger, Yoav Artzi.
@@ -314,18 +313,16 @@ Supported models
 71. :doc:`Transformer-XL <model_doc/transformerxl>` (from Google/CMU) released with the paper `Transformer-XL:
     Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`__ by Zihang Dai*,
     Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-72. `TrOCR <https://huggingface.co/transformers/master/model_doc/trocr.html>`__ (from Microsoft), released together
-    with the paper `TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models
-    <https://arxiv.org/abs/2109.10282>`__ by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
-    Zhoujun Li, Furu Wei.
-73. `UniSpeech <https://huggingface.co/transformers/master/model_doc/unispeech.html>`__ (from Microsoft Research)
-    released with the paper `UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data
-    <https://arxiv.org/abs/2101.07597>`__ by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei,
-    Michael Zeng, Xuedong Huang.
-74. `UniSpeechSat <https://huggingface.co/transformers/master/model_doc/unispeech_sat.html>`__ (from Microsoft
-    Research) released with the paper `UNISPEECH-SAT: UNIVERSAL SPEECH REPRESENTATION LEARNING WITH SPEAKER AWARE
-    PRE-TRAINING <https://arxiv.org/abs/2110.05752>`__ by Sanyuan Chen, Yu Wu, Chengyi Wang, Zhengyang Chen, Zhuo Chen,
-    Shujie Liu, Jian Wu, Yao Qian, Furu Wei, Jinyu Li, Xiangzhan Yu.
+72. :doc:`TrOCR <model_doc/trocr>` (from Microsoft), released together with the paper `TrOCR: Transformer-based Optical
+    Character Recognition with Pre-trained Models <https://arxiv.org/abs/2109.10282>`__ by Minghao Li, Tengchao Lv, Lei
+    Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei.
+73. :doc:`UniSpeech <model_doc/unispeech>` (from Microsoft Research) released with the paper `UniSpeech: Unified Speech
+    Representation Learning with Labeled and Unlabeled Data <https://arxiv.org/abs/2101.07597>`__ by Chengyi Wang, Yu
+    Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei, Michael Zeng, Xuedong Huang.
+74. :doc:`UniSpeechSat <model_doc/unispeech_sat>` (from Microsoft Research) released with the paper `UNISPEECH-SAT:
+    UNIVERSAL SPEECH REPRESENTATION LEARNING WITH SPEAKER AWARE PRE-TRAINING <https://arxiv.org/abs/2110.05752>`__ by
+    Sanyuan Chen, Yu Wu, Chengyi Wang, Zhengyang Chen, Zhuo Chen, Shujie Liu, Jian Wu, Yao Qian, Furu Wei, Jinyu Li,
+    Xiangzhan Yu.
 75. :doc:`Vision Transformer (ViT) <model_doc/vit>` (from Google AI) released with the paper `An Image is Worth 16x16
     Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`__ by Alexey Dosovitskiy,
     Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias
