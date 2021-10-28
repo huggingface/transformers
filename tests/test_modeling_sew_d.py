@@ -540,9 +540,9 @@ class SEWDModelIntegrationTest(unittest.TestCase):
         )
         expected_output_sum = 54201.0469
 
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
-        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 5)
+        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=1e-3))
+        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 1)
 
     def test_inference_ctc_batched(self):
         model = SEWDForCTC.from_pretrained("asapp/sew-d-tiny-100k-ft-ls100h").to(torch_device)
