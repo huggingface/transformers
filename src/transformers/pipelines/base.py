@@ -708,7 +708,7 @@ if is_torch_available():
                     The function to apply of each element of :obj:`loader`.
                 params (:obj:`dict`):
                     The parameters passed to :obj:`infer` along with every item
-                loader_batch_size (:obj:`int`, :obj:`optional`):
+                loader_batch_size (:obj:`int`, `optional`):
                     If specified, the items of :obj:`loader` are supposed to come as batch, and are loader_batched here
                     making it roughly behave as
 
