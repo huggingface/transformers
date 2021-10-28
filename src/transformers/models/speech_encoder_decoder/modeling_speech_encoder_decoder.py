@@ -103,9 +103,9 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
-            For training, :obj:`decoder_input_ids` should be provided. However, if no :obj:`decoder_input_ids` are
-            provided, they are automatically created by the model by shifting the :obj:`labels` to the right, replacing
-            -100 by the :obj:`pad_token_id` and prepending them with the :obj:`decoder_start_token_id`.
+            For training, :obj:`decoder_input_ids` are automatically created by the model by shifting the :obj:`labels`
+            to the right, replacing -100 by the :obj:`pad_token_id` and prepending them with the
+            :obj:`decoder_start_token_id`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
