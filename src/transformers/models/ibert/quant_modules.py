@@ -409,7 +409,7 @@ class IntSoftmax(nn.Module):
 
     def forward(self, x, scaling_factor):
         if not self.quant_mode:
-            return torch.nn.functional.softmax(x, dim=-1), None
+            return nn.functional.softmax(x, dim=-1), None
 
         x_int = x / scaling_factor
 
