@@ -107,7 +107,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
     if tokenizer is not None:
         if tokenizer.pad_token_id is None:
             raise ValueError(
-                "Pipeline with tokenizer without pad_token cannot do batching. You can try to set it with `pipe.tokenizer.pad_token_id = model.config.eos_token_id`."
+                "Pipeline with tokenizer without pad_token cannot do batching. You can try to set it with "
+                "`pipe.tokenizer.pad_token_id = model.config.eos_token_id`."
             )
         else:
             padding_value = tokenizer.pad_token_id
