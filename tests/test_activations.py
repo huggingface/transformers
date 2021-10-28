@@ -21,7 +21,7 @@ from transformers.testing_utils import require_torch
 if is_torch_available():
     import torch
 
-    from transformers.activations import _gelu_python, gelu_new, get_activation
+    from transformers.activations import gelu_new, gelu_python, get_activation
 
 
 @require_torch
@@ -29,8 +29,8 @@ class TestActivations(unittest.TestCase):
     def test_gelu_versions(self):
         x = torch.tensor([-100, -1, -0.1, 0, 0.1, 1.0, 100])
         torch_builtin = get_activation("gelu")
-        self.assertTrue(torch.allclose(_gelu_python(x), torch_builtin(x)))
-        self.assertFalse(torch.allclose(_gelu_python(x), gelu_new(x)))
+        self.assertTrue(torch.allclose(gelu_python(x), torch_builtin(x)))
+        self.assertFalse(torch.allclose(gelu_python(x), gelu_new(x)))
 
     def test_get_activation(self):
         get_activation("swish")
@@ -39,6 +39,7 @@ class TestActivations(unittest.TestCase):
         get_activation("tanh")
         get_activation("gelu_new")
         get_activation("gelu_fast")
+        get_activation("gelu_python")
         with self.assertRaises(KeyError):
             get_activation("bogus")
         with self.assertRaises(KeyError):
