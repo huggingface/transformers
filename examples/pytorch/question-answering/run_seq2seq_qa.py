@@ -556,18 +556,6 @@ def main():
         pad_to_multiple_of=8 if training_args.fp16 else None,
     )
 
-    # Post-processing:
-    def postprocess_text(preds, labels):
-        preds = [" ".join(pred) for pred in preds]
-        preds = [pred.strip() for pred in preds]
-        labels = [label.strip() for label in labels]
-
-        # rougeLSum expects newline after each sentence
-        preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in preds]
-        labels = ["\n".join(nltk.sent_tokenize(label)) for label in labels]
-
-        return preds, labels
-
     metric = load_metric("squad_v2" if data_args.version_2_with_negative else "squad")
 
     def compute_metrics(p: EvalPrediction):
