@@ -149,7 +149,7 @@ _deps = [
     "timeout-decorator",
     "timm",
     "tokenizers>=0.10.1,<0.11",
-    "torch>=1.0,<1.10",
+    "torch>=1.0",
     "torchaudio",
     "tqdm>=4.27",
     "unidic>=1.0.2",
