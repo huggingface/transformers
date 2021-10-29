@@ -42,8 +42,6 @@ class OpenAIGPTConfig(PretrainedConfig):
         n_positions (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_ctx (:obj:`int`, `optional`, defaults to 512):
-            Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         n_layer (:obj:`int`, `optional`, defaults to 12):
@@ -126,7 +124,6 @@ class OpenAIGPTConfig(PretrainedConfig):
         self,
         vocab_size=40478,
         n_positions=512,
-        n_ctx=512,
         n_embd=768,
         n_layer=12,
         n_head=12,
@@ -145,7 +142,6 @@ class OpenAIGPTConfig(PretrainedConfig):
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
