@@ -242,9 +242,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             - **end** (`int`) -- The character end index of the answer (in the tokenized version of the input).
             - **answer** (`str`) -- The answer to the question.
         """
-        if kwargs.get("batch_size", 1) > 1:
-            logger.error("Batch_size > 1 is not supported for question answering pipeline, setting it to 1.")
-            kwargs["batch_size"] = 1
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
@@ -346,7 +343,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         for i, feature in enumerate(features):
             fw_args = {}
             others = {}
-            model_input_names = self.tokenizer.model_input_names
+            model_input_names = self.tokenizer.model_input_names + ["p_mask"]
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
@@ -364,20 +361,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                     others[k] = v
 
             is_last = i == len(features) - 1
-            yield {"fw_args": fw_args, "others": others, "example": example, "is_last": is_last}
+            yield {"example": example, "is_last": is_last, **fw_args, **others}
 
     def _forward(self, model_inputs):
         example = model_inputs["example"]
-        fw_args = model_inputs["fw_args"]
-        start, end = self.model(**fw_args)[:2]
-        return {
-            "start": start,
-            "end": end,
-            "features": model_inputs["others"],
-            "example": example,
-            "fw_args": fw_args,
-            "is_last": model_inputs["is_last"],
-        }
+        start, end = self.model(input_ids=model_inputs["input_ids"], attention_mask=model_inputs["attention_mask"])[:2]
+        return {"start": start, "end": end, "example": example, **model_inputs}
 
     def postprocess(
         self,
@@ -389,16 +378,15 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
-            feature = output["features"]
             start_ = output["start"]
             end_ = output["end"]
             example = output["example"]
 
             # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
-            undesired_tokens = np.abs(np.array(feature["p_mask"]) - 1)
+            undesired_tokens = np.abs(np.array(output["p_mask"]) - 1)
 
-            if output["fw_args"].get("attention_mask", None) is not None:
-                undesired_tokens = undesired_tokens & output["fw_args"]["attention_mask"].numpy()
+            if output.get("attention_mask", None) is not None:
+                undesired_tokens = undesired_tokens & output["attention_mask"].numpy()
 
             # Generate mask
             undesired_tokens_mask = undesired_tokens == 0.0
@@ -427,7 +415,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
                 for s, e, score in zip(starts, ends, scores):
-                    token_to_orig_map = feature["token_to_orig_map"]
+                    token_to_orig_map = output["token_to_orig_map"]
                     answers.append(
                         {
                             "score": score.item(),
@@ -443,7 +431,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
                 question_first = bool(self.tokenizer.padding_side == "right")
-                enc = feature["encoding"]
+                enc = output["encoding"]
 
                 # Sometimes the max probability token is in the middle of a word so:
                 # - we start by finding the right word containing the token with `token_to_word`

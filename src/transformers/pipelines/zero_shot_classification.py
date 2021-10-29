@@ -84,6 +84,12 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
         return_tensors = self.framework
+        if self.tokenizer.pad_token is None:
+            # Override for tokenizers not supporting padding
+            logger.warning(
+                "Tokenizer was no supporting padding necessary for zero-shot, attempting to use  `pad_token=eos_token`"
+            )
+            self.tokenizer.pad_token = self.tokenizer.eos_token
         try:
             inputs = self.tokenizer(
                 sequence_pairs,
@@ -166,10 +172,6 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
             - **labels** (`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (`List[float]`) -- The probabilities for each of the labels.
         """
-        if kwargs.get("batch_size", 1) > 1:
-            logger.error("Batch size > 1 is not supported for zero-shot pipeline, setting batch_size=1.")
-            kwargs["batch_size"] = 1
-
         if len(args) == 0:
             pass
         elif len(args) == 1 and "candidate_labels" not in kwargs:
@@ -188,28 +190,30 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
             yield {
                 "candidate_label": candidate_label,
                 "sequence": sequences[0],
-                "inputs": model_input,
                 "is_last": i == len(candidate_labels) - 1,
+                **model_input,
             }
 
     def _forward(self, inputs):
         candidate_label = inputs["candidate_label"]
         sequence = inputs["sequence"]
-        model_inputs = inputs["inputs"]
+        model_inputs = {"input_ids": inputs["input_ids"], "attention_mask": inputs["attention_mask"]}
+        if "token_type_ids" in inputs:
+            model_inputs["token_type_ids"] = inputs["token_type_ids"]
         outputs = self.model(**model_inputs)
 
         model_outputs = {
             "candidate_label": candidate_label,
             "sequence": sequence,
-            "outputs": outputs,
             "is_last": inputs["is_last"],
+            **outputs,
         }
         return model_outputs
 
     def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         sequences = [outputs["sequence"] for outputs in model_outputs]
-        logits = np.concatenate([output["outputs"]["logits"].numpy() for output in model_outputs])
+        logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n

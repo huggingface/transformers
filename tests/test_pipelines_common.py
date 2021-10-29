@@ -571,3 +571,16 @@ class PipelineUtilsTest(unittest.TestCase):
                 ],
             ],
         )
+
+    def test_pipeline_pack_unbatch_iterator(self):
+        from transformers.pipelines.pt_utils import PipelinePackIterator
+
+        dummy_dataset = [{"id": [0, 1, 2], "is_last": [False, True, False]}, {"id": [3], "is_last": [True]}]
+
+        def add(number, extra=0):
+            return {"id": [i + extra for i in number["id"]], "is_last": number["is_last"]}
+
+        dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [[{"id": 2}, {"id": 3}], [{"id": 4}, {"id": 5}]])
