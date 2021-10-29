@@ -471,7 +471,7 @@ class GPT2ModelTester:
         self.parent.assertTrue(
             torch.allclose(
                 output[:, random_token_id + 1 :, :],
-                output_that_token[:, : random_token_id + 1 :, :],
+                output_that_token[:, random_token_id + 1 :, :],
             )
         )
 
@@ -496,7 +496,7 @@ class GPT2ModelTester:
         self.parent.assertFalse(
             torch.allclose(
                 output[:, new_token_id + 1 :, :],
-                output_other_token[:, : new_token_id + 1 :, :],
+                output_other_token[:, new_token_id + 1 :, :],
             )
         )
 
