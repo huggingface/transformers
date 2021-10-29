@@ -436,7 +436,7 @@ class GPT2ModelTester:
         )
 
         # first forward pass
-        model(input_ids, attention_block_mask=attention_block_mask).to_tuple()
+        model(input_ids, attention_block_mask=attention_block_mask)
 
         # create full attention masking except for one token who can only attend to itself
         attention_block_mask = torch.ones(
@@ -445,7 +445,7 @@ class GPT2ModelTester:
         random_token_id = global_rng.randint(0, sequence_length - 1)
         attention_block_mask[:, :, :, random_token_id] = False
 
-        output, past = model(input_ids, attention_block_mask=attention_block_mask).to_tuple()
+        output, past = model(input_ids, attention_block_mask=attention_block_mask)
 
         def randint(a, b, blacklist):
             while True:

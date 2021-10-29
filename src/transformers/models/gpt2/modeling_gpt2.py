@@ -543,7 +543,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
                 # build new attention_block_mask by adding autoregressive parts at the end.
                 new_attention_block_mask = torch.tril(
                     torch.ones(
-                        attention_block_mask,
+                        attn_block_mask_bs,
                         attn_block_mask_nh,
                         sequence_length,
                         sequence_length,
