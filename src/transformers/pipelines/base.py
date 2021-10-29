@@ -25,6 +25,7 @@ from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -59,10 +60,78 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def collate_fn(items):
+def no_collate_fn(items):
     if len(items) != 1:
         raise ValueError("This collate_fn is meant to be used with batch_size=1")
     return items[0]
+
+
+def _pad(items, key, padding_value, padding_side):
+    batch_size = len(items)
+    if isinstance(items[0][key], torch.Tensor):
+        # Others include `attention_mask` etc...
+        shape = items[0][key].shape
+        dim = len(shape)
+        if dim == 4:
+            # This is probable image so padding shouldn't be necessary
+            # B, C, H, W
+            return torch.cat([item[key] for item in items], dim=0)
+        max_length = max(item[key].shape[1] for item in items)
+        dtype = items[0][key].dtype
+
+        if dim == 2:
+            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+        elif dim == 3:
+            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
+
+        for i, item in enumerate(items):
+            if dim == 2:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0])] = item[key][0].clone()
+            elif dim == 3:
+                if padding_side == "left":
+                    tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
+                else:
+                    tensor[i, : len(item[key][0]), :] = item[key][0].clone()
+        return tensor
+    else:
+        return [item[key] for item in items]
+
+
+def pad_collate_fn(tokenizer, feature_extractor):
+    padding_side = "right"
+    if tokenizer is None and feature_extractor is None:
+        raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")
+    if tokenizer is not None:
+        if tokenizer.pad_token_id is None:
+            raise ValueError(
+                "Pipeline with tokenizer without pad_token cannot do batching. You can try to set it with "
+                "`pipe.tokenizer.pad_token_id = model.config.eos_token_id`."
+            )
+        else:
+            padding_value = tokenizer.pad_token_id
+            padding_side = tokenizer.padding_side
+    if feature_extractor is not None:
+        # Feature extractor can be images, where no padding is expected
+        padding_value = getattr(feature_extractor, "padding_value", None)
+        padding_side = getattr(feature_extractor, "padding_side", None)
+
+    def inner(items):
+        keys = set(items[0].keys())
+        for item in items:
+            if set(item.keys()) != keys:
+                raise ValueError(
+                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
+                )
+        # input_values, input_pixels, input_ids, ...
+        padded = {
+            key: _pad(items, key, padding_value if key.startswith("input_") else 0, padding_side) for key in keys
+        }
+        return padded
+
+    return inner
 
 
 def infer_framework_load_model(
@@ -591,6 +660,13 @@ PIPELINE_INIT_ARGS = r"""
             is provided.
         task (:obj:`str`, defaults to :obj:`""`):
             A task-identifier for the pipeline.
+        num_workers (:obj:`int`, `optional`, defaults to 8):
+            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the number of
+            workers to be used.
+        batch_size (:obj:`int`, `optional`, defaults to 1):
+            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the size of
+            the batch to use, for inference this is not always beneficial, please read `Batching with pipelines
+            <https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching>`_ .
         args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (:obj:`int`, `optional`, defaults to -1):
@@ -617,10 +693,44 @@ if is_torch_available():
             return processed
 
     class PipelineIterator(IterableDataset):
-        def __init__(self, loader, infer, params):
+        def __init__(self, loader, infer, params, loader_batch_size=None):
+            """
+            Roughly equivalent to
+
+            .. code-block::
+                for item in loader:
+                    yield infer(item, **params)
+
+            Arguments:
+                loader (:obj:`torch.utils.data.DataLoader` or any iterator):
+                    The iterator that will be used to apply :obj:`infer` on.
+                infer (any function):
+                    The function to apply of each element of :obj:`loader`.
+                params (:obj:`dict`):
+                    The parameters passed to :obj:`infer` along with every item
+                loader_batch_size (:obj:`int`, `optional`):
+                    If specified, the items of :obj:`loader` are supposed to come as batch, and are loader_batched here
+                    making it roughly behave as
+
+
+                    .. code-block::
+
+                        for items in loader:
+                            for i in loader_batch_size:
+                                item = items[i]
+                                yield infer(item, **params)
+            """
             self.loader = loader
             self.infer = infer
             self.params = params
+            if loader_batch_size == 1:
+                # Let's spare some time by deactivating altogether
+                loader_batch_size = None
+            self.loader_batch_size = loader_batch_size
+
+            # Internal bookkeeping
+            self._loader_batch_index = None
+            self._loader_batch_data = None
 
         def __len__(self):
             return len(self.loader)
@@ -629,10 +739,49 @@ if is_torch_available():
             self.iterator = iter(self.loader)
             return self
 
+        def loader_batch_item(self):
+            if isinstance(self._loader_batch_data, torch.Tensor):
+                result = self._loader_batch_data[self._loader_batch_index]
+            else:
+                loader_batched = {}
+                for k, element in self._loader_batch_data.items():
+                    if k == "past_key_values":
+                        continue
+                    if isinstance(element[self._loader_batch_index], torch.Tensor):
+                        loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
+                    elif isinstance(element[self._loader_batch_index], np.ndarray):
+                        loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
+                    else:
+                        loader_batched[k] = element[self._loader_batch_index]
+                result = self._loader_batch_data.__class__(loader_batched)
+            self._loader_batch_index += 1
+            return result
+
         def __next__(self):
+            if self._loader_batch_index is not None and self._loader_batch_index < self.loader_batch_size:
+                return self.loader_batch_item()
+
             item = next(self.iterator)
             processed = self.infer(item, **self.params)
-            return processed
+            if self.loader_batch_size is not None:
+                if isinstance(processed, torch.Tensor):
+                    first_tensor = processed
+                else:
+                    key = list(processed.keys())[0]
+                    first_tensor = processed[key]
+                if isinstance(first_tensor, list):
+                    observed_batch_size = len(first_tensor)
+                else:
+                    observed_batch_size = first_tensor.shape[0]
+                if 0 < observed_batch_size < self.loader_batch_size:
+                    # Could be last batch so we can't unroll as many
+                    # elements.
+                    self.loader_batch_size = observed_batch_size
+                self._loader_batch_data = processed
+                self._loader_batch_index = 0
+                return self.loader_batch_item()
+            else:
+                return processed
 
     class KeyDataset(Dataset):
         def __init__(self, dataset: Dataset, key: str):
@@ -881,17 +1030,20 @@ class Pipeline(_ScikitCompat):
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs
 
-    def get_iterator(self, inputs, num_workers: int, preprocess_params, forward_params, postprocess_params):
+    def get_iterator(
+        self, inputs, num_workers: int, batch_size: int, preprocess_params, forward_params, postprocess_params
+    ):
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
-        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=1, collate_fn=collate_fn)
-        model_iterator = PipelineIterator(dataloader, self.forward, forward_params)
+        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
+        dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
+        model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
-    def __call__(self, inputs, *args, num_workers=8, **kwargs):
+    def __call__(self, inputs, *args, num_workers=0, batch_size=1, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
@@ -910,14 +1062,16 @@ class Pipeline(_ScikitCompat):
         if isinstance(inputs, list):
             if self.framework == "pt":
                 final_iterator = self.get_iterator(
-                    inputs, num_workers, preprocess_params, forward_params, postprocess_params
+                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
                 )
                 outputs = [output for output in final_iterator]
                 return outputs
             else:
                 return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
         elif Dataset is not None and isinstance(inputs, Dataset):
-            return self.get_iterator(inputs, num_workers, preprocess_params, forward_params, postprocess_params)
+            return self.get_iterator(
+                inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+            )
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
