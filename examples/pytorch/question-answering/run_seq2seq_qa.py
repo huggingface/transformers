@@ -30,6 +30,7 @@ import numpy as np
 from datasets import load_dataset, load_metric
 
 import transformers
+from trainer_seq2seq_qa import QuestionAnsweringSeq2SeqTrainer
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -40,7 +41,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import EvalPrediction, get_last_checkpoint
+from transformers.trainer_utils import EvalLoopOutput, EvalPrediction, get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -422,7 +423,7 @@ def main():
         answers = examples[answer_column]
 
         def generate_input(_question, _context):
-            return " ".join(["question:", _question, "context:", _context])
+            return " ".join(["question:", _question.lstrip(), "context:", _context.lstrip()])
 
         inputs = [generate_input(question, context) for question, context in zip(questions, contexts)]
         targets = [answer["text"][0] if len(answer["text"]) > 0 else "" for answer in answers]
@@ -435,6 +436,45 @@ def main():
         # Setup the tokenizer for targets
         with tokenizer.as_target_tokenizer():
             labels = tokenizer(targets, max_length=max_answer_length, padding=padding, truncation=True)
+
+        # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
+        # padding in the loss.
+        if padding == "max_length" and data_args.ignore_pad_token_for_loss:
+            labels["input_ids"] = [
+                [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
+            ]
+
+        model_inputs["labels"] = labels["input_ids"]
+        return model_inputs
+
+    # Validation preprocessing
+    def preprocess_validation_function(examples):
+        inputs, targets = preprocess_sqaud_batch(examples, question_column, context_column, answer_column)
+
+        model_inputs = tokenizer(
+            inputs,
+            max_length=max_seq_length,
+            padding=padding,
+            truncation=True,
+            return_overflowing_tokens=True,
+            return_offsets_mapping=True,
+        )
+        # Setup the tokenizer for targets
+        with tokenizer.as_target_tokenizer():
+            labels = tokenizer(targets, max_length=max_answer_length, padding=padding, truncation=True)
+
+        # Since one example might give us several features if it has a long context, we need a map from a feature to
+        # its corresponding example. This key gives us just that.
+        sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
+
+        # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
+        # corresponding example_id and we will store the offset mappings.
+        model_inputs["example_id"] = []
+
+        for i in range(len(model_inputs["input_ids"])):
+            # One example can give several spans, this is the index of the example containing this span of text.
+            sample_index = sample_mapping[i]
+            model_inputs["example_id"].append(examples["id"][sample_index])
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
@@ -477,7 +517,7 @@ def main():
         # Validation Feature Creation
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_examples.map(
-                preprocess_function,
+                preprocess_validation_function,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
                 remove_columns=column_names,
@@ -498,7 +538,7 @@ def main():
         # Predict Feature Creation
         with training_args.main_process_first(desc="prediction dataset map pre-processing"):
             predict_dataset = predict_examples.map(
-                preprocess_function,
+                preprocess_validation_function,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
                 remove_columns=column_names,
@@ -530,38 +570,50 @@ def main():
 
         return preds, labels
 
-    metric = load_metric("rouge")
+    metric = load_metric("squad_v2" if data_args.version_2_with_negative else "squad")
 
-    def compute_metrics(eval_preds: EvalPrediction):
-        preds, labels = eval_preds
+    def compute_metrics(p: EvalPrediction):
+        return metric.compute(predictions=p.predictions, references=p.label_ids)
+
+    # Post-processing:
+    def post_processing_function(
+        examples: datasets.Dataset, features: datasets.Dataset, outputs: EvalLoopOutput, stage="eval"
+    ):
+        preds, labels = outputs.predictions, outputs.label_ids
         if isinstance(preds, tuple):
             preds = preds[0]
-        decoded_preds = [tokenizer.batch_decode(pred, skip_special_tokens=True) for pred in preds]
+        decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
         if data_args.ignore_pad_token_for_loss:
             # Replace -100 in the labels as we can't decode them.
             labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-        # Some simple post-processing
-        decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-        result = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
-        # Extract a few results from ROUGE
-        result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
+        predictions = {}
+        for idx, example in enumerate(examples):
+            predictions[example["id"]] = decoded_preds[idx]
 
-        prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
-        result["gen_len"] = np.mean(prediction_lens)
-        result = {k: round(v, 4) for k, v in result.items()}
-        return result
+        # Format the result to the format the metric expects.
+        if data_args.version_2_with_negative:
+            formatted_predictions = [
+                {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
+            ]
+        else:
+            formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
+
+        references = [{"id": ex["id"], "answers": ex[answer_column]} for ex in examples]
+        return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
     # Initialize our Trainer
-    trainer = Seq2SeqTrainer(
+    trainer = QuestionAnsweringSeq2SeqTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
+        eval_examples=eval_examples if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
+        post_process_function=post_processing_function,
     )
 
     # Training
