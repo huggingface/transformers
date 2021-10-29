@@ -227,7 +227,9 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, lm_attention_mask=None, head_mask=None):
+    def _upcast_and_reordered_attn(
+        self, query, key, value, attention_mask=None, lm_attention_mask=None, head_mask=None
+    ):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
         bsz, num_heads, q_seq_len, dk = query.size()
         _, _, k_seq_len, _ = key.size()
@@ -259,7 +261,7 @@ class GPT2Attention(nn.Module):
             if lm_attention_mask is None:
                 # default to causal masking
                 query_length, key_length = query.size(-2), key.size(-2)
-                lm_attention_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].bool()
+                lm_attention_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
             else:
                 lm_attention_mask = lm_attention_mask.bool()
             attn_weights = torch.where(lm_attention_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
@@ -340,7 +342,9 @@ class GPT2Attention(nn.Module):
             present = None
 
         if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, lm_attention_mask, head_mask)
+            attn_output, attn_weights = self._upcast_and_reordered_attn(
+                query, key, value, attention_mask, lm_attention_mask, head_mask
+            )
         else:
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, lm_attention_mask, head_mask)
 
@@ -522,13 +526,29 @@ class GPT2PreTrainedModel(PreTrainedModel):
         else:
             # either the first time we run this method, or users has set use_cache = False
             _, sequence_length = input_ids.shape
-            lm_attn_mask_bs, lm_attn_mask_nh, lm_attn_mask_queries_length, lm_attn_mask_keys_length = lm_attention_mask.shape
+            (
+                lm_attn_mask_bs,
+                lm_attn_mask_nh,
+                lm_attn_mask_queries_length,
+                lm_attn_mask_keys_length,
+            ) = lm_attention_mask.shape
             assert lm_attn_mask_queries_length == lm_attn_mask_keys_length
             assert lm_attn_mask_keys_length <= sequence_length
             if lm_attn_mask_keys_length < sequence_length:
                 # build new lm_attention_mask by adding autoregressive parts at the end.
-                new_lm_attention_mask = torch.tril(torch.ones(lm_attention_mask, lm_attn_mask_nh, sequence_length, sequence_length, dtype=lm_attention_mask.dtype, device=lm_attention_mask.device))
-                new_lm_attention_mask[:,:,:lm_attn_mask_queries_length, :lm_attn_mask_keys_length] = lm_attention_mask
+                new_lm_attention_mask = torch.tril(
+                    torch.ones(
+                        lm_attention_mask,
+                        lm_attn_mask_nh,
+                        sequence_length,
+                        sequence_length,
+                        dtype=lm_attention_mask.dtype,
+                        device=lm_attention_mask.device,
+                    )
+                )
+                new_lm_attention_mask[
+                    :, :, :lm_attn_mask_queries_length, :lm_attn_mask_keys_length
+                ] = lm_attention_mask
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
@@ -550,6 +570,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
             "lm_attention_mask": lm_attention_mask,
             "token_type_ids": token_type_ids,
         }
+
 
 @dataclass
 class GPT2DoubleHeadsModelOutput(ModelOutput):
