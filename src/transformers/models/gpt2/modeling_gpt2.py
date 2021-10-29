@@ -206,7 +206,6 @@ class GPT2Attention(nn.Module):
                 query_length, key_length = query.size(-2), key.size(-2)
                 lm_attention_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
             else:
-                assert head_mask is None, "Using both head_mask and lm_attention_mask can lead to ambiguity. Please on or the other"
                 lm_attention_mask = lm_attention_mask.bool()
             attn_weights = torch.where(lm_attention_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
@@ -262,7 +261,6 @@ class GPT2Attention(nn.Module):
                 query_length, key_length = query.size(-2), key.size(-2)
                 lm_attention_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].bool()
             else:
-                assert head_mask is None, "Using both head_mask and lm_attention_mask can lead to ambiguity. Please on or the other"
                 lm_attention_mask = lm_attention_mask.bool()
             attn_weights = torch.where(lm_attention_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
