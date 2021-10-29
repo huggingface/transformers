@@ -523,7 +523,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
             # autoregressively decode tokens
             lm_attention_mask = None
-        elid lm_attention_mask is not None:
+        elif lm_attention_mask is not None:
             # either the first time we run this method, or users has set use_cache = False
             _, sequence_length = input_ids.shape
             (
