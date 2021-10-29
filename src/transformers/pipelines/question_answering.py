@@ -343,7 +343,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                     )
                 )
 
-        for feature in features:
+        for i, feature in enumerate(features):
             fw_args = {}
             others = {}
             model_input_names = self.tokenizer.model_input_names
@@ -363,13 +363,21 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 else:
                     others[k] = v
 
-            yield {"fw_args": fw_args, "others": others, "example": example}
+            is_last = i == len(features) - 1
+            yield {"fw_args": fw_args, "others": others, "example": example, "is_last": is_last}
 
     def _forward(self, model_inputs):
         example = model_inputs["example"]
         fw_args = model_inputs["fw_args"]
         start, end = self.model(**fw_args)[:2]
-        return {"start": start, "end": end, "features": model_inputs["others"], "example": example, "fw_args": fw_args}
+        return {
+            "start": start,
+            "end": end,
+            "features": model_inputs["others"],
+            "example": example,
+            "fw_args": fw_args,
+            "is_last": model_inputs["is_last"],
+        }
 
     def postprocess(
         self,
@@ -380,9 +388,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     ):
         min_null_score = 1000000  # large and positive
         answers = []
-        import ipdb
-
-        ipdb.set_trace()
         for output in model_outputs:
             feature = output["features"]
             start_ = output["start"]

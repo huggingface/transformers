@@ -182,13 +182,14 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
         sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
 
-        for candidate_label, sequence_pair in zip(candidate_labels, sequence_pairs):
+        for i, (candidate_label, sequence_pair) in enumerate(zip(candidate_labels, sequence_pairs)):
             model_input = self._parse_and_tokenize(sequence_pair)
 
             yield {
                 "candidate_label": candidate_label,
                 "sequence": sequences[0],
                 "inputs": model_input,
+                "is_last": i == len(candidate_labels) - 1,
             }
 
     def _forward(self, inputs):
@@ -197,13 +198,15 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         model_inputs = inputs["inputs"]
         outputs = self.model(**model_inputs)
 
-        model_outputs = {"candidate_label": candidate_label, "sequence": sequence, "outputs": outputs}
+        model_outputs = {
+            "candidate_label": candidate_label,
+            "sequence": sequence,
+            "outputs": outputs,
+            "is_last": inputs["is_last"],
+        }
         return model_outputs
 
     def postprocess(self, model_outputs, multi_label=False):
-        import ipdb
-
-        ipdb.set_trace()
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         sequences = [outputs["sequence"] for outputs in model_outputs]
         logits = np.concatenate([output["outputs"]["logits"].numpy() for output in model_outputs])
