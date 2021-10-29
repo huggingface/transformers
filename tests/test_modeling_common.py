@@ -113,7 +113,6 @@ class ModelTesterMixin:
     test_missing_keys = True
     test_model_parallel = False
     is_encoder_decoder = False
-    test_sequence_classification_problem_types = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -387,12 +386,13 @@ class ModelTesterMixin:
         if not self.model_tester.is_training:
             return
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
             if model_class in get_values(MODEL_MAPPING):
                 continue
+
             model = model_class(config)
             model.to(torch_device)
             model.train()
@@ -401,14 +401,14 @@ class ModelTesterMixin:
             loss.backward()
 
     def test_training_gradient_checkpointing(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
             return
 
-        config.use_cache = False
-        config.return_dict = True
-
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+
             if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
                 continue
             model = model_class(config)
@@ -1842,9 +1842,6 @@ class ModelTesterMixin:
             model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
 
     def test_problem_types(self):
-        if not self.test_sequence_classification_problem_types:
-            return
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         problem_types = [
@@ -1880,7 +1877,11 @@ class ModelTesterMixin:
                     # See https://github.com/huggingface/transformers/issues/11780
                     with warnings.catch_warnings(record=True) as warning_list:
                         loss = model(**inputs).loss
-                    self.assertListEqual(warning_list, [])
+                    for w in warning_list:
+                        if "Using a target size that is different to the input size" in str(w.message):
+                            raise ValueError(
+                                f"Something is going wrong in the regression problem: intercepted {w.message}"
+                            )
 
                     loss.backward()
 
@@ -2184,7 +2185,6 @@ class ModelPushToHubTester(unittest.TestCase):
                 f.write(FAKE_MODEL_CODE)
 
             repo.push_to_hub()
-            print(os.listdir(tmp_dir))
 
         new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
