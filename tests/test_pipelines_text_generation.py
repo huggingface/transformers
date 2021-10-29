@@ -88,8 +88,14 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             ],
         )
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
+        return text_generator, ["This is a test", "Another test"]
+
+    def run_pipeline_test(self, text_generator, _):
+        model = text_generator.model
+        tokenizer = text_generator.tokenizer
+
         outputs = text_generator("This is a test")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertTrue(outputs[0]["generated_text"].startswith("This is a test"))

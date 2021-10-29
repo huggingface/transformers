@@ -32,13 +32,20 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
-            return
+            return None, None
         question_answerer = QuestionAnsweringPipeline(model, tokenizer)
 
+        examples = [
+            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
+            {"question": "In what field is HuggingFace ?", "context": "HuggingFace is  an AI startup."},
+        ]
+        return question_answerer, examples
+
+    def run_pipeline_test(self, question_answerer, _):
         outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
         )

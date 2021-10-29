@@ -114,11 +114,12 @@ class ObjectDetectionPipeline(Pipeline):
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
         outputs = self.model(**model_inputs)
-        model_outputs = {"outputs": outputs, "target_size": target_size}
+        model_outputs = outputs.__class__({"target_size": target_size, **outputs})
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9):
-        raw_annotations = self.feature_extractor.post_process(model_outputs["outputs"], model_outputs["target_size"])
+        target_size = model_outputs["target_size"]
+        raw_annotations = self.feature_extractor.post_process(model_outputs, target_size)
         raw_annotation = raw_annotations[0]
         keep = raw_annotation["scores"] > threshold
         scores = raw_annotation["scores"][keep]

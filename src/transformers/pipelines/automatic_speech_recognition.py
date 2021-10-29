@@ -169,6 +169,10 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         elif model_class in MODEL_FOR_CTC_MAPPING.values():
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+        else:
+            logger.warning("This is an unknown class, treating it as CTC.")
+            outputs = self.model(**model_inputs)
+            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
         return tokens
 
     def postprocess(self, model_outputs):
