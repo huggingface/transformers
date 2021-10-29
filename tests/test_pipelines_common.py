@@ -143,7 +143,9 @@ class PipelineTestCaseMeta(type):
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
                         # XLNet actually defines it as -1.
-                        if (
+                        if model.config.__class__.__name__ == "RobertaConfig":
+                            tokenizer.model_max_length = model.config.max_position_embeddings - 2
+                        elif (
                             hasattr(model.config, "max_position_embeddings")
                             and model.config.max_position_embeddings > 0
                         ):
