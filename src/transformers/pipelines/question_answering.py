@@ -9,7 +9,7 @@ from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, i
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
 logger = logging.get_logger(__name__)
@@ -99,7 +99,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class QuestionAnsweringPipeline(Pipeline):
+class QuestionAnsweringPipeline(ChunkPipeline):
     """
     Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering examples](../task_summary#question-answering) for more information.
 
@@ -343,7 +343,6 @@ class QuestionAnsweringPipeline(Pipeline):
                     )
                 )
 
-        split_features = []
         for feature in features:
             fw_args = {}
             others = {}
@@ -363,20 +362,14 @@ class QuestionAnsweringPipeline(Pipeline):
                         fw_args[k] = tensor.unsqueeze(0)
                 else:
                     others[k] = v
-            split_features.append({"fw_args": fw_args, "others": others})
-        return {"features": split_features, "example": example}
+
+            yield {"fw_args": fw_args, "others": others, "example": example}
 
     def _forward(self, model_inputs):
-        features = model_inputs["features"]
         example = model_inputs["example"]
-        starts = []
-        ends = []
-        for feature in features:
-            fw_args = feature["fw_args"]
-            start, end = self.model(**fw_args)[:2]
-            starts.append(start)
-            ends.append(end)
-        return {"starts": starts, "ends": ends, "features": features, "example": example}
+        fw_args = model_inputs["fw_args"]
+        start, end = self.model(**fw_args)[:2]
+        return {"start": start, "end": end, "features": model_inputs["others"], "example": example, "fw_args": fw_args}
 
     def postprocess(
         self,
@@ -387,16 +380,20 @@ class QuestionAnsweringPipeline(Pipeline):
     ):
         min_null_score = 1000000  # large and positive
         answers = []
-        example = model_outputs["example"]
-        for i, (feature_, start_, end_) in enumerate(
-            zip(model_outputs["features"], model_outputs["starts"], model_outputs["ends"])
-        ):
-            feature = feature_["others"]
+        import ipdb
+
+        ipdb.set_trace()
+        for output in model_outputs:
+            feature = output["features"]
+            start_ = output["start"]
+            end_ = output["end"]
+            example = output["example"]
+
             # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
             undesired_tokens = np.abs(np.array(feature["p_mask"]) - 1)
 
-            if feature_["fw_args"].get("attention_mask", None) is not None:
-                undesired_tokens = undesired_tokens & feature_["fw_args"]["attention_mask"].numpy()
+            if output["fw_args"].get("attention_mask", None) is not None:
+                undesired_tokens = undesired_tokens & output["fw_args"]["attention_mask"].numpy()
 
             # Generate mask
             undesired_tokens_mask = undesired_tokens == 0.0

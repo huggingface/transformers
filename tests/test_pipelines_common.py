@@ -204,8 +204,10 @@ class PipelineTestCaseMeta(type):
                             # Need to copy because Conversation object is mutated
                             yield copy.deepcopy(random.choice(examples))
 
+                    out = []
                     for item in pipeline(data(10), batch_size=4):
-                        pass
+                        out.append(item)
+                    self.assertEqual(len(out), 10)
 
                 run_batch_test(pipeline, examples)
 
