@@ -74,6 +74,11 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
 class DefaultDataCollator(DataCollatorMixin):
     return_tensors: str = "pt"
 
+    def __call__(self, features: List[Dict[str, Any]], return_tensors=None) -> Dict[str, Any]:
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        return default_data_collator(features, return_tensors)
+
 
 def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import torch
@@ -948,7 +953,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                 covered_indexes.add(index)
                 masked_lms.append(index)
 
-        assert len(covered_indexes) == len(masked_lms)
+        if len(covered_indexes) != len(masked_lms):
+            raise ValueError("Length of covered_indexes is not equal to length of masked_lms.")
         mask_labels = [1 if i in covered_indexes else 0 for i in range(len(input_tokens))]
         return mask_labels
 
