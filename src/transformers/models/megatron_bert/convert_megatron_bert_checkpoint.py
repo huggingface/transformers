@@ -17,7 +17,6 @@
 ####################################################################################################
 
 import argparse
-import json
 import os
 import re
 import zipfile
@@ -81,19 +80,20 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     output_state_dict = {}
 
     # old versions did not store training args
-    if "args" in input_state_dict:
+    ds_args = input_state_dict.get("args", None)
+    if ds_args is not None:
         # do not make the user write a config file when the exact dimensions/sizes are already in the checkpoint
-        train_args = input_state_dict["args"]
         # from pprint import pprint
-        # pprint(vars(train_args))
+        # pprint(vars(ds_args))
 
-        config.vocab_size = train_args.padded_vocab_size
-        config.max_position_embeddings = train_args.max_position_embeddings
-        config.hidden_size = train_args.hidden_size
-        config.num_hidden_layers = train_args.num_layers
-        config.num_attention_heads = train_args.num_attention_heads
-        config.intermediate_size = train_args.ffn_hidden_size if "ffn_hidden_size" in train_args \
-            else 4 * train_args.hidden_size
+        config.tokenizer_type = ds_args.tokenizer_type
+        config.vocab_size = ds_args.padded_vocab_size
+        config.max_position_embeddings = ds_args.max_position_embeddings
+        config.hidden_size = ds_args.hidden_size
+        config.num_hidden_layers = ds_args.num_layers
+        config.num_attention_heads = ds_args.num_attention_heads
+        config.intermediate_size = ds_args.ffn_hidden_size if "ffn_hidden_size" in ds_args \
+            else 4 * ds_args.hidden_size
         # pprint(config)
 
     # The number of heads.
@@ -297,12 +297,8 @@ def main():
         recursive_print(None, output_state_dict)
 
     # Store the config to file.
-    output_config_file = os.path.join(basename, "config.json")
-    output_config = config.to_dict()
-    output_config["model_type"] = "megatron-bert"
-    print(f'Saving config to "{output_config_file}"')
-    with open(output_config_file, "w") as f:
-        json.dump(output_config, f)
+    print("Saving config")
+    config.save_pretrained(basename)
 
     # Store the state_dict to file.
     output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")
