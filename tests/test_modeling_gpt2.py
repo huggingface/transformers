@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, global_rng
 
 
 if is_torch_available():
@@ -422,6 +422,66 @@ class GPT2ModelTester:
 
         return config, inputs_dict
 
+    def create_and_check_gpt2_lm_attention_mask(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
+        model = GPT2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # create attention mask
+        batch_size, sequence_length = input_ids.shape
+        lm_attention_mask = torch.ones(batch_size, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch_device)
+
+        # first forward pass
+        model(input_ids, lm_attention_mask=lm_attention_mask).to_tuple()
+
+        # create full attention masking except for one token who can only attend to itself
+        lm_attention_mask = torch.ones(batch_size, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch_device)
+        random_token_id = global_rng.randint(0, sequence_length - 1)
+        lm_attention_mask[:, :, :, random_token_id] = False
+
+        output, past = model(input_ids, lm_attention_mask=lm_attention_mask).to_tuple()
+
+        def randint(a, b, blacklist):
+            while True:
+                value = global_rng.randint(a,b)
+                if value not in blacklist:
+                    return value
+
+        # We modify input_ids at that token_id
+        modified_inputs_that_token = input_ids.clone()
+        blacklisted_values = set(input_ids[:, random_token_id])
+        modified_inputs_that_token[:, random_token_id] = randint(0, config.vocab_size, blacklist=blacklisted_values)
+
+        output_that_token, past_that_token = model(modified_inputs_that_token, lm_attention_mask=lm_attention_mask)
+
+        self.parent.assertTrue(torch.allclose(
+            output["last_hidden_state"][:, :random_token_id,:],
+            output_that_token["last_hidden_state"][:, :random_token_id, :]
+        ))
+        self.parent.assertTrue(torch.allclose(
+            output["last_hidden_state"][:, random_token_id+1:, :],
+            output_that_token["last_hidden_state"][:, :random_token_id+1:, :]
+        ))
+
+        # We modify another token_id
+        new_token_id = randint(0, sequence_length - 1, blacklist=(random_token_id,))
+        modified_inputs_other_token = input_ids.clone()
+        blacklisted_values_other_token = set(input_ids[:, new_token_id])
+        modified_inputs_other_token[:, random_token_id] = randint(0, config.vocab_size, blacklist=blacklisted_values_other_token)
+
+        output_other_token, past_other_token = model(modified_inputs_other_token, lm_attention_mask=lm_attention_mask)
+
+        self.parent.assertFalse(torch.allclose(
+            output["last_hidden_state"][:, :new_token_id, :],
+            output_other_token["last_hidden_state"][:, :new_token_id, :]
+        ))
+        self.parent.assertFalse(torch.allclose(
+            output["last_hidden_state"][:, new_token_id + 1:, :],
+            past_other_token["last_hidden_state"][:, :new_token_id + 1:, :]
+        ))
+
 
 @require_torch
 class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -515,6 +575,10 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_weight_initialization(*config_and_inputs)
 
+    def test_gpt2_lm_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_lm_attention_mask(*config_and_inputs)
+
     @slow
     def test_batch_generation(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2")
@@ -535,13 +599,15 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
+        batch_size, sequence_length = input_ids.shape
         token_type_ids = torch.cat(
             [
-                input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-                input_ids.new_full((input_ids.shape[0], 1), 500),
+                input_ids.new_full((batch_size, sequence_length - 1), 0),
+                input_ids.new_full((batch_size, 1), 500),
             ],
             dim=-1,
         )
+        lm_attention_mask = torch.ones(batch_size, sequence_length, dtype=torch.bool, device=input_ids.device)
 
         outputs = model.generate(
             input_ids=input_ids,
@@ -554,6 +620,12 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             token_type_ids=token_type_ids,
         )
 
+        outputs_lm_attn_mask = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+            lm_attention_mask=lm_attention_mask,
+        )
+
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
@@ -563,6 +635,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
+        batch_out_sentence_lm_attn_mask = tokenizer.batch_decode(outputs_lm_attn_mask, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
@@ -572,6 +645,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
+        self.assertTrue(batch_out_sentence_lm_attn_mask != batch_out_sentence) # lm_attention_mask should change the output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
@@ -595,13 +669,15 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
+        batch_size, sequence_length = input_ids.shape
         token_type_ids = torch.cat(
             [
-                input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-                input_ids.new_full((input_ids.shape[0], 1), 500),
+                input_ids.new_full((batch_size, sequence_length - 1), 0),
+                input_ids.new_full((batch_size, 1), 500),
             ],
             dim=-1,
         )
+        lm_attention_mask = torch.ones(batch_size, sequence_length, dtype=torch.bool, device=input_ids.device)
 
         outputs = model.generate(
             input_ids=input_ids,
@@ -614,6 +690,12 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             token_type_ids=token_type_ids,
         )
 
+        outputs_lm_attn_mask = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+            lm_attention_mask=lm_attention_mask,
+        )
+
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
@@ -623,6 +705,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
+        batch_out_sentence_lm_attn_mask = tokenizer.batch_decode(outputs_lm_attn_mask, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
@@ -632,6 +715,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
+        self.assertTrue(batch_out_sentence_lm_attn_mask != batch_out_sentence) # lm_attention_mask should change the output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow

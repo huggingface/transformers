@@ -536,6 +536,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
 
             if lm_attn_mask_keys_length <= sequence_length:
                 raise ValueError(f"Expected {lm_attn_mask_keys_length} <= {sequence_length}.")
+
             if lm_attn_mask_keys_length < sequence_length:
                 # build new lm_attention_mask by adding autoregressive parts at the end.
                 new_lm_attention_mask = torch.tril(
