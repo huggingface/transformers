@@ -398,6 +398,7 @@ if is_tokenizers_available():
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
+    _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
@@ -2285,6 +2286,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
+        from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast

@@ -18,13 +18,16 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tf_available, is_torch_available
+from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
     "configuration_blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig"],
     "tokenization_blenderbot": ["BlenderbotTokenizer"],
 }
+
+if is_tokenizers_available():
+    _import_structure["tokenization_blenderbot_fast"] = ["BlenderbotTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_blenderbot"] = [
@@ -47,6 +50,9 @@ if is_tf_available():
 if TYPE_CHECKING:
     from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
     from .tokenization_blenderbot import BlenderbotTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_blenderbot_fast import BlenderbotTokenizerFast
 
     if is_torch_available():
         from .modeling_blenderbot import (

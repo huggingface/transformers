@@ -124,6 +124,11 @@ class PipelineTestCaseMeta(type):
             def test(self):
                 if ModelClass.__name__.endswith("ForCausalLM"):
                     tiny_config.is_encoder_decoder = False
+                    if hasattr(tiny_config, "encoder_no_repeat_ngram_size"):
+                        # specific for blenderbot which supports both decoder-only
+                        # encoder/decoder but the test config  only reflects
+                        # encoder/decoder arch
+                        tiny_config.encoder_no_repeat_ngram_size = 0
                 if ModelClass.__name__.endswith("WithLMHead"):
                     tiny_config.is_decoder = True
                 try:
