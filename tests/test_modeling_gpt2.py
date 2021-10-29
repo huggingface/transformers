@@ -483,7 +483,7 @@ class GPT2ModelTester:
             0, config.vocab_size, blacklist=blacklisted_values_other_token
         )
 
-        output_other_token, past_other_token = model(
+        output_other_token = model(
             modified_inputs_other_token, attention_block_mask=attention_block_mask
         ).last_hidden_state
 
