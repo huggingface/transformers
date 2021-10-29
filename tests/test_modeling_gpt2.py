@@ -155,7 +155,6 @@ class GPT2ModelTester:
             resid_pdrop=self.hidden_dropout_prob,
             attn_pdrop=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             use_cache=True,
