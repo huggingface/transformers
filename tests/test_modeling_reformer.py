@@ -794,7 +794,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, Generation
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
-    
+
     def test_problem_types(self):
         # Fails because the sequence length is not a multiple of 4
         pass
