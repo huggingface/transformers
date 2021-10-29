@@ -254,7 +254,7 @@ class ReformerEmbeddings(nn.Module):
 
         if position_ids.shape[-1] > self.max_position_embeddings:
             raise ValueError(
-                f"Sequence Length: {position_ids.shape[-1]} has to be larger equal than "
+                f"Sequence Length: {position_ids.shape[-1]} has to be less or equal than "
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
 

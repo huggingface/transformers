@@ -123,3 +123,24 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         else:
             with self.assertRaises((ValueError, AssertionError)):
                 outputs = text_generator("")
+
+        if text_generator.framework == "tf":
+            # TF generation does not support max_new_tokens, and it's impossible
+            # to control long generation with only max_length without
+            # fancy calculation, dismissing tests for now.
+            return
+        # We don't care about infinite range models.
+        # They already work.
+        if tokenizer.model_max_length < 10000:
+            # Handling of large generations
+            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
+                text_generator("This is a test" * 500, max_new_tokens=20)
+
+            outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)
+            # Hole strategy cannot work
+            with self.assertRaises(ValueError):
+                text_generator(
+                    "This is a test" * 500,
+                    handle_long_generation="hole",
+                    max_new_tokens=tokenizer.model_max_length + 10,
+                )
