@@ -19,7 +19,8 @@ if is_ov_available():
 
 @require_ov
 class OVAutoModelIntegrationTest(unittest.TestCase):
-    model = OVAutoModel.from_pretrained("dkurt/test_openvino")
+    def test_download(self):
+        OVAutoModel.from_pretrained("dkurt/test_openvino")
 
 
 @require_ov

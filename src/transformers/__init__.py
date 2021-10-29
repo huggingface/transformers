@@ -1972,6 +1972,11 @@ if is_ov_available():
             "OVAutoModelWithLMHead",
         ]
     )
+else:
+    from .utils import dummy_ov_objects
+
+    _import_structure["utils.dummy_ov_objects"] = [name for name in dir(dummy_ov_objects) if not name.startswith("_")]
+
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -3595,6 +3600,10 @@ if TYPE_CHECKING:
             OVAutoModelForQuestionAnswering,
             OVAutoModelWithLMHead,
         )
+    else:
+        # Import the same objects as dummies to get them in the namespace.
+        # They will raise an import error if the user tries to instantiate / use them.
+        from .utils.dummy_ov_objects import *
 
 else:
     import sys
