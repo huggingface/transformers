@@ -526,14 +526,16 @@ class GPT2PreTrainedModel(PreTrainedModel):
         elif lm_attention_mask is not None:
             # either the first time we run this method, or users has set use_cache = False
             _, sequence_length = input_ids.shape
-            (
-                lm_attn_mask_bs,
-                lm_attn_mask_nh,
-                lm_attn_mask_queries_length,
-                lm_attn_mask_keys_length,
-            ) = lm_attention_mask.shape
-            assert lm_attn_mask_queries_length == lm_attn_mask_keys_length
-            assert lm_attn_mask_keys_length <= sequence_length
+            lm_attn_mask_bs=lm_attention_mask.shape[0]
+            lm_attn_mask_nh=lm_attention_mask.shape[1]
+            lm_attn_mask_queries_length=lm_attention_mask.shape[2]
+            lm_attn_mask_keys_length=lm_attention_mask.shape[3]
+
+            if lm_attn_mask_queries_length == lm_attn_mask_keys_length:
+                raise ValueError(f"lm_attention_mask should have the two last dimension be equal, got {lm_attn_mask_queries_length} and {lm_attn_mask_keys_length}.")
+
+            if lm_attn_mask_keys_length <= sequence_length:
+                raise ValueError(f"Expected {lm_attn_mask_keys_length} <= {sequence_length}.")
             if lm_attn_mask_keys_length < sequence_length:
                 # build new lm_attention_mask by adding autoregressive parts at the end.
                 new_lm_attention_mask = torch.tril(
@@ -661,8 +663,8 @@ GPT2_INPUTS_DOCSTRING = r"""
         lm_attention_mask (:obj:`torch.BoolTensor` of shape or broadcastable to :obj:`(batch_size, num_heads, sequence_length, sequence_length)`, `optional`):
             Mask to override causal masking for any generic masking:
 
-            - True for attention weights that are **not masked**,
-            - False for attention weights that are **masked**.
+            - :obj:`True` for attention weights that are **not masked**,
+            - :obj:`False` for attention weights that are **masked**.
 
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
