@@ -42,8 +42,6 @@ class GPTJConfig(PretrainedConfig):
         n_positions (:obj:`int`, `optional`, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_ctx (:obj:`int`, `optional`, defaults to 2048):
-            Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the embeddings and hidden states.
         n_layer (:obj:`int`, `optional`, defaults to 28):
@@ -96,7 +94,6 @@ class GPTJConfig(PretrainedConfig):
         self,
         vocab_size=50400,
         n_positions=2048,
-        n_ctx=2048,
         n_embd=4096,
         n_layer=28,
         n_head=16,
@@ -115,7 +112,6 @@ class GPTJConfig(PretrainedConfig):
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer

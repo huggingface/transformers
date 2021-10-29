@@ -14,7 +14,15 @@
 
 import unittest
 
-from transformers import MODEL_MAPPING, TF_MODEL_MAPPING, CLIPConfig, FeatureExtractionPipeline, LxmertConfig, pipeline
+from transformers import (
+    MODEL_MAPPING,
+    TF_MODEL_MAPPING,
+    CLIPConfig,
+    FeatureExtractionPipeline,
+    LxmertConfig,
+    Wav2Vec2Config,
+    pipeline,
+)
 from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 from .test_pipelines_common import PipelineTestCaseMeta
@@ -61,12 +69,12 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             raise ValueError("We expect lists of floats, nothing else")
         return shape
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         if tokenizer is None:
             self.skipTest("No tokenizer")
             return
 
-        elif isinstance(model.config, (LxmertConfig, CLIPConfig)):
+        elif isinstance(model.config, (LxmertConfig, CLIPConfig, Wav2Vec2Config)):
             self.skipTest(
                 "This is an Lxmert bimodal model, we need to find a more consistent way to switch on those models."
             )
@@ -81,11 +89,12 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             )
 
             return
-
         feature_extractor = FeatureExtractionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
+        return feature_extractor, ["This is a test", "This is another test"]
 
+    def run_pipeline_test(self, feature_extractor, examples):
         outputs = feature_extractor("This is a test")
 
         shape = self.get_shape(outputs)

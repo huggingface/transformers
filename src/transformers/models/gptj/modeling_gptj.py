@@ -99,7 +99,7 @@ class GPTJAttention(nn.Module):
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
-        Splits n_ctx dim into attn_head_size and num_attention_heads
+        Splits hidden dim into attn_head_size and num_attention_heads
         """
         new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
         tensor = tensor.view(*new_shape)
@@ -114,7 +114,7 @@ class GPTJAttention(nn.Module):
 
     def _merge_heads(self, tensor, num_attention_heads, attn_head_size):
         """
-        Merges attn_head_size dim and num_attn_heads dim into n_ctx
+        Merges attn_head_size dim and num_attn_heads dim into hidden dim
         """
         if len(tensor.shape) == 5:
             tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
@@ -377,7 +377,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, n_ctx)`, `optional`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_dim)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -444,7 +444,6 @@ class GPTJModel(GPTJPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
         self.init_weights()
 
         # Model parallel
@@ -854,7 +853,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
-        self.score = nn.Linear(config.n_ctx, self.num_labels, bias=False)
+        self.score = nn.Linear(config.n_positions, self.num_labels, bias=False)
 
         self.init_weights()
 
