@@ -140,11 +140,7 @@ class TFViTModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -156,14 +152,7 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            TFViTModel,
-            TFViTForImageClassification,
-        )
-        if is_tf_available()
-        else ()
-    )
+    all_model_classes = (TFViTModel, TFViTForImageClassification) if is_tf_available() else ()
 
     test_resize_embeddings = False
     test_head_masking = False

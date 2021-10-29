@@ -383,9 +383,8 @@ class TFViTLayer(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
-            input_tensor=self.layernorm_before(
-                inputs=hidden_states
-            ),  # in ViT, layernorm is applied before self-attention
+            # in ViT, layernorm is applied before self-attention
+            input_tensor=self.layernorm_before(inputs=hidden_states)
             head_mask=head_mask,
             output_attentions=output_attentions,
             training=training,
@@ -538,10 +537,7 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -571,9 +567,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
         )
-        return {
-            "pixel_values": tf.constant(VISION_DUMMY_INPUTS),
-        }
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
         input_signature=[
