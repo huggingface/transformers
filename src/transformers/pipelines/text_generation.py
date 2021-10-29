@@ -75,6 +75,7 @@ class TextGenerationPipeline(Pipeline):
         return_type=None,
         clean_up_tokenization_spaces=None,
         prefix=None,
+        handle_long_generation=None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -85,14 +86,24 @@ class TextGenerationPipeline(Pipeline):
                 prefix, padding=False, add_special_tokens=False, return_tensors=self.framework
             )
             prefix_length = prefix_inputs["input_ids"].shape[-1]
-            if "max_length" in generate_kwargs:
+
+            if "max_new_tokens" in generate_kwargs:
+                pass
+            elif "max_length" in generate_kwargs:
                 generate_kwargs["max_length"] += prefix_length
             else:
                 generate_kwargs["max_length"] = self.model.config.max_length + prefix_length
 
             if "min_length" in generate_kwargs:
                 generate_kwargs["min_length"] += prefix_length
+        if handle_long_generation is not None:
+            if handle_long_generation not in {"hole"}:
+                raise ValueError(
+                    f"{handle_long_generation} is not a valid value for `handle_long_generation` parameter expected [None, 'hole']"
+                )
+            preprocess_params["handle_long_generation"] = handle_long_generation
 
+        preprocess_params.update(generate_kwargs)
         forward_params = generate_kwargs
 
         postprocess_params = {}
@@ -136,6 +147,16 @@ class TextGenerationPipeline(Pipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             prefix (:obj:`str`, `optional`):
                 Prefix added to prompt.
+            handle_long_generation (:obj:`str`, `optional`):
+                By default, this pipelines does not handle long generation (ones that exceed in one form or the other
+                the model maximum length). There is no perfect way to adress this (more info
+                :https://github.com/huggingface/transformers/issues/14033#issuecomment-948385227). This provides common
+                strategies to work around that problem depending on your use case.
+
+                - :obj:`None` : default strategy where nothing in particular happens
+                - :obj:`"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
+                  truncate a lot of the prompt and not suitable when generation exceed the model capacity)
+
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework `here <./model.html#generative-models>`__).
@@ -149,11 +170,31 @@ class TextGenerationPipeline(Pipeline):
         """
         return super().__call__(text_inputs, **kwargs)
 
-    def preprocess(self, prompt_text, prefix=""):
+    def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
         inputs = self.tokenizer(
             prefix + prompt_text, padding=False, add_special_tokens=False, return_tensors=self.framework
         )
         inputs["prompt_text"] = prompt_text
+
+        if handle_long_generation == "hole":
+            cur_len = inputs["input_ids"].shape[-1]
+            if "max_new_tokens" in generate_kwargs:
+                new_tokens = generate_kwargs["max_new_tokens"]
+            else:
+                new_tokens = generate_kwargs.get("max_length", self.model.config.max_length) - cur_len
+                if new_tokens < 0:
+                    raise ValueError("We cannot infer how many new tokens are expected")
+            if cur_len + new_tokens > self.tokenizer.model_max_length:
+                keep_length = self.tokenizer.model_max_length - new_tokens
+                if keep_length <= 0:
+                    raise ValueError(
+                        "We cannot use `hole` to handle this generation the number of desired tokens exceeds the models max length"
+                    )
+
+                inputs["input_ids"] = inputs["input_ids"][:, -keep_length:]
+                if "attention_mask" in inputs:
+                    inputs["attention_mask"] = inputs["attention_mask"][:, -keep_length:]
+
         return inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
