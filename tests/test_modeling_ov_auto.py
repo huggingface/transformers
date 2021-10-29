@@ -23,13 +23,8 @@ class OVAutoModelIntegrationTest(unittest.TestCase):
 
 
 @require_ov
-class OVBertSQuADTest(unittest.TestCase):
-    def test_inference_no_head_absolute_embedding(self):
-        tok = AutoTokenizer.from_pretrained("dkurt/bert-large-uncased-whole-word-masking-squad-int8-0001")
-        model = OVAutoModelForQuestionAnswering.from_pretrained(
-            "dkurt/bert-large-uncased-whole-word-masking-squad-int8-0001"
-        )
-
+class OVBertForQuestionAnsweringTest(unittest.TestCase):
+    def check_model(self, model, tok):
         context = """
         Soon her eye fell on a little glass box that
         was lying under the table: she opened it, and
@@ -44,7 +39,11 @@ class OVBertSQuADTest(unittest.TestCase):
 
         question = "Where Alice should go?"
 
-        input_ids = tok.encode(question + " " + tok.sep_token + " " + context, return_tensors="pt")
+        # For better OpenVINO efficiency it's recommended to use fixed input shape.
+        # So pad input_ids up to specific max_length.
+        input_ids = tok.encode(
+            question + " " + tok.sep_token + " " + context, return_tensors="pt", max_length=128, padding="max_length"
+        )
 
         outputs = model(input_ids)
 
@@ -55,6 +54,20 @@ class OVBertSQuADTest(unittest.TestCase):
         answer = tok.convert_tokens_to_string(tok.convert_ids_to_tokens(answer_ids))
 
         self.assertEqual(answer, "the garden")
+
+    def test_from_pt(self):
+        tok = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+        model = OVAutoModelForQuestionAnswering.from_pretrained(
+            "bert-large-uncased-whole-word-masking-finetuned-squad", from_pt=True
+        )
+        self.check_model(model, tok)
+
+    def test_from_ir(self):
+        tok = AutoTokenizer.from_pretrained("dkurt/bert-large-uncased-whole-word-masking-squad-int8-0001")
+        model = OVAutoModelForQuestionAnswering.from_pretrained(
+            "dkurt/bert-large-uncased-whole-word-masking-squad-int8-0001"
+        )
+        self.check_model(model, tok)
 
 
 @require_ov

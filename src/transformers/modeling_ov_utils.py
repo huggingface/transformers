@@ -29,9 +29,15 @@ def load_ov_model_from_pytorch(model):
         inputs = (dummy_input_ids, None, dummy_mask)
     else:
         inputs = (dummy_input_ids, dummy_mask)
+
+    if model.__class__.__name__.endswith("ForQuestionAnswering"):
+        outputs = ["output_s", "output_e"]
+    else:
+        outputs = ["output"]
+
     with torch.no_grad():
         torch.onnx.export(
-            model, inputs, buf, input_names=["input_ids", "attention_mask"], output_names=["output"], opset_version=11
+            model, inputs, buf, input_names=["input_ids", "attention_mask"], output_names=outputs, opset_version=11
         )
 
     net = ie.read_network(buf.getvalue(), b"", init_from_buffer=True)
