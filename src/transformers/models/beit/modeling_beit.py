@@ -96,7 +96,8 @@ class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         pooler_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
-            Average of the last layer hidden states of the patch tokens (except the `CLS` token).
+            Average of the last layer hidden states of the patch tokens (except the `[CLS]` token) if
+            `config.use_mean_pooling` is set to True. If set to False, then `[CLS]` token will be returned.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
