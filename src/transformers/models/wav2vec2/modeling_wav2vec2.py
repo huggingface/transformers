@@ -46,7 +46,7 @@ _CONFIG_FOR_DOC = "Wav2Vec2Config"
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
-_SEQ_CLASS_CHECKPOINT = ("superb/wav2vec2-base-superb-ks",)
+_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2
@@ -462,9 +462,12 @@ class Wav2Vec2Attention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -858,9 +861,11 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         self.num_groups = config.num_codevector_groups
         self.num_vars = config.num_codevectors_per_group
 
-        assert (
-            config.codevector_dim % self.num_groups == 0
-        ), f"`config.codevector_dim {config.codevector_dim} must be divisible by `config.num_codevector_groups` {self.num_groups} for concatenation"
+        if config.codevector_dim % self.num_groups != 0:
+            raise ValueError(
+                f"`config.codevector_dim {config.codevector_dim} must be divisible "
+                f"by `config.num_codevector_groups` {self.num_groups} for concatenation"
+            )
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(
@@ -870,9 +875,6 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
 
         # can be decayed for training
         self.temperature = 2
-
-    def set_temperature(self, temperature: int):
-        self.temperature = temperature
 
     @staticmethod
     def _compute_perplexity(probs, mask=None):
@@ -1118,9 +1120,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)[
-                :, None
-            ].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
@@ -1200,7 +1201,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         """
         Set the Gumbel softmax temperature to a given value. Only necessary for training
         """
-        return self.quantizer.set_temperature(temperature)
+        self.quantizer.temperature = temperature
 
     def freeze_feature_extractor(self):
         """
