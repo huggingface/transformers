@@ -337,6 +337,7 @@ def module_to_test_file(module_fname):
 # launched separately.
 EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/test_doc_samples.py",  # Doc tests
+    "tests/test_pipelines_common.py",  # Actually checked by the pipeline based file
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
