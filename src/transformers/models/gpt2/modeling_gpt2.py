@@ -526,13 +526,15 @@ class GPT2PreTrainedModel(PreTrainedModel):
         elif attention_block_mask is not None:
             # either the first time we run this method, or users has set use_cache = False
             _, sequence_length = input_ids.shape
-            attn_block_mask_bs=attention_block_mask.shape[0]
-            attn_block_mask_nh=attention_block_mask.shape[1]
-            attn_block_mask_queries_length=attention_block_mask.shape[2]
-            attn_block_mask_keys_length=attention_block_mask.shape[3]
+            attn_block_mask_bs = attention_block_mask.shape[0]
+            attn_block_mask_nh = attention_block_mask.shape[1]
+            attn_block_mask_queries_length = attention_block_mask.shape[2]
+            attn_block_mask_keys_length = attention_block_mask.shape[3]
 
             if attn_block_mask_queries_length == attn_block_mask_keys_length:
-                raise ValueError(f"attention_block_mask should have the two last dimension be equal, got {attn_block_mask_queries_length} and {attn_block_mask_keys_length}.")
+                raise ValueError(
+                    f"attention_block_mask should have the two last dimension be equal, got {attn_block_mask_queries_length} and {attn_block_mask_keys_length}."
+                )
 
             if attn_block_mask_keys_length <= sequence_length:
                 raise ValueError(f"Expected {attn_block_mask_keys_length} <= {sequence_length}.")

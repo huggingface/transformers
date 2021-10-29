@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, global_rng
+from .test_modeling_common import ModelTesterMixin, floats_tensor, global_rng, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -431,13 +431,17 @@ class GPT2ModelTester:
 
         # create attention mask
         batch_size, sequence_length = input_ids.shape
-        attention_block_mask = torch.ones(batch_size, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch_device)
+        attention_block_mask = torch.ones(
+            batch_size, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch_device
+        )
 
         # first forward pass
         model(input_ids, attention_block_mask=attention_block_mask).to_tuple()
 
         # create full attention masking except for one token who can only attend to itself
-        attention_block_mask = torch.ones(batch_size, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch_device)
+        attention_block_mask = torch.ones(
+            batch_size, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch_device
+        )
         random_token_id = global_rng.randint(0, sequence_length - 1)
         attention_block_mask[:, :, :, random_token_id] = False
 
@@ -445,7 +449,7 @@ class GPT2ModelTester:
 
         def randint(a, b, blacklist):
             while True:
-                value = global_rng.randint(a,b)
+                value = global_rng.randint(a, b)
                 if value not in blacklist:
                     return value
 
@@ -454,33 +458,47 @@ class GPT2ModelTester:
         blacklisted_values = set(input_ids[:, random_token_id])
         modified_inputs_that_token[:, random_token_id] = randint(0, config.vocab_size, blacklist=blacklisted_values)
 
-        output_that_token, past_that_token = model(modified_inputs_that_token, attention_block_mask=attention_block_mask)
+        output_that_token, past_that_token = model(
+            modified_inputs_that_token, attention_block_mask=attention_block_mask
+        )
 
-        self.parent.assertTrue(torch.allclose(
-            output["last_hidden_state"][:, :random_token_id,:],
-            output_that_token["last_hidden_state"][:, :random_token_id, :]
-        ))
-        self.parent.assertTrue(torch.allclose(
-            output["last_hidden_state"][:, random_token_id+1:, :],
-            output_that_token["last_hidden_state"][:, :random_token_id+1:, :]
-        ))
+        self.parent.assertTrue(
+            torch.allclose(
+                output["last_hidden_state"][:, :random_token_id, :],
+                output_that_token["last_hidden_state"][:, :random_token_id, :],
+            )
+        )
+        self.parent.assertTrue(
+            torch.allclose(
+                output["last_hidden_state"][:, random_token_id + 1 :, :],
+                output_that_token["last_hidden_state"][:, : random_token_id + 1 :, :],
+            )
+        )
 
         # We modify another token_id
         new_token_id = randint(0, sequence_length - 1, blacklist=(random_token_id,))
         modified_inputs_other_token = input_ids.clone()
         blacklisted_values_other_token = set(input_ids[:, new_token_id])
-        modified_inputs_other_token[:, random_token_id] = randint(0, config.vocab_size, blacklist=blacklisted_values_other_token)
+        modified_inputs_other_token[:, random_token_id] = randint(
+            0, config.vocab_size, blacklist=blacklisted_values_other_token
+        )
 
-        output_other_token, past_other_token = model(modified_inputs_other_token, attention_block_mask=attention_block_mask)
+        output_other_token, past_other_token = model(
+            modified_inputs_other_token, attention_block_mask=attention_block_mask
+        )
 
-        self.parent.assertFalse(torch.allclose(
-            output["last_hidden_state"][:, :new_token_id, :],
-            output_other_token["last_hidden_state"][:, :new_token_id, :]
-        ))
-        self.parent.assertFalse(torch.allclose(
-            output["last_hidden_state"][:, new_token_id + 1:, :],
-            past_other_token["last_hidden_state"][:, :new_token_id + 1:, :]
-        ))
+        self.parent.assertFalse(
+            torch.allclose(
+                output["last_hidden_state"][:, :new_token_id, :],
+                output_other_token["last_hidden_state"][:, :new_token_id, :],
+            )
+        )
+        self.parent.assertFalse(
+            torch.allclose(
+                output["last_hidden_state"][:, new_token_id + 1 :, :],
+                past_other_token["last_hidden_state"][:, : new_token_id + 1 :, :],
+            )
+        )
 
 
 @require_torch
@@ -645,7 +663,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-        self.assertTrue(batch_out_sentence_attn_block_mask != batch_out_sentence) # attention_block_mask should change the output
+        self.assertTrue(
+            batch_out_sentence_attn_block_mask != batch_out_sentence
+        )  # attention_block_mask should change the output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
@@ -715,7 +735,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-        self.assertTrue(batch_out_sentence_attn_block_mask != batch_out_sentence) # attention_block_mask should change the output
+        self.assertTrue(
+            batch_out_sentence_attn_block_mask != batch_out_sentence
+        )  # attention_block_mask should change the output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
