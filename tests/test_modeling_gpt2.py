@@ -445,7 +445,7 @@ class GPT2ModelTester:
         random_token_id = global_rng.randint(0, sequence_length - 1)
         attention_block_mask[:, :, :, random_token_id] = False
 
-        output, past = model(input_ids, attention_block_mask=attention_block_mask)
+        output = model(input_ids, attention_block_mask=attention_block_mask).last_hidden_state
 
         def randint(a, b, blacklist):
             while True:
@@ -458,20 +458,20 @@ class GPT2ModelTester:
         blacklisted_values = set(input_ids[:, random_token_id])
         modified_inputs_that_token[:, random_token_id] = randint(0, config.vocab_size, blacklist=blacklisted_values)
 
-        output_that_token, past_that_token = model(
+        output_that_token = model(
             modified_inputs_that_token, attention_block_mask=attention_block_mask
-        )
+        ).last_hidden_state
 
         self.parent.assertTrue(
             torch.allclose(
-                output["last_hidden_state"][:, :random_token_id, :],
-                output_that_token["last_hidden_state"][:, :random_token_id, :],
+                output[:, :random_token_id, :],
+                output_that_token[:, :random_token_id, :],
             )
         )
         self.parent.assertTrue(
             torch.allclose(
-                output["last_hidden_state"][:, random_token_id + 1 :, :],
-                output_that_token["last_hidden_state"][:, : random_token_id + 1 :, :],
+                output[:, random_token_id + 1 :, :],
+                output_that_token[:, : random_token_id + 1 :, :],
             )
         )
 
@@ -485,18 +485,18 @@ class GPT2ModelTester:
 
         output_other_token, past_other_token = model(
             modified_inputs_other_token, attention_block_mask=attention_block_mask
-        )
+        ).last_hidden_state
 
         self.parent.assertFalse(
             torch.allclose(
-                output["last_hidden_state"][:, :new_token_id, :],
-                output_other_token["last_hidden_state"][:, :new_token_id, :],
+                output[:, :new_token_id, :],
+                output_other_token[:, :new_token_id, :],
             )
         )
         self.parent.assertFalse(
             torch.allclose(
-                output["last_hidden_state"][:, new_token_id + 1 :, :],
-                past_other_token["last_hidden_state"][:, : new_token_id + 1 :, :],
+                output[:, new_token_id + 1 :, :],
+                output_other_token[:, : new_token_id + 1 :, :],
             )
         )
 
