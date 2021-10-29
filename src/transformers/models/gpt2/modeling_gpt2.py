@@ -189,7 +189,7 @@ class GPT2Attention(nn.Module):
         self.num_heads = self.num_heads - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _attn(self, query, key, value, attention_mask=None, lm_attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
@@ -200,10 +200,15 @@ class GPT2Attention(nn.Module):
             attn_weights = attn_weights / float(self.layer_idx + 1)
 
         if not self.is_cross_attention:
-            # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+            # cross attention are always full mask
+            if lm_attention_mask is None:
+                # default to causal masking
+                query_length, key_length = query.size(-2), key.size(-2)
+                lm_attention_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+            else:
+                assert head_mask is None, "Using both head_mask and lm_attention_mask can lead to ambiguity. Please on or the other"
+                lm_attention_mask = lm_attention_mask.bool()
+            attn_weights = torch.where(lm_attention_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -223,7 +228,7 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, lm_attention_mask=None, head_mask=None):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
         bsz, num_heads, q_seq_len, dk = query.size()
         _, _, k_seq_len, _ = key.size()
@@ -251,10 +256,15 @@ class GPT2Attention(nn.Module):
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
 
         if not self.is_cross_attention:
-            # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-            attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+            # cross attention are always full mask
+            if lm_attention_mask is None:
+                # default to causal masking
+                query_length, key_length = query.size(-2), key.size(-2)
+                lm_attention_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].bool()
+            else:
+                assert head_mask is None, "Using both head_mask and lm_attention_mask can lead to ambiguity. Please on or the other"
+                lm_attention_mask = lm_attention_mask.bool()
+            attn_weights = torch.where(lm_attention_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -297,6 +307,7 @@ class GPT2Attention(nn.Module):
         hidden_states,
         layer_past=None,
         attention_mask=None,
+        lm_attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -331,9 +342,9 @@ class GPT2Attention(nn.Module):
             present = None
 
         if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, lm_attention_mask, head_mask)
         else:
-            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._attn(query, key, value, attention_mask, lm_attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.c_proj(attn_output)
@@ -384,6 +395,7 @@ class GPT2Block(nn.Module):
         hidden_states,
         layer_past=None,
         attention_mask=None,
+        lm_attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -396,11 +408,12 @@ class GPT2Block(nn.Module):
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
+            lm_attention_mask=lm_attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
+        attn_output = attn_outputs[0]  # attn_outputs: a, present, (attentions)
         outputs = attn_outputs[1:]
         # residual connection
         hidden_states = attn_output + residual
@@ -487,6 +500,48 @@ class GPT2PreTrainedModel(PreTrainedModel):
         if isinstance(module, GPT2Model):
             module.gradient_checkpointing = value
 
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past=None,
+        attention_mask=None,
+        lm_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs
+    ):
+        token_type_ids = kwargs.get("token_type_ids", None)
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+            # when past is defined, we autoregressively decode tokens
+            lm_attention_mask = None
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        else:
+            position_ids = None
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "lm_attention_mask": lm_attention_mask,
+            "token_type_ids": token_type_ids,
+        }
 
 @dataclass
 class GPT2DoubleHeadsModelOutput(ModelOutput):
@@ -574,6 +629,12 @@ GPT2_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
+        lm_attention_mask (:obj:`torch.BoolTensor` of shape or broadcastable to :obj:`(batch_size, num_heads, sequence_length, sequence_length)`, `optional`):
+            Mask to override causal masking for any generic masking:
+
+            - True for attention weights that are **not masked**,
+            - False for attention weights that are **masked**.
+
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
@@ -742,6 +803,7 @@ class GPT2Model(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        lm_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -878,6 +940,7 @@ class GPT2Model(GPT2PreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
+                    lm_attention_mask,
                     head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
@@ -887,6 +950,7 @@ class GPT2Model(GPT2PreTrainedModel):
                     hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
+                    lm_attention_mask=lm_attention_mask,
                     head_mask=head_mask[i],
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
@@ -979,34 +1043,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
-        # only last token for inputs_ids if past is defined in kwargs
-        if past:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1019,6 +1055,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        lm_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1043,6 +1080,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            lm_attention_mask=lm_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -1151,35 +1189,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
-        # only last token for inputs_ids if past is defined in kwargs
-        if past:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
-
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1187,6 +1196,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        lm_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1246,6 +1256,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            lm_attention_mask=lm_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -1348,6 +1359,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        lm_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1370,6 +1382,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            lm_attention_mask=lm_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -1467,6 +1480,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        lm_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -1489,6 +1503,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            lm_attention_mask=lm_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
