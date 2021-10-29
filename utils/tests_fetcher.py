@@ -264,7 +264,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "models/blenderbot_small/tokenization_blenderbot_small.py": "test_tokenization_small_blenderbot.py",
     "models/blenderbot_small/tokenization_blenderbot_small_fast.py": "test_tokenization_small_blenderbot.py",
     "models/gpt2/modeling_gpt2.py": ["test_modeling_gpt2.py", "test_modeling_megatron_gpt2.py"],
-    "pipelines/base.py": "test_pipelines_common.py",
+    "pipelines/base.py": "test_pipelines_*.py",
     "pipelines/text2text_generation.py": [
         "test_pipelines_text2text_generation.py",
         "test_pipelines_summarization.py",
