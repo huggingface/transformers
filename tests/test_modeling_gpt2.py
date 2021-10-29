@@ -479,7 +479,7 @@ class GPT2ModelTester:
         new_token_id = randint(0, sequence_length - 1, blacklist=(random_token_id,))
         modified_inputs_other_token = input_ids.clone()
         blacklisted_values_other_token = set(input_ids[:, new_token_id])
-        modified_inputs_other_token[:, random_token_id] = randint(
+        modified_inputs_other_token[:, new_token_id] = randint(
             0, config.vocab_size, blacklist=blacklisted_values_other_token
         )
 
