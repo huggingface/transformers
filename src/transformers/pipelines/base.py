@@ -25,8 +25,8 @@ from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from packaging import version
 import numpy as np
+from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
