@@ -517,8 +517,18 @@ class GPT2PreTrainedModel(PreTrainedModel):
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
-            # when past is defined, we autoregressively decode tokens
+            # autoregressively decode tokens
             lm_attention_mask = None
+        else:
+            # either the first time we run this method, or users has set use_cache = False
+            _, sequence_length = input_ids.shape
+            lm_attn_mask_bs, lm_attn_mask_nh, lm_attn_mask_queries_length, lm_attn_mask_keys_length = lm_attention_mask.shape
+            assert lm_attn_mask_queries_length == lm_attn_mask_keys_length
+            assert lm_attn_mask_keys_length <= sequence_length
+            if lm_attn_mask_keys_length < sequence_length:
+                # build new lm_attention_mask by adding autoregressive parts at the end.
+                new_lm_attention_mask = torch.tril(torch.ones(lm_attention_mask, lm_attn_mask_nh, sequence_length, sequence_length, dtype=lm_attention_mask.dtype, device=lm_attention_mask.device))
+                new_lm_attention_mask[:,:,:lm_attn_mask_queries_length, :lm_attn_mask_keys_length] = lm_attention_mask
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
