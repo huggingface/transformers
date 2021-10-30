@@ -25,9 +25,9 @@ from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 
 if is_sentencepiece_available():
-    from .tokenization_plbart import PLBartTokenizer
+    from .tokenization_plbart_multi import PLBartMultiTokenizer
 else:
-    PLBartTokenizer = None
+    PLBartMultiTokenizer = None
 
 
 logger = logging.get_logger(__name__)
@@ -173,22 +173,22 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-class PLBartTokenizerFast(XLMRobertaTokenizerFast):
+class PLBartMultiTokenizerFast(XLMRobertaTokenizerFast):
     """
     Construct a "fast" PLBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
-    :class:`~transformers.PLBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast`. Refer
-    to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    :class:`~transformers.PLBartMultiTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast`.
+    Refer to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning
+    the initialization parameters and other methods.
 
     The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
 
     Examples::
 
-        >>> from transformers import PLBartTokenizerFast
-        >>> tokenizer = PLBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+        >>> from transformers import PLBartMultiTokenizerFast
+        >>> tokenizer = PLBartMultiTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
@@ -200,7 +200,7 @@ class PLBartTokenizerFast(XLMRobertaTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    slow_tokenizer_class = PLBartTokenizer
+    slow_tokenizer_class = PLBartMultiTokenizer
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []

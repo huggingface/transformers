@@ -123,11 +123,11 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-class PLBartTokenizer(XLMRobertaTokenizer):
+class PLBartMultiTokenizer(XLMRobertaTokenizer):
     """
     Construct an PLBART tokenizer.
 
-    :class:`~transformers.PLBartTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer`. Refer to
+    :class:`~transformers.PLBartMultiTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer`. Refer to
     superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
     initialization parameters and other methods.
 
@@ -136,8 +136,8 @@ class PLBartTokenizer(XLMRobertaTokenizer):
 
     Examples::
 
-        >>> from transformers import PLBartTokenizer
-        >>> tokenizer = PLBartTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+        >>> from transformers import PLBartMultiTokenizer
+        >>> tokenizer = PLBartMultiTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)

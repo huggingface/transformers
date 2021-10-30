@@ -17,16 +17,21 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_sentencepiece_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
     "configuration_plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
-    "tokenization_plbart": ["PLBartTokenizer"],
 }
+
+if is_sentencepiece_available():
+    _import_structure["tokenization_plbart"] = ["PLBartTokenizer"]
+    _import_structure["tokenization_plbart_multi"] = ["PLBartMultiTokenizer"]
+
 
 if is_tokenizers_available():
     _import_structure["tokenization_plbart_fast"] = ["PLBartTokenizerFast"]
+    _import_structure["tokenization_plbart_multi_fast"] = ["PLBartMultiTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_plbart"] = [
@@ -42,10 +47,14 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
-    from .tokenization_plbart import PLBartTokenizer
+
+    if is_sentencepiece_available():
+        from .tokenization_plbart import PLBartTokenizer
+        from .tokenization_plbart_multi import PLBartMultiTokenizer
 
     if is_tokenizers_available():
         from .tokenization_plbart_fast import PLBartTokenizerFast
+        from .tokenization_plbart_multi_fast import PLBartMultiTokenizerFast
 
     if is_torch_available():
         from .modeling_plbart import (
