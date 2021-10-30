@@ -25,9 +25,9 @@ from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 
 if is_sentencepiece_available():
-    from .tokenization_mbart import MBartTokenizer
+    from .tokenization_plbart import PLBartTokenizer
 else:
-    MBartTokenizer = None
+    PLBartTokenizer = None
 
 
 logger = logging.get_logger(__name__)
@@ -173,13 +173,13 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-class MBartTokenizerFast(XLMRobertaTokenizerFast):
+class PLBartTokenizerFast(XLMRobertaTokenizerFast):
     """
-    Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
+    Construct a "fast" PLBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
-    :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast`. Refer to
-    superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning the
+    :class:`~transformers.PLBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast`. Refer
+    to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning the
     initialization parameters and other methods.
 
     The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
@@ -187,8 +187,8 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
 
     Examples::
 
-        >>> from transformers import MBartTokenizerFast
-        >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+        >>> from transformers import PLBartTokenizerFast
+        >>> tokenizer = PLBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
@@ -200,7 +200,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    slow_tokenizer_class = MBartTokenizer
+    slow_tokenizer_class = PLBartTokenizer
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
@@ -257,7 +257,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. The special tokens depend on calling set_lang.
 
-        An MBART sequence has the following format, where ``X`` represents the sequence:
+        An PLBART sequence has the following format, where ``X`` represents the sequence:
 
         - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
         - ``decoder_input_ids``: (for decoder) ``X [eos, tgt_lang_code]``
@@ -296,7 +296,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         src_texts: List[str],
         src_lang: str = "en_XX",
         tgt_texts: Optional[List[str]] = None,
-        tgt_lang: str = "ro_RO",
+        tgt_lang: str = "python",
         **kwargs,
     ) -> BatchEncoding:
         self.src_lang = src_lang
@@ -331,8 +331,8 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        self.prefix_tokens = [self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]
 
         prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
         suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)

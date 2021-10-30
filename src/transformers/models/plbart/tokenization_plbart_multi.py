@@ -116,18 +116,18 @@ FAIRSEQ_LANGUAGE_CODES = [
     "java",
     "python",
     "en_XX",
-    "js",
+    "javascript",
     "php",
     "ruby",
     "go",
 ]
 
 
-class MBartTokenizer(XLMRobertaTokenizer):
+class PLBartTokenizer(XLMRobertaTokenizer):
     """
-    Construct an MBART tokenizer.
+    Construct an PLBART tokenizer.
 
-    :class:`~transformers.MBartTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer`. Refer to
+    :class:`~transformers.PLBartTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer`. Refer to
     superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
     initialization parameters and other methods.
 
@@ -136,8 +136,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
 
     Examples::
 
-        >>> from transformers import MBartTokenizer
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+        >>> from transformers import PLBartTokenizer
+        >>> tokenizer = PLBartTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
@@ -235,7 +235,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An MBART sequence has the following format, where ``X`` represents the sequence:
+        adding special tokens. An PLBART sequence has the following format, where ``X`` represents the sequence:
 
         - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
         - ``decoder_input_ids``: (for decoder) ``X [eos, tgt_lang_code]``
@@ -300,5 +300,5 @@ class MBartTokenizer(XLMRobertaTokenizer):
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
         self.cur_lang_code = self.lang_code_to_id[lang]
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        self.prefix_tokens = [self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]
