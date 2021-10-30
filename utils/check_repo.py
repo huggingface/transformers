@@ -147,6 +147,29 @@ spec = importlib.util.spec_from_file_location(
 transformers = spec.loader.load_module()
 
 
+def check_model_list():
+    """Check the model list inside the transformers library."""
+    _ignore_models = ["bort"]
+
+    # Get the models from the directory structure of `src/transformers/models/`
+    models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
+    _models = []
+    for model in os.listdir(models_dir):
+        if model not in _ignore_models:
+            model_dir = os.path.join(models_dir, model)
+            if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
+                _models.append(model)
+
+    # Get the models from the directory structure of `src/transformers/models/`
+    models = [model for model in dir(transformers.models) if not model.startswith("__")]
+
+    missing_models = sorted(list(set(_models).difference(models)))
+    if missing_models:
+        raise Exception(
+            f"The following models should be included in {models_dir}/__init__.py: {','.join(missing_models)}."
+        )
+
+
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
 def get_model_modules():
@@ -560,6 +583,8 @@ def check_all_objects_are_documented():
 
 def check_repo_quality():
     """Check all models are properly tested and documented."""
+    print("Checking all models are included.")
+    check_model_list()
     print("Checking all models are public.")
     check_models_are_in_init()
     print("Checking all models are properly tested.")
