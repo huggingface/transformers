@@ -43,7 +43,7 @@ _CONFIG_FOR_DOC = "HubertConfig"
 _CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
-_SEQ_CLASS_CHECKPOINT = ("superb/hubert-base-superb-ks",)
+_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
 _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 1
@@ -325,13 +325,16 @@ class HubertFeatureExtractor(nn.Module):
 class HubertFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
+        self.feat_proj_layer_norm = config.feat_proj_layer_norm
+        if self.feat_proj_layer_norm:
+            self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
     def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
-        hidden_states = self.layer_norm(hidden_states)
+        if self.feat_proj_layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -354,9 +357,12 @@ class HubertAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -929,9 +935,8 @@ class HubertModel(HubertPreTrainedModel):
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)[
-                :, None
-            ].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states

@@ -54,8 +54,6 @@ class GPT2Config(PretrainedConfig):
         n_positions (:obj:`int`, `optional`, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_ctx (:obj:`int`, `optional`, defaults to 1024):
-            Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         n_layer (:obj:`int`, `optional`, defaults to 12):
@@ -144,7 +142,6 @@ class GPT2Config(PretrainedConfig):
         self,
         vocab_size=50257,
         n_positions=1024,
-        n_ctx=1024,
         n_embd=768,
         n_layer=12,
         n_head=12,
@@ -169,7 +166,6 @@ class GPT2Config(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
