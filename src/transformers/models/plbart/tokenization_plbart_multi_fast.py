@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
+# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,26 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from contextlib import contextmanager
-from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from tokenizers import processors
 
 from ...file_utils import is_sentencepiece_available
-from ...tokenization_utils import AddedToken, BatchEncoding
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils import BatchEncoding
 from ...utils import logging
+from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 
 if is_sentencepiece_available():
-    from .tokenization_plbart import PLBartMultiTokenizer
+    from .tokenization_mbart import MBartTokenizer
 else:
-    PLBartMultiTokenizer = None
+    MBartTokenizer = None
 
 
 logger = logging.get_logger(__name__)
+
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
@@ -174,53 +173,34 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
+class MBartTokenizerFast(XLMRobertaTokenizerFast):
     """
-    Construct a "fast" PLBART tokenizer for PLBART-Multilingual (backed by HuggingFace's `tokenizers` library). Based
-    on `BPE <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
+    Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast`. Refer to
+    superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning the
+    initialization parameters and other methods.
 
-    Args:
-        vocab_file (:obj:`str`):
-            Path to the vocabulary file.
-        src_lang (:obj:`str`, `optional`):
-            A string representing the source language.
-        tgt_lang (:obj:`str`, `optional`):
-            A string representing the target language.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The end of sequence token.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
-            sequence classification or for a text and a question for question answering. It is also used as the last
-            token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
+    The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
+    <tokens> <eos>``` for target language documents.
 
     Examples::
 
-        >>> from transformers import PLBartMultiTokenizerFast
-        >>> tokenizer = PLBartMultiTokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
-        >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
-        >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> model_inputs = tokenizer(src_text, return_tensors="pt")
+        >>> from transformers import MBartTokenizerFast
+        >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+        >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
         >>> with tokenizer.as_target_tokenizer():
-        ...    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
-        >>> # model(**model_inputs, labels=labels) should work
+        ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+        >>> inputs["labels"] = labels["input_ids"]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = PLBartMultiTokenizer
+    slow_tokenizer_class = MBartTokenizer
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
@@ -228,45 +208,37 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file=None,
+        tokenizer_file=None,
         src_lang=None,
         tgt_lang=None,
-        tokenizer_file=None,
-        eos_token="</s>",
-        sep_token="</s>",
-        cls_token="<s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
+        additional_special_tokens=None,
         **kwargs
     ):
-
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
-        kwargs["additional_special_tokens"] += [
-            code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
-        ]
-
         super().__init__(
-            vocab_file,
+            vocab_file=vocab_file,
+            tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
-            tokenizer_file=tokenizer_file,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
-        self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
 
+        if additional_special_tokens is not None:
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+            )
+
+        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property
@@ -285,10 +257,10 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. The special tokens depend on calling set_lang.
 
-        An PLBART sequence has the following format, where ``X`` represents the sequence:
+        An MBART sequence has the following format, where ``X`` represents the sequence:
 
-        - ``input_ids`` (for encoder) ``[src_lang_code] X [eos]``
-        - ``labels``: (for decoder) ``[tgt_lang_code] X [eos]``
+        - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
+        - ``decoder_input_ids``: (for decoder) ``X [eos, tgt_lang_code]``
 
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.
@@ -306,6 +278,18 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+
+    def _build_translation_inputs(
+        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+    ):
+        """Used by translation pipeline, to prepare inputs for the generate function"""
+        if src_lang is None or tgt_lang is None:
+            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+        self.src_lang = src_lang
+        inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
+        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        inputs["forced_bos_token_id"] = tgt_lang_id
+        return inputs
 
     def prepare_seq2seq_batch(
         self,
@@ -329,11 +313,11 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
         yield
         self.set_src_lang_special_tokens(self.src_lang)
 
-    def set_src_lang_special_tokens(self, src_lang: str) -> None:
-        """Reset the special tokens to the source lang setting. prefix=[src_lang_code] and suffix=[eos]."""
-        self.cur_lang_code_id = self.convert_tokens_to_ids(src_lang)
-        self.prefix_tokens = [self.cur_lang_code_id]
-        self.suffix_tokens = [self.eos_token_id]
+    def set_src_lang_special_tokens(self, src_lang) -> None:
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
+        self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
         prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
         suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
@@ -344,11 +328,11 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
 
-    def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
-        """Reset the special tokens to the target language setting. prefix=[src_lang_code] and suffix=[eos]."""
-        self.cur_lang_code_id = self.convert_tokens_to_ids(tgt_lang)
-        self.prefix_tokens = [self.cur_lang_code_id]
-        self.suffix_tokens = [self.eos_token_id]
+    def set_tgt_lang_special_tokens(self, lang: str) -> None:
+        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
+        self.cur_lang_code = self.convert_tokens_to_ids(lang)
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
         prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
         suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
@@ -358,34 +342,3 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
             pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
-
-    def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
-    ):
-        """Used by translation pipeline, to prepare inputs for the generate function"""
-        if src_lang is None or tgt_lang is None:
-            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
-        self.src_lang = src_lang
-        inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
-        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
-        inputs["forced_bos_token_id"] = tgt_lang_id
-        return inputs
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
-            raise ValueError(
-                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
-                "tokenizer."
-            )
-
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)

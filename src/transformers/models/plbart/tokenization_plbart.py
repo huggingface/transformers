@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
+# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,22 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from contextlib import contextmanager
-from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional
 
-import sentencepiece as spm
-
-from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
+from ...tokenization_utils import BatchEncoding
 from ...utils import logging
+from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
 
 
 logger = logging.get_logger(__name__)
 
-SPIECE_UNDERLINE = "▁"
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -73,124 +69,47 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-class PLBartTokenizer(PreTrainedTokenizer):
+class MBartTokenizer(XLMRobertaTokenizer):
     """
-    Construct a PLBart tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+    Construct an MBART tokenizer.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    :class:`~transformers.MBartTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer`. Refer to
+    superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
+    initialization parameters and other methods.
 
-    Args:
-        vocab_file (:obj:`str`):
-            Path to the vocabulary file.
-        src_lang (:obj:`str`, `optional`):
-            A string representing the source language.
-        tgt_lang (:obj:`str`, `optional`):
-            A string representing the target language.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The end of sequence token.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
-            sequence classification or for a text and a question for question answering. It is also used as the last
-            token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
-        sp_model_kwargs (:obj:`dict`, `optional`):
-            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
-            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
-
-            - ``enable_sampling``: Enable subword regularization.
-            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - ``nbest_size = {0,1}``: No sampling is performed.
-              - ``nbest_size > 1``: samples from the nbest_size results.
-              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
+    The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
+    <tokens> <eos>``` for target language documents.
 
     Examples::
 
-        >>> from transformers import PLBartTokenizer
-        >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-en_XX-python", src_lang="en_XX", tgt_lang="python")
-        >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
-        >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> model_inputs = tokenizer(src_text, return_tensors="pt")
+        >>> from transformers import MBartTokenizer
+        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+        >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
         >>> with tokenizer.as_target_tokenizer():
-        ...    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
-        >>> # model(**model_inputs, labels=labels) should work
+        ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+        >>> inputs["labels"] = labels["input_ids"]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
     def __init__(
-        self,
-        vocab_file,
-        src_lang=None,
-        tgt_lang=None,
-        eos_token="</s>",
-        sep_token="</s>",
-        cls_token="<s>",
-        unk_token="<unk>",
-        pad_token="<pad>",
-        mask_token="<mask>",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> None:
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
-        kwargs["additional_special_tokens"] += [
-            code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
-        ]
-
+        self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, additional_special_tokens=None, **kwargs
+    ):
         super().__init__(
+            *args,
+            tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
-        self.vocab_file = vocab_file
-
-        # Original fairseq vocab and spm vocab must be "aligned":
-        # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
-        # -------- | ------- | ------- | ------ | ------- | --- | --- | --- | ----- | ----- | ----
-        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
-        # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
-
-        # Mimic fairseq token-to-id alignment for the first 4 token
-        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
-
-        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
-        self.fairseq_offset = 1
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
@@ -201,14 +120,21 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self._additional_special_tokens = list(self.lang_code_to_id.keys())
 
-        self._src_lang = src_lang
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang] if self._src_lang is not None else None
+        if additional_special_tokens is not None:
+            # Only add those special tokens if they are not already there.
+            self._additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
+            )
+
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property
-    def vocab_size(self) -> int:
+    def vocab_size(self):
         return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
 
     @property
@@ -219,61 +145,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
     def src_lang(self, new_src_lang: str) -> None:
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
-    def __getstate__(self) -> Dict:
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    def __setstate__(self, d: Dict) -> None:
-        self.__dict__ = d
-
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(self.vocab_file)
-
-    def get_vocab(self) -> Dict:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    def _tokenize(self, text: str) -> List[str]:
-        return self.sp_model.encode(text, out_type=str)
-
-    def _convert_token_to_id(self, token: str) -> int:
-        """Converts a token (str) in an id using the vocab."""
-        if token in self.fairseq_tokens_to_ids:
-            return self.fairseq_tokens_to_ids[token]
-        spm_id = self.sp_model.PieceToId(token)
-
-        # Need to return unknown token if the SP model returned 0
-        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
-
-    def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.fairseq_ids_to_tokens:
-            return self.fairseq_ids_to_tokens[index]
-        return self.sp_model.IdToPiece(index - self.fairseq_offset)
-
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        return self.sp_model.decode(tokens)
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -310,10 +181,10 @@ class PLBartTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An PLBART sequence has the following format, where ``X`` represents the sequence:
+        adding special tokens. An MBART sequence has the following format, where ``X`` represents the sequence:
 
-        - ``input_ids`` (for encoder) ``[src_lang_code] X [eos]``
-        - ``labels``: (for decoder) ``[tgt_lang_code] X [eos]``
+        - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
+        - ``decoder_input_ids``: (for decoder) ``X [eos, tgt_lang_code]``
 
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.
@@ -366,14 +237,14 @@ class PLBartTokenizer(PreTrainedTokenizer):
         yield
         self.set_src_lang_special_tokens(self.src_lang)
 
-    def set_src_lang_special_tokens(self, src_lang: str) -> None:
-        """Reset the special tokens to the source lang setting. prefix=[src_lang_code] and suffix=[eos]."""
-        self.cur_lang_code_id = self.lang_code_to_id[src_lang] if src_lang is not None else None
-        self.prefix_tokens = [self.cur_lang_code_id] if self.cur_lang_code_id is not None else []
-        self.suffix_tokens = [self.eos_token_id]
+    def set_src_lang_special_tokens(self, src_lang) -> None:
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
+        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
-    def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
-        """Reset the special tokens to the target language setting. prefix=[tgt_lang_code] and suffix=[eos]."""
-        self.cur_lang_code_id = self.lang_code_to_id[tgt_lang] if tgt_lang is not None else None
-        self.prefix_tokens = [self.cur_lang_code_id] if self.cur_lang_code_id is not None else []
-        self.suffix_tokens = [self.eos_token_id]
+    def set_tgt_lang_special_tokens(self, lang: str) -> None:
+        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
+        self.cur_lang_code = self.lang_code_to_id[lang]
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
