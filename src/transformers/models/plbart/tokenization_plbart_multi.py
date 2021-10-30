@@ -219,7 +219,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             cls_token=cls_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
