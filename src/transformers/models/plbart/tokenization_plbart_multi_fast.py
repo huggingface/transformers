@@ -203,9 +203,6 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
 
     Examples::
 
@@ -239,11 +236,8 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        mask_token="<mask>",
         **kwargs
     ):
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
         kwargs["additional_special_tokens"] += [
@@ -260,7 +254,6 @@ class PLBartMultiTokenizerFast(PreTrainedTokenizerFast):
             cls_token=cls_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             **kwargs,
         )
 

@@ -155,9 +155,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
         sp_model_kwargs (:obj:`dict`, `optional`):
             Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
             <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
@@ -203,12 +200,9 @@ class PLBartTokenizer(PreTrainedTokenizer):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        mask_token="<mask>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> None:
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -251,7 +245,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
             code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
