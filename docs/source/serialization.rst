@@ -43,6 +43,8 @@ Ready-made configurations include the following models:
 - ALBERT
 - BART
 - BERT
+- BigBird
+- BigBirdPegasus
 - CamemBERT
 - DistilBERT
 - GPT Neo
