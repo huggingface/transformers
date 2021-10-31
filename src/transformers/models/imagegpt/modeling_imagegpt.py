@@ -144,9 +144,6 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
 
         logger.info("Initialize PyTorch weight {}".format(name))
 
-        print("Name:", name)
-        print("Pointer:", pointer)
-        
         if name[-1] == "q_proj":
             pointer.data[:, : config.n_embd] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
         elif name[-1] == "k_proj":
@@ -160,8 +157,6 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         elif name[-1] == "wtet":
             pointer.data = torch.from_numpy(array)
         elif name[-1] == "wte":
-            print("Shape of pointer data:", pointer.data.shape)
-            print("Shape of array to load:", array.shape)
             pointer.data[: config.vocab_size - 1, :] = torch.from_numpy(array)
         elif name[-1] == "sos":
             pointer.data[-1] = torch.from_numpy(array)
@@ -921,12 +916,7 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
         }
 
     @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -949,7 +939,25 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
             ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import ImageGPTForCausalLM
+            >>> import torch
+
+            >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            >>> model = ImageGPTForCausalLM.from_pretrained('openai/imagegpt-small')
+            >>> model.to(device)
+
+            >>> # unconditional generation of 8 images
+            >>> batch_size = 8
+            >>> context = torch.full((batch_size, 1), model.config.vocab_size - 1) #initialize with SOS token
+            >>> context = torch.tensor(context).to(device)
+            >>> output = model.generate(input_ids=context, max_length=model.config.n_positions + 1, temperature=1.0, do_sample=True, top_k=40)
         """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(

@@ -102,7 +102,7 @@ class ImageGPTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=512 + 1,  #add one for start of sentence (sos) token
+        vocab_size=512 + 1,  # add one for start of sentence (sos) token
         n_positions=32 * 32,
         n_embd=512,
         n_layer=24,

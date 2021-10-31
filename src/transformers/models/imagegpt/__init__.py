@@ -18,16 +18,13 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
     "configuration_imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "tokenization_imagegpt": ["ImageGPTTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_imagegpt_fast"] = ["ImageGPTTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_imagegpt"] = [
@@ -43,9 +40,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .tokenization_imagegpt import ImageGPTTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_imagegpt_fast import ImageGPTTokenizerFast
 
     if is_torch_available():
         from .modeling_imagegpt import (
