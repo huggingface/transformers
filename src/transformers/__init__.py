@@ -221,6 +221,7 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
+    "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig", "ImageGPTTokenizer"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -390,6 +391,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.imagegpt"].append("ImageGPTTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
@@ -571,6 +573,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -941,6 +944,16 @@ if is_torch_available():
             "IBertForTokenClassification",
             "IBertModel",
             "IBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.imagegpt"].extend(
+        [
+            "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ImageGPTForCausalLM",
+            "ImageGPTLayer",
+            "ImageGPTModel",
+            "ImageGPTPreTrainedModel",
+            "load_tf_weights_in_imagegpt",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -2150,6 +2163,7 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig, ImageGPTTokenizer
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2320,6 +2334,7 @@ if TYPE_CHECKING:
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
+        from .models.imagegpt import ImageGPTTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.layoutxlm import LayoutXLMTokenizerFast
@@ -2402,6 +2417,7 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2755,6 +2771,14 @@ if TYPE_CHECKING:
             IBertForTokenClassification,
             IBertModel,
             IBertPreTrainedModel,
+        )
+        from .models.imagegpt import (
+            IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ImageGPTForCausalLM,
+            ImageGPTLayer,
+            ImageGPTModel,
+            ImageGPTPreTrainedModel,
+            load_tf_weights_in_imagegpt,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,

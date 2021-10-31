@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("imagegpt", "ImageGPTModel"),
         ("fnet", "FNetModel"),
         ("segformer", "SegformerModel"),
         ("gptj", "GPTJModel"),
@@ -145,6 +146,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+        ("imagegpt", "ImageGPTForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForMaskedLM"),
@@ -195,6 +197,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("imagegpt", "ImageGPTForCausalLM"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForCausalLM"),
@@ -253,6 +256,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("imagegpt", "ImageGPTForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("rembert", "RemBertForMaskedLM"),
         ("roformer", "RoFormerForMaskedLM"),
@@ -323,6 +327,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("imagegpt", "ImageGPTForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
         ("layoutlmv2", "LayoutLMv2ForSequenceClassification"),
@@ -368,6 +373,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("imagegpt", "ImageGPTForQuestionAnswering"),
         ("fnet", "FNetForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
@@ -414,6 +420,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("imagegpt", "ImageGPTForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
         ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
@@ -448,6 +455,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        ("imagegpt", "ImageGPTForMultipleChoice"),
         ("fnet", "FNetForMultipleChoice"),
         ("rembert", "RemBertForMultipleChoice"),
         ("canine", "CanineForMultipleChoice"),
