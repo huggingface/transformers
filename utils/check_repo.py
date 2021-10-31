@@ -149,16 +149,13 @@ transformers = spec.loader.load_module()
 
 def check_model_list():
     """Check the model list inside the transformers library."""
-    _ignore_models = ["bort"]
-
     # Get the models from the directory structure of `src/transformers/models/`
     models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
     _models = []
     for model in os.listdir(models_dir):
-        if model not in _ignore_models:
-            model_dir = os.path.join(models_dir, model)
-            if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
-                _models.append(model)
+        model_dir = os.path.join(models_dir, model)
+        if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
+            _models.append(model)
 
     # Get the models from the directory structure of `src/transformers/models/`
     models = [model for model in dir(transformers.models) if not model.startswith("__")]
