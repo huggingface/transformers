@@ -160,6 +160,8 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         elif name[-1] == "wtet":
             pointer.data = torch.from_numpy(array)
         elif name[-1] == "wte":
+            print("Shape of pointer data:", pointer.data.shape)
+            print("Shape of array to load:", array.shape)
             pointer.data[: config.vocab_size - 1, :] = torch.from_numpy(array)
         elif name[-1] == "sos":
             pointer.data[-1] = torch.from_numpy(array)
