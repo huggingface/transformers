@@ -144,6 +144,9 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
 
         logger.info("Initialize PyTorch weight {}".format(name))
 
+        print("Name:", name)
+        print("Pointer:", pointer)
+        
         if name[-1] == "q_proj":
             pointer.data[:, : config.n_embd] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
         elif name[-1] == "k_proj":
