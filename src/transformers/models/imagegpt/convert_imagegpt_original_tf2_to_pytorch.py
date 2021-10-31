@@ -27,12 +27,11 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 
 
-def convert_imagegpt_checkpoint_to_pytorch(imagegpt_checkpoint_path, imagegpt_config_file, pytorch_dump_folder_path):
-    # Construct model
-    if imagegpt_config_file == "":
-        config = ImageGPTConfig()
-    else:
-        config = ImageGPTConfig.from_json_file(imagegpt_config_file)
+def convert_imagegpt_checkpoint_to_pytorch(imagegpt_checkpoint_path, model_size, pytorch_dump_folder_path):
+    # Construct configuration depending on size
+    MODELS = {"small": (512, 8, 24), "medium": (1024, 8, 36), "large": (1536, 16, 48)}
+    n_embd, n_head, n_layer = MODELS[model_size]  # set model hyperparameters
+    config = ImageGPTConfig(n_embd=n_embd, n_layer=n_layer, n_head=n_head)
     model = ImageGPTModel(config)
 
     # Load weights from numpy
@@ -59,16 +58,16 @@ if __name__ == "__main__":
         help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--model_size",
+        default=None,
+        type=str,
+        required=True,
+        help="Size of the model (can be either 'small', 'medium' or 'large').",
     )
     parser.add_argument(
-        "--imagegpt_config_file",
-        default="",
-        type=str,
-        help="An optional config json file corresponding to the pre-trained OpenAI model. \n"
-        "This specifies the model architecture.",
+        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
     convert_imagegpt_checkpoint_to_pytorch(
-        args.imagegpt_checkpoint_path, args.imagegpt_config_file, args.pytorch_dump_folder_path
+        args.imagegpt_checkpoint_path, args.model_size, args.pytorch_dump_folder_path
     )
