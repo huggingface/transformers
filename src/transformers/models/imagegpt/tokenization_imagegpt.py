@@ -36,6 +36,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "openai/imagegpt-small": 1024,
 }
 
+
 class ImageGPTTokenizer(PreTrainedTokenizer):
     """
     Construct a BrandNewBERT tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -51,12 +52,7 @@ class ImageGPTTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-            self,
-            vocab_file,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
-            **kwargs
+        self, vocab_file, unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -73,16 +69,16 @@ class ImageGPTTokenizer(PreTrainedTokenizer):
         "Returns vocab as a dict"
 
     def _tokenize(self, text):
-        """ Returns a tokenized string. """
+        """Returns a tokenized string."""
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
 
     def save_vocabulary(self, save_directory):
         """
@@ -97,7 +93,7 @@ class ImageGPTTokenizer(PreTrainedTokenizer):
         """
 
     def build_inputs_with_special_tokens(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -122,7 +118,7 @@ class ImageGPTTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -149,7 +145,7 @@ class ImageGPTTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. BrandNewBERT
@@ -177,6 +173,7 @@ class ImageGPTTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
+
 class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" BrandNewBERT tokenizer (backed by HuggingFace's `tokenizers` library).
@@ -192,15 +189,15 @@ class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
-            add_prefix_space=False,
-            trim_offsets=True,
-            **kwargs
+        self,
+        vocab_file,
+        merges_file,
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
+        add_prefix_space=False,
+        trim_offsets=True,
+        **kwargs
     ):
         super().__init__(
             ByteLevelBPETokenizer(
@@ -223,9 +220,8 @@ class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
 
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
-
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. BrandNewBERT
@@ -246,5 +242,3 @@ class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
-

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The OpenAI Team Authors and HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,7 @@
 # limitations under the License.
 """ OpenAI ImageGPT configuration """
 
-from collections import OrderedDict
-from typing import Any, Mapping, Optional
-
-from transformers import PreTrainedTokenizer, TensorType, is_torch_available
-
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -60,8 +54,9 @@ class ImageGPTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (:obj:`int`, `optional`, defaults to None):
             Dimensionality of the inner feed-forward layers. :obj:`None` will set it to 4 times n_embd
-        activation_function (:obj:`str`, `optional`, defaults to :obj:`"gelu"`):
-            Activation function, to be selected in the list :obj:`["relu", "silu", "gelu", "tanh", "gelu_new"]`.
+        activation_function (:obj:`str`, `optional`, defaults to :obj:`"quick_gelu"`):
+            Activation function (can be one of the activation functions defined in src/transformers/activations.py).
+            Defaults to "quick_gelu".
         resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (:obj:`int`, `optional`, defaults to 0.1):
@@ -108,12 +103,12 @@ class ImageGPTConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=512,
-        n_positions=32*32,
+        n_positions=32 * 32,
         n_embd=512,
         n_layer=24,
         n_head=8,
         n_inner=None,
-        activation_function="gelu_new",
+        activation_function="quick_gelu",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,

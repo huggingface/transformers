@@ -39,6 +39,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "openai/imagegpt-small": 1024,
 }
 
+
 class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" BrandNewBERT tokenizer (backed by HuggingFace's `tokenizers` library).
@@ -54,15 +55,15 @@ class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = ImageGPTTokenizer
 
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
-            add_prefix_space=False,
-            trim_offsets=True,
-            **kwargs
+        self,
+        vocab_file,
+        merges_file,
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
+        add_prefix_space=False,
+        trim_offsets=True,
+        **kwargs
     ):
         super().__init__(
             ByteLevelBPETokenizer(
@@ -85,9 +86,8 @@ class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
 
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
-
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. BrandNewBERT
@@ -108,6 +108,3 @@ class ImageGPTTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
-
-

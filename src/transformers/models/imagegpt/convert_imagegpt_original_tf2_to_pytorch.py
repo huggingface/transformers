@@ -52,7 +52,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--imagegpt_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--imagegpt_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
@@ -65,4 +69,6 @@ if __name__ == "__main__":
         "This specifies the model architecture.",
     )
     args = parser.parse_args()
-    convert_imagegpt_checkpoint_to_pytorch(args.imagegpt_checkpoint_path, args.imagegpt_config_file, args.pytorch_dump_folder_path)
+    convert_imagegpt_checkpoint_to_pytorch(
+        args.imagegpt_checkpoint_path, args.imagegpt_config_file, args.pytorch_dump_folder_path
+    )

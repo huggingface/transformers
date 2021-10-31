@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2021 The OpenAI Team Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,14 +16,13 @@
 
 import math
 import os
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Tuple
 
 import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
@@ -35,27 +33,14 @@ else:
 
 from ...activations import ACT2FN
 from ...file_utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
-from ...modeling_utils import (
-    Conv1D,
-    PreTrainedModel,
-    SequenceSummary,
-    find_pruneable_heads_and_indices,
-    prune_conv1d_layer,
-)
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -79,6 +64,7 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
     """
     try:
         import re
+
         import tensorflow as tf
     except ImportError:
         logger.error(
@@ -108,14 +94,14 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         if any(
             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
             for n in name
-        ) or name[-1] in ['_step']:
+        ) or name[-1] in ["_step"]:
             logger.info("Skipping {}".format("/".join(name)))
             continue
-        
+
         pointer = model
         if name[-1] not in ["wtet"]:
-          pointer = getattr(pointer, "transformer")
-        
+            pointer = getattr(pointer, "transformer")
+
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+\d+", m_name):
                 scope_names = re.split(r"(\d+)", m_name)
@@ -129,53 +115,70 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
             elif scope_names[0] == "wpe" or scope_names[0] == "wte":
                 pointer = getattr(pointer, scope_names[0])
                 pointer = getattr(pointer, "weight")
-            elif scope_names[0] in ['q_proj','k_proj','v_proj']:
-                pointer = getattr(pointer, 'c_attn')
-                pointer = getattr(pointer, 'weight')
-            elif len(name) ==3 and name[1]=="attn" and scope_names[0]=="c_proj":
+            elif scope_names[0] in ["q_proj", "k_proj", "v_proj"]:
+                pointer = getattr(pointer, "c_attn")
+                pointer = getattr(pointer, "weight")
+            elif len(name) == 3 and name[1] == "attn" and scope_names[0] == "c_proj":
                 pointer = getattr(pointer, scope_names[0])
-                pointer = getattr(pointer, 'weight')
-            elif scope_names[0]=="wtet":
+                pointer = getattr(pointer, "weight")
+            elif scope_names[0] == "wtet":
                 pointer = getattr(pointer, "lm_head")
-                pointer = getattr(pointer, 'weight')
-            elif scope_names[0]=="sos":
-                pointer = getattr(pointer,"wte")
-                pointer = getattr(pointer, 'weight')
+                pointer = getattr(pointer, "weight")
+            elif scope_names[0] == "sos":
+                pointer = getattr(pointer, "wte")
+                pointer = getattr(pointer, "weight")
             else:
                 pointer = getattr(pointer, scope_names[0])
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
                 pointer = pointer[num]
 
-        if len(name) > 1 and name[1]=="attn" or name[-1]=="wtet" or name[-1]=="sos" or name[-1]=="wte":
-           pass #array is used to initialize only part of the pointer so sizes won't match
+        if len(name) > 1 and name[1] == "attn" or name[-1] == "wtet" or name[-1] == "sos" or name[-1] == "wte":
+            pass  # array is used to initialize only part of the pointer so sizes won't match
         else:
-          try:
-              assert pointer.shape == array.shape
-          except AssertionError as e:
-              e.args += (pointer.shape, array.shape)
-              raise
-          
+            try:
+                assert pointer.shape == array.shape
+            except AssertionError as e:
+                e.args += (pointer.shape, array.shape)
+                raise
+
         logger.info("Initialize PyTorch weight {}".format(name))
 
-        if name[-1]=="q_proj":
-          pointer.data[:,:config.n_embd] = torch.from_numpy(array.reshape(config.n_embd,config.n_embd) ).T
-        elif name[-1]=="k_proj":
-          pointer.data[:,config.n_embd:2*config.n_embd] = torch.from_numpy(array.reshape(config.n_embd,config.n_embd) ).T
-        elif name[-1]=="v_proj":
-          pointer.data[:,2*config.n_embd:] = torch.from_numpy(array.reshape(config.n_embd,config.n_embd) ).T
-        elif (len(name) ==3 and name[1]=="attn" and name[2]=="c_proj" ):
-          pointer.data = torch.from_numpy(array.reshape(config.n_embd,config.n_embd) )
-        elif name[-1]=="wtet":
-          pointer.data = torch.from_numpy(array)
-        elif name[-1]=="wte":
-          pointer.data[:config.vocab_size-1,:] = torch.from_numpy(array)
-        elif name[-1]=="sos":
-          pointer.data[-1] = torch.from_numpy(array)
+        if name[-1] == "q_proj":
+            pointer.data[:, : config.n_embd] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
+        elif name[-1] == "k_proj":
+            pointer.data[:, config.n_embd : 2 * config.n_embd] = torch.from_numpy(
+                array.reshape(config.n_embd, config.n_embd)
+            ).T
+        elif name[-1] == "v_proj":
+            pointer.data[:, 2 * config.n_embd :] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
+        elif len(name) == 3 and name[1] == "attn" and name[2] == "c_proj":
+            pointer.data = torch.from_numpy(array.reshape(config.n_embd, config.n_embd))
+        elif name[-1] == "wtet":
+            pointer.data = torch.from_numpy(array)
+        elif name[-1] == "wte":
+            pointer.data[: config.vocab_size - 1, :] = torch.from_numpy(array)
+        elif name[-1] == "sos":
+            pointer.data[-1] = torch.from_numpy(array)
         else:
-          pointer.data = torch.from_numpy(array)
+            pointer.data = torch.from_numpy(array)
 
     return model
+
+
+class ImageGPTLayerNorm(nn.Module):
+    def __init__(self, nx, eps=1e-5):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.Tensor(nx))
+
+    def forward(self, x):
+        # input is not mean centered
+        return (
+            x
+            / torch.sqrt(torch.std(x, axis=-1, unbiased=False, keepdim=True) ** 2 + self.eps)
+            * self.weight.data[..., :]
+        )
 
 
 class ImageGPTAttention(nn.Module):
@@ -415,13 +418,13 @@ class ImageGPTBlock(nn.Module):
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_1 = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = ImageGPTAttention(config, layer_idx=layer_idx)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.ln_2 = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
             self.crossattention = ImageGPTAttention(config, is_cross_attention=True)
-            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.ln_cross_attn = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = ImageGPTMLP(inner_dim, config)
 
@@ -496,7 +499,6 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     config_class = ImageGPTConfig
     load_tf_weights = load_tf_weights_in_imagegpt
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
 
     def __init__(self, *inputs, **kwargs):
@@ -514,7 +516,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, ImageGPTLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -532,48 +534,6 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ImageGPTModel):
             module.gradient_checkpointing = value
-
-
-@dataclass
-class ImageGPTDoubleHeadsModelOutput(ModelOutput):
-    """
-    Base class for outputs of models predicting if two sentences are consecutive or not.
-
-    Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided):
-            Language modeling loss.
-        mc_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`mc_labels` is provided):
-            Multiple choice classification loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        mc_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
-            Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            Tuple of length :obj:`config.n_layers`, containing tuples of tensors of shape :obj:`(batch_size, num_heads,
-            sequence_length, embed_size_per_head)`).
-
-            Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-            :obj:`past_key_values` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
-
-            ImageGPTAttentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    mc_loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    mc_logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 IMAGEGPT_START_DOCSTRING = r"""
@@ -658,50 +618,6 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the imagegpt models have the
-            following number of attention modules:
-
-                - imagegpt: 12
-                - imagegpt-medium: 24
-                - imagegpt-large: 36
-                - imagegpt-xl: 48
-
-    Example::
-
-            # Here is an example of a device map on a machine with 4 GPUs using imagegpt-xl, which has a total of 48 attention modules:
-            model = ImageGPTLMHeadModel.from_pretrained('imagegpt-xl')
-            device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-
-                          1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-                          2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-                          3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
-            model.parallelize(device_map)
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example::
-
-        # On a 4 GPU machine with imagegpt-large:
-        model = ImageGPTLMHeadModel.from_pretrained('imagegpt-large')
-        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
-
-                    1: [8, 9, 10, 11, 12, 13, 14, 15],
-                    2: [16, 17, 18, 19, 20, 21, 22, 23],
-                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-"""
 
 
 @add_start_docstrings(
@@ -721,7 +637,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([ImageGPTBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = ImageGPTLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
 
@@ -729,39 +645,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.h))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
-        self.wpe = self.wpe.to(self.first_device)
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        # ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        self.wte = self.wte.to("cpu")
-        self.wpe = self.wpe.to("cpu")
-        for index in range(len(self.h)):
-            self.h[index] = self.h[index].to("cpu")
-        self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.wte
@@ -999,26 +882,6 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
-
     def get_output_embeddings(self):
         return self.lm_head
 
@@ -1101,11 +964,6 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         lm_logits = self.lm_head(hidden_states)
 
