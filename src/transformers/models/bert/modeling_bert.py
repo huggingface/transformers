@@ -1369,7 +1369,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         effective_batch_size = input_shape[0]
 
         #  add a dummy token
-        if (self.config.pad_token_id is None):
+        if self.config.pad_token_id is None:
             raise ValueError("The PAD token should be defined for generation")
 
         attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
