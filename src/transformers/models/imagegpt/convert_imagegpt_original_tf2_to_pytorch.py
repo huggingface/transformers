@@ -19,7 +19,7 @@ import argparse
 
 import torch
 
-from transformers import ImageGPTConfig, ImageGPTModel, load_tf_weights_in_imagegpt
+from transformers import ImageGPTConfig, ImageGPTForCausalLM, load_tf_weights_in_imagegpt
 from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
@@ -32,7 +32,7 @@ def convert_imagegpt_checkpoint_to_pytorch(imagegpt_checkpoint_path, model_size,
     MODELS = {"small": (512, 8, 24), "medium": (1024, 8, 36), "large": (1536, 16, 48)}
     n_embd, n_head, n_layer = MODELS[model_size]  # set model hyperparameters
     config = ImageGPTConfig(n_embd=n_embd, n_layer=n_layer, n_head=n_head)
-    model = ImageGPTModel(config)
+    model = ImageGPTForCausalLM(config)
 
     # Load weights from numpy
     load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path)
