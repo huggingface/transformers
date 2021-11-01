@@ -18,7 +18,7 @@ import numpy as np
 
 from ..file_utils import is_torch_available
 from ..utils import logging
-from .base import Pipeline
+from .base import ChunkPipeline
 
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-class AutomaticSpeechRecognitionPipeline(Pipeline):
+class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     """
     Pipeline that aims at extracting spoken text contained within some audio.
 
@@ -152,10 +152,12 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
-        return processed
+        processed["is_last"] = True
+        yield processed
 
     def _forward(self, model_inputs):
         model_class = self.model.__class__
+        is_last = model_inputs.pop("is_last")
         if model_class in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             encoder = self.model.get_encoder()
             # we need to pass `processed.get("attention_mask")` here since audio encoder
@@ -165,17 +167,21 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
             tokens = self.model.generate(
                 encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
             )
-            tokens = tokens.squeeze(0)
         elif model_class in MODEL_FOR_CTC_MAPPING.values():
             outputs = self.model(**model_inputs)
-            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+            tokens = outputs.logits.argmax(dim=-1)
         else:
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
-            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
-        return tokens
+            tokens = outputs.logits.argmax(dim=-1)
+        return {"tokens": tokens, "is_last": is_last}
 
     def postprocess(self, model_outputs):
         skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        recognized_string = self.tokenizer.decode(model_outputs, skip_special_tokens=skip_special_tokens)
+        string = ""
+        for output in model_outputs:
+            recognized_string = self.tokenizer.decode(
+                output["tokens"].squeeze(0), skip_special_tokens=skip_special_tokens
+            )
+            string += recognized_string
         return {"text": recognized_string}
