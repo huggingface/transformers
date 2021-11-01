@@ -167,10 +167,9 @@ class Frame(object):
 
 # Taken from https://github.com/wiseman/py-webrtcvad/blob/master/example.py
 def frame_generator(frame_duration_ms, audio_generator, sample_rate):
-    """Generates audio frames from PCM audio data.
-    Takes the desired frame duration in milliseconds, the PCM data, and
-    the sample rate.
-    Yields Frames of the requested duration.
+    """
+    Generates audio frames from PCM audio data. Takes the desired frame duration in milliseconds, the PCM data, and the
+    sample rate. Yields Frames of the requested duration.
     """
     n = int(sample_rate * (frame_duration_ms / 1000.0) * 2)
     duration = (float(n) / sample_rate) / 2.0
@@ -185,17 +184,13 @@ def frame_generator(frame_duration_ms, audio_generator, sample_rate):
 
 # Taken from https://github.com/wiseman/py-webrtcvad/blob/master/example.py
 def vad_collector(sample_rate, frame_duration_ms, padding_duration_ms, vad, frames):
-    """Filters out non-voiced audio frames.
-    Given a webrtcvad.Vad and a source of audio frames, yields only
-    the voiced audio.
-    Uses a padded, sliding window algorithm over the audio frames.
-    When more than 90% of the frames in the window are voiced (as
-    reported by the VAD), the collector triggers and begins yielding
-    audio frames. Then the collector waits until 90% of the frames in
-    the window are unvoiced to detrigger.
-    The window is padded at the front and back to provide a small
-    amount of silence or the beginnings/endings of speech around the
-    voiced frames.
+    """
+    Filters out non-voiced audio frames. Given a webrtcvad.Vad and a source of audio frames, yields only the voiced
+    audio. Uses a padded, sliding window algorithm over the audio frames. When more than 90% of the frames in the
+    window are voiced (as reported by the VAD), the collector triggers and begins yielding audio frames. Then the
+    collector waits until 90% of the frames in the window are unvoiced to detrigger. The window is padded at the front
+    and back to provide a small amount of silence or the beginnings/endings of speech around the voiced frames.
+
     Arguments:
     sample_rate - The audio sample rate, in Hz.
     frame_duration_ms - The frame duration in milliseconds.
