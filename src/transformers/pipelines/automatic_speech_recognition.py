@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import subprocess
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
 from ..file_utils import is_torch_available
 from ..utils import logging
+from .audio_utils import ffmpeg_read, ffmpeg_stream2
 from .base import ChunkPipeline
 
 
@@ -28,42 +28,6 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
-
-
-def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
-    """
-    Helper function to read an audio file through ffmpeg.
-    """
-    ar = f"{sampling_rate}"
-    ac = "1"
-    format_for_conversion = "f32le"
-    ffmpeg_command = [
-        "ffmpeg",
-        "-i",
-        "pipe:0",
-        "-ac",
-        ac,
-        "-ar",
-        ar,
-        "-f",
-        format_for_conversion,
-        "-hide_banner",
-        "-loglevel",
-        "quiet",
-        "pipe:1",
-    ]
-
-    try:
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    except FileNotFoundError:
-        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
-    output_stream = ffmpeg_process.communicate(bpayload)
-    out_bytes = output_stream[0]
-
-    audio = np.frombuffer(out_bytes, np.float32)
-    if audio.shape[0] == 0:
-        raise ValueError("Malformed soundfile")
-    return audio
 
 
 class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
@@ -134,26 +98,59 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def _sanitize_parameters(self, **kwargs):
         # No parameters on this pipeline right now
-        return {}, {}, {}
+        preprocess_params = {}
+        if "chunk_voice" in kwargs:
+            preprocess_params["chunk_voice"] = kwargs["chunk_voice"]
+        return preprocess_params, {}, {}
 
-    def preprocess(self, inputs):
-        if isinstance(inputs, str):
-            with open(inputs, "rb") as f:
-                inputs = f.read()
+    def preprocess(self, inputs, chunk_voice=None):
+        if not chunk_voice:
+            if isinstance(inputs, str):
+                with open(inputs, "rb") as f:
+                    inputs = f.read()
 
-        if isinstance(inputs, bytes):
-            inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
+            if isinstance(inputs, bytes):
+                inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
+            if not isinstance(inputs, np.ndarray):
+                raise ValueError("We expect a numpy ndarray as input")
+            if len(inputs.shape) != 1:
+                raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
-        if not isinstance(inputs, np.ndarray):
-            raise ValueError("We expect a numpy ndarray as input")
-        if len(inputs.shape) != 1:
-            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
+            processed = self.feature_extractor(
+                inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            )
+            processed["is_last"] = True
+            yield processed
+        else:
+            # try:
+            #     import webrtcvad
+            # except ImportError:
+            #     raise ValueError(
+            #         "webrtcvad was not found but is required to chunk on voice activation, `pip install webrtcvad`."
+            #     )
 
-        processed = self.feature_extractor(
-            inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-        processed["is_last"] = True
-        yield processed
+            # if not isinstance(inputs, str):
+            #     raise ValueError("Chunk voice can only operate on large filenames")
+            # inputs = ffmpeg_stream(inputs, self.feature_extractor.sampling_rate)
+            # sample_rate = self.feature_extractor.sampling_rate
+            # vad = webrtcvad.Vad(chunk_voice)
+            # frames = frame_generator(30, inputs, sample_rate)
+            # segments = vad_collector(sample_rate, 30, 300, vad, frames)
+            # max_int16 = 2 ** 15
+            # for i, segment in enumerate(segments):
+            #     audio = np.frombuffer(segment, dtype=np.int16).astype("float32") / max_int16
+            #     processed = self.feature_extractor(
+            #         audio, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            #     )
+            #     processed["is_last"] = True
+            #     yield processed
+
+            for chunk in ffmpeg_stream2(inputs, self.feature_extractor.sampling_rate):
+                processed = self.feature_extractor(
+                    chunk, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                )
+                processed["is_last"] = True
+                yield processed
 
     def _forward(self, model_inputs):
         model_class = self.model.__class__
@@ -184,4 +181,4 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 output["tokens"].squeeze(0), skip_special_tokens=skip_special_tokens
             )
             string += recognized_string
-        return {"text": recognized_string}
+        return {"text": string}

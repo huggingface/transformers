@@ -84,6 +84,25 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
+    @require_torch
+    def test_small_model_pt_chunk_voice(self):
+        import numpy as np
+
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
+            chunk_voice=1,
+        )
+        waveform = np.tile(np.arange(100000, dtype=np.float32), 34)
+        output = speech_recognizer(
+            waveform,
+        )
+        self.assertEqual(output, {"text": "(Applaudissements)"})
+        output = speech_recognizer(waveform, batch_size=4)
+        self.assertEqual(output, {"text": "(Applaudissements)"})
+
     @require_tf
     def test_small_model_tf(self):
         self.skipTest("Tensorflow not supported yet.")

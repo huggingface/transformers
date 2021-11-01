@@ -1015,6 +1015,11 @@ class ChunkPipeline(Pipeline):
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        if num_workers > 1:
+            logger.warning(
+                "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable, setting `num_workers=1` to guarantee correctness."
+            )
+            num_workers = 1
         dataset = PipelineChunkIterator(inputs, self.preprocess, preprocess_params)
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
