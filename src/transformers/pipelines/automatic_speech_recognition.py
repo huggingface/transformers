@@ -17,7 +17,7 @@ import numpy as np
 
 from ..file_utils import is_torch_available
 from ..utils import logging
-from .audio_utils import ffmpeg_read, ffmpeg_stream2
+from .audio_utils import ffmpeg_read, ffmpeg_stream, ffmpeg_stream2, frame_generator, vad_collector
 from .base import ChunkPipeline
 
 
@@ -121,30 +121,30 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             )
             processed["is_last"] = True
             yield processed
+        elif chunk_voice == "vad":
+            try:
+                import webrtcvad
+            except ImportError:
+                raise ValueError(
+                    "webrtcvad was not found but is required to chunk on voice activation, `pip install webrtcvad`."
+                )
+
+            if not isinstance(inputs, str):
+                raise ValueError("Chunk voice can only operate on large filenames")
+            inputs = ffmpeg_stream(inputs, self.feature_extractor.sampling_rate)
+            sample_rate = self.feature_extractor.sampling_rate
+            vad = webrtcvad.Vad(chunk_voice)
+            frames = frame_generator(30, inputs, sample_rate)
+            segments = vad_collector(sample_rate, 30, 300, vad, frames)
+            max_int16 = 2 ** 15
+            for i, segment in enumerate(segments):
+                audio = np.frombuffer(segment, dtype=np.int16).astype("float32") / max_int16
+                processed = self.feature_extractor(
+                    audio, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                )
+                processed["is_last"] = True
+                yield processed
         else:
-            # try:
-            #     import webrtcvad
-            # except ImportError:
-            #     raise ValueError(
-            #         "webrtcvad was not found but is required to chunk on voice activation, `pip install webrtcvad`."
-            #     )
-
-            # if not isinstance(inputs, str):
-            #     raise ValueError("Chunk voice can only operate on large filenames")
-            # inputs = ffmpeg_stream(inputs, self.feature_extractor.sampling_rate)
-            # sample_rate = self.feature_extractor.sampling_rate
-            # vad = webrtcvad.Vad(chunk_voice)
-            # frames = frame_generator(30, inputs, sample_rate)
-            # segments = vad_collector(sample_rate, 30, 300, vad, frames)
-            # max_int16 = 2 ** 15
-            # for i, segment in enumerate(segments):
-            #     audio = np.frombuffer(segment, dtype=np.int16).astype("float32") / max_int16
-            #     processed = self.feature_extractor(
-            #         audio, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-            #     )
-            #     processed["is_last"] = True
-            #     yield processed
-
             for chunk in ffmpeg_stream2(inputs, self.feature_extractor.sampling_rate):
                 processed = self.feature_extractor(
                     chunk, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
