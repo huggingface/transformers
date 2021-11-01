@@ -127,9 +127,15 @@ def pad_collate_fn(tokenizer, feature_extractor):
                     f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
                 )
         # input_values, input_pixels, input_ids, ...
-        padded = {
-            key: _pad(items, key, padding_value if key.startswith("input_") else 0, padding_side) for key in keys
-        }
+        padded = {}
+        for key in keys:
+            if key.startswith("input_"):
+                _padding_value = padding_value
+            elif key == "p_mask":
+                _padding_value = 1
+            else:
+                _padding_value = 0
+            padded[key] = _pad(items, key, _padding_value, padding_side)
         return padded
 
     return inner
