@@ -66,13 +66,12 @@ TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class TFAttention(tf.keras.layers.Layer):
-    def __init__(self, nx, n_ctx, config, scale=False, **kwargs):
+    def __init__(self, nx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
         assert n_state % config.n_head == 0
-        self.n_ctx = n_ctx
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -185,12 +184,12 @@ class TFMLP(tf.keras.layers.Layer):
 
 
 class TFBlock(tf.keras.layers.Layer):
-    def __init__(self, n_ctx, config, scale=False, **kwargs):
+    def __init__(self, config, scale=False, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
         inner_dim = config.n_inner if config.n_inner is not None else 4 * nx
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
-        self.attn = TFAttention(nx, n_ctx, config, scale, name="attn")
+        self.attn = TFAttention(nx, config, scale, name="attn")
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
         self.mlp = TFMLP(inner_dim, config, name="mlp")
 
@@ -233,7 +232,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFBlock(config.n_ctx, config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
+        self.h = [TFBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
 
     def build(self, input_shape):

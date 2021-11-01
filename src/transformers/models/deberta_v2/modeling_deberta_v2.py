@@ -20,7 +20,7 @@ from collections.abc import Sequence
 import numpy as np
 import torch
 from torch import _softmax_backward_data, nn
-from torch.nn import CrossEntropyLoss, LayerNorm
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
@@ -1304,31 +1304,46 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                # regression task
-                loss_fn = nn.MSELoss()
-                logits = logits.view(-1).to(labels.dtype)
-                loss = loss_fn(logits, labels.view(-1))
-            elif labels.dim() == 1 or labels.size(-1) == 1:
-                label_index = (labels >= 0).nonzero()
-                labels = labels.long()
-                if label_index.size(0) > 0:
-                    labeled_logits = torch.gather(logits, 0, label_index.expand(label_index.size(0), logits.size(1)))
-                    labels = torch.gather(labels, 0, label_index.view(-1))
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(labeled_logits.view(-1, self.num_labels).float(), labels.view(-1))
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    # regression task
+                    loss_fn = nn.MSELoss()
+                    logits = logits.view(-1).to(labels.dtype)
+                    loss = loss_fn(logits, labels.view(-1))
+                elif labels.dim() == 1 or labels.size(-1) == 1:
+                    label_index = (labels >= 0).nonzero()
+                    labels = labels.long()
+                    if label_index.size(0) > 0:
+                        labeled_logits = torch.gather(
+                            logits, 0, label_index.expand(label_index.size(0), logits.size(1))
+                        )
+                        labels = torch.gather(labels, 0, label_index.view(-1))
+                        loss_fct = CrossEntropyLoss()
+                        loss = loss_fct(labeled_logits.view(-1, self.num_labels).float(), labels.view(-1))
+                    else:
+                        loss = torch.tensor(0).to(logits)
                 else:
-                    loss = torch.tensor(0).to(logits)
-            else:
-                log_softmax = nn.LogSoftmax(-1)
-                loss = -((log_softmax(logits) * labels).sum(-1)).mean()
+                    log_softmax = nn.LogSoftmax(-1)
+                    loss = -((log_softmax(logits) * labels).sum(-1)).mean()
+            elif self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
-        else:
-            return SequenceClassifierOutput(
-                loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-            )
+
+        return SequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
 
 
 @add_start_docstrings(

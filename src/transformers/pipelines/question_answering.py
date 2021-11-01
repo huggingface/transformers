@@ -8,8 +8,11 @@ from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_featur
 from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
+
+logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -241,6 +244,9 @@ class QuestionAnsweringPipeline(Pipeline):
             - **end** (:obj:`int`) -- The character end index of the answer (in the tokenized version of the input).
             - **answer** (:obj:`str`) -- The answer to the question.
         """
+        if kwargs.get("batch_size", 1) > 1:
+            logger.error("Batch_size > 1 is not supported for question answering pipeline, setting it to 1.")
+            kwargs["batch_size"] = 1
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)

@@ -81,6 +81,7 @@ from . import (
     retribert,
     roberta,
     roformer,
+    segformer,
     sew,
     sew_d,
     speech_to_text,

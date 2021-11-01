@@ -313,6 +313,9 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
+MODEL_FOR_CTC_MAPPING = None
+
+
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
@@ -341,6 +344,9 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
+
+
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
 
 
 MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
@@ -3279,6 +3285,47 @@ class RoFormerPreTrainedModel:
 
 def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
+
+
+SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SegformerDecodeHead:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerForSemanticSegmentation:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SegformerPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 SEW_PRETRAINED_MODEL_ARCHIVE_LIST = None
