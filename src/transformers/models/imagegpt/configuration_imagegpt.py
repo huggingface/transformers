@@ -116,8 +116,6 @@ class ImageGPTConfig(PretrainedConfig):
         initializer_range=0.02,
         scale_attn_weights=True,
         use_cache=True,
-        bos_token_id=50256,
-        eos_token_id=50256,
         tie_word_embeddings=False,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
@@ -139,11 +137,6 @@ class ImageGPTConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
