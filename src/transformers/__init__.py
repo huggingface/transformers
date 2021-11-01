@@ -638,6 +638,7 @@ if is_torch_available():
             "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BeitForImageClassification",
             "BeitForMaskedImageModeling",
+            "BeitForSemanticSegmentation",
             "BeitModel",
             "BeitPreTrainedModel",
         ]
@@ -2483,6 +2484,7 @@ if TYPE_CHECKING:
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BeitForImageClassification,
             BeitForMaskedImageModeling,
+            BeitForSemanticSegmentation,
             BeitModel,
             BeitPreTrainedModel,
         )
