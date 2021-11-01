@@ -133,17 +133,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("Chunk voice can only operate on large filenames")
             inputs = ffmpeg_stream(inputs, self.feature_extractor.sampling_rate)
             sample_rate = self.feature_extractor.sampling_rate
-            vad = webrtcvad.Vad(chunk_voice)
+            vad = webrtcvad.Vad(1)
             frames = frame_generator(30, inputs, sample_rate)
             segments = vad_collector(sample_rate, 30, 300, vad, frames)
             max_int16 = 2 ** 15
+            max_chunk_duration = 20
+            max_len = int(max_chunk_duration * sample_rate)
             for i, segment in enumerate(segments):
                 audio = np.frombuffer(segment, dtype=np.int16).astype("float32") / max_int16
-                processed = self.feature_extractor(
-                    audio, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-                )
-                processed["is_last"] = True
-                yield processed
+                for i in range(0, audio.shape[0], max_len):
+                    processed = self.feature_extractor(
+                        audio[i : i + max_len], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                    )
+                    processed["is_last"] = True
+                    yield processed
         else:
             for chunk in ffmpeg_stream2(inputs, self.feature_extractor.sampling_rate):
                 processed = self.feature_extractor(
