@@ -363,10 +363,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             is_last = i == len(features) - 1
             yield {"example": example, "is_last": is_last, **fw_args, **others}
 
-    def _forward(self, model_inputs):
-        example = model_inputs["example"]
-        start, end = self.model(input_ids=model_inputs["input_ids"], attention_mask=model_inputs["attention_mask"])[:2]
-        return {"start": start, "end": end, "example": example, **model_inputs}
+    def _forward(self, inputs):
+        example = inputs["example"]
+        model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        start, end = self.model(**model_inputs)[:2]
+        return {"start": start, "end": end, "example": example, **inputs}
 
     def postprocess(
         self,

@@ -197,9 +197,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def _forward(self, inputs):
         candidate_label = inputs["candidate_label"]
         sequence = inputs["sequence"]
-        model_inputs = {"input_ids": inputs["input_ids"], "attention_mask": inputs["attention_mask"]}
-        if "token_type_ids" in inputs:
-            model_inputs["token_type_ids"] = inputs["token_type_ids"]
+        model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
         outputs = self.model(**model_inputs)
 
         model_outputs = {
