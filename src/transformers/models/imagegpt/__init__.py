@@ -30,6 +30,7 @@ if is_torch_available():
     _import_structure["modeling_imagegpt"] = [
         "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ImageGPTForCausalLM",
+        "ImageGPTForImageClassification",
         "ImageGPTLayer",
         "ImageGPTModel",
         "ImageGPTPreTrainedModel",
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
         from .modeling_imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageGPTForCausalLM,
+            ImageGPTForImageClassification,
             ImageGPTLayer,
             ImageGPTModel,
             ImageGPTPreTrainedModel,

@@ -24,7 +24,7 @@ from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
 
-logging.set_verbosity_info()
+logging.set_verbosity_warning()
 
 
 def convert_imagegpt_checkpoint_to_pytorch(imagegpt_checkpoint_path, model_size, pytorch_dump_folder_path):
