@@ -51,13 +51,18 @@ else:
 @require_timm
 @require_torch
 @is_pipeline_test
-@unittest.skip("Skip while fixing segmentation pipeline tests")
 class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
 
-    @require_datasets
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
+        return image_segmenter, [
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+        ]
+
+    @require_datasets
+    def run_pipeline_test(self, image_segmenter, examples):
         outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
         self.assertEqual(outputs, [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12)
 
