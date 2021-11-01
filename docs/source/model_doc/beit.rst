@@ -73,7 +73,7 @@ BeitConfig
 XLNet specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BeitModelOutputWithPooling
+.. autoclass:: transformers.models.beit.BeitModelOutputWithPooling
     :members:
 
 
