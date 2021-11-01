@@ -1038,12 +1038,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="microsoft/DialogRPT-updown",
-        output_type=SequenceClassifierOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=SequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1064,6 +1059,14 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import ImageGPTForImageClassification
+
+            >>> model = ImageGPTForImageClassification.from_pretrained('openai/imagegpt-small')
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
