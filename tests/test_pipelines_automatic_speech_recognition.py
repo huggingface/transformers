@@ -70,6 +70,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     def test_pt_defaults(self):
         pipeline("automatic-speech-recognition", framework="pt")
 
+    @require_datasets
     @require_torch
     def test_small_model_pt(self):
         import numpy as np
@@ -85,8 +86,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
     @require_torch
+    @require_datasets
     def test_small_model_pt_chunk_voice(self):
-        import numpy as np
+        from datasets import load_dataset
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -95,13 +97,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             framework="pt",
             chunk_voice=1,
         )
-        waveform = np.tile(np.arange(100000, dtype=np.float32), 34)
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
         output = speech_recognizer(
-            waveform,
+            filename,
         )
-        self.assertEqual(output, {"text": "(Applaudissements)"})
-        output = speech_recognizer(waveform, batch_size=4)
-        self.assertEqual(output, {"text": "(Applaudissements)"})
+        self.assertEqual(output, {"text": "Un homme a dit à l'univers : « Monsieur, j'existe. »"})
+        output = speech_recognizer(filename, batch_size=4)
+        self.assertEqual(output, {"text": "Un homme a dit à l'univers : « Monsieur, j'existe. »"})
 
     @require_tf
     def test_small_model_tf(self):
