@@ -71,7 +71,7 @@ class GPTJAttention(nn.Module):
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
                 1, 1, max_positions, max_positions
             ),
         )
@@ -136,7 +136,7 @@ class GPTJAttention(nn.Module):
 
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
@@ -674,7 +674,7 @@ class GPTJModel(GPTJPreTrainedModel):
     GPTJ_START_DOCSTRING,
 )
 class GPTJForCausalLM(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -707,10 +707,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
-        return None
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        return
+        self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
@@ -847,13 +847,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     GPTJ_START_DOCSTRING,
 )
 class GPTJForSequenceClassification(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head\.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
-        self.score = nn.Linear(config.n_positions, self.num_labels, bias=False)
+        self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
         self.init_weights()
 
