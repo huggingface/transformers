@@ -28,6 +28,7 @@ from ...file_utils import (
     is_sentencepiece_available,
     is_tokenizers_available,
 )
+from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
@@ -37,6 +38,7 @@ from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     config_class_to_model_type,
+    model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
 
@@ -50,6 +52,7 @@ if TYPE_CHECKING:
 else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
+            ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -105,7 +108,7 @@ else:
             ),
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
-            ("blenderbot", ("BlenderbotTokenizer", None)),
+            ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -120,6 +123,7 @@ else:
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
+            ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
                 (
@@ -152,6 +156,7 @@ else:
             ("rag", ("RagTokenizer", None)),
             ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
+            ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
             ("prophetnet", ("ProphetNetTokenizer", None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
@@ -185,6 +190,7 @@ else:
             ),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("phobert", ("PhobertTokenizer", None)),
+            ("bartpho", ("BartphoTokenizer", None)),
             (
                 "barthez",
                 (
@@ -227,10 +233,17 @@ def tokenizer_class_from_name(class_name: str):
 
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
-            break
+            module_name = model_type_to_module_name(module_name)
 
-    module = importlib.import_module(f".{module_name}", "transformers.models")
-    return getattr(module, class_name)
+            module = importlib.import_module(f".{module_name}", "transformers.models")
+            return getattr(module, class_name)
+
+    for config, tokenizers in TOKENIZER_MAPPING._extra_content.items():
+        for tokenizer in tokenizers:
+            if getattr(tokenizer, "__name__", None) == class_name:
+                return tokenizer
+
+    return None
 
 
 def get_tokenizer_config(
@@ -396,6 +409,8 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to try to load the fast version of the tokenizer.
+            tokenizer_type (:obj:`str`, `optional`):
+                Tokenizer type to be loaded.
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
@@ -419,8 +434,33 @@ class AutoTokenizer:
         kwargs["_from_auto"] = True
 
         use_fast = kwargs.pop("use_fast", True)
+        tokenizer_type = kwargs.pop("tokenizer_type", None)
 
-        # First, let's try to use the tokenizer_config file to get the tokenizer class.
+        # First, let's see whether the tokenizer_type is passed so that we can leverage it
+        if tokenizer_type is not None:
+            tokenizer_class = None
+            tokenizer_class_tuple = TOKENIZER_MAPPING_NAMES.get(tokenizer_type, None)
+
+            if tokenizer_class_tuple is None:
+                raise ValueError(
+                    f"Passed `tokenizer_type` {tokenizer_type} does not exist. `tokenizer_type` should be one of "
+                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES.keys())}."
+                )
+
+            tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
+
+            if use_fast and tokenizer_fast_class_name is not None:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_fast_class_name)
+
+            if tokenizer_class is None:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
+
+            if tokenizer_class is None:
+                raise ValueError(f"Tokenizer class {tokenizer_class_name} is not currently imported.")
+
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
 
@@ -476,3 +516,46 @@ class AutoTokenizer:
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING.keys())}."
         )
+
+    def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None):
+        """
+        Register a new tokenizer in this mapping.
+
+
+        Args:
+            config_class (:class:`~transformers.PretrainedConfig`):
+                The configuration corresponding to the model to register.
+            slow_tokenizer_class (:class:`~transformers.PretrainedTokenizer`, `optional`):
+                The slow tokenizer to register.
+            slow_tokenizer_class (:class:`~transformers.PretrainedTokenizerFast`, `optional`):
+                The fast tokenizer to register.
+        """
+        if slow_tokenizer_class is None and fast_tokenizer_class is None:
+            raise ValueError("You need to pass either a `slow_tokenizer_class` or a `fast_tokenizer_class")
+        if slow_tokenizer_class is not None and issubclass(slow_tokenizer_class, PreTrainedTokenizerFast):
+            raise ValueError("You passed a fast tokenizer in the `slow_tokenizer_class`.")
+        if fast_tokenizer_class is not None and issubclass(fast_tokenizer_class, PreTrainedTokenizer):
+            raise ValueError("You passed a slow tokenizer in the `fast_tokenizer_class`.")
+
+        if (
+            slow_tokenizer_class is not None
+            and fast_tokenizer_class is not None
+            and issubclass(fast_tokenizer_class, PreTrainedTokenizerFast)
+            and fast_tokenizer_class.slow_tokenizer_class != slow_tokenizer_class
+        ):
+            raise ValueError(
+                "The fast tokenizer class you are passing has a `slow_tokenizer_class` attribute that is not "
+                "consistent with the slow tokenizer class you passed (fast tokenizer has "
+                f"{fast_tokenizer_class.slow_tokenizer_class} and you passed {slow_tokenizer_class}. Fix one of those "
+                "so they match!"
+            )
+
+        # Avoid resetting a set slow/fast tokenizer if we are passing just the other ones.
+        if config_class in TOKENIZER_MAPPING._extra_content:
+            existing_slow, existing_fast = TOKENIZER_MAPPING[config_class]
+            if slow_tokenizer_class is None:
+                slow_tokenizer_class = existing_slow
+            if fast_tokenizer_class is None:
+                fast_tokenizer_class = existing_fast
+
+        TOKENIZER_MAPPING.register(config_class, (slow_tokenizer_class, fast_tokenizer_class))

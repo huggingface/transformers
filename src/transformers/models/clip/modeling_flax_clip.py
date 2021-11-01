@@ -521,7 +521,7 @@ class FlaxCLIPTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
+        # text_embeds.shape = [batch_size, sequence_length, transformer.width]
         # take features from the EOS embedding (eos_token_id is the highest number in each sequence)
         pooled_output = last_hidden_state[jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)]
 
@@ -1041,7 +1041,10 @@ class FlaxCLIPModule(nn.Module):
             kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
             use_bias=False,
         )
-        self.logit_scale = self.param("logit_scale", jax.nn.initializers.ones, [])
+
+        self.logit_scale = self.param(
+            "logit_scale", lambda _, shape: jnp.ones(shape, dtype=self.dtype) * self.config.logit_scale_init_value, []
+        )
 
     def __call__(
         self,

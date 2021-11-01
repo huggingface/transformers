@@ -286,7 +286,7 @@ class FlaxWav2Vec2LayerNormConvLayer(nn.Module):
 
         self.conv = nn.Conv(
             features=self.config.conv_dim[self.layer_id],
-            kernel_size=self.config.conv_kernel[self.layer_id],
+            kernel_size=(self.config.conv_kernel[self.layer_id],),
             strides=(self.config.conv_stride[self.layer_id],),
             use_bias=self.config.conv_bias,
             kernel_init=jax.nn.initializers.he_normal(dtype=self.dtype),
@@ -310,7 +310,7 @@ class FlaxConvWithWeightNorm(nn.Module):
     def setup(self):
         self.conv = nn.Conv(
             features=self.config.hidden_size,
-            kernel_size=self.config.num_conv_pos_embeddings,
+            kernel_size=(self.config.num_conv_pos_embeddings,),
             kernel_init=jax.nn.initializers.he_normal(dtype=self.dtype),
             padding="VALID",
             feature_group_count=self.config.num_conv_pos_embedding_groups,
@@ -319,12 +319,12 @@ class FlaxConvWithWeightNorm(nn.Module):
         weight_shape = (
             self.conv.features,
             self.conv.features // self.conv.feature_group_count,
-            self.conv.kernel_size,
+            self.conv.kernel_size[0],
         )
         self.weight_v = self.param("weight_v", jax.nn.initializers.he_normal(dtype=self.dtype), weight_shape)
         self.weight_g = self.param("weight_g", lambda _: jnp.linalg.norm(self.weight_v, axis=(0, 1))[None, None, :])
         self.bias = self.param("bias", jax.nn.initializers.zeros, (self.conv.features,))
-        self.prev_padding = self.conv.kernel_size // 2
+        self.prev_padding = self.conv.kernel_size[0] // 2
 
     def _get_normed_weights(self):
         weight_v_norm = jnp.linalg.norm(self.weight_v, axis=(0, 1))[None, None, :]
@@ -385,7 +385,7 @@ class FlaxConvLayersCollection(nn.Module):
 
 
 class FlaxWav2Vec2FeatureExtractor(nn.Module):
-    """Construct the featurs from raw audio waveform"""
+    """Construct the features from raw audio waveform"""
 
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
@@ -944,7 +944,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
         >>>     batch["speech"] = speech
         >>>     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
@@ -1045,7 +1045,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
         >>>     batch["speech"] = speech
         >>>     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
@@ -1233,7 +1233,7 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
         ...     return batch
 
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = feature_extractor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1

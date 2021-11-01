@@ -20,6 +20,7 @@ import re
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
@@ -46,6 +47,7 @@ from .file_utils import (
 )
 from .generation_utils import GenerationMixin
 from .utils import logging
+from .utils.versions import require_version_core
 
 
 logger = logging.get_logger(__name__)
@@ -450,6 +452,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
+    supports_gradient_checkpointing = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -457,6 +460,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         :obj:`Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
+
+    @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a PyTorch model.
+        """
+        return "pt"
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
@@ -469,6 +479,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        if getattr(self.config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
+            # Remove the attribute now that is has been consumed, so it's no saved in the config.
+            delattr(self.config, "gradient_checkpointing")
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -492,7 +506,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config=deepspeed_config()):
+            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 model = cls(config, **kwargs)
         else:
             model = cls(config, **kwargs)
@@ -770,14 +784,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}."
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. "
                 f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
             )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(
-            self.device, dtype=old_embeddings.weight.dtype
-        )
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -841,14 +854,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
-                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. "
                 f"You should either use a different resize function or make sure that `old_lm_head` are an instance of {nn.Linear}."
             )
 
         # Build new lm head
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
-        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias).to(self.device)
+        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
+        new_lm_head = new_lm_head.to(self.device, dtype=old_lm_head.weight.dtype)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
@@ -887,6 +901,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return new_lm_head
 
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        raise NotImplementedError(
+            f"`resize_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+        )
+
+    def get_position_embeddings(self) -> Union[nn.Embedding, Tuple[nn.Embedding]]:
+        raise NotImplementedError(
+            f"`get_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+        )
+
     def init_weights(self):
         """
         If needed prunes and maybe initializes weights.
@@ -919,6 +945,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self.config.pruned_heads[layer] = list(union_heads)  # Unfortunately we have to store it as list for JSON
 
         self.base_model._prune_heads(heads_to_prune)
+
+    def gradient_checkpointing_enable(self):
+        """
+        Activates gradient checkpointing for the current model.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        if not self.supports_gradient_checkpointing:
+            raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
+        self.apply(partial(self._set_gradient_checkpointing, value=True))
+
+    def gradient_checkpointing_disable(self):
+        """
+        Deactivates gradient checkpointing for the current model.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        if self.supports_gradient_checkpointing:
+            self.apply(partial(self._set_gradient_checkpointing, value=False))
+
+    @property
+    def is_gradient_checkpointing(self) -> bool:
+        """
+        Whether gradient checkpointing is activated for this model or not.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
 
     def save_pretrained(
         self,
@@ -1038,14 +1095,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
@@ -1080,7 +1137,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1100,6 +1157,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Please refer to the mirror site for more information.
             _fast_init(:obj:`bool`, `optional`, defaults to `:obj:`True`):
                 Whether or not to disable fast initialization.
+            low_cpu_mem_usage(:obj:`bool`, `optional`, defaults to `:obj:`False`):
+                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                This is an experimental feature and a subject to change at any moment.
             torch_dtype (:obj:`str` or :obj:`torch.dtype`, `optional`):
                 Override the default ``torch.dtype`` and load the model under this dtype. If ``"auto"`` is passed the
                 dtype will be automatically derived from the model's weights.
@@ -1170,6 +1230,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from_auto_class = kwargs.pop("_from_auto", False)
         _fast_init = kwargs.pop("_fast_init", True)
         torch_dtype = kwargs.pop("torch_dtype", None)
+        low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
 
         from_pt = not (from_tf | from_flax)
 
@@ -1186,7 +1247,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -1264,9 +1324,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                    f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}\n\n"
                 )
+
+                if revision is not None:
+                    msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
@@ -1281,12 +1346,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if state_dict is None:
                 try:
                     state_dict = torch.load(resolved_archive_file, map_location="cpu")
-                except Exception:
-                    raise OSError(
-                        f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                        f"at '{resolved_archive_file}'"
-                        "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
-                    )
+                except Exception as e:
+                    try:
+                        with open(resolved_archive_file) as f:
+                            if f.read().startswith("version"):
+                                raise OSError(
+                                    "You seem to have cloned a repository without having git-lfs installed. Please install "
+                                    "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                                    "you cloned."
+                                )
+                            else:
+                                raise ValueError from e
+                    except (UnicodeDecodeError, ValueError):
+                        raise OSError(
+                            f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                            f"at '{resolved_archive_file}'. "
+                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
+                        )
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -1304,6 +1380,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
+            if low_cpu_mem_usage:
+                # save the keys
+                loaded_state_dict_keys = [k for k in state_dict.keys()]
+                del state_dict  # free CPU memory - will reload again later
+
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
@@ -1313,7 +1394,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config=deepspeed_config()):
+            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 with no_init_weights(_enable=_fast_init):
                     model = cls(config, *model_args, **model_kwargs)
         else:
@@ -1353,13 +1434,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         elif from_pt:
-            model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
-                model,
-                state_dict,
-                pretrained_model_name_or_path,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-                _fast_init=_fast_init,
-            )
+
+            if low_cpu_mem_usage:
+                cls._load_state_dict_into_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
+            else:
+                model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
+                    model,
+                    state_dict,
+                    pretrained_model_name_or_path,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    _fast_init=_fast_init,
+                )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -1409,13 +1494,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # key re-naming operations are never done on the keys
         # that are loaded, but always on the keys of the newly initialized model
-        remove_prefix = not has_prefix_module and expects_prefix_module
-        add_prefix = has_prefix_module and not expects_prefix_module
+        remove_prefix_from_model = not has_prefix_module and expects_prefix_module
+        add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
-        if remove_prefix:
+        if remove_prefix_from_model:
             expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
-        elif add_prefix:
+        elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
@@ -1427,10 +1512,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if ignore_mismatched_sizes:
             for checkpoint_key in loaded_keys:
                 model_key = checkpoint_key
-                if remove_prefix and checkpoint_key.startswith(prefix):
-                    model_key = ".".join(checkpoint_key.split(".")[1:])
-                elif add_prefix:
+                if remove_prefix_from_model:
+                    # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
                     model_key = f"{prefix}.{checkpoint_key}"
+                elif add_prefix_to_model:
+                    # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                    model_key = ".".join(checkpoint_key.split(".")[1:])
 
                 if (
                     model_key in model_state_dict
@@ -1453,10 +1540,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if _fast_init:
             # retrieve unintialized modules and initialize
-            unintialized_modules = model.retrieve_modules_from_names(
-                missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+            uninitialized_modules = model.retrieve_modules_from_names(
+                missing_keys, add_prefix=add_prefix_to_model, remove_prefix=remove_prefix_from_model
             )
-            for module in unintialized_modules:
+            for module in uninitialized_modules:
                 model._init_weights(module)
 
         # copy state_dict so _load_from_state_dict can modify it
@@ -1564,6 +1651,72 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 retrieved_modules.append(module)
 
         return retrieved_modules
+
+    @classmethod
+    def _load_state_dict_into_model_low_mem(cls, model, loaded_state_dict_keys, resolved_archive_file):
+        """
+        This is an experimental function that loads the model using ~1.x model size CPU memory
+
+        Before it gets called we do:
+
+        1. save which state_dict keys we have
+        2. drop state_dict before model is created, since the latter takes 1x model size memory
+
+        Here then we continue:
+
+        3. switch to the meta device all params/buffers that are going to be replaced from the loaded state_dict
+        4. load state_dict 2nd time
+        5. replace the params/buffers from the state_dict
+
+        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
+        """
+
+        require_version_core("torch>=1.9")
+        if is_deepspeed_zero3_enabled():
+            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
+
+        # a helper util to find the last sub-module and the param/buffer name
+        def find_submodule_and_param_name(model, long_key):
+            split_key = long_key.split(".")
+            submodule = model
+            while len(split_key) > 1:
+                if hasattr(submodule, split_key[0]):
+                    submodule = getattr(submodule, split_key[0])
+                    del split_key[0]
+                else:
+                    submodule = None
+                    break
+            return submodule, split_key[0]
+
+        # dematerialize param storage for keys that are going to be replaced by state_dict, by
+        # putting those on the meta device
+        for k in loaded_state_dict_keys:
+            submodule, param_name = find_submodule_and_param_name(model, k)
+            if submodule is not None:
+                # selectively switch to the meta device only those params/buffers that will
+                # be next replaced from state_dict. This a complex way to do p.to_("meta")
+                # since we have no in-place to_ for tensors.
+                new_val = getattr(submodule, param_name)
+                if isinstance(new_val, torch.nn.Parameter):
+                    # isinstance returns False for Params on meta device, so switch after the check
+                    new_val = torch.nn.Parameter(new_val.to("meta"))
+                else:
+                    new_val = new_val.to("meta")
+                setattr(submodule, param_name, new_val)
+
+        # only now can load state_dict
+        state_dict = torch.load(resolved_archive_file, map_location="cpu")
+
+        # materialize state_dict entries one by one on CPU
+        for k in loaded_state_dict_keys:
+            submodule, param_name = find_submodule_and_param_name(model, k)
+            if submodule is not None:
+                new_val = state_dict[k]
+                if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                    new_val = torch.nn.Parameter(new_val)
+                setattr(submodule, param_name, new_val)
+
+        del state_dict
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
@@ -2160,10 +2313,6 @@ def apply_chunking_to_forward(
     """
 
     assert len(input_tensors) > 0, f"{input_tensors} has to be a tuple/list of tensors"
-    tensor_shape = input_tensors[0].shape[chunk_dim]
-    assert all(
-        input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
-    ), "All input tenors have to be of the same shape"
 
     # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
@@ -2174,6 +2323,14 @@ def apply_chunking_to_forward(
         )
 
     if chunk_size > 0:
+        tensor_shape = input_tensors[0].shape[chunk_dim]
+        for input_tensor in input_tensors:
+            if input_tensor.shape[chunk_dim] != tensor_shape:
+                raise ValueError(
+                    f"All input tenors have to be of the same shape: {tensor_shape}, "
+                    f"found shape {input_tensor.shape[chunk_dim]}"
+                )
+
         if input_tensors[0].shape[chunk_dim] % chunk_size != 0:
             raise ValueError(
                 f"The dimension to be chunked {input_tensors[0].shape[chunk_dim]} has to be a multiple of the chunk "

@@ -53,7 +53,7 @@ This model was contributed by `<INSERT YOUR HF USERNAME HERE>
     :members:
 
 
-{% if "PyTorch" in cookiecutter.generate_tensorflow_and_pytorch -%}
+{% if "PyTorch" in cookiecutter.generate_tensorflow_pytorch_and_flax -%}
 {{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -133,7 +133,7 @@ This model was contributed by `<INSERT YOUR HF USERNAME HERE>
 
 {% endif -%}
 {% endif -%}
-{% if "TensorFlow" in cookiecutter.generate_tensorflow_and_pytorch -%}
+{% if "TensorFlow" in cookiecutter.generate_tensorflow_pytorch_and_flax -%}
 
 TF{{cookiecutter.camelcase_modelname}}Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -189,6 +189,82 @@ TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+    :members: call
+
+
+{% endif -%}
+{% endif -%}
+
+{% if "Flax" in cookiecutter.generate_tensorflow_pytorch_and_flax -%}
+
+Flax{{cookiecutter.camelcase_modelname}}Model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}Model
+    :members: call
+
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForMaskedLM
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForCausalLM
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoice
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForTokenClassification
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+    :members: call
+
+
+{%- else %}
+Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering
+    :members: call
+
+
+Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
     :members: call
 
 

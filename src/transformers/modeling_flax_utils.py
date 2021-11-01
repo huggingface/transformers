@@ -21,6 +21,7 @@ from typing import Dict, Set, Tuple, Union
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import msgpack.exceptions
 from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -119,6 +120,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return cls(config, **kwargs)
 
     @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a Flax model.
+        """
+        return "flax"
+
+    @property
     def config(self) -> PretrainedConfig:
         return self._config
 
@@ -177,14 +185,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     - A path or url to a `pt index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In this
                       case, ``from_pt`` should be set to :obj:`True`.
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
@@ -209,7 +217,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -269,7 +277,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -327,7 +334,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                    f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                     f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named {WEIGHTS_NAME}.\n\n"
                 )
                 raise EnvironmentError(msg)
@@ -348,8 +356,19 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             with open(resolved_archive_file, "rb") as state_f:
                 try:
                     state = from_bytes(cls, state_f.read())
-                except UnpicklingError:
-                    raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
+                except (UnpicklingError, msgpack.exceptions.ExtraData) as e:
+                    try:
+                        with open(resolved_archive_file) as f:
+                            if f.read().startswith("version"):
+                                raise OSError(
+                                    "You seem to have cloned a repository without having git-lfs installed. Please install "
+                                    "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                                    "you cloned."
+                                )
+                            else:
+                                raise ValueError from e
+                    except (UnicodeDecodeError, ValueError):
+                        raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
             # make sure all arrays are stored as jnp.arrays
             # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
             # https://github.com/google/flax/issues/1261
@@ -509,7 +528,7 @@ def overwrite_call_docstring(model_class, docstring):
 def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
-        tokenizer_class=tokenizer_class,
+        processor_class=tokenizer_class,
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,

@@ -26,6 +26,12 @@ from ...file_utils import CONFIG_NAME
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
+        ("trocr", "TrOCRConfig"),
+        ("fnet", "FNetConfig"),
+        ("segformer", "SegformerConfig"),
+        ("gptj", "GPTJConfig"),
+        ("layoutlmv2", "LayoutLMv2Config"),
         ("beit", "BeitConfig"),
         ("rembert", "RemBertConfig"),
         ("visual_bert", "VisualBertConfig"),
@@ -38,6 +44,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrConfig"),
         ("gpt_neo", "GPTNeoConfig"),
         ("big_bird", "BigBirdConfig"),
+        ("speech_to_text_2", "Speech2Text2Config"),
         ("speech_to_text", "Speech2TextConfig"),
         ("vit", "ViTConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
@@ -81,6 +88,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xlm", "XLMConfig"),
         ("ctrl", "CTRLConfig"),
         ("electra", "ElectraConfig"),
+        ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("funnel", "FunnelConfig"),
         ("lxmert", "LxmertConfig"),
@@ -89,12 +97,21 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
         ("splinter", "SplinterConfig"),
+        ("sew-d", "SEWDConfig"),
+        ("sew", "SEWConfig"),
+        ("unispeech-sat", "UniSpeechSatConfig"),
+        ("unispeech", "UniSpeechConfig"),
     ]
 )
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -109,6 +126,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speech_to_text", "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("speech_to_text_2", "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit", "VIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -150,14 +168,24 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("beit", "BeiT"),
+        ("vision-encoder-decoder", "Vision Encoder decoder"),
+        ("trocr", "TrOCR"),
+        ("fnet", "FNet"),
+        ("segformer", "SegFormer"),
+        ("gptj", "GPT-J"),
+        ("beit", "BEiT"),
         ("rembert", "RemBERT"),
+        ("layoutlmv2", "LayoutLMv2"),
         ("visual_bert", "VisualBert"),
         ("canine", "Canine"),
         ("roformer", "RoFormer"),
@@ -168,6 +196,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("detr", "DETR"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
+        ("speech_to_text_2", "Speech2Text2"),
         ("speech_to_text", "Speech2Text"),
         ("vit", "ViT"),
         ("wav2vec2", "Wav2Vec2"),
@@ -205,6 +234,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ctrl", "CTRL"),
         ("electra", "ELECTRA"),
         ("encoder-decoder", "Encoder decoder"),
+        ("speech-encoder-decoder", "Speech Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
         ("deberta-v2", "DeBERTa-v2"),
@@ -220,12 +250,17 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("hubert", "Hubert"),
         ("barthez", "BARThez"),
         ("phobert", "PhoBERT"),
+        ("bartpho", "BARTpho"),
         ("cpm", "CPM"),
         ("bertweet", "Bertweet"),
         ("bert-japanese", "BertJapanese"),
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
         ("splinter", "Splinter"),
+        ("sew-d", "SEW-D"),
+        ("sew", "SEW"),
+        ("unispeech-sat", "UniSpeechSat"),
+        ("unispeech", "UniSpeech"),
     ]
 )
 
@@ -256,9 +291,12 @@ class _LazyConfigMapping(OrderedDict):
 
     def __init__(self, mapping):
         self._mapping = mapping
+        self._extra_content = {}
         self._modules = {}
 
     def __getitem__(self, key):
+        if key in self._extra_content:
+            return self._extra_content[key]
         if key not in self._mapping:
             raise KeyError(key)
         value = self._mapping[key]
@@ -268,19 +306,27 @@ class _LazyConfigMapping(OrderedDict):
         return getattr(self._modules[module_name], value)
 
     def keys(self):
-        return self._mapping.keys()
+        return list(self._mapping.keys()) + list(self._extra_content.keys())
 
     def values(self):
-        return [self[k] for k in self._mapping.keys()]
+        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
 
     def items(self):
-        return [(k, self[k]) for k in self._mapping.keys()]
+        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
 
     def __iter__(self):
-        return iter(self._mapping.keys())
+        return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
 
     def __contains__(self, item):
-        return item in self._mapping
+        return item in self._mapping or item in self._extra_content
+
+    def register(self, key, value):
+        """
+        Register a new configuration in this mapping.
+        """
+        if key in self._mapping.keys():
+            raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+        self._extra_content[key] = value
 
 
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
@@ -524,3 +570,20 @@ class AutoConfig:
             f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )
+
+    @staticmethod
+    def register(model_type, config):
+        """
+        Register a new configuration for this class.
+
+        Args:
+            model_type (:obj:`str`): The model type like "bert" or "gpt".
+            config (:class:`~transformers.PretrainedConfig`): The config to register.
+        """
+        if issubclass(config, PretrainedConfig) and config.model_type != model_type:
+            raise ValueError(
+                "The config you are passing has a `model_type` attribute that is not consistent with the model type "
+                f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
+                "match!"
+            )
+        CONFIG_MAPPING.register(model_type, config)

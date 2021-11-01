@@ -757,7 +757,7 @@ FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
         >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         >>> model = FlaxBertForPreTraining.from_pretrained('bert-base-uncased')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.prediction_logits

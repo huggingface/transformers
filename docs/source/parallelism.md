@@ -35,7 +35,7 @@ The following is the brief description of the main concepts that will be describ
 1. DataParallel (DP) - the same setup is replicated multiple times, and each being fed a slice of the data. The processing is done in parallel and all setups are synchronized at the end of each training step.
 2. TensorParallel (TP) - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single gpu, each shard of the tensor resides on its designated gpu. During processing each shard gets processed separately and in parallel on different GPUs and the results are synced at the end of the step. This is what one may call horizontal parallelism, as the splitting happens on horizontal level.
 3. PipelineParallel (PP) - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are places on a single gpu. Each gpu processes in parallel different stages of the pipeline and working on a small chunk of the batch.
-4. Zero Redundancy Optimizer (ZeRO) - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model does't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
+4. Zero Redundancy Optimizer (ZeRO) - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
 5. Sharded DDP - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
 
 
@@ -58,7 +58,7 @@ a0 | b0 | c0
 a1 | b1 | c1
 a2 | b2 | c2
 ```
-Layer La has weights a0, at and a2.
+Layer La has weights a0, a1 and a2.
 
 If we have 3 GPUs, the Sharded DDP (= Zero-DP) splits the model onto 3 GPUs like so:
 
@@ -110,7 +110,7 @@ To me this sounds like an efficient group backpacking weight distribution strate
 2. person B carries the stove
 3. person C carries the axe
 
-Now each night they all share what they have with others and get from others what the don't have, and in the morning they pack up their allocated type of gear and continue on their way. This is Sharded DDP / Zero DP.
+Now each night they all share what they have with others and get from others what they don't have, and in the morning they pack up their allocated type of gear and continue on their way. This is Sharded DDP / Zero DP.
 
 Compare this strategy to the simple one where each person has to carry their own tent, stove and axe, which would be far more inefficient. This is DataParallel (DP and DDP) in Pytorch.
 
@@ -140,7 +140,7 @@ we just sliced it in 2 vertically, placing layers 0-3 onto GPU0 and 4-7 to GPU1.
 
 Now while data travels from layer 0 to 1, 1 to 2 and 2 to 3 this is just the normal model. But when data needs to pass from layer 3 to layer 4 it needs to travel from GPU0 to GPU1 which introduces a communication overhead. If the participating GPUs are on the same compute node (e.g. same physical machine) this copying is pretty fast, but if the GPUs are located on different compute nodes (e.g. multiple machines) the communication overhead could be significantly larger.
 
-Then layers 4 to 5 to 6 to 7 are as a normal model would have and when the 7th layer completes we often need to send the data back to layer 0 where the labels are (or alternatively send the labels to the the last layer). Now the loss can be computed and the optimizer can do its work.
+Then layers 4 to 5 to 6 to 7 are as a normal model would have and when the 7th layer completes we often need to send the data back to layer 0 where the labels are (or alternatively send the labels to the last layer). Now the loss can be computed and the optimizer can do its work.
 
 Problems:
 - the main deficiency and why this one is called "naive" MP, is that all but one GPU is idle at any given moment. So if 4 GPUs are used, it's almost identical to quadrupling the amount of memory of a single GPU, and ignoring the rest of the hardware. Plus there is the overhead of copying the data between devices. So 4x 6GB cards will be able to accommodate the same size as 1x 24GB card using naive MP, except the latter will complete the training faster, since it doesn't have the data copying overhead. But, say, if you have 40GB cards and need to fit a 45GB model you can with 4x 40GB cards (but barely because of the gradient and optimizer states)
@@ -220,9 +220,12 @@ Special considerations: TP requires very fast network, and therefore it's not ad
 This section is based on the original much more [detailed TP overview](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
 by [@anton-l](https://github.com/anton-l).
 
-Implementations:
+Alternative names:
 - DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
-- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation.
+
+Implementations:
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
+- [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
 
 🤗 Transformers status:
 - core: not yet implemented in the core
@@ -269,7 +272,7 @@ Implementations:
 
 One of the main features of DeepSpeed is ZeRO, which is a super-scalable extension of DP. It has already been discussed in [ZeRO Data Parallel](#zero-data-parallel). Normally it's a standalone feature that doesn't require PP or TP. But it can be combined with PP and TP.
 
-When ZeRO-DP is combined with PP (and optinally TP) it typically enables only ZeRO stage 1 (optimizer sharding).
+When ZeRO-DP is combined with PP (and optionally TP) it typically enables only ZeRO stage 1 (optimizer sharding).
 
 While it's theoretically possible to use ZeRO stage 2 (gradient sharding) with Pipeline Parallelism, it will have bad performance impacts. There would need to be an additional reduce-scatter collective for every micro-batch to aggregate the gradients before sharding, which adds a potentially significant communication overhead. By nature of Pipeline Parallelism, small micro-batches are used and instead the focus is on trying to balance arithmetic intensity (micro-batch size) with minimizing the Pipeline bubble (number of micro-batches). Therefore those communication costs are going to hurt.
 
@@ -293,12 +296,27 @@ Paper: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao J
 
 It performs a sort of 4D Parallelism over Sample-Operator-Attribute-Parameter.
 
-1. Sample = Data Parallelism
-2. Operator = part vertical Layer Parallelism, but it can split the layer too - more refined level
-3. Attribute = horizontal Model Parallelism (Megatron-LM style)
-4. Parameter = Sharded model params
+1. Sample = Data Parallelism (sample-wise parallel)
+2. Operator = Parallelize a single operation into several sub-operations
+3. Attribute = Data Parallelism (length-wise parallel)
+4. Parameter = Model Parallelism (regardless of dimension - horizontal or vertical)
 
-and they are working on Pipeline Parallelism. I guess ZeRO-DP is Sample+Parameter in this context.
+Examples:
+* Sample
+
+Let's take 10 batches of sequence length 512. If we parallelize them by sample dimension into 2 devices, we get 10 x 512 which becomes be 5 x 2 x 512.
+
+* Operator
+
+If we perform layer normalization, we compute std first and mean second, and then we can normalize data. Operator parallelism allows computing std and mean in parallel. So if we parallelize them by operator dimension into 2 devices (cuda:0, cuda:1), first we copy input data into both devices, and cuda:0 computes std, cuda:1 computes mean at the same time.
+
+* Attribute
+
+We have 10 batches of 512 length. If we parallelize them by attribute dimension into 2 devices, 10 x 512 will be 10 x 2 x 256.
+
+* Parameter
+
+It is similar with tensor model parallelism or naive layer-wise model parallelism.
 
 ![flex-flow-soap](imgs/parallelism-flexflow.jpeg)
 
@@ -313,7 +331,7 @@ So the promise is very attractive - it runs a 30min simulation on the cluster of
 
 ## Which Strategy To Use When
 
-Here is a very rough outlook at which parallelism strategy to use when. The first on the list is typically faster.
+Here is a very rough outline at which parallelism strategy to use when. The first on each list is typically faster.
 
 **⇨ Single GPU**
 
@@ -324,7 +342,11 @@ Here is a very rough outlook at which parallelism strategy to use when. The firs
 * Model doesn't fit onto a single GPU:
 
     1. ZeRO + Offload CPU and optionally NVMe
+    2. as above plus Memory Centric Tiling (see below for details) if the largest layer can't fit into a single GPU
 
+* Largest Layer not fitting into a single GPU:
+
+1. ZeRO - Enable [Memory Centric Tiling](https://deepspeed.readthedocs.io/en/latest/zero3.html#memory-centric-tiling) (MCT). It allows you to run arbitrarily large layers by automatically splitting them and executing them sequentially. MCT reduces the number of parameters that are live on a GPU, but it does not affect the activation memory. As this need is very rare as of this writing a manual override of `torch.nn.Linear` needs to be done by the user.
 
 **⇨ Single Node / Multi-GPU**
 
@@ -339,7 +361,14 @@ Here is a very rough outlook at which parallelism strategy to use when. The firs
     2. ZeRO
     3. TP
 
-    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP and ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP or ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+
+    TP is almost always used within a single node. That is TP size <= gpus per node.
+
+* Largest Layer not fitting into a single GPU:
+
+    1. If not using ZeRO - must use TP, as PP alone won't be able to fit.
+    2. With ZeRO see the same entry for "Single GPU" above
 
 
 **⇨ Multi-Node / Multi-GPU**

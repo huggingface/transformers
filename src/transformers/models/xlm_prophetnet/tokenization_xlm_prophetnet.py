@@ -152,7 +152,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             import sentencepiece as spm
         except ImportError:
             logger.warning(
-                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece "
                 "pip install sentencepiece"
             )
             raise
@@ -191,7 +191,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             import sentencepiece as spm
         except ImportError:
             logger.warning(
-                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece "
                 "pip install sentencepiece"
             )
             raise

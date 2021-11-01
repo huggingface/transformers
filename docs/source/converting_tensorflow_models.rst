@@ -13,8 +13,8 @@
 Converting Tensorflow Checkpoints
 =======================================================================================================================
 
-A command-line interface is provided to convert original Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM checkpoints in models
-than be loaded using the ``from_pretrained`` methods of the library.
+A command-line interface is provided to convert original Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM checkpoints to models
+that can be loaded using the ``from_pretrained`` methods of the library.
 
 .. note::
     Since 2.3.0 the conversion script is now part of the transformers CLI (**transformers-cli**) available in any

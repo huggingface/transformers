@@ -87,6 +87,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
 
     slow_tokenizer_class: PreTrainedTokenizer = None
+    can_save_slow_tokenizer: bool = True
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -551,7 +552,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "might consider leaving the legacy_format at `None` or setting it to `False`."
             )
 
-        save_slow = (legacy_format is None or legacy_format is True) and self.slow_tokenizer_class is not None
+        save_slow = (
+            (legacy_format is None or legacy_format is True)
+            and self.slow_tokenizer_class is not None
+            and self.can_save_slow_tokenizer
+        )
         save_fast = legacy_format is None or legacy_format is False
 
         if save_slow:
@@ -661,7 +666,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["continuing_subword_prefix"] = tokenizer_json["model"]["continuing_subword_prefix"]
         if (
             tokenizer_json["model"]["type"] == "BPE"
-            and "end_of_work_suffix" not in kwargs
+            and "end_of_word_suffix" not in kwargs
             and tokenizer_json["model"]["end_of_word_suffix"] is not None
         ):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
@@ -707,7 +712,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
                 special_token_full = getattr(self, f"_{token}")
                 if isinstance(special_token_full, AddedToken):
-                    # Create an added token with the same paramters except the content
+                    # Create an added token with the same parameters except the content
                     kwargs[token] = AddedToken(
                         special_token,
                         single_word=special_token_full.single_word,

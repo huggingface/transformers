@@ -19,6 +19,7 @@
 import copy
 import json
 import os
+import warnings
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
@@ -57,6 +58,8 @@ class PretrainedConfig(PushToHubMixin):
           :class:`~RagConfig`.
         - **keys_to_ignore_at_inference** (:obj:`List[str]`) -- A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
+        - **attribute_map** (:obj:`Dict[str, str]`) -- A dict that maps model specific attribute names to the
+          standardized naming of attributes.
 
     Common attributes (present in all subclasses)
 
@@ -83,11 +86,14 @@ class PretrainedConfig(PushToHubMixin):
             Whether the model is used as an encoder/decoder or not.
         is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether the model is used as decoder or not (in which case it's used as an encoder).
+        cross_attention_hidden_size (:obj:`bool`, `optional`):
+            The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
+            setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
         add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which
             consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
-        tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`)
+        tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
         prune_heads (:obj:`Dict[int, List[int]]`, `optional`, defaults to :obj:`{}`):
@@ -218,6 +224,17 @@ class PretrainedConfig(PushToHubMixin):
     """
     model_type: str = ""
     is_composition: bool = False
+    attribute_map: Dict[str, str] = {}
+
+    def __setattr__(self, key, value):
+        if key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        super().__setattr__(key, value)
+
+    def __getattribute__(self, key):
+        if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
+            key = super().__getattribute__("attribute_map")[key]
+        return super().__getattribute__(key)
 
     def __init__(self, **kwargs):
         # Attributes with defaults
@@ -235,6 +252,7 @@ class PretrainedConfig(PushToHubMixin):
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
+        self.cross_attention_hidden_size = kwargs.pop("cross_attention_hidden_size", None)
         self.add_cross_attention = kwargs.pop("add_cross_attention", False)
         self.tie_encoder_decoder = kwargs.pop("tie_encoder_decoder", False)
 
@@ -300,7 +318,7 @@ class PretrainedConfig(PushToHubMixin):
         allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
         if self.problem_type is not None and self.problem_type not in allowed_problem_types:
             raise ValueError(
-                f"The config parameter `problem_type` was not understood: received {self.problem_type}"
+                f"The config parameter `problem_type` was not understood: received {self.problem_type} "
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
 
@@ -316,6 +334,14 @@ class PretrainedConfig(PushToHubMixin):
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
+
+        # Deal with gradient checkpointing
+        if kwargs.get("gradient_checkpointing", False):
+            warnings.warn(
+                "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
+                "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
+                "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
+            )
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -350,7 +376,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @num_labels.setter
     def num_labels(self, num_labels: int):
-        if self.id2label is None or len(self.id2label) != num_labels:
+        if not hasattr(self, "id2label") or self.id2label is None or len(self.id2label) != num_labels:
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
@@ -538,12 +564,17 @@ class PretrainedConfig(PushToHubMixin):
             logger.error(err)
             msg = (
                 f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
             )
+
+            if revision is not None:
+                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
             raise EnvironmentError(msg)
 
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             msg = (
                 f"Couldn't reach server at '{config_file}' to download configuration file or "
                 "configuration file is not a valid JSON file. "

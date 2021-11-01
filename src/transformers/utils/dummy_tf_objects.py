@@ -691,6 +691,63 @@ class TFDebertaPreTrainedModel:
         requires_backends(cls, ["tf"])
 
 
+TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFDebertaV2ForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2ForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2ForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2Model:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFDebertaV2PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -864,6 +921,15 @@ class TFElectraModel:
 
 
 class TFElectraPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -1653,6 +1719,15 @@ class TFRemBertPreTrainedModel:
 
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFRobertaForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
 
 
 class TFRobertaForMaskedLM:

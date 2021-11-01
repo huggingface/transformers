@@ -27,6 +27,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
+from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
@@ -43,6 +44,8 @@ from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
+from .image_segmentation import ImageSegmentationPipeline
+from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
@@ -86,12 +89,17 @@ if is_torch_available():
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         AutoModel,
+        AutoModelForAudioClassification,
         AutoModelForCausalLM,
+        AutoModelForCTC,
         AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
+        AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
@@ -108,12 +116,16 @@ TASK_ALIASES = {
     "ner": "token-classification",
 }
 SUPPORTED_TASKS = {
+    "audio-classification": {
+        "impl": AudioClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
+        "default": {"model": {"pt": "superb/wav2vec2-base-superb-ks"}},
+    },
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
-        # Only load from `config.architectures`, AutoModelForCTC and AutoModelForConditionalGeneration
-        # do not exist yet.
-        "pt": () if is_torch_available() else (),
+        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
     },
     "feature-extraction": {
@@ -221,6 +233,18 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "google/vit-base-patch16-224"}},
     },
+    "image-segmentation": {
+        "impl": ImageSegmentationPipeline,
+        "tf": (),
+        "pt": (AutoModelForImageSegmentation,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
+    },
+    "object-detection": {
+        "impl": ObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50"}},
+    },
 }
 
 
@@ -233,18 +257,22 @@ def check_task(task: str) -> Tuple[Dict, Any]:
         task (:obj:`str`):
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
-            - :obj:`"feature-extraction"`
-            - :obj:`"text-classification"`
-            - :obj:`"sentiment-analysis"` (alias of :obj:`"text-classification")
-            - :obj:`"token-classification"`
-            - :obj:`"ner"` (alias of :obj:`"token-classification")
-            - :obj:`"question-answering"`
-            - :obj:`"fill-mask"`
-            - :obj:`"summarization"`
-            - :obj:`"translation_xx_to_yy"`
-            - :obj:`"translation"`
-            - :obj:`"text-generation"`
+            - :obj:`"audio-classification"`
+            - :obj:`"automatic-speech-recognition"`
             - :obj:`"conversational"`
+            - :obj:`"feature-extraction"`
+            - :obj:`"fill-mask"`
+            - :obj:`"image-classification"`
+            - :obj:`"question-answering"`
+            - :obj:`"table-question-answering"`
+            - :obj:`"text2text-generation"`
+            - :obj:`"text-classification"` (alias :obj:`"sentiment-analysis" available)
+            - :obj:`"text-generation"`
+            - :obj:`"token-classification"` (alias :obj:`"ner"` available)
+            - :obj:`"translation"`
+            - :obj:`"translation_xx_to_yy"`
+            - :obj:`"summarization"`
+            - :obj:`"zero-shot-classification"`
 
     Returns:
         (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize the
@@ -296,21 +324,26 @@ def pipeline(
         task (:obj:`str`):
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
-            - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
-            - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
-              :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
-              :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
-            - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
-            - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
-            - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`.
-            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
-            - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
-            - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
-            - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`.
+            - :obj:`"audio-classification"`: will return a :class:`~transformers.AudioClassificationPipeline`:.
+            - :obj:`"automatic-speech-recognition"`: will return a
+              :class:`~transformers.AutomaticSpeechRecognitionPipeline`:.
+            - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`:.
+            - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`:.
+            - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`:.
+            - :obj:`"image-classification"`: will return a :class:`~transformers.ImageClassificationPipeline`:.
+            - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`:.
+            - :obj:`"table-question-answering"`: will return a :class:`~transformers.TableQuestionAnsweringPipeline`:.
+            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`:.
+            - :obj:`"text-classification"` (alias :obj:`"sentiment-analysis" available): will return a
+              :class:`~transformers.TextClassificationPipeline`:.
+            - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`:.
+            - :obj:`"token-classification"` (alias :obj:`"ner"` available): will return a
+              :class:`~transformers.TokenClassificationPipeline`:.
+            - :obj:`"translation"`: will return a :class:`~transformers.TranslationPipeline`:.
+            - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`:.
+            - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`:.
+            - :obj:`"zero-shot-classification"`: will return a :class:`~transformers.ZeroShotClassificationPipeline`:.
+
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
             actual instance of a pretrained model inheriting from :class:`~transformers.PreTrainedModel` (for PyTorch)
@@ -408,6 +441,10 @@ def pipeline(
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
+        logger.warning(f"No model was supplied, defaulted to {model} (https://huggingface.co/{model})")
+
+    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -417,9 +454,6 @@ def pipeline(
         config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
     model_name = model if isinstance(model, str) else None
-
-    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
-    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None
@@ -437,8 +471,15 @@ def pipeline(
 
     model_config = model.config
 
-    load_tokenizer = type(model_config) in TOKENIZER_MAPPING
-    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+
+    if task in {"audio-classification"}:
+        # Audio classification will never require a tokenizer.
+        # the model on the other hand might have a tokenizer, but
+        # the files could be missing from the hub, instead of failing
+        # on such repos, we just force to not load it.
+        load_tokenizer = False
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)

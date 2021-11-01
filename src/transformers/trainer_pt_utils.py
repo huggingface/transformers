@@ -25,7 +25,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import StreamHandler
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
@@ -152,18 +152,20 @@ def nested_xla_mesh_reduce(tensors, name):
 
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
+        if tensors.ndim == 0:
+            tensors = tensors[None]
         return xm.mesh_reduce(name, tensors, torch.cat)
     else:
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
 
 
-def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> torch.Tensor:
+def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) -> Any:
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
-        dist.all_gather(output_tensors, tensor)
         output_tensors = [t if len(t.shape) > 0 else t[None] for t in output_tensors]
+        dist.all_gather(output_tensors, tensor)
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -175,10 +177,12 @@ def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int]
 
 
 def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]], num_total_examples: Optional[int] = None
+    scalars: List[Union[int, float]],
+    num_total_examples: Optional[int] = None,
+    device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
-        tensorized_scalar = torch.tensor(scalars).cuda()
+        tensorized_scalar = torch.tensor(scalars).to(device)
         output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
@@ -458,7 +462,7 @@ class LabelSmoother:
         padding_mask = labels.eq(self.ignore_index)
         # In case the ignore_index is -100, the gather will fail, so we replace labels by 0. The padding_mask
         # will ignore them in any case.
-        labels.clamp_min_(0)
+        labels = torch.clamp(labels, min=0)
         nll_loss = log_probs.gather(dim=-1, index=labels)
         # works for fp16 input tensor too, by internally upcasting it to fp32
         smoothed_loss = log_probs.sum(dim=-1, keepdim=True, dtype=torch.float32)
@@ -516,25 +520,27 @@ class LengthGroupedSampler(Sampler):
 
     def __init__(
         self,
-        dataset: Dataset,
         batch_size: int,
+        dataset: Optional[Dataset] = None,
         lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
         generator=None,
     ):
-        self.dataset = dataset
+        if dataset is None and lengths is None:
+            raise ValueError("One of dataset and lengths must be provided.")
+
         self.batch_size = batch_size
-        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
+            model_input_name = model_input_name if model_input_name is not None else "input_ids"
             if (
                 not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or self.model_input_name not in dataset[0]
+                or model_input_name not in dataset[0]
             ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    f"'{self.model_input_name}' key."
+                    f"'{model_input_name}' key."
                 )
-            lengths = [len(feature[self.model_input_name]) for feature in dataset]
+            lengths = [len(feature[model_input_name]) for feature in dataset]
         self.lengths = lengths
         self.generator = generator
 
@@ -554,8 +560,8 @@ class DistributedLengthGroupedSampler(DistributedSampler):
     # Copied and adapted from PyTorch DistributedSampler.
     def __init__(
         self,
-        dataset: Dataset,
         batch_size: int,
+        dataset: Optional[Dataset] = None,
         num_replicas: Optional[int] = None,
         rank: Optional[int] = None,
         seed: int = 0,
@@ -563,6 +569,8 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
     ):
+        if dataset is None and lengths is None:
+            raise ValueError("One of dataset and lengths must be provided.")
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -571,36 +579,37 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
             rank = dist.get_rank()
-        self.dataset = dataset
+
         self.batch_size = batch_size
         self.num_replicas = num_replicas
         self.rank = rank
         self.epoch = 0
         self.drop_last = drop_last
-        # If the dataset length is evenly divisible by # of replicas, then there
-        # is no need to drop any data, since the dataset will be split equally.
-        if self.drop_last and len(self.dataset) % self.num_replicas != 0:
-            # Split to nearest available length that is evenly divisible.
-            # This is to ensure each rank receives the same amount of data when
-            # using this Sampler.
-            self.num_samples = math.ceil((len(self.dataset) - self.num_replicas) / self.num_replicas)
-        else:
-            self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
-        self.total_size = self.num_samples * self.num_replicas
-        self.seed = seed
-        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
+            model_input_name = model_input_name if model_input_name is not None else "input_ids"
             if (
                 not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or self.model_input_name not in dataset[0]
+                or model_input_name not in dataset[0]
             ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    f"'{self.model_input_name}' key."
+                    f"'{model_input_name}' key."
                 )
-            lengths = [len(feature[self.model_input_name]) for feature in dataset]
+            lengths = [len(feature[model_input_name]) for feature in dataset]
         self.lengths = lengths
+
+        # If the dataset length is evenly divisible by # of replicas, then there
+        # is no need to drop any data, since the dataset will be split equally.
+        if self.drop_last and len(self.lengths) % self.num_replicas != 0:
+            # Split to nearest available length that is evenly divisible.
+            # This is to ensure each rank receives the same amount of data when
+            # using this Sampler.
+            self.num_samples = math.ceil((len(self.lengths) - self.num_replicas) / self.num_replicas)
+        else:
+            self.num_samples = math.ceil(len(self.lengths) / self.num_replicas)
+        self.total_size = self.num_samples * self.num_replicas
+        self.seed = seed
 
     def __iter__(self) -> Iterator:
         # Deterministically shuffle based on epoch and seed
@@ -769,6 +778,13 @@ class IterableDatasetShard(IterableDataset):
                 current_batch += first_batch
             for i in process_slice:
                 yield current_batch[i]
+
+    def __len__(self):
+        # Will raise an error if the underlying dataset is not sized.
+        if self.drop_last:
+            return (len(self.dataset) // (self.batch_size * self.num_processes)) * self.batch_size
+        else:
+            return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
 
 # In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
@@ -1019,6 +1035,7 @@ if is_sagemaker_mp_enabled():
                 f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
             )
         all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
+        all_tensors = [t if len(t.shape) > 0 else t[None] for t in all_tensors]
         return torch.cat([t.cpu() for t in all_tensors], dim=0)
 
     def smp_nested_concat(tensor):

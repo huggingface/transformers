@@ -479,21 +479,13 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def test_inference_ctc_normal(self):
         model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
@@ -511,14 +503,12 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_normal_batched(self):
-        model = TFHubertForCTC.from_pretrained("facebook/hubert-base-ls960")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-ls960", do_lower_case=True)
+        model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
+        processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
-        input_values = processor(
-            input_speech, return_tensors="tf", padding=True, truncation=True, sampling_rate=16000
-        ).input_values
+        input_values = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000).input_values
 
         logits = model(input_values).logits
 
@@ -527,7 +517,7 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
+            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
@@ -537,20 +527,20 @@ class TFHubertModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="tf", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000)
 
         input_values = inputs.input_values
         attention_mask = inputs.attention_mask
 
         logits = model(input_values, attention_mask=attention_mask).logits
 
-        predicted_ids = tf.argmax(logits, dim=-1)
+        predicted_ids = tf.argmax(logits, axis=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
             "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
-            "his instant panic was followed by a small sharp blow high on his chest",
+            "his instant of panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

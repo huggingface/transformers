@@ -41,8 +41,6 @@ class CTRLConfig(PretrainedConfig):
         n_positions (:obj:`int`, `optional`, defaults to 256):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_ctx (:obj:`int`, `optional`, defaults to 256):
-            Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 1280):
             Dimensionality of the embeddings and hidden states.
         dff (:obj:`int`, `optional`, defaults to 8192):
@@ -81,12 +79,17 @@ class CTRLConfig(PretrainedConfig):
 
     model_type = "ctrl"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "max_position_embeddings": "n_positions",
+        "hidden_size": "n_embd",
+        "num_attention_heads": "n_head",
+        "num_hidden_layers": "n_layer",
+    }
 
     def __init__(
         self,
         vocab_size=246534,
         n_positions=256,
-        n_ctx=256,
         n_embd=1280,
         dff=8192,
         n_layer=48,
@@ -104,9 +107,7 @@ class CTRLConfig(PretrainedConfig):
         use_cache=True,
         **kwargs
     ):
-        super().__init__(**kwargs)
         self.vocab_size = vocab_size
-        self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
@@ -125,18 +126,4 @@ class CTRLConfig(PretrainedConfig):
         self.summary_proj_to_labels = summary_proj_to_labels
         self.use_cache = use_cache
 
-    @property
-    def max_position_embeddings(self):
-        return self.n_positions
-
-    @property
-    def hidden_size(self):
-        return self.n_embd
-
-    @property
-    def num_attention_heads(self):
-        return self.n_head
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layer
+        super().__init__(**kwargs)

@@ -42,8 +42,10 @@ from .file_utils import (
     is_torch_available,
 )
 from .models.auto.modeling_auto import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -59,6 +61,7 @@ from .utils import logging
 TASK_MAPPING = {
     "text-generation": MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "image-segmentation": MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
     "fill-mask": MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     "object-detection": MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -66,6 +69,7 @@ TASK_MAPPING = {
     "text-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     "table-question-answering": MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
 }
 
 logger = logging.get_logger(__name__)
@@ -271,6 +275,7 @@ should probably proofread and complete it, then remove this comment. -->
 TASK_TAG_TO_NAME_MAPPING = {
     "fill-mask": "Masked Language Modeling",
     "image-classification": "Image Classification",
+    "image-segmentation": "Image Segmentation",
     "multiple-choice": "Multiple Choice",
     "object-detection": "Object Detection",
     "question-answering": "Question Answering",
@@ -313,6 +318,7 @@ def _insert_values_as_list(metadata, name, values):
         return metadata
     if isinstance(values, str):
         values = [values]
+    values = [v for v in values if v is not None]
     if len(values) == 0:
         return metadata
     metadata[name] = values
@@ -426,14 +432,21 @@ class TrainingSummary:
                     result["dataset"]["args"] = dataset_arg_mapping[ds_tag]
 
             if len(metric_mapping) > 0:
+                result["metrics"] = []
                 for metric_tag, metric_name in metric_mapping.items():
-                    result["metric"] = {
-                        "name": metric_name,
-                        "type": metric_tag,
-                        "value": self.eval_results[metric_name],
-                    }
+                    result["metrics"].append(
+                        {
+                            "name": metric_name,
+                            "type": metric_tag,
+                            "value": self.eval_results[metric_name],
+                        }
+                    )
 
-            model_index["results"].append(result)
+            # Remove partial results to avoid the model card being rejected.
+            if "task" in result and "dataset" in result and "metrics" in result:
+                model_index["results"].append(result)
+            else:
+                logger.info(f"Dropping the following result as it does not have all the necessary fields:\n{result}")
 
         return [model_index]
 
@@ -446,7 +459,7 @@ class TrainingSummary:
         metadata = _insert_values_as_list(metadata, "tags", self.tags)
         metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)
         metadata = _insert_values_as_list(metadata, "metrics", list(metric_mapping.keys()))
-        metadata["model_index"] = self.create_model_index(metric_mapping)
+        metadata["model-index"] = self.create_model_index(metric_mapping)
 
         return metadata
 
@@ -468,7 +481,7 @@ class TrainingSummary:
             model_card += f"This model is a fine-tuned version of [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
 
         if self.dataset is None:
-            model_card += "an unkown dataset."
+            model_card += "an unknown dataset."
         else:
             if isinstance(self.dataset, str):
                 model_card += f"the {self.dataset} dataset."

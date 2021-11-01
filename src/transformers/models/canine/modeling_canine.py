@@ -549,7 +549,7 @@ class CanineAttention(nn.Module):
         self.local = local
         if attend_from_chunk_width < attend_from_chunk_stride:
             raise ValueError(
-                "`attend_from_chunk_width` < `attend_from_chunk_stride`"
+                "`attend_from_chunk_width` < `attend_from_chunk_stride` "
                 "would cause sequence positions to get skipped."
             )
         if attend_to_chunk_width < attend_to_chunk_stride:
@@ -772,6 +772,7 @@ class CanineEncoder(nn.Module):
                 for _ in range(config.num_hidden_layers)
             ]
         )
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -791,7 +792,7 @@ class CanineEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -895,6 +896,7 @@ class CaninePreTrainedModel(PreTrainedModel):
     config_class = CanineConfig
     load_tf_weights = load_tf_weights_in_canine
     base_model_prefix = "canine"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -912,6 +914,10 @@ class CaninePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, CanineEncoder):
+            module.gradient_checkpointing = value
 
 
 CANINE_START_DOCSTRING = r"""
@@ -1090,7 +1096,7 @@ class CanineModel(CaninePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CanineModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -1119,13 +1125,12 @@ class CanineModel(CaninePreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:
@@ -1272,7 +1277,7 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1368,7 +1373,7 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1460,7 +1465,7 @@ class CanineForTokenClassification(CaninePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1547,7 +1552,7 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

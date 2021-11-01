@@ -174,7 +174,7 @@ class VisualBertEmbeddings(nn.Module):
                 if visual_position_embeddings.size(1) != visual_embeds.size(1):
                     if visual_position_embeddings.size(1) < visual_embeds.size(1):
                         raise ValueError(
-                            f"Visual position embeddings length: {visual_position_embeddings.size(1)}"
+                            f"Visual position embeddings length: {visual_position_embeddings.size(1)} "
                             f"should be the same as `visual_embeds` length: {visual_embeds.size(1)}"
                         )
                     visual_position_embeddings = visual_position_embeddings[:, : visual_embeds.size(1), :]
@@ -398,6 +398,7 @@ class VisualBertEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([VisualBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -417,7 +418,7 @@ class VisualBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -532,6 +533,7 @@ class VisualBertPreTrainedModel(PreTrainedModel):
 
     config_class = VisualBertConfig
     base_model_prefix = "visual_bert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -546,6 +548,10 @@ class VisualBertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, VisualBertEncoder):
+            module.gradient_checkpointing = value
 
 
 @dataclass
@@ -767,35 +773,35 @@ class VisualBertModel(VisualBertPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if visual_embeds is None:
-            raise ValueError(
-                f"`visual_embeds` can not be of type {type(visual_embeds)} when using a VisualBert Model."
-            )
-
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        visual_input_shape = visual_embeds.size()[:-1]
+        if visual_embeds is not None:
+            visual_input_shape = visual_embeds.size()[:-1]
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
 
-        if visual_attention_mask is None:
+        if visual_embeds is not None and visual_attention_mask is None:
             visual_attention_mask = torch.ones(visual_input_shape, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
+        if visual_embeds is not None:
+            combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+                combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
+            )
 
-        combined_attention_mask = torch.cat((attention_mask, visual_attention_mask), dim=-1)
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            combined_attention_mask, [batch_size, input_shape + visual_input_shape], device
-        )
+        else:
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+                attention_mask, [batch_size, input_shape], device
+            )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -967,7 +973,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask."
+                    f"The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 
@@ -980,7 +986,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             total_size = attention_mask.size(-1) + visual_attention_mask.size(-1)
             if labels.size(-1) != total_size:
                 raise ValueError(
-                    f"The labels provided should have same sequence length as total attention mask."
+                    f"The labels provided should have same sequence length as total attention mask. "
                     f"Found labels with sequence length {labels.size(-1)}, expected {total_size}."
                 )
 

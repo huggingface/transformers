@@ -14,107 +14,206 @@
 
 import unittest
 
-from transformers import is_tf_available, is_torch_available
+from transformers import (
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    LxmertConfig,
+    QuestionAnsweringPipeline,
+)
 from transformers.data.processors.squad import SquadExample
-from transformers.pipelines import Pipeline, QuestionAnsweringArgumentHandler, pipeline
-from transformers.testing_utils import slow
+from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
 
-from .test_pipelines_common import CustomInputPipelineCommonMixin
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
-class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "question-answering"
-    pipeline_running_kwargs = {
-        "padding": "max_length",
-        "max_seq_len": 25,
-        "doc_stride": 5,
-    }  # Default is 'longest' but we use 'max_length' to test equivalence between slow/fast tokenizers
-    small_models = [
-        "sshleifer/tiny-distilbert-base-cased-distilled-squad"
-    ]  # Models tested without the @slow decorator
-    large_models = []  # Models tested with the @slow decorator
-    valid_inputs = [
-        {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
-        {
-            "question": "In what field is HuggingFace working ?",
-            "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
-        },
-        {
-            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
-            "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
-        },
-        {
-            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
-            "context": [
-                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
-                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
-            ],
-        },
-    ]
+@is_pipeline_test
+class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-    def get_pipelines(self):
-        question_answering_pipelines = [
-            pipeline(
-                task=self.pipeline_task,
-                model=model,
-                tokenizer=model,
-                framework="pt" if is_torch_available() else "tf",
-                **self.pipeline_loading_kwargs,
-            )
-            for model in self.small_models
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if isinstance(model.config, LxmertConfig):
+            # This is an bimodal model, we need to find a more consistent way
+            # to switch on those models.
+            return None, None
+        question_answerer = QuestionAnsweringPipeline(model, tokenizer)
+
+        examples = [
+            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
+            {"question": "In what field is HuggingFace ?", "context": "HuggingFace is  an AI startup."},
         ]
-        return question_answering_pipelines
+        return question_answerer, examples
+
+    def run_pipeline_test(self, question_answerer, _):
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+        self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+
+        outputs = question_answerer(
+            question=["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            context="HuggingFace was founded in Paris.",
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
+            ],
+        )
+
+        outputs = question_answerer(
+            question=["What field is HuggingFace working ?", "In what field is HuggingFace ?"],
+            context=[
+                "HuggingFace is a startup based in New-York",
+                "HuggingFace is a startup founded in Paris",
+            ],
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
+            ],
+        )
+
+        with self.assertRaises(ValueError):
+            question_answerer(question="", context="HuggingFace was founded in Paris.")
+        with self.assertRaises(ValueError):
+            question_answerer(question=None, context="HuggingFace was founded in Paris.")
+        with self.assertRaises(ValueError):
+            question_answerer(question="In what field is HuggingFace working ?", context="")
+        with self.assertRaises(ValueError):
+            question_answerer(question="In what field is HuggingFace working ?", context=None)
+
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", topk=20
+        )
+        self.assertEqual(
+            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
+        )
+
+        # Very long context require multiple features
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20
+        )
+        self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+
+    @require_torch
+    def test_small_model_pt(self):
+        question_answerer = pipeline(
+            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
+        )
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_tf
+    def test_small_model_tf(self):
+        question_answerer = pipeline(
+            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="tf"
+        )
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.011, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @slow
-    @unittest.skipIf(not is_torch_available() and not is_tf_available(), "Either torch or TF must be installed.")
-    def test_high_topk_small_context(self):
-        self.pipeline_running_kwargs.update({"topk": 20})
-        valid_inputs = [
-            {"question": "Where was HuggingFace founded ?", "context": "Paris"},
-        ]
-        question_answering_pipelines = self.get_pipelines()
-        output_keys = {"score", "answer", "start", "end"}
-        for question_answering_pipeline in question_answering_pipelines:
-            result = question_answering_pipeline(valid_inputs, **self.pipeline_running_kwargs)
-            self.assertIsInstance(result, dict)
+    @require_torch
+    def test_large_model_pt(self):
+        question_answerer = pipeline(
+            "question-answering",
+        )
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
 
-            for key in output_keys:
-                self.assertIn(key, result)
+        self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
 
-    def _test_pipeline(self, question_answering_pipeline: Pipeline):
-        output_keys = {"score", "answer", "start", "end"}
-        valid_inputs = [
-            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
+    @slow
+    @require_torch
+    def test_large_model_issue(self):
+        qa_pipeline = pipeline(
+            "question-answering",
+            model="mrm8488/bert-multi-cased-finetuned-xquadv1",
+        )
+        outputs = qa_pipeline(
             {
-                "question": "In what field is HuggingFace working ?",
-                "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
-            },
-        ]
-        invalid_inputs = [
-            {"question": "", "context": "This is a test to try empty question edge case"},
-            {"question": None, "context": "This is a test to try empty question edge case"},
-            {"question": "What is does with empty context ?", "context": ""},
-            {"question": "What is does with empty context ?", "context": None},
-        ]
-        self.assertIsNotNone(question_answering_pipeline)
+                "context": "Yes Bank founder Rana Kapoor has approached the Bombay High Court, challenging a special court's order from August this year that had remanded him in police custody for a week in a multi-crore loan fraud case. Kapoor, who is currently lodged in Taloja Jail, is an accused in the loan fraud case and some related matters being probed by the CBI and Enforcement Directorate. A single bench presided over by Justice S K Shinde on Tuesday posted the plea for further hearing on October 14. In his plea filed through advocate Vijay Agarwal, Kapoor claimed that the special court's order permitting the CBI's request for police custody on August 14 was illegal and in breach of the due process of law. Therefore, his police custody and subsequent judicial custody in the case were all illegal. Kapoor has urged the High Court to quash and set aside the special court's order dated August 14. As per his plea, in August this year, the CBI had moved two applications before the special court, one seeking permission to arrest Kapoor, who was already in judicial custody at the time in another case, and the other, seeking his police custody. While the special court refused to grant permission to the CBI to arrest Kapoor, it granted the central agency's plea for his custody. Kapoor, however, said in his plea that before filing an application for his arrest, the CBI had not followed the process of issuing him a notice under Section 41 of the CrPC for appearance before it. He further said that the CBI had not taken prior sanction as mandated under section 17 A of the Prevention of Corruption Act for prosecuting him. The special court, however, had said in its order at the time that as Kapoor was already in judicial custody in another case and was not a free man the procedure mandated under Section 41 of the CrPC need not have been adhered to as far as issuing a prior notice of appearance was concerned. ADVERTISING It had also said that case records showed that the investigating officer had taken an approval from a managing director of Yes Bank before beginning the proceedings against Kapoor and such a permission was a valid sanction. However, Kapoor in his plea said that the above order was bad in law and sought that it be quashed and set aside. The law mandated that if initial action was not in consonance with legal procedures, then all subsequent actions must be held as illegal, he said, urging the High Court to declare the CBI remand and custody and all subsequent proceedings including the further custody as illegal and void ab-initio. In a separate plea before the High Court, Kapoor's daughter Rakhee Kapoor-Tandon has sought exemption from in-person appearance before a special PMLA court. Rakhee has stated that she is a resident of the United Kingdom and is unable to travel to India owing to restrictions imposed due to the COVID-19 pandemic. According to the CBI, in the present case, Kapoor had obtained a gratification or pecuniary advantage of ₹ 307 crore, and thereby caused Yes Bank a loss of ₹ 1,800 crore by extending credit facilities to Avantha Group, when it was not eligible for the same",
+                "question": "Is this person invovled in fraud?",
+            }
+        )
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"answer": "an accused in the loan fraud case", "end": 294, "score": 0.001, "start": 261},
+        )
 
-        mono_result = question_answering_pipeline(valid_inputs[0])
-        self.assertIsInstance(mono_result, dict)
+    @slow
+    @require_torch
+    def test_large_model_course(self):
+        question_answerer = pipeline("question-answering")
+        long_context = """
+🤗 Transformers: State of the Art NLP
 
-        for key in output_keys:
-            self.assertIn(key, mono_result)
+🤗 Transformers provides thousands of pretrained models to perform tasks on texts such as classification, information extraction,
+question answering, summarization, translation, text generation and more in over 100 languages.
+Its aim is to make cutting-edge NLP easier to use for everyone.
 
-        multi_result = question_answering_pipeline(valid_inputs)
-        self.assertIsInstance(multi_result, list)
-        self.assertIsInstance(multi_result[0], dict)
+🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and
+then share them with the community on our model hub. At the same time, each python module defining an architecture is fully standalone and
+can be modified to enable quick research experiments.
 
-        for result in multi_result:
-            for key in output_keys:
-                self.assertIn(key, result)
-        for bad_input in invalid_inputs:
-            self.assertRaises(ValueError, question_answering_pipeline, bad_input)
-        self.assertRaises(ValueError, question_answering_pipeline, invalid_inputs)
+Why should I use transformers?
 
+1. Easy-to-use state-of-the-art models:
+  - High performance on NLU and NLG tasks.
+  - Low barrier to entry for educators and practitioners.
+  - Few user-facing abstractions with just three classes to learn.
+  - A unified API for using all our pretrained models.
+  - Lower compute costs, smaller carbon footprint:
+
+2. Researchers can share trained models instead of always retraining.
+  - Practitioners can reduce compute time and production costs.
+  - Dozens of architectures with over 10,000 pretrained models, some in more than 100 languages.
+
+3. Choose the right framework for every part of a model's lifetime:
+  - Train state-of-the-art models in 3 lines of code.
+  - Move a single model between TF2.0/PyTorch frameworks at will.
+  - Seamlessly pick the right framework for training, evaluation and production.
+
+4. Easily customize a model or an example to your needs:
+  - We provide examples for each architecture to reproduce the results published by its original authors.
+  - Model internals are exposed as consistently as possible.
+  - Model files can be used independently of the library for quick experiments.
+
+🤗 Transformers is backed by the three most popular deep learning libraries — Jax, PyTorch and TensorFlow — with a seamless integration
+between them. It's straightforward to train your models with one before loading them for inference with the other.
+"""
+        question = "Which deep learning libraries back 🤗 Transformers?"
+        outputs = question_answerer(question=question, context=long_context)
+
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
+        )
+
+    @slow
+    @require_tf
+    def test_large_model_tf(self):
+        question_answerer = pipeline("question-answering", framework="tf")
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
+
+
+@is_pipeline_test
+class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler(self):
         qa = QuestionAnsweringArgumentHandler()
 

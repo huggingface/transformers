@@ -1007,7 +1007,7 @@ class FSMTModel(PretrainedFSMTModel):
 
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1272,8 +1272,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             # in ___init__
             super().__init__(num_positions, embedding_dim, padding_idx, _weight=weight)
         else:
-            # in forward
-            weight = weight.to(self.weight.device)
+            # in forward put the weights on the correct dtype and device of the param
+            weight = weight.to(dtype=self.weight.dtype, device=self.weight.device)
             self.weight = nn.Parameter(weight)
         self.weight.detach_()
         self.weight.requires_grad = False

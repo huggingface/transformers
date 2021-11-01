@@ -54,10 +54,12 @@ class HubertConfig(PretrainedConfig):
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+        hidden_dropout(:obj:`float`, `optional`, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout(:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        final_dropout (:obj:`float`, `optional`, defaults to 0.1):
+            The dropout probabilitiy for the final projection layer of :class:`Wav2Vec2ForCTC`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -66,8 +68,10 @@ class HubertConfig(PretrainedConfig):
             The norm to be applied to 1D convolutional layers in feature extractor. One of :obj:`"group"` for group
             normalization of only the first 1D convolutional layer or :obj:`"layer"` for layer normalization of all 1D
             convolutional layers.
-        feat_extract_dropout (:obj:`float`, `optional`, defaults to 0.0):
-            The dropout probabilitiy for all 1D convolutional layers in feature extractor.
+        feat_proj_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout probability for output of the feature extractor.
+        feat_proj_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to apply LayerNorm to the output of the feature extractor.
         feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
@@ -115,8 +119,11 @@ class HubertConfig(PretrainedConfig):
             Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
             mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
             instance of :class:`~transformers.HubertForCTC`.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        use_weighted_layer_sum (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
+            instance of :class:`~transformers.HubertForSequenceClassification`.
+        classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
+            Dimensionality of the projection before token mean-pooling for classification.
 
     Example::
 
@@ -144,7 +151,8 @@ class HubertConfig(PretrainedConfig):
         hidden_dropout=0.1,
         activation_dropout=0.1,
         attention_dropout=0.1,
-        feat_proj_dropout=0.1,
+        feat_proj_layer_norm=True,
+        feat_proj_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
         initializer_range=0.02,
@@ -165,7 +173,8 @@ class HubertConfig(PretrainedConfig):
         mask_feature_length=10,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
-        gradient_checkpointing=False,
+        use_weighted_layer_sum=False,
+        classifier_proj_size=256,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -189,6 +198,7 @@ class HubertConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
+        self.feat_proj_layer_norm = feat_proj_layer_norm
         self.feat_proj_dropout = feat_proj_dropout
         self.final_dropout = final_dropout
         self.layerdrop = layerdrop
@@ -196,7 +206,8 @@ class HubertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
-        self.gradient_checkpointing = gradient_checkpointing
+        self.use_weighted_layer_sum = use_weighted_layer_sum
+        self.classifier_proj_size = classifier_proj_size
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -204,9 +215,9 @@ class HubertConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect."
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`,"
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride)"
+                "Configuration for convolutional layers is incorrect. "
+                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
+                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 

@@ -14,8 +14,11 @@
 # limitations under the License.
 """ Classes to support Encoder-Decoder architectures """
 
-
+import warnings
 from typing import Optional
+
+import torch
+from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -28,6 +31,13 @@ from .configuration_encoder_decoder import EncoderDecoderConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
+
+DEPRECATION_WARNING = (
+    "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss inside the "
+    "encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if fine-tuning "
+    "a model trained with versions anterior to 4.12.0. The decoder_input_ids are now created based on the labels, no "
+    "need to pass them yourself anymore."
+)
 
 ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
@@ -53,7 +63,7 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.EncoderDecoderConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -88,9 +98,9 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
-            Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            For training, :obj:`decoder_input_ids` are automatically created by the model by shifting the :obj:`labels`
+            to the right, replacing -100 by the :obj:`pad_token_id` and prepending them with the
+            :obj:`decoder_start_token_id`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -136,10 +146,28 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    if decoder_start_token_id is None:
+        raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
+
+
 @add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
 class EncoderDecoderModel(PreTrainedModel):
     r"""
-    :class:`~transformers.EncoderDecoder` is a generic model class that will be instantiated as a transformer
+    :class:`~transformers.EncoderDecoderModel` is a generic model class that will be instantiated as a transformer
     architecture with one of the base model classes of the library as encoder and another one as decoder when created
     with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
@@ -272,7 +300,7 @@ class EncoderDecoderModel(PreTrainedModel):
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
 
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -397,12 +425,14 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
             >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
 
-            >>> # forward
-            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
-
             >>> # training
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+            >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
+            >>> model.config.pad_token_id = tokenizer.pad_token_id
+            >>> model.config.vocab_size = model.config.decoder.vocab_size
+
+            >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt").input_ids
+            >>> labels = tokenizer("Salut, mon chien est mignon", return_tensors="pt").input_ids
+            >>> outputs = model(input_ids=input_ids, labels=input_ids)
             >>> loss, logits = outputs.loss, outputs.logits
 
             >>> # save and load from pretrained
@@ -434,6 +464,11 @@ class EncoderDecoderModel(PreTrainedModel):
 
         encoder_hidden_states = encoder_outputs[0]
 
+        if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+            decoder_input_ids = shift_tokens_right(
+                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -441,7 +476,6 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -450,11 +484,22 @@ class EncoderDecoderModel(PreTrainedModel):
             **kwargs_decoder,
         )
 
+        # Compute loss independent from decoder (as some shift the logits inside them)
+        loss = None
+        if labels is not None:
+            warnings.warn(DEPRECATION_WARNING, FutureWarning)
+            logits = decoder_outputs.logits if return_dict else decoder_outputs[1]
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
+
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            if loss is not None:
+                return (loss,) + decoder_outputs + encoder_outputs
+            else:
+                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
-            loss=decoder_outputs.loss,
+            loss=loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -464,6 +509,9 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def prepare_inputs_for_generation(
         self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
@@ -482,7 +530,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
-            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported."
+            "Resizing the embedding layers via the EncoderDecoderModel directly is not supported. "
             "Please use the respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or model.decoder.resize_token_embeddings(...))"
         )
 

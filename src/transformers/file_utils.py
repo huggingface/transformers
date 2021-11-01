@@ -30,14 +30,14 @@ import tarfile
 import tempfile
 import types
 from collections import OrderedDict, UserDict
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import fields
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
 from types import ModuleType
-from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
+from typing import Any, BinaryIO, ContextManager, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
@@ -135,6 +135,14 @@ try:
         _datasets_available = False
 except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
+
+
+_detectron2_available = importlib.util.find_spec("detectron2") is not None
+try:
+    _detectron2_version = importlib_metadata.version("detectron2")
+    logger.debug(f"Successfully imported detectron2 version {_detectron2_version}")
+except importlib_metadata.PackageNotFoundError:
+    _detectron2_available = False
 
 
 _faiss_available = importlib.util.find_spec("faiss") is not None
@@ -240,6 +248,8 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
+TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
 DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
 
@@ -269,13 +279,8 @@ _default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
-PRESET_MIRROR_DICT = {
-    "tuna": "https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models",
-    "bfsu": "https://mirrors.bfsu.edu.cn/hugging-face-models",
-}
-
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.8")
+TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
@@ -352,6 +357,10 @@ def is_datasets_available():
     return _datasets_available
 
 
+def is_detectron2_available():
+    return _detectron2_available
+
+
 def is_rjieba_available():
     return importlib.util.find_spec("rjieba") is not None
 
@@ -398,6 +407,10 @@ def is_tokenizers_available():
 
 def is_vision_available():
     return importlib.util.find_spec("PIL") is not None
+
+
+def is_pytesseract_available():
+    return importlib.util.find_spec("pytesseract") is not None
 
 
 def is_in_notebook():
@@ -577,6 +590,14 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 
 
 # docstyle-ignore
+DETECTRON2_IMPORT_ERROR = """
+{0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
+installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
+that match your environment.
+"""
+
+
+# docstyle-ignore
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
@@ -623,13 +644,22 @@ VISION_IMPORT_ERROR = """
 """
 
 
+# docstyle-ignore
+PYTESSERACT_IMPORT_ERROR = """
+{0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
+`pip install pytesseract`
+"""
+
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
@@ -761,10 +791,10 @@ def _prepare_output_docstrings(output_type, config_class):
 PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -778,10 +808,10 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
 PT_QUESTION_ANSWERING_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -798,10 +828,10 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -814,10 +844,10 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 PT_MASKED_LM_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
@@ -831,10 +861,10 @@ PT_MASKED_LM_SAMPLE = r"""
 PT_BASE_MODEL_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -846,10 +876,10 @@ PT_BASE_MODEL_SAMPLE = r"""
 PT_MULTIPLE_CHOICE_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import torch
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -869,9 +899,9 @@ PT_CAUSAL_LM_SAMPLE = r"""
     Example::
 
         >>> import torch
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -879,6 +909,79 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> loss = outputs.loss
         >>> logits = outputs.logits
 """
+
+PT_SPEECH_BASE_MODEL_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> processor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+"""
+
+PT_SPEECH_CTC_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> processor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+        >>> logits = model(**inputs).logits
+        >>> predicted_ids = torch.argmax(logits, dim=-1)
+
+        >>> # transcribe speech
+        >>> transcription = processor.batch_decode(predicted_ids)
+
+        >>> # compute loss
+        >>> with processor.as_target_processor():
+        ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
+
+        >>> loss = model(**inputs).loss
+"""
+
+PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> feature_extractor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
+        >>> logits = model(**inputs).logits
+        >>> predicted_class_ids = torch.argmax(logits, dim=-1)
+        >>> predicted_label = model.config.id2label[predicted_class_ids]
+
+        >>> # compute loss - target_label is e.g. "down"
+        >>> target_label = model.config.id2label[0]
+        >>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
+        >>> loss = model(**inputs).loss
+"""
+
 
 PT_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
@@ -888,16 +991,19 @@ PT_SAMPLE_DOCSTRINGS = {
     "MaskedLM": PT_MASKED_LM_SAMPLE,
     "LMHead": PT_CAUSAL_LM_SAMPLE,
     "BaseModel": PT_BASE_MODEL_SAMPLE,
+    "SpeechBaseModel": PT_SPEECH_BASE_MODEL_SAMPLE,
+    "CTC": PT_SPEECH_CTC_SAMPLE,
+    "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
 }
 
 
 TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import tensorflow as tf
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -912,10 +1018,10 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
 TF_QUESTION_ANSWERING_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import tensorflow as tf
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -931,10 +1037,10 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
 TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import tensorflow as tf
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -948,10 +1054,10 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 TF_MASKED_LM_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import tensorflow as tf
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
@@ -965,10 +1071,10 @@ TF_MASKED_LM_SAMPLE = r"""
 TF_BASE_MODEL_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import tensorflow as tf
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -980,10 +1086,10 @@ TF_BASE_MODEL_SAMPLE = r"""
 TF_MULTIPLE_CHOICE_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import tensorflow as tf
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1001,10 +1107,10 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
 TF_CAUSAL_LM_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
         >>> import tensorflow as tf
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -1026,9 +1132,9 @@ TF_SAMPLE_DOCSTRINGS = {
 FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
@@ -1040,9 +1146,9 @@ FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
 FLAX_QUESTION_ANSWERING_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -1056,9 +1162,9 @@ FLAX_QUESTION_ANSWERING_SAMPLE = r"""
 FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
@@ -1070,9 +1176,9 @@ FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 FLAX_MASKED_LM_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors='jax')
@@ -1084,9 +1190,9 @@ FLAX_MASKED_LM_SAMPLE = r"""
 FLAX_BASE_MODEL_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
@@ -1098,9 +1204,9 @@ FLAX_BASE_MODEL_SAMPLE = r"""
 FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1116,12 +1222,12 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
 FLAX_CAUSAL_LM_SAMPLE = r"""
     Example::
 
-        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
         >>> outputs = model(**inputs)
 
         >>> # retrieve logts for next token
@@ -1140,7 +1246,14 @@ FLAX_SAMPLE_DOCSTRINGS = {
 
 
 def add_code_sample_docstrings(
-    *docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None, mask=None, model_cls=None
+    *docstr,
+    processor_class=None,
+    checkpoint=None,
+    output_type=None,
+    config_class=None,
+    mask=None,
+    model_cls=None,
+    modality=None
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1153,9 +1266,11 @@ def add_code_sample_docstrings(
         else:
             sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
-        doc_kwargs = dict(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
+        doc_kwargs = dict(model_class=model_class, processor_class=processor_class, checkpoint=checkpoint)
 
-        if "SequenceClassification" in model_class:
+        if "SequenceClassification" in model_class and modality == "audio":
+            code_sample = sample_docstrings["AudioClassification"]
+        elif "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]
         elif "QuestionAnswering" in model_class:
             code_sample = sample_docstrings["QuestionAnswering"]
@@ -1168,6 +1283,10 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["MaskedLM"]
         elif "LMHead" in model_class or "CausalLM" in model_class:
             code_sample = sample_docstrings["LMHead"]
+        elif "CTC" in model_class:
+            code_sample = sample_docstrings["CTC"]
+        elif "Model" in model_class and modality == "audio":
+            code_sample = sample_docstrings["SpeechBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = sample_docstrings["BaseModel"]
         else:
@@ -1229,12 +1348,13 @@ def hf_bucket_url(
         filename = f"{subfolder}/{filename}"
 
     if mirror:
-        endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
+        if mirror in ["tuna", "bfsu"]:
+            raise ValueError("The Tuna and BFSU mirrors are no longer available. Try removing the mirror argument.")
         legacy_format = "/" not in model_id
         if legacy_format:
-            return f"{endpoint}/{model_id}-{filename}"
+            return f"{mirror}/{model_id}-{filename}"
         else:
-            return f"{endpoint}/{model_id}/{filename}"
+            return f"{mirror}/{model_id}/{filename}"
 
     if revision is None:
         revision = "main"
@@ -1485,6 +1605,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     progress = tqdm(
         unit="B",
         unit_scale=True,
+        unit_divisor=1024,
         total=total,
         initial=resume_size,
         desc="Downloading",
@@ -1823,8 +1944,28 @@ def to_py_obj(obj):
         return obj.numpy().tolist()
     elif is_torch_available() and _is_torch(obj):
         return obj.detach().cpu().tolist()
-    elif isinstance(obj, np.ndarray):
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj).tolist()
+    elif isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
         return obj.tolist()
+    else:
+        return obj
+
+
+def to_numpy(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
+    """
+    if isinstance(obj, (dict, UserDict)):
+        return {k: to_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return np.array(obj)
+    elif is_tf_available() and _is_tensorflow(obj):
+        return obj.numpy()
+    elif is_torch_available() and _is_torch(obj):
+        return obj.detach().cpu().numpy()
+    elif is_flax_available() and _is_jax(obj):
+        return np.asarray(obj)
     else:
         return obj
 
@@ -1844,10 +1985,10 @@ class ModelOutput(OrderedDict):
         class_fields = fields(self)
 
         # Safety and consistency checks
-        assert len(class_fields), f"{self.__class__.__name__} has no fields."
-        assert all(
-            field.default is None for field in class_fields[1:]
-        ), f"{self.__class__.__name__} should not have more than one required field."
+        if not len(class_fields):
+            raise ValueError(f"{self.__class__.__name__} has no fields.")
+        if not all(field.default is None for field in class_fields[1:]):
+            raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
 
         first_field = getattr(self, class_fields[0].name)
         other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
@@ -1964,7 +2105,7 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, extra_objects=None):
+    def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
         super().__init__(name)
         self._modules = set(import_structure.keys())
         self._class_to_module = {}
@@ -1974,6 +2115,7 @@ class _LazyModule(ModuleType):
         # Needed for autocompletion in an IDE
         self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
         self.__file__ = module_file
+        self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]
         self._objects = {} if extra_objects is None else extra_objects
         self._name = name
@@ -1981,7 +2123,13 @@ class _LazyModule(ModuleType):
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
-        return super().__dir__() + self.__all__
+        result = super().__dir__()
+        # The elements of self.__all__ that are submodules may or may not be in the dir already, depending on whether
+        # they have been accessed or not. So we only add the elements of self.__all__ that are not already in the dir.
+        for attr in self.__all__:
+            if attr not in result:
+                result.append(attr)
+        return result
 
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
@@ -1998,7 +2146,12 @@ class _LazyModule(ModuleType):
         return value
 
     def _get_module(self, module_name: str):
-        return importlib.import_module("." + module_name, self.__name__)
+        try:
+            return importlib.import_module("." + module_name, self.__name__)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its traceback):\n{e}"
+            ) from e
 
     def __reduce__(self):
         return (self.__class__, (self._name, self.__file__, self._import_structure))
@@ -2207,3 +2360,31 @@ class PushToHubMixin:
                 commit_message = "add model"
 
         return repo.push_to_hub(commit_message=commit_message)
+
+
+def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
+    if token is None:
+        token = HfFolder.get_token()
+    if organization is None:
+        username = HfApi().whoami(token)["name"]
+        return f"{username}/{model_id}"
+    else:
+        return f"{organization}/{model_id}"
+
+
+class ContextManagers:
+    """
+    Wrapper for `contextlib.ExitStack` which enters a collection of context managers. Adaptation of `ContextManagers`
+    in the `fastcore` library.
+    """
+
+    def __init__(self, context_managers: List[ContextManager]):
+        self.context_managers = context_managers
+        self.stack = ExitStack()
+
+    def __enter__(self):
+        for context_manager in self.context_managers:
+            self.stack.enter_context(context_manager)
+
+    def __exit__(self, *args, **kwargs):
+        self.stack.__exit__(*args, **kwargs)

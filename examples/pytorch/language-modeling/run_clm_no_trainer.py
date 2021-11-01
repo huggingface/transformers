@@ -27,6 +27,7 @@ import logging
 import math
 import os
 import random
+from pathlib import Path
 
 import datasets
 import torch
@@ -36,6 +37,7 @@ from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator, DistributedType
+from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -48,6 +50,7 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
+from transformers.file_utils import get_full_repo_name
 from transformers.utils.versions import require_version
 
 
@@ -173,7 +176,14 @@ def parse_args():
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
     )
-
+    parser.add_argument(
+        "--no_keep_linebreaks", action="store_true", help="Do not keep line breaks when using TXT files."
+    )
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
+    parser.add_argument(
+        "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
+    )
+    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     args = parser.parse_args()
 
     # Sanity checks
@@ -187,8 +197,8 @@ def parse_args():
             extension = args.validation_file.split(".")[-1]
             assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
 
-    if args.output_dir is not None:
-        os.makedirs(args.output_dir, exist_ok=True)
+    if args.push_to_hub:
+        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
 
     return args
 
@@ -220,6 +230,18 @@ def main():
     if args.seed is not None:
         set_seed(args.seed)
 
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.push_to_hub:
+            if args.hub_model_id is None:
+                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
+            else:
+                repo_name = args.hub_model_id
+            repo = Repository(args.output_dir, clone_from=repo_name)
+        elif args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
+    accelerator.wait_for_everyone()
+
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
@@ -245,6 +267,7 @@ def main():
             )
     else:
         data_files = {}
+        dataset_args = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
         if args.validation_file is not None:
@@ -252,18 +275,21 @@ def main():
         extension = args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        raw_datasets = load_dataset(extension, data_files=data_files)
+            dataset_args["keep_linebreaks"] = not args.no_keep_linebreaks
+        raw_datasets = load_dataset(extension, data_files=data_files, **dataset_args)
         # If no validation data is there, validation_split_percentage will be used to divide the dataset.
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[:{args.validation_split_percentage}%]",
+                **dataset_args,
             )
             raw_datasets["train"] = load_dataset(
                 extension,
                 data_files=data_files,
                 split=f"train[{args.validation_split_percentage}%:]",
+                **dataset_args,
             )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
@@ -311,14 +337,15 @@ def main():
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name])
 
-    tokenized_datasets = raw_datasets.map(
-        tokenize_function,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=column_names,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on dataset",
-    )
+    with accelerator.main_process_first():
+        tokenized_datasets = raw_datasets.map(
+            tokenize_function,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
 
     if args.block_size is None:
         block_size = tokenizer.model_max_length
@@ -360,13 +387,14 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
-    lm_datasets = tokenized_datasets.map(
-        group_texts,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        load_from_cache_file=not args.overwrite_cache,
-        desc=f"Grouping texts in chunks of {block_size}",
-    )
+    with accelerator.main_process_first():
+        lm_datasets = tokenized_datasets.map(
+            group_texts,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            load_from_cache_file=not args.overwrite_cache,
+            desc=f"Grouping texts in chunks of {block_size}",
+        )
 
     train_dataset = lm_datasets["train"]
     eval_dataset = lm_datasets["validation"]
@@ -473,10 +501,22 @@ def main():
 
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
 
+        if args.push_to_hub and epoch < args.num_train_epochs - 1:
+            accelerator.wait_for_everyone()
+            unwrapped_model = accelerator.unwrap_model(model)
+            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            if accelerator.is_main_process:
+                tokenizer.save_pretrained(args.output_dir)
+                repo.push_to_hub(commit_message=f"Training in progress epoch {epoch}", blocking=False)
+
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        if accelerator.is_main_process:
+            tokenizer.save_pretrained(args.output_dir)
+            if args.push_to_hub:
+                repo.push_to_hub(commit_message="End of training")
 
 
 if __name__ == "__main__":
