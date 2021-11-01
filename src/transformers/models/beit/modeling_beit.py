@@ -163,6 +163,7 @@ class PatchEmbeddings(nn.Module):
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+
         return x
 
 
@@ -499,7 +500,7 @@ class BeitPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -849,5 +850,356 @@ class BeitForImageClassification(BeitPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class BeitConvModule(nn.Module):
+    """
+    A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
+    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, padding=0, bias=False, dilation=1):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias=bias,
+            dilation=dilation,
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.activation = nn.ReLU()
+
+    def forward(self, input):
+        output = self.conv(input)
+        output = self.bn(output)
+        output = self.activation(output)
+
+        return output
+
+
+class BeitPyramidPoolingModule(nn.ModuleList):
+    """
+    Pyramid Pooling Module (PPM) used in PSPNet.
+
+    Args:
+        pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
+            Module.
+        in_channels (int): Input channels.
+        channels (int): Channels after modules, before conv_seg.
+        align_corners (bool): align_corners argument of F.interpolate.
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, pool_scales, in_channels, channels, align_corners):
+        super().__init__()
+        self.pool_scales = pool_scales
+        self.align_corners = align_corners
+        self.in_channels = in_channels
+        self.channels = channels
+        for pool_scale in pool_scales:
+            self.append(
+                nn.Sequential(
+                    nn.AdaptiveAvgPool2d(pool_scale),
+                    BeitConvModule(self.in_channels, self.channels, kernel_size=1),
+                )
+            )
+
+    def forward(self, x):
+        ppm_outs = []
+        for ppm in self:
+            ppm_out = ppm(x)
+            upsampled_ppm_out = nn.functional.interpolate(
+                ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
+            )
+            ppm_outs.append(upsampled_ppm_out)
+        return ppm_outs
+
+
+class BeitUperHead(nn.Module):
+    """
+    Unified Perceptual Parsing for Scene Understanding. This head is the implementation of `UPerNet
+    <https://arxiv.org/abs/1807.10221>`_.
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
+        self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
+        self.channels = config.hidden_size
+        self.align_corners = False
+        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
+
+        # PSP Module
+        self.psp_modules = BeitPyramidPoolingModule(
+            self.pool_scales,
+            self.in_channels[-1],
+            self.channels,
+            align_corners=self.align_corners,
+        )
+        self.bottleneck = BeitConvModule(
+            self.in_channels[-1] + len(self.pool_scales) * self.channels,
+            self.channels,
+            kernel_size=3,
+            padding=1,
+        )
+        # FPN Module
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_convs = nn.ModuleList()
+        for in_channels in self.in_channels[:-1]:  # skip the top layer
+            l_conv = BeitConvModule(in_channels, self.channels, kernel_size=1)
+            fpn_conv = BeitConvModule(self.channels, self.channels, kernel_size=3, padding=1)
+            self.lateral_convs.append(l_conv)
+            self.fpn_convs.append(fpn_conv)
+
+        self.fpn_bottleneck = BeitConvModule(
+            len(self.in_channels) * self.channels,
+            self.channels,
+            kernel_size=3,
+            padding=1,
+        )
+
+    def psp_forward(self, inputs):
+        x = inputs[-1]
+        psp_outs = [x]
+        psp_outs.extend(self.psp_modules(x))
+        psp_outs = torch.cat(psp_outs, dim=1)
+        output = self.bottleneck(psp_outs)
+
+        return output
+
+    def forward(self, encoder_hidden_states):
+        # build laterals
+        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+
+        laterals.append(self.psp_forward(encoder_hidden_states))
+
+        # build top-down path
+        used_backbone_levels = len(laterals)
+        for i in range(used_backbone_levels - 1, 0, -1):
+            prev_shape = laterals[i - 1].shape[2:]
+            laterals[i - 1] += nn.functional.interpolate(
+                laterals[i], size=prev_shape, mode="bilinear", align_corners=self.align_corners
+            )
+
+        # build outputs
+        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
+        # append psp feature
+        fpn_outs.append(laterals[-1])
+
+        for i in range(used_backbone_levels - 1, 0, -1):
+            fpn_outs[i] = nn.functional.interpolate(
+                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=self.align_corners
+            )
+        fpn_outs = torch.cat(fpn_outs, dim=1)
+        output = self.fpn_bottleneck(fpn_outs)
+        output = self.classifier(output)
+
+        return output
+
+
+class BeitFCNHead(nn.Module):
+    """
+    Fully Convolution Networks for Semantic Segmentation. This head is implemented of `FCNNet
+    <https://arxiv.org/abs/1411.4038>`_.
+
+    Args:
+        config (BeitConfig): Configuration.
+        in_channels
+        kernel_size (int): The kernel size for convs in the head. Default: 3.
+        dilation (int): The dilation rate for convs in the head. Default: 1.
+
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, config, in_index=2, kernel_size=3, dilation=1):
+        super().__init__()
+        self.in_channels = config.hidden_size
+        self.channels = config.auxiliary_channels
+        self.num_convs = config.auxiliary_num_convs
+        self.concat_input = config.auxiliary_concat_input
+        self.in_index = in_index
+
+        conv_padding = (kernel_size // 2) * dilation
+        convs = []
+        convs.append(
+            BeitConvModule(
+                self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+            )
+        )
+        for i in range(self.num_convs - 1):
+            convs.append(
+                BeitConvModule(
+                    self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+                )
+            )
+        if self.num_convs == 0:
+            self.convs = nn.Identity()
+        else:
+            self.convs = nn.Sequential(*convs)
+        if self.concat_input:
+            self.conv_cat = BeitConvModule(
+                self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
+            )
+
+        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
+
+    def forward(self, encoder_hidden_states):
+        # just take the relevant feature maps
+        hidden_states = encoder_hidden_states[self.in_index]
+        output = self.convs(hidden_states)
+        if self.concat_input:
+            output = self.conv_cat(torch.cat([hidden_states, output], dim=1))
+        output = self.classifier(output)
+        return output
+
+
+@add_start_docstrings(
+    """
+    Beit Model transformer with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
+    """,
+    BEIT_START_DOCSTRING,
+)
+class BeitForSemanticSegmentation(BeitPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.beit = BeitModel(config, add_pooling_layer=False)
+
+        # FPNs
+        self.fpn1 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+            nn.BatchNorm2d(config.hidden_size),
+            nn.GELU(),
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+        )
+        self.fpn2 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+        )
+        self.fpn3 = nn.Identity()
+        self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # Semantic segmentation head(s)
+        self.decode_head = BeitUperHead(config)
+        self.auxiliary_head = BeitFCNHead(config) if config.use_auxiliary_head else None
+
+        self.init_weights()
+
+    def compute_loss(self, logits, auxiliary_logits, labels):
+        # upsample logits to the images' original size
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+        )
+        if auxiliary_logits is not None:
+            upsampled_auxiliary_logits = nn.functional.interpolate(
+                auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+        # compute weighted loss
+        loss_fct = CrossEntropyLoss(ignore_index=255)
+        main_loss = loss_fct(upsampled_logits, labels)
+        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+
+        return loss
+
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels > 1`, a classification loss is computed
+            (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import BeitFeatureExtractor, BeitForSemanticSegmentation
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-finetuned-ade-640-640')
+            >>> model = BeitForSemanticSegmentation.from_pretrained('microsoft/beit-base-finetuned-ade-640-640')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
+            >>> logits = outputs.logits
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.beit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[2]
+
+        # only keep certain features, and reshape
+        # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
+        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
+        batch_size = pixel_values.shape[0]
+        patch_resolution = self.config.image_size // self.config.patch_size
+        features = [
+            x[:, 1:, :].permute(0, 2, 1).reshape(batch_size, -1, patch_resolution, patch_resolution) for x in features
+        ]
+
+        # apply FPNs
+        ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
+        for i in range(len(features)):
+            features[i] = ops[i](features[i])
+
+        logits = self.decode_head(features)
+        auxiliary_logits = None
+        if self.auxiliary_head is not None:
+            auxiliary_logits = self.auxiliary_head(features)
+
+        loss = None
+        if labels is not None:
+            if self.config.num_labels == 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                loss = self.compute_loss(logits, auxiliary_logits, labels)
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (logits,) + outputs[2:]
+            else:
+                output = (logits,) + outputs[3:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
