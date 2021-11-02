@@ -2477,6 +2477,7 @@ if TYPE_CHECKING:
             BartForConditionalGeneration,
             BartForQuestionAnswering,
             BartForSequenceClassification,
+            BartForTokenClassification,
             BartModel,
             BartPretrainedModel,
             PretrainedBartModel,
