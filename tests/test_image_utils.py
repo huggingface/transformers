@@ -394,7 +394,7 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_rgba(self):
         import datasets
 
-        dataset = datasets.load_dataset("mishig/fixtures_image_utils", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         img = load_image(dataset[0]["file"])
         img_arr = np.array(img)
@@ -408,7 +408,7 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_la(self):
         import datasets
 
-        dataset = datasets.load_dataset("mishig/fixtures_image_utils", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         img = load_image(dataset[1]["file"])
         img_arr = np.array(img)
@@ -422,7 +422,7 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_l(self):
         import datasets
 
-        dataset = datasets.load_dataset("mishig/fixtures_image_utils", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         img = load_image(dataset[2]["file"])
         img_arr = np.array(img)
@@ -436,7 +436,7 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_exif_transpose(self):
         import datasets
 
-        dataset = datasets.load_dataset("mishig/fixtures_image_utils", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
         img_file = dataset[3]["file"]
 
         img_without_exif_transpose = PIL.Image.open(img_file)
