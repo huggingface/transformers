@@ -28,13 +28,12 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 import transformers
-from huggingface_hub import HfApi, Repository
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import AutoModel, AutoModelForSequenceClassification, is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    ENDPOINT_STAGING,
     PASS,
     USER,
     CaptureLogger,
@@ -2122,23 +2121,22 @@ class FakeModel(PreTrainedModel):
 class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model")
+            delete_repo(token=cls._token, name="test-model")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-dynamic-model")
+            delete_repo(token=cls._token, name="test-dynamic-model")
         except HTTPError:
             pass
 

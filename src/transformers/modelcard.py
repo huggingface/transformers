@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import requests
 import yaml
-from huggingface_hub import HfApi
+from huggingface_hub import model_info
 
 from . import __version__
 from .file_utils import (
@@ -387,8 +387,8 @@ class TrainingSummary:
             and len(self.finetuned_from) > 0
         ):
             try:
-                model_info = HfApi().model_info(self.finetuned_from)
-                for tag in model_info.tags:
+                info = model_info(self.finetuned_from)
+                for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
             except requests.exceptions.HTTPError:
