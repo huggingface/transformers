@@ -73,7 +73,7 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
 VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`jnp.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using the vision's model's feature extractor. For example, using
+            Pixel values. Pixel values can be obtained using the vision model's feature extractor. For example, using
             :class:`~transformers.ViTFeatureExtractor`. See :meth:`transformers.ViTFeatureExtractor.__call__` for
             details.
         attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -111,7 +111,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 VISION_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`jnp.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using the vision's model's feature extractor. For example, using
+            Pixel values. Pixel values can be obtained using the vision model's feature extractor. For example, using
             :class:`~transformers.ViTFeatureExtractor`. See :meth:`transformers.ViTFeatureExtractor.__call__` for
             details.
         output_attentions (:obj:`bool`, `optional`):
