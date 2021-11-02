@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.12.0.dev0"
+__version__ = "4.13.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -252,6 +252,7 @@ _import_structure = {
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
@@ -397,6 +398,7 @@ if is_tokenizers_available():
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
+    _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
@@ -475,6 +477,7 @@ if is_vision_available():
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
+    _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -582,6 +585,7 @@ if is_torch_available():
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
+            "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
@@ -592,6 +596,7 @@ if is_torch_available():
             "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_MAPPING",
@@ -633,6 +638,7 @@ if is_torch_available():
             "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BeitForImageClassification",
             "BeitForMaskedImageModeling",
+            "BeitForSemanticSegmentation",
             "BeitModel",
             "BeitPreTrainedModel",
         ]
@@ -1145,6 +1151,17 @@ if is_torch_available():
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
+        ]
+    )
+    _import_structure["models.segformer"].extend(
+        [
+            "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SegformerDecodeHead",
+            "SegformerForImageClassification",
+            "SegformerForSemanticSegmentation",
+            "SegformerLayer",
+            "SegformerModel",
+            "SegformerPreTrainedModel",
         ]
     )
     _import_structure["models.sew"].extend(
@@ -2145,6 +2162,7 @@ if TYPE_CHECKING:
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -2269,6 +2287,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
+        from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
@@ -2330,6 +2349,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
+        from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
@@ -2415,6 +2435,7 @@ if TYPE_CHECKING:
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
+            MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -2425,6 +2446,7 @@ if TYPE_CHECKING:
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_MAPPING,
@@ -2462,6 +2484,7 @@ if TYPE_CHECKING:
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BeitForImageClassification,
             BeitForMaskedImageModeling,
+            BeitForSemanticSegmentation,
             BeitModel,
             BeitPreTrainedModel,
         )
@@ -2889,6 +2912,15 @@ if TYPE_CHECKING:
             RoFormerModel,
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
+        )
+        from .models.segformer import (
+            SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SegformerDecodeHead,
+            SegformerForImageClassification,
+            SegformerForSemanticSegmentation,
+            SegformerLayer,
+            SegformerModel,
+            SegformerPreTrainedModel,
         )
         from .models.sew import (
             SEW_PRETRAINED_MODEL_ARCHIVE_LIST,

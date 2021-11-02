@@ -204,12 +204,12 @@ class TokenClassificationPipeline(Pipeline):
         offset_mapping = model_inputs.pop("offset_mapping", None)
         sentence = model_inputs.pop("sentence")
         if self.framework == "tf":
-            outputs = self.model(model_inputs.data)[0][0]
+            logits = self.model(model_inputs.data)[0]
         else:
-            outputs = self.model(**model_inputs)[0][0]
+            logits = self.model(**model_inputs)[0]
 
         return {
-            "outputs": outputs,
+            "logits": logits,
             "special_tokens_mask": special_tokens_mask,
             "offset_mapping": offset_mapping,
             "sentence": sentence,
@@ -217,13 +217,16 @@ class TokenClassificationPipeline(Pipeline):
         }
 
     def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE):
-        outputs = model_outputs["outputs"].numpy()
+        logits = model_outputs["logits"][0].numpy()
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
         offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
         special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
 
-        scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
+        maxes = np.max(logits, axis=-1, keepdims=True)
+        shifted_exp = np.exp(logits - maxes)
+        scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+
         pre_entities = self.gather_pre_entities(
             sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )

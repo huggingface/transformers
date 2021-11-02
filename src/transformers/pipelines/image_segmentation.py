@@ -114,6 +114,9 @@ class ImageSegmentationPipeline(Pipeline):
 
         return super().__call__(*args, **kwargs)
 
+    def get_inference_context(self):
+        return torch.no_grad
+
     def preprocess(self, image):
         image = self.load_image(image)
         target_size = torch.IntTensor([[image.height, image.width]])
@@ -123,13 +126,13 @@ class ImageSegmentationPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
-        outputs = self.model(**model_inputs)
-        model_outputs = {"outputs": outputs, "target_size": target_size}
+        model_outputs = self.model(**model_inputs)
+        model_outputs["target_size"] = target_size
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9, mask_threshold=0.5):
         raw_annotations = self.feature_extractor.post_process_segmentation(
-            model_outputs["outputs"], model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
+            model_outputs, model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
         )
         raw_annotation = raw_annotations[0]
 
