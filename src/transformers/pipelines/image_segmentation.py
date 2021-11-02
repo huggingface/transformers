@@ -5,13 +5,14 @@ from typing import Any, Dict, List, Union
 import numpy as np
 
 from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
-from ..image_utils import load_image
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
     from PIL import Image
+
+    from ..image_utils import load_image
 
 if is_torch_available():
     import torch
