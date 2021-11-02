@@ -22,7 +22,14 @@ import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import Wav2Vec2Config, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_datasets,
+    require_soundfile,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -131,6 +138,7 @@ class Wav2Vec2ModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             intermediate_size=self.intermediate_size,
             layer_norm_eps=self.layer_norm_eps,
+            do_stable_layer_norm=self.do_stable_layer_norm,
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
@@ -355,6 +363,16 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     # and thus the `get_input_embeddings` fn
     # is not implemented
     def test_model_common_attributes(self):
+        pass
+
+    @is_pt_flax_cross_test
+    # non-robust architecture does not exist in Flax
+    def test_equivalence_flax_to_pt(self):
+        pass
+
+    @is_pt_flax_cross_test
+    # non-robust architecture does not exist in Flax
+    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -738,6 +756,33 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(logits.shape, (4, 1498, 32))
 
+    def test_mask_time_feature_prob_ctc_single_batch(self):
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2",
+            mask_time_prob=0.2,
+            mask_feature_prob=0.2,
+            mask_time_length=2,
+            mask_feature_length=2,
+        )
+        model.to(torch_device).train()
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+
+        batch_duration_in_seconds = [6]
+        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+
+        batch = processor(
+            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        logits = model(
+            input_values=batch["input_values"].to(torch_device),
+            attention_mask=batch["attention_mask"].to(torch_device),
+        ).logits
+
+        self.assertEqual(logits.shape, (1, 1498, 32))
+
     @slow
     def test_model_from_pretrained(self):
         model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
@@ -873,21 +918,13 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
         from datasets import load_dataset

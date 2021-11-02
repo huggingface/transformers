@@ -358,6 +358,9 @@ class HFTracer(Tracer):
         return attr_val
 
     def trace(self, root: PreTrainedModel, concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
+        if concrete_args is None:
+            concrete_args = {}
+
         sig = inspect.signature(root.forward)
         input_names = sig.parameters.keys() - concrete_args.keys()
 

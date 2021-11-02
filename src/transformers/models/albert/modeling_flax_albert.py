@@ -314,35 +314,13 @@ class FlaxAlbertLayer(nn.Module):
         return outputs
 
 
-class FlaxAlbertLayers(nn.Module):
-    config: AlbertConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    layer_index: Optional[str] = None
-
-    def setup(self):
-        self.albert_layers = FlaxAlbertLayer(self.config, name=self.layer_index, dtype=self.dtype)
-
-    def __call__(
-        self,
-        hidden_states,
-        attention_mask,
-        deterministic: bool = True,
-        output_attentions: bool = False,
-    ):
-        outputs = self.albert_layers(
-            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
-        )
-        return outputs
-
-
 class FlaxAlbertLayerCollection(nn.Module):
     config: AlbertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxAlbertLayers(self.config, name="albert_layers", layer_index=str(i), dtype=self.dtype)
-            for i in range(self.config.inner_group_num)
+            FlaxAlbertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.inner_group_num)
         ]
 
     def __call__(
@@ -385,7 +363,7 @@ class FlaxAlbertLayerCollections(nn.Module):
     layer_index: Optional[str] = None
 
     def setup(self):
-        self.albert_layer_groups = FlaxAlbertLayerCollection(self.config, name=self.layer_index, dtype=self.dtype)
+        self.albert_layers = FlaxAlbertLayerCollection(self.config, dtype=self.dtype)
 
     def __call__(
         self,
@@ -395,7 +373,7 @@ class FlaxAlbertLayerCollections(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ):
-        outputs = self.albert_layer_groups(
+        outputs = self.albert_layers(
             hidden_states,
             attention_mask,
             deterministic=deterministic,
@@ -405,19 +383,13 @@ class FlaxAlbertLayerCollections(nn.Module):
         return outputs
 
 
-class FlaxAlbertEncoder(nn.Module):
+class FlaxAlbertLayerGroups(nn.Module):
     config: AlbertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.layers_per_group = int(self.config.num_hidden_layers / self.config.num_hidden_groups)
-        self.embedding_hidden_mapping_in = nn.Dense(
-            self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            dtype=self.dtype,
-        )
         self.layers = [
-            FlaxAlbertLayerCollections(self.config, name="albert_layer_groups", layer_index=str(i), dtype=self.dtype)
+            FlaxAlbertLayerCollections(self.config, name=str(i), layer_index=str(i), dtype=self.dtype)
             for i in range(self.config.num_hidden_groups)
         ]
 
@@ -430,7 +402,6 @@ class FlaxAlbertEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_attentions = () if output_attentions else None
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
@@ -456,6 +427,37 @@ class FlaxAlbertEncoder(nn.Module):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
+class FlaxAlbertEncoder(nn.Module):
+    config: AlbertConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.embedding_hidden_mapping_in = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            dtype=self.dtype,
+        )
+        self.albert_layer_groups = FlaxAlbertLayerGroups(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
+        return self.albert_layer_groups(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
 

@@ -107,12 +107,15 @@ class ImageSegmentationPipeline(Pipeline):
 
             - **label** (:obj:`str`) -- The class label identified by the model.
             - **score** (:obj:`float`) -- The score attributed by the model for that label.
-            - **mask** (:obj:`str`) -- base64 string of a single-channel PNG image that contain masks information. The
-              PNG image has size (heigth, width) of the original image. Pixel values in the image are either 0 or 255
-              (i.e. mask is absent VS mask is present).
+            - **mask** (:obj:`str`) -- base64 string of a grayscale (single-channel) PNG image that contain masks
+              information. The PNG image has size (heigth, width) of the original image. Pixel values in the image are
+              either 0 or 255 (i.e. mask is absent VS mask is present).
         """
 
         return super().__call__(*args, **kwargs)
+
+    def get_inference_context(self):
+        return torch.no_grad
 
     def preprocess(self, image):
         image = self.load_image(image)
@@ -123,13 +126,13 @@ class ImageSegmentationPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
-        outputs = self.model(**model_inputs)
-        model_outputs = {"outputs": outputs, "target_size": target_size}
+        model_outputs = self.model(**model_inputs)
+        model_outputs["target_size"] = target_size
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9, mask_threshold=0.5):
         raw_annotations = self.feature_extractor.post_process_segmentation(
-            model_outputs["outputs"], model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
+            model_outputs, model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
         )
         raw_annotation = raw_annotations[0]
 
@@ -158,7 +161,7 @@ class ImageSegmentationPipeline(Pipeline):
         Returns:
             A base64 string of a single-channel PNG image that contain masks information.
         """
-        img = Image.fromarray(mask.astype(np.int8))
+        img = Image.fromarray(mask.astype(np.int8), mode="L")
         with io.BytesIO() as out:
             img.save(out, format="PNG")
             png_string = out.getvalue()

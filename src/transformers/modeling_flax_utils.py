@@ -277,7 +277,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -529,7 +528,7 @@ def overwrite_call_docstring(model_class, docstring):
 def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
-        tokenizer_class=tokenizer_class,
+        processor_class=tokenizer_class,
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,

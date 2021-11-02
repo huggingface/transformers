@@ -244,7 +244,7 @@ class Trainer:
             detailed in :doc:`here <callback>`.
 
             If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
-        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
+        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, `optional`): A tuple
             containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
@@ -1511,7 +1511,7 @@ class Trainer:
                 return
         else:
             rng_file = os.path.join(checkpoint, "rng_state.pth")
-            if not os.path.isfile(os.path.join(checkpoint, rng_file)):
+            if not os.path.isfile(rng_file):
                 logger.info(
                     "Didn't find an RNG file, if you are resuming a training that was launched in a distributed "
                     "fashion, reproducibility is not guaranteed."
@@ -2486,7 +2486,11 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    if self.use_amp:
+                        with autocast():
+                            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    else:
+                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
