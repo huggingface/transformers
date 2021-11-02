@@ -15,10 +15,11 @@
 
 import unittest
 
+import datasets
 import numpy as np
 
 from transformers import is_torch_available, is_vision_available
-from transformers.testing_utils import require_datasets, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 
 
 if is_torch_available():
@@ -381,19 +382,7 @@ class LoadImageTester(unittest.TestCase):
             (480, 640, 3),
         )
 
-    def test_load_img_url(self):
-        img = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
-        img_arr = np.array(img)
-
-        self.assertEqual(
-            img_arr.shape,
-            (480, 640, 3),
-        )
-
-    @require_datasets
     def test_load_img_rgba(self):
-        import datasets
-
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         img = load_image(dataset[0]["file"])  # img with mode RGBA
@@ -404,10 +393,7 @@ class LoadImageTester(unittest.TestCase):
             (512, 512, 3),
         )
 
-    @require_datasets
     def test_load_img_la(self):
-        import datasets
-
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         img = load_image(dataset[1]["file"])  # img with mode LA
@@ -418,10 +404,7 @@ class LoadImageTester(unittest.TestCase):
             (512, 768, 3),
         )
 
-    @require_datasets
     def test_load_img_l(self):
-        import datasets
-
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         img = load_image(dataset[2]["file"])  # img with mode L
@@ -432,10 +415,7 @@ class LoadImageTester(unittest.TestCase):
             (381, 225, 3),
         )
 
-    @require_datasets
     def test_load_img_exif_transpose(self):
-        import datasets
-
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
         img_file = dataset[3]["file"]
 
