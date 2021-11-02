@@ -18,6 +18,7 @@ from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -38,6 +39,29 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from .configuration_beit import BeitConfig
+
+
+@flax.struct.dataclass
+class FlaxBeitModelOutputWithPooling(FlaxBaseModelOutputWithPooling):
+    """
+    Class for outputs of :class:`~transformers.FlaxBeitModel`.
+
+    Args:
+        last_hidden_state (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (:obj:`jnp.ndarray` of shape :obj:`(batch_size, hidden_size)`):
+            Average of the last layer hidden states of the patch tokens (excluding the `[CLS]` token) if
+            `config.use_mean_pooling` is set to True. If set to False, then the final hidden state of the `[CLS]` token
+            will be returned.
+        hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each
+            layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
 
 
 BEIT_START_DOCSTRING = r"""
@@ -674,7 +698,7 @@ class FlaxBeitModule(nn.Module):
                 return (hidden_states,) + outputs[1:]
             return (hidden_states, pooled) + outputs[1:]
 
-        return FlaxBaseModelOutputWithPooling(
+        return FlaxBeitModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=pooled,
             hidden_states=outputs.hidden_states,
@@ -711,7 +735,7 @@ FLAX_BEIT_MODEL_DOCSTRING = """
 """
 
 overwrite_call_docstring(FlaxBeitModel, FLAX_BEIT_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxBeitModel, output_type=FlaxBaseModelOutputWithPooling, config_class=BeitConfig)
+append_replace_return_docstrings(FlaxBeitModel, output_type=FlaxBeitModelOutputWithPooling, config_class=BeitConfig)
 
 
 class FlaxBeitForMaskedImageModelingModule(nn.Module):
