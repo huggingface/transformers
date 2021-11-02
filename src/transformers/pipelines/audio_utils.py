@@ -41,7 +41,7 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-def ffmpeg_stream(filename: str, sampling_rate: int, format_for_conversion: str, chunk_max_duration_s: int):
+def ffmpeg_stream(filename: str, sampling_rate: int, format_for_conversion: str, max_chunk_duration_s: int):
     """
     Helper function to read an audio file through ffmpeg.
     """
@@ -72,7 +72,7 @@ def ffmpeg_stream(filename: str, sampling_rate: int, format_for_conversion: str,
         "pipe:1",
     ]
 
-    buflen = int(sampling_rate * chunk_max_duration_s * size_of_sample)
+    buflen = int(sampling_rate * max_chunk_duration_s * size_of_sample)
     return _ffmpeg_stream(ffmpeg_command, bufsize, buflen, dtype)
 
 
