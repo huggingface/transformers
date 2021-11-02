@@ -710,31 +710,19 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @require_torch_multi_gpu
-    @parameterized.expand(stages)
-    def test_inference_fp16(self, stage):
+    @parameterized.expand(["fp16", "fp32"])
+    def test_inference(self, dtype):
         # this is just inference, so no optimizer should be loaded
+        # it only works for z3 (makes no sense with z1-z2)
+        fp16 = True if dtype == "fp16" else False
         self.run_and_check(
-            stage=stage,
+            stage=ZERO3,
             model_name=T5_TINY,
             distributed=True,
             do_train=False,
             do_eval=True,
             quality_checks=False,
             fp16=True,
-        )
-
-    @require_torch_multi_gpu
-    @parameterized.expand(stages)
-    def test_inference_fp32(self, stage):
-        # this is just inference, so no optimizer should be loaded
-        self.run_and_check(
-            stage=stage,
-            model_name=T5_TINY,
-            distributed=True,
-            do_train=False,
-            do_eval=True,
-            quality_checks=False,
-            fp16=False,
         )
 
     @parameterized.expand(stages)

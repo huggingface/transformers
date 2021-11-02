@@ -376,6 +376,10 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     # set the Deepspeed log level consistent with the trainer
     ds_logger.setLevel(args.get_process_log_level())
 
+    # only Z3 makes sense for the inference
+    if inference and not hf_deepspeed_config.is_zero3():
+        raise ValueError("ZeRO inference only makes sense with ZeRO Stage 3 - please adjust your config")
+
     if inference:
         optimizer = None
         lr_scheduler = None
@@ -384,9 +388,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         model_parameters = None
     else:
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-
-    # XXX: validate
-    print(config)
 
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
         model=model,
