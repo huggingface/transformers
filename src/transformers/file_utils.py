@@ -30,14 +30,14 @@ import tarfile
 import tempfile
 import types
 from collections import OrderedDict, UserDict
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import fields
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
 from types import ModuleType
-from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
+from typing import Any, BinaryIO, ContextManager, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
@@ -1946,7 +1946,7 @@ def to_py_obj(obj):
         return obj.detach().cpu().tolist()
     elif is_flax_available() and _is_jax(obj):
         return np.asarray(obj).tolist()
-    elif isinstance(obj, np.ndarray):
+    elif isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
         return obj.tolist()
     else:
         return obj
@@ -2146,7 +2146,12 @@ class _LazyModule(ModuleType):
         return value
 
     def _get_module(self, module_name: str):
-        return importlib.import_module("." + module_name, self.__name__)
+        try:
+            return importlib.import_module("." + module_name, self.__name__)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its traceback):\n{e}"
+            ) from e
 
     def __reduce__(self):
         return (self.__class__, (self._name, self.__file__, self._import_structure))
@@ -2365,3 +2370,21 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"
+
+
+class ContextManagers:
+    """
+    Wrapper for `contextlib.ExitStack` which enters a collection of context managers. Adaptation of `ContextManagers`
+    in the `fastcore` library.
+    """
+
+    def __init__(self, context_managers: List[ContextManager]):
+        self.context_managers = context_managers
+        self.stack = ExitStack()
+
+    def __enter__(self):
+        for context_manager in self.context_managers:
+            self.stack.enter_context(context_manager)
+
+    def __exit__(self, *args, **kwargs):
+        self.stack.__exit__(*args, **kwargs)

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import Union
+from typing import List, Union
 
 import numpy as np
 import PIL.Image
@@ -29,6 +29,10 @@ IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
 IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
 IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
+
+ImageInput = Union[
+    PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
+]
 
 
 def is_torch_tensor(obj):
@@ -140,7 +144,7 @@ class ImageFeatureExtractionMixin:
         if rescale:
             image = image.astype(np.float32) / 255.0
 
-        if channel_first:
+        if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
 
         return image
@@ -195,8 +199,10 @@ class ImageFeatureExtractionMixin:
         """
         self._ensure_format_supported(image)
 
-        if not isinstance(size, tuple):
+        if isinstance(size, int):
             size = (size, size)
+        elif isinstance(size, list):
+            size = tuple(size)
         if not isinstance(image, PIL.Image.Image):
             image = self.to_pil_image(image)
 

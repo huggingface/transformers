@@ -47,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.13.0.dev0")
 
 require_version("datasets>=1.13.3", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -185,6 +185,13 @@ class DataTrainingArguments:
             "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
             "In this case, one should run the preprocessing in a non-distributed setup with `preprocessing_only=True` "
             "so that the cached datasets can consequently be loaded in distributed training"
+        },
+    )
+    use_auth_token: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "If :obj:`True`, will use the token generated when running"
+            ":obj:`transformers-cli logiin as HTTP bearer authorization for remote files."
         },
     )
 
@@ -349,7 +356,7 @@ def main():
 
     if data_args.text_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
-            f"--text_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
+            f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--text_column_name` to the correct text column - one of "
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
@@ -388,38 +395,46 @@ def main():
     # the training and evaluation datasets
     # We need to make sure that only first rank saves vocabulary
     # make sure all processes wait until vocab is created
+    vocab_file = os.path.join(training_args.output_dir, "vocab.json")
 
-    with training_args.main_process_first(desc="dataset map vocabulary creation"):
-        vocab_dict = create_vocabulary_from_data(raw_datasets)
-
-        vocab_file = os.path.join(training_args.output_dir, "vocab.json")
-
-        # save vocab dict to be loaded into tokenizer
-        os.makedirs(training_args.output_dir, exist_ok=True)
+    with training_args.main_process_first():
         if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
             os.remove(vocab_file)
 
+    with training_args.main_process_first(desc="dataset map vocabulary creation"):
         if not os.path.isfile(vocab_file):
-            with open(vocab_file, "w") as vocab_file:
-                json.dump(vocab_dict, vocab_file)
+            os.makedirs(training_args.output_dir, exist_ok=True)
+            vocab_dict = create_vocabulary_from_data(raw_datasets)
+
+            # save vocab dict to be loaded into tokenizer
+            with open(vocab_file, "w") as file:
+                json.dump(vocab_dict, file)
 
     # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
     # Note for distributed training, the .from_pretrained methods guarantee that only
     # one local process can concurrently download model & vocab.
 
     # load config
-    config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+    )
+
+    # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
+    config_for_tokenizer = config if config.tokenizer_class is not None else None
+    tokenizer_type = config.model_type if config.tokenizer_class is None else None
 
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
         training_args.output_dir,
-        tokenizer_type=config.model_type,
+        config=config_for_tokenizer,
+        tokenizer_type=tokenizer_type,
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
+        use_auth_token=data_args.use_auth_token,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -442,7 +457,10 @@ def main():
 
     # create model
     model = AutoModelForCTC.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, config=config
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        config=config,
+        use_auth_token=data_args.use_auth_token,
     )
 
     # freeze encoder
@@ -454,9 +472,9 @@ def main():
     # so that we just need to set the correct target sampling rate and normalize the input
     # via the `feature_extractor`
 
-    # make sure that dataset decodes audio with correct samlping rate
+    # make sure that dataset decodes audio with correct sampling rate
     raw_datasets = raw_datasets.cast_column(
-        "audio", datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+        data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
     )
 
     # derive max & min input length for sample rate & max duration
@@ -587,15 +605,16 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # Write model card and (optionally) push to hub
+    config_name = data_args.dataset_config_name if data_args.dataset_config_name is not None else "na"
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
-        "dataset_args": f"Config: {data_args.dataset_config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
-        "dataset": f"{data_args.dataset_name.upper()} - {data_args.dataset_config_name.upper()}",
+        "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
+        "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
     }
     if "common_voice" in data_args.dataset_name:
-        kwargs["language"] = data_args.dataset_config_name
+        kwargs["language"] = config_name
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)

@@ -29,6 +29,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
         ("trocr", "TrOCRConfig"),
         ("fnet", "FNetConfig"),
+        ("segformer", "SegformerConfig"),
         ("gptj", "GPTJConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("beit", "BeitConfig"),
@@ -98,6 +99,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("splinter", "SplinterConfig"),
         ("sew-d", "SEWDConfig"),
         ("sew", "SEWConfig"),
+        ("unispeech-sat", "UniSpeechSatConfig"),
+        ("unispeech", "UniSpeechConfig"),
     ]
 )
 
@@ -106,6 +109,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         # Add archive maps here
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -166,6 +170,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -175,8 +181,9 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vision-encoder-decoder", "Vision Encoder decoder"),
         ("trocr", "TrOCR"),
         ("fnet", "FNet"),
+        ("segformer", "SegFormer"),
         ("gptj", "GPT-J"),
-        ("beit", "BeiT"),
+        ("beit", "BEiT"),
         ("rembert", "RemBERT"),
         ("layoutlmv2", "LayoutLMv2"),
         ("visual_bert", "VisualBert"),
@@ -252,6 +259,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("splinter", "Splinter"),
         ("sew-d", "SEW-D"),
         ("sew", "SEW"),
+        ("unispeech-sat", "UniSpeechSat"),
+        ("unispeech", "UniSpeech"),
     ]
 )
 

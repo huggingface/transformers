@@ -72,9 +72,12 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("Birds are a type of animal")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+        return text_classifier, ["HuggingFace is in", "This is another test"]
 
+    def run_pipeline_test(self, text_classifier, _):
+        model = text_classifier.model
         # Small inputs because BartTokenizer tiny has maximum position embeddings = 22
         valid_inputs = "HuggingFace is in"
         outputs = text_classifier(valid_inputs)
