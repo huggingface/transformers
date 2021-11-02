@@ -49,6 +49,7 @@ if is_torch_available():
     from torch.utils.data import DataLoader, Dataset
 
     from ..models.auto.modeling_auto import AutoModel
+    from .pt_utils import KeyDataset, PipelineChunkIterator, PipelineDataset, PipelineIterator, PipelinePackIterator
 else:
     Dataset = None
     KeyDataset = None
@@ -119,6 +120,16 @@ def pad_collate_fn(tokenizer, feature_extractor):
         padding_value = getattr(feature_extractor, "padding_value", None)
         padding_side = getattr(feature_extractor, "padding_side", None)
 
+    def get_padding_value(key):
+        if key.startswith("input_"):
+            ret = padding_value
+        elif key == "p_mask":
+            # This tensor is inverted as a mask...
+            ret = 1
+        else:
+            ret = 0
+        return ret
+
     def inner(items):
         keys = set(items[0].keys())
         for item in items:
@@ -127,15 +138,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
                     f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
                 )
         # input_values, input_pixels, input_ids, ...
-        padded = {}
-        for key in keys:
-            if key.startswith("input_"):
-                _padding_value = padding_value
-            elif key == "p_mask":
-                _padding_value = 1
-            else:
-                _padding_value = 0
-            padded[key] = _pad(items, key, _padding_value, padding_side)
+        padded = {key: _pad(items, key, get_padding_value(key), padding_side) for key in keys}
         return padded
 
     return inner
@@ -676,14 +679,6 @@ PIPELINE_INIT_ARGS = r"""
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
-
-if is_torch_available():
-    from transformers.pipelines.pt_utils import (
-        PipelineChunkIterator,
-        PipelineDataset,
-        PipelineIterator,
-        PipelinePackIterator,
-    )
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)

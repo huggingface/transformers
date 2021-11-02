@@ -22,6 +22,8 @@ from abc import abstractmethod
 from functools import lru_cache
 from unittest import skipIf
 
+from datasets import load_dataset
+
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     TOKENIZER_MAPPING,
@@ -34,6 +36,7 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import get_task
+from transformers.pipelines.audio_utils import chunk_files
 from transformers.pipelines.base import _pad
 from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
@@ -605,3 +608,156 @@ class PipelineUtilsTest(unittest.TestCase):
 
         outputs = [item for item in dataset]
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
+
+
+def require_ffmpeg(test_case):
+    """
+    Decorator marking a test that requires PyTorch.
+
+    These tests are skipped when PyTorch isn't installed.
+
+    """
+    import subprocess
+
+    try:
+        subprocess.check_output(["ffmpeg", "-h"], stderr=subprocess.DEVNULL)
+        return test_case
+    except Exception as e:
+        print(f"EXCEPT {e}")
+        return unittest.skip("test requires ffmpeg")(test_case)
+
+
+@is_pipeline_test
+@require_ffmpeg
+class PipelineAudioUtilsTest(unittest.TestCase):
+    def test_chunk(self):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+
+        chunks = list(chunk_files([filename], sampling_rate=16_000, chunk_length_s=1000))
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0]["stride"], (0, 0))
+        self.assertEqual(chunks[0]["raw"].shape, (74400,))
+
+        total_samples = sum(chunk["raw"].shape[0] for chunk in chunks)
+        total_stride = sum(sum(chunk["stride"]) for chunk in chunks)
+        self.assertEqual(total_samples - total_stride, 74400)
+
+        # Chunk length 3s
+
+        chunks = list(chunk_files([filename], sampling_rate=16_000, chunk_length_s=3))
+        self.assertEqual(len(chunks), 2)
+        # 40_000 effective samples (48_000 - 8_000)
+        self.assertEqual(chunks[0]["stride"], (0, 8000))
+        self.assertEqual(chunks[0]["raw"].shape, (48000,))
+
+        # 34_400 effective samples (42_400 - 8_000)
+        self.assertEqual(chunks[1]["stride"], (8000, 0))
+        self.assertEqual(chunks[1]["raw"].shape, (42_400,))
+
+        total_samples = sum(chunk["raw"].shape[0] for chunk in chunks)
+        total_stride = sum(sum(chunk["stride"]) for chunk in chunks)
+        self.assertEqual(total_samples - total_stride, 74400)
+
+        # Chunk length 1s
+
+        chunks = list(chunk_files([filename], sampling_rate=16_000, chunk_length_s=1))
+        self.assertEqual(len(chunks), 7)
+        # 13_333 effective samples (16_000 - 2_667)
+        self.assertEqual(chunks[0]["stride"], (0, 2_667))
+        self.assertEqual(chunks[0]["raw"].shape, (16000,))
+
+        # 10_666 effective samples (16_000 - 2_667 * 2)
+        self.assertEqual(chunks[1]["stride"], (2667, 2667))
+        self.assertEqual(chunks[1]["raw"].shape, (16_000,))
+
+        # 10_666 effective samples (16_000 - 2_667 * 2)
+        self.assertEqual(chunks[2]["stride"], (2667, 2667))
+        self.assertEqual(chunks[2]["raw"].shape, (16_000,))
+
+        # 10_666 effective samples (16_000 - 2_667 * 2)
+        self.assertEqual(chunks[3]["stride"], (2667, 2667))
+        self.assertEqual(chunks[3]["raw"].shape, (16_000,))
+
+        # 10_666 effective samples (16_000 - 2_667 * 2)
+        self.assertEqual(chunks[4]["stride"], (2667, 2667))
+        self.assertEqual(chunks[4]["raw"].shape, (16_000,))
+
+        # 10_666 effective samples (16_000 - 2_667 * 2)
+        self.assertEqual(chunks[5]["stride"], (2667, 2667))
+        self.assertEqual(chunks[5]["raw"].shape, (16_000,))
+
+        # 7_737 effective samples (10_404 - 2_667)
+        self.assertEqual(chunks[6]["stride"], (2667, 0))
+        self.assertEqual(chunks[6]["raw"].shape, (10_404,))
+
+        total_samples = sum(chunk["raw"].shape[0] for chunk in chunks)
+        total_stride = sum(sum(chunk["stride"]) for chunk in chunks)
+        self.assertEqual(total_samples - total_stride, 74400)
+
+    def test_chunk_no_stride(self):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+
+        chunks = list(chunk_files([filename], sampling_rate=16_000, chunk_length_s=1000, stride_length_s=0))
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0]["stride"], (0, 0))
+        self.assertEqual(chunks[0]["raw"].shape, (74400,))
+
+        total_samples = sum(chunk["raw"].shape[0] for chunk in chunks)
+        total_stride = sum(sum(chunk["stride"]) for chunk in chunks)
+        self.assertEqual(total_samples - total_stride, 74400)
+
+        # Chunk length 3s
+
+        chunks = list(chunk_files([filename], sampling_rate=16_000, chunk_length_s=3, stride_length_s=0))
+        self.assertEqual(len(chunks), 2)
+        # 40_000 effective samples (48_000 - 8_000)
+        self.assertEqual(chunks[0]["stride"], (0, 0))
+        self.assertEqual(chunks[0]["raw"].shape, (48000,))
+
+        # 34_400 effective samples (42_400 - 8_000)
+        self.assertEqual(chunks[1]["stride"], (0, 0))
+        self.assertEqual(chunks[1]["raw"].shape, (26_400,))
+
+        total_samples = sum(chunk["raw"].shape[0] for chunk in chunks)
+        total_stride = sum(sum(chunk["stride"]) for chunk in chunks)
+        self.assertEqual(total_samples - total_stride, 74400)
+
+        # Chunk length 1s
+
+        chunks = list(chunk_files([filename], sampling_rate=16_000, chunk_length_s=1, stride_length_s=0))
+        self.assertEqual(len(chunks), 5)
+        self.assertEqual(chunks[0]["stride"], (0, 0))
+        self.assertEqual(chunks[0]["raw"].shape, (16_000,))
+
+        self.assertEqual(chunks[1]["stride"], (0, 0))
+        self.assertEqual(chunks[1]["raw"].shape, (16_000,))
+
+        self.assertEqual(chunks[2]["stride"], (0, 0))
+        self.assertEqual(chunks[2]["raw"].shape, (16_000,))
+
+        self.assertEqual(chunks[3]["stride"], (0, 0))
+        self.assertEqual(chunks[3]["raw"].shape, (16_000,))
+
+        self.assertEqual(chunks[4]["stride"], (0, 0))
+        self.assertEqual(chunks[4]["raw"].shape, (10_400,))
+
+        total_samples = sum(chunk["raw"].shape[0] for chunk in chunks)
+        total_stride = sum(sum(chunk["stride"]) for chunk in chunks)
+        self.assertEqual(total_samples - total_stride, 74400)
+
+    def test_chunk_last_chunk_is_stride_only(self):
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+
+        chunks = list(chunk_files([filename], sampling_rate=16_000, chunk_length_s=4.65, stride_length_s=(0.775, 0)))
+        self.assertEqual(len(chunks), 1)
+        # 62_000
+        self.assertEqual(chunks[0]["stride"], (0, 0))
+        self.assertEqual(chunks[0]["raw"].shape, (74_400,))
+
+        total_samples = sum(chunk["raw"].shape[0] for chunk in chunks)
+        total_stride = sum(sum(chunk["stride"]) for chunk in chunks)
+        self.assertEqual(total_samples - total_stride, 74400)

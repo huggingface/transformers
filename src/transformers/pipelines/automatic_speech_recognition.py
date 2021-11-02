@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import subprocess
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
 from ..file_utils import is_torch_available
 from ..utils import logging
+from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
 
 
@@ -28,42 +28,6 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
-
-
-def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
-    """
-    Helper function to read an audio file through ffmpeg.
-    """
-    ar = f"{sampling_rate}"
-    ac = "1"
-    format_for_conversion = "f32le"
-    ffmpeg_command = [
-        "ffmpeg",
-        "-i",
-        "pipe:0",
-        "-ac",
-        ac,
-        "-ar",
-        ar,
-        "-f",
-        format_for_conversion,
-        "-hide_banner",
-        "-loglevel",
-        "quiet",
-        "pipe:1",
-    ]
-
-    try:
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    except FileNotFoundError:
-        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
-    output_stream = ffmpeg_process.communicate(bpayload)
-    out_bytes = output_stream[0]
-
-    audio = np.frombuffer(out_bytes, np.float32)
-    if audio.shape[0] == 0:
-        raise ValueError("Malformed soundfile")
-    return audio
 
 
 def rescale_stride(tokens_or_logits, stride):
@@ -218,8 +182,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
+        stride = None
+        if isinstance(inputs, dict):
+            stride = inputs.get("stride", None)
+            inputs = inputs.get("raw")
+            if stride is not None and stride[0] + stride[1] > inputs.shape[0]:
+                raise ValueError("Stride is too large for input")
         if not isinstance(inputs, np.ndarray):
-            raise ValueError("We expect a numpy ndarray as input")
+            raise ValueError(f"We expect a numpy ndarray as input, got `{type(inputs)}`")
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
@@ -249,7 +219,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             processed = self.feature_extractor(
                 inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
             )
+            if stride is not None:
+                if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+                    raise ValueError("Stride is only usable with CTC models, try removing it")
+
+                processed["stride"] = stride
             yield {"is_last": True, **processed}
+        return processed
 
     def _forward(self, model_inputs):
         is_last = model_inputs.pop("is_last")

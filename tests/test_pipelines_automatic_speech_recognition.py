@@ -80,6 +80,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         outputs = speech_recognizer(audio)
         self.assertEqual(outputs, {"text": ANY(str)})
 
+        audio = {"raw": audio, "stride": (0, 4000)}
+        if speech_recognizer.model.__class__ in MODEL_FOR_CTC_MAPPING.values():
+            outputs = speech_recognizer(audio)
+            self.assertEqual(outputs, {"text": ANY(str)})
+        else:
+            # Non CTC models cannot use striding.
+            with self.assertRaises(ValueError):
+                outputs = speech_recognizer(audio)
+
     @require_torch
     @slow
     def test_pt_defaults(self):
@@ -87,7 +96,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     def test_small_model_pt(self):
-
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
@@ -180,7 +188,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     def test_simple_wav2vec2(self):
-
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
@@ -454,6 +461,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(nested_simplify(input_values[:, 60:90]), nested_simplify(outs[3]["input_values"]))
         # (85, 100)
         self.assertEqual(nested_simplify(input_values[:, 80:100]), nested_simplify(outs[4]["input_values"]))
+
+    def test_stride(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 10)
+        output = speech_recognizer({"raw": waveform, "stride": (0, 0)})
+        self.assertEqual(output, {"text": "OB XB  B EB BB  B EB B OB X"})
+
+        # 0 effective ids
+        output = speech_recognizer({"raw": waveform, "stride": (5000, 5000)})
+        self.assertEqual(output, {"text": ""})
+
+        # Only 1 arange.
+        output = speech_recognizer({"raw": waveform, "stride": (0, 9000)})
+        self.assertEqual(output, {"text": "O"})
+
+        # 2nd arange
+        output = speech_recognizer({"raw": waveform, "stride": (1000, 8000)})
+        self.assertEqual(output, {"text": "B XB"})
 
 
 @require_torch
