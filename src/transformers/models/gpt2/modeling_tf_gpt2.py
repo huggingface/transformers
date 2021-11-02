@@ -230,10 +230,7 @@ class TFBlock(tf.keras.layers.Layer):
 
         if config.add_cross_attention:
 
-            # `n_ctx` is the dimensionality of the causal mask (usually same as n_positions).
-            # This doesn't apply to cross-attention, however it seems that `n_ctx` is never used.
-            # It's not clear if it makes sense to specify it here.
-            self.crossattention = TFAttention(nx, n_ctx, config, scale, name="crossattention", is_cross_attention=True)
+            self.crossattention = TFAttention(nx, config, scale, name="crossattention", is_cross_attention=True)
             self.ln_cross_attn = tf.keras.layers.LayerNormalization(
                 epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
             )
