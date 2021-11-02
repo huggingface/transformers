@@ -1826,7 +1826,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     ids = None
 
                 seq0_tokens = tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)
-                assert len(seq0_tokens["input_ids"]) > 2 + stride
+                self.assertGreater(len(seq0_tokens["input_ids"]), 2 + stride)
                 question_1 = "This is another sentence to be encoded."
                 seq_1 = ["This", "is", "another", "sentence", "to", "be", "encoded."]
                 boxes_1 = [[i, i, i, i] for i in range(len(seq_1))]
@@ -1838,7 +1838,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     boxes_1 = [[i, i, i, i] for i in range(len(seq_1))]
                 seq1_tokens = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)
 
-                assert len(seq1_tokens["input_ids"]) > 2 + stride
+                self.assertGreater(len(seq1_tokens["input_ids"]), 2 + stride)
 
                 smallest = (
                     seq1_tokens["input_ids"]
@@ -1858,14 +1858,16 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 seq_2 = seq_0 * model_max_length
                 question_2 = " ".join(map(str, seq_2))
                 boxes_2 = boxes_0 * model_max_length
-                assert len(seq_2) > model_max_length
+                self.assertGreater(len(seq_2), model_max_length)
 
                 sequence1 = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
                 sequence2 = tokenizer(question_2, seq_1, boxes=boxes_1, add_special_tokens=False)
                 total_length2 = len(sequence2["input_ids"])
-                assert total_length1 < model_max_length - 10, "Issue with the testing sequence, please update it."
-                assert total_length2 > model_max_length, "Issue with the testing sequence, please update it."
+                self.assertLess(total_length1, model_max_length, "Issue with the testing sequence, please update it.")
+                self.assertGreater(
+                    total_length2, model_max_length, "Issue with the testing sequence, please update it."
+                )
 
                 # Simple
                 padding_strategies = (
@@ -2151,7 +2153,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence = tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)
                 total_length = len(sequence["input_ids"])
 
-                assert total_length > 4, "Issue with the testing sequence, please update it it's too short"
+                self.assertGreater(total_length, 4, "Issue with the testing sequence, please update it it's too short")
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -2160,9 +2162,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 boxes_1 = boxes_0 * model_max_length
                 sequence1 = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
-                assert (
-                    total_length1 > model_max_length
-                ), "Issue with the testing sequence, please update it it's too short"
+                self.assertGreater(
+                    total_length1, model_max_length, "Issue with the testing sequence, please update it it's too short"
+                )
 
                 # Simple
                 padding_strategies = (
