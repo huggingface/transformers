@@ -26,12 +26,10 @@ _import_structure = {
 
 if is_sentencepiece_available():
     _import_structure["tokenization_plbart"] = ["PLBartTokenizer"]
-    _import_structure["tokenization_plbart_multi"] = ["PLBartMultiTokenizer"]
 
 
 if is_tokenizers_available():
     _import_structure["tokenization_plbart_fast"] = ["PLBartTokenizerFast"]
-    _import_structure["tokenization_plbart_multi_fast"] = ["PLBartMultiTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_plbart"] = [
@@ -50,11 +48,9 @@ if TYPE_CHECKING:
 
     if is_sentencepiece_available():
         from .tokenization_plbart import PLBartTokenizer
-        from .tokenization_plbart_multi import PLBartMultiTokenizer
 
     if is_tokenizers_available():
         from .tokenization_plbart_fast import PLBartTokenizerFast
-        from .tokenization_plbart_multi_fast import PLBartMultiTokenizerFast
 
     if is_torch_available():
         from .modeling_plbart import (
