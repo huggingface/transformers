@@ -11,7 +11,7 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
-    from PIL import Image, ImageOps
+    from PIL import Image
 
 if is_torch_available():
     import torch

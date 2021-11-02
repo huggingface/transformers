@@ -17,9 +17,10 @@ import os
 from typing import Union
 
 import numpy as np
-import requests
 import PIL.Image
 import PIL.ImageOps
+
+import requests
 
 from .file_utils import _is_torch, is_torch_available
 
