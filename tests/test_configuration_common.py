@@ -19,11 +19,11 @@ import os
 import tempfile
 import unittest
 
-from huggingface_hub import HfApi
+from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import ENDPOINT_STAGING, PASS, USER, is_staging_test
+from transformers.testing_utils import PASS, USER, is_staging_test
 
 
 config_common_kwargs = {
@@ -194,18 +194,17 @@ class ConfigTester(object):
 class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-config")
+            delete_repo(token=cls._token, name="test-config")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
         except HTTPError:
             pass
 

@@ -14,7 +14,7 @@ import lightning_base
 from convert_pl_checkpoint_to_hf import convert_pl_to_hf
 from distillation import distill_main
 from finetune import SummarizationModule, main
-from huggingface_hub.hf_api import HfApi
+from huggingface_hub import list_models
 from parameterized import parameterized
 from run_eval import generate_summaries_or_translations
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
@@ -130,7 +130,7 @@ class TestSummarizationDistiller(TestCasePlus):
     def test_hub_configs(self):
         """I put require_torch_gpu cause I only want this to run with self-scheduled."""
 
-        model_list = HfApi().list_models()
+        model_list = list_models()
         org = "sshleifer"
         model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
         allowed_to_be_broken = ["sshleifer/blenderbot-3B", "sshleifer/blenderbot-90M"]
