@@ -220,7 +220,7 @@ class PLBartTokenizer(XLMRobertaTokenizer):
         src_texts: List[str],
         src_lang: str = "en_XX",
         tgt_texts: Optional[List[str]] = None,
-        tgt_lang: str = "ro_RO",
+        tgt_lang: str = "python",
         **kwargs,
     ) -> BatchEncoding:
         self.src_lang = src_lang
@@ -249,9 +249,8 @@ class PLBartTokenizer(XLMRobertaTokenizer):
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
         self.cur_lang_code = self.lang_code_to_id[lang] if lang is not None else None
-
+        self.prefix_tokens = []
         if self.cur_lang_code is not None:
-            self.prefix_tokens = [self.cur_lang_code]
+            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
         else:
-            self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id]
+            self.suffix_tokens = [self.eos_token_id]
