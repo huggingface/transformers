@@ -170,13 +170,11 @@ INPUT_SHAPE = (args.eval_batch_size, args.max_seq_length)
 
 # TRT Engine properties
 STRICT_TYPES = True
-INT8_ENGINE = True if args.int8 else False
-FP16_ENGINE = True if args.fp16 else False
 
 engine_name = "temp_engine/bert-fp32.engine"
-if FP16_ENGINE:
+if args.fp16:
     engine_name = "temp_engine/bert-fp16.engine"
-if INT8_ENGINE:
+if args.int8:
     engine_name = "temp_engine/bert-int8.engine"
 
 # import ONNX file
@@ -192,10 +190,6 @@ with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) 
             for error in range(parser.num_errors):
                 print(parser.get_error(error))
 
-    # print(network)
-    # num_layers = network.num_layers
-    # print('nLayers', num_layers)
-
     # Query input names and shapes from parsed TensorRT network
     network_inputs = [network.get_input(i) for i in range(network.num_inputs)]
     input_names = [_input.name for _input in network_inputs]  # ex: ["actual_input1"]
@@ -204,15 +198,14 @@ with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) 
         config.max_workspace_size = 1 << 50
         if STRICT_TYPES:
             config.set_flag(trt.BuilderFlag.STRICT_TYPES)
-        if FP16_ENGINE:
+        if args.fp16:
             config.set_flag(trt.BuilderFlag.FP16)
-        if INT8_ENGINE:
+        if args.int8:
             config.set_flag(trt.BuilderFlag.INT8)
         profile = builder.create_optimization_profile()
         config.add_optimization_profile(profile)
         for i in range(len(input_names)):
             profile.set_shape(input_names[i], INPUT_SHAPE, INPUT_SHAPE, INPUT_SHAPE)
-            # profile.set_shape(input_names[i], (1, 128), (8, 128), (256, 128))
         engine = builder.build_engine(network, config)
 
         # serialize_engine and store in file (can be directly loaded and deserialized):
@@ -355,9 +348,6 @@ def prepare_validation_features(examples):
 
     return tokenized_examples
 
-
-if "validation" not in raw_datasets:
-    raise ValueError("--do_eval requires a validation dataset")
 eval_examples = raw_datasets["validation"]
 # Validation Feature Creation
 eval_dataset = eval_examples.map(
