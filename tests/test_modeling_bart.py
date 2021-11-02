@@ -39,6 +39,7 @@ if is_torch_available():
         BartForConditionalGeneration,
         BartForQuestionAnswering,
         BartForSequenceClassification,
+        BartForTokenClassification,
         BartModel,
         BartTokenizer,
         pipeline,
@@ -407,7 +408,7 @@ class BartHeadTests(unittest.TestCase):
 @require_torch
 class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
+        (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering, BartForTokenClassification)
         if is_torch_available()
         else ()
     )
@@ -633,6 +634,10 @@ class BartModelIntegrationTests(unittest.TestCase):
             logits2 = model(input_ids=input_ids_no_pad, attention_mask=attention_mask_no_pad).logits.squeeze()
         assert_tensors_close(batched_logits[1], logits2, atol=1e-3)
         assert_tensors_close(expected_slice, logits_arr, atol=1e-3)
+
+    def test_bart_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bart_for_token_classification(*config_and_inputs)
 
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
@@ -922,6 +927,16 @@ class BartStandaloneDecoderModelTester:
 
         # test that outputs are equal for slice
         assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+
+    def create_and_check_bart_for_token_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = BartForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

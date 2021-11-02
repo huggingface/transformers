@@ -562,6 +562,15 @@ class BartForSequenceClassification:
         requires_backends(cls, ["torch"])
 
 
+class BartForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class BartModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
