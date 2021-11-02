@@ -1330,7 +1330,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         if self.config.tie_word_embeddings:
             self.set_input_embeddings(value)
         else:
-            lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
+            lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
             self.lm_head = tf.keras.layers.Dense(
                 shape_list(value)[0], use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
             )  # Dans - - update init weights as in flax
