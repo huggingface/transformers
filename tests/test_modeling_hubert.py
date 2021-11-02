@@ -762,8 +762,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-1))
 
     def test_inference_distilhubert(self):
-        model = HubertModel.from_pretrained("anton-l/distilhubert").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/distilhubert")
+        model = HubertModel.from_pretrained("ntu-spml/distilhubert").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("ntu-spml/distilhubert")
 
         # TODO: can't test on batched inputs due to incompatible padding https://github.com/pytorch/fairseq/pull/3572
         input_speech = self._load_datasamples(1)
