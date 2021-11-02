@@ -1,4 +1,5 @@
 import collections
+import platform
 import subprocess
 
 import numpy as np
@@ -40,9 +41,7 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-def ffmpeg_stream(
-    filename: str, sampling_rate: int, format_for_conversion: str = "f32le", chunk_max_duration_s: int = 10
-):
+def ffmpeg_stream(filename: str, sampling_rate: int, format_for_conversion: str, chunk_max_duration_s: int):
     """
     Helper function to read an audio file through ffmpeg.
     """
@@ -54,7 +53,7 @@ def ffmpeg_stream(
         size_of_sample = 2
     elif format_for_conversion == "f32le":
         dtype = np.float32
-        size_of_sample = 3
+        size_of_sample = 4
     else:
         raise ValueError("Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
     ffmpeg_command = [
@@ -73,12 +72,62 @@ def ffmpeg_stream(
         "pipe:1",
     ]
 
+    buflen = int(sampling_rate * chunk_max_duration_s * size_of_sample)
+    return _ffmpeg_stream(ffmpeg_command, bufsize, buflen, dtype)
+
+
+def ffmpeg_microphone(sampling_rate: int, format_for_conversion: str, chunk_max_duration_s: int):
+    """
+    Helper function to read an audio file through ffmpeg.
+    """
+    ar = f"{sampling_rate}"
+    ac = "1"
+    bufsize = 10 ** 8
+    if format_for_conversion == "s16le":
+        dtype = np.int16
+        size_of_sample = 2
+    elif format_for_conversion == "f32le":
+        dtype = np.float32
+        size_of_sample = 4
+    else:
+        raise ValueError("Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
+
+    system = platform.system()
+    if system == "Linux":
+        format_ = "pulse"
+    elif system == "Darwin":
+        format_ = "avfoundation"
+    elif system == "Windows":
+        format_ = "dshow"
+
+    ffmpeg_command = [
+        "ffmpeg",
+        "-f",
+        format_,
+        "-i",
+        "default",
+        "-ac",
+        ac,
+        "-ar",
+        ar,
+        "-f",
+        format_for_conversion,
+        "-hide_banner",
+        "-loglevel",
+        "quiet",
+        "pipe:1",
+    ]
+
+    buflen = int(sampling_rate * chunk_max_duration_s * size_of_sample)
+    return _ffmpeg_stream(ffmpeg_command, bufsize, buflen, dtype)
+
+
+def _ffmpeg_stream(ffmpeg_command, bufsize, buflen, dtype):
     try:
         ffmpeg_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, bufsize=bufsize)
     except FileNotFoundError:
         raise ValueError("ffmpeg was not found but is required to stream audio files from filename")
 
-    buflen = int(sampling_rate * chunk_max_duration_s * size_of_sample)
     running = True
     while running:
         raw = ffmpeg_process.stdout.read(buflen)
@@ -145,7 +194,6 @@ def vad_collector(sample_rate, frame_duration_ms, padding_duration_ms, vad, fram
     for frame in frames:
         is_speech = vad.is_speech(frame.bytes, sample_rate)
 
-        # sys.stdout.write("1" if is_speech else "0")
         if not triggered:
             ring_buffer.append((frame, is_speech))
             num_voiced = len([f for f, speech in ring_buffer if speech])
@@ -171,21 +219,17 @@ def vad_collector(sample_rate, frame_duration_ms, padding_duration_ms, vad, fram
             # unvoiced, then enter NOTTRIGGERED and yield whatever
             # audio we've collected.
             if num_unvoiced > 0.9 * ring_buffer.maxlen:
-                # sys.stdout.write("-(%s)" % (frame.timestamp + frame.duration))
                 triggered = False
                 yield b"".join([f.bytes for f in voiced_frames])
                 ring_buffer.clear()
                 voiced_frames = []
-    # if triggered:
-    #     sys.stdout.write("-(%s)" % (frame.timestamp + frame.duration))
-    # sys.stdout.write("\n")
     # If we have any leftover voiced audio when we run out of input,
     # yield it.
     if voiced_frames:
         yield b"".join([f.bytes for f in voiced_frames])
 
 
-def vad_files(filenames, sampling_rate: int):
+def vad_files(filenames, sampling_rate: int, max_chunk_duration_s: int):
     try:
         import webrtcvad
     except ImportError:
@@ -197,20 +241,22 @@ def vad_files(filenames, sampling_rate: int):
         if not isinstance(filename, str):
             raise ValueError("Chunk voice can only operate on large filenames")
 
-        inputs = ffmpeg_stream(filename, sampling_rate, format_for_conversion="s16le")
-        vad = webrtcvad.Vad(1)
+        inputs = ffmpeg_stream(
+            filename, sampling_rate, format_for_conversion="s16le", chunk_max_duration_s=max_chunk_duration_s
+        )
+        vad = webrtcvad.Vad(0)
         frames = frame_generator(10, inputs, sampling_rate)
         segments = vad_collector(sampling_rate, 10, 300, vad, frames)
         max_int16 = 2 ** 15
-        max_chunk_duration = 20
-        max_len = int(max_chunk_duration * sampling_rate)
+        max_len = int(max_chunk_duration_s * sampling_rate)
         for i, segment in enumerate(segments):
             audio = np.frombuffer(segment, dtype=np.int16).astype("float32") / max_int16
             for i in range(0, audio.shape[0], max_len):
-                yield audio[i : i + max_len]
+                chunk = audio[i : i + max_len]
+                yield chunk
 
 
-def chunk_files(filenames, sampling_rate: int):
+def chunk_files(filenames, sampling_rate: int, max_chunk_duration_s: int):
     try:
         from scipy import signal
     except ImportError:
@@ -226,10 +272,8 @@ def chunk_files(filenames, sampling_rate: int):
     order = 10
     sos = signal.butter(order, [low, high], analog=False, btype="band", output="sos")
     chunk_min_duration = 5
-    chunk_max_duration = 20
     chunk_pad_duration = 0.3
     start_chunk = int(sampling_rate * chunk_min_duration)
-    stop_chunk = int(sampling_rate * chunk_max_duration)
     pad_chunk = int(sampling_rate * chunk_pad_duration)
 
     for filename in filenames:
@@ -238,9 +282,11 @@ def chunk_files(filenames, sampling_rate: int):
         if not isinstance(filename, str):
             raise ValueError("Chunk voice can only operate on large filenames")
 
-        for audio in ffmpeg_stream(filename, sampling_rate):
+        for audio in ffmpeg_stream(
+            filename, sampling_rate, format_for_conversion="f32le", max_chunk_duration_s=max_chunk_duration_s
+        ):
             audio = np.concatenate([leftover, audio])
-            chunk_portion = audio[start_chunk:stop_chunk]
+            chunk_portion = audio[start_chunk:]
             if chunk_portion.shape[0] == 0:
                 padded = np.concatenate([pad, audio, pad])
                 yield padded
