@@ -363,7 +363,7 @@ class FlaxEncoderDecoderModelTest(unittest.TestCase):
         assert id(module.decoder.config) == id(model.config.decoder)
         assert id(module.encoder.config) == id(model.config.encoder)
 
-    # @slow
+    @slow
     def test_configuration_tie(self):
         model = self.get_from_encoderdecoder_pretrained_model()
         self._check_configuration_tie(model)
