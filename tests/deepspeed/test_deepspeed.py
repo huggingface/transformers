@@ -709,22 +709,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             fp16=False,
         )
 
-    @require_torch_multi_gpu
-    @parameterized.expand(["fp16", "fp32"])
-    def test_inference(self, dtype):
-        # this is just inference, so no optimizer should be loaded
-        # it only works for z3 (makes no sense with z1-z2)
-        fp16 = True if dtype == "fp16" else False
-        self.run_and_check(
-            stage=ZERO3,
-            model_name=T5_TINY,
-            distributed=True,
-            do_train=False,
-            do_eval=True,
-            quality_checks=False,
-            fp16=True,
-        )
-
     @parameterized.expand(stages)
     def test_resume_train_not_from_ds_checkpoint(self, stage):
         # do normal training and then resume not from the deepspeed checkpoint but explicitly from
@@ -742,6 +726,22 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         output_dir = self.run_trainer(**kwargs, model_name=output_dir)
 
         self.do_checks(output_dir, do_train=do_train, do_eval=do_eval)
+
+    @require_torch_multi_gpu
+    @parameterized.expand(["fp16", "fp32"])
+    def test_inference(self, dtype):
+        # this is just inference, so no optimizer should be loaded
+        # it only works for z3 (makes no sense with z1-z2)
+        fp16 = True if dtype == "fp16" else False
+        self.run_and_check(
+            stage=ZERO3,
+            model_name=T5_TINY,
+            distributed=True,
+            do_train=False,
+            do_eval=True,
+            quality_checks=False,
+            fp16=fp16,
+        )
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
 
