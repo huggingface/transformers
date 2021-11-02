@@ -1618,8 +1618,8 @@ class BartForTokenClassification(BartPretrainedModel):
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            # hidden_states=outputs.hidden_states,
-            # attentions=outputs.attentions,
+            hidden_states=outputs.decoder_hidden_states,
+            attentions=outputs.decoder_attentions,
         )
 
 

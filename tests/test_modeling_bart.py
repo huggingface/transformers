@@ -635,9 +635,22 @@ class BartModelIntegrationTests(unittest.TestCase):
         assert_tensors_close(batched_logits[1], logits2, atol=1e-3)
         assert_tensors_close(expected_slice, logits_arr, atol=1e-3)
 
+    @slow
     def test_bart_token_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bart_for_token_classification(*config_and_inputs)
+        example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
+        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2], example_b])
+
+        model = BartForTokenClassification.from_pretrained("facebook/bart-base").to(
+            torch_device
+        )  # eval called in from_pre
+        model.eval()
+        attention_mask = input_ids.ne(model.config.pad_token_id)
+        # Test that model hasn't changed
+        with torch.no_grad():
+            result = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        self.assertEqual(result.logits.shape, (self.batch_size, len(example_b), self.num_labels))
+        self.assertIsInstance(result.loss.item(), float)
 
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
@@ -927,16 +940,6 @@ class BartStandaloneDecoderModelTester:
 
         # test that outputs are equal for slice
         assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
-
-    def create_and_check_bart_for_token_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
-    ):
-        config.num_labels = self.num_labels
-        model = BartForTokenClassification.from_pretrained("facebook/bart-base")
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
