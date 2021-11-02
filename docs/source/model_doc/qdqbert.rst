@@ -32,7 +32,7 @@ more difficult to quantize, such as MobileNets and BERT-large.*
 
 Tips:
 
-QDQBERT requires the support of `Pytorch Quantization Toolkit <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`_.
+QDQBERT requires the support of `Pytorch Quantization Toolkit <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`__.
 
 To install::
 
