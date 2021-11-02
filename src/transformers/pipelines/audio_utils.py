@@ -242,7 +242,7 @@ def vad_files(filenames, sampling_rate: int, max_chunk_duration_s: int):
             raise ValueError("Chunk voice can only operate on large filenames")
 
         inputs = ffmpeg_stream(
-            filename, sampling_rate, format_for_conversion="s16le", chunk_max_duration_s=max_chunk_duration_s
+            filename, sampling_rate, format_for_conversion="s16le", max_chunk_duration_s=max_chunk_duration_s
         )
         vad = webrtcvad.Vad(0)
         frames = frame_generator(10, inputs, sampling_rate)
