@@ -932,7 +932,7 @@ class BartStandaloneDecoderModelTester:
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
-        model = BartForTokenClassification(config)
+        model = BartForTokenClassification.from_pretrained("facebook/bart-base")
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)

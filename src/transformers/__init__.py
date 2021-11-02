@@ -628,7 +628,7 @@ if is_torch_available():
             "BartForConditionalGeneration",
             "BartForQuestionAnswering",
             "BartForSequenceClassification",
-            "BartForTokenClassification"
+            "BartForTokenClassification",
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
