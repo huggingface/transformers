@@ -361,3 +361,10 @@ OVAutoModelForQuestionAnswering
 
 .. autoclass:: transformers.OVAutoModelForQuestionAnswering
     :members:
+
+
+OVAutoModelForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.OVAutoModelForSequenceClassification
+    :members:

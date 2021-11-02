@@ -29,6 +29,15 @@ class OVAutoModelForQuestionAnswering:
         requires_backends(cls, ["ov"])
 
 
+class OVAutoModelForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["ov"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["ov"])
+
+
 class OVAutoModelWithLMHead:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["ov"])

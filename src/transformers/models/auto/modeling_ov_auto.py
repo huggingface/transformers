@@ -2,10 +2,12 @@ from transformers import (
     AutoModel,
     AutoModelForMaskedLM,
     AutoModelForQuestionAnswering,
+    AutoModelForSequenceClassification,
     AutoModelWithLMHead,
     TFAutoModel,
     TFAutoModelForMaskedLM,
     TFAutoModelForQuestionAnswering,
+    TFAutoModelForSequenceClassification,
     TFAutoModelWithLMHead,
 )
 
@@ -38,3 +40,8 @@ class OVAutoModelWithLMHead(_BaseOVAutoModelClass):
 class OVAutoModelForQuestionAnswering(_BaseOVAutoModelClass):
     _pt_auto_model = AutoModelForQuestionAnswering
     _tf_auto_model = TFAutoModelForQuestionAnswering
+
+
+class OVAutoModelForSequenceClassification(_BaseOVAutoModelClass):
+    _pt_auto_model = AutoModelForSequenceClassification
+    _tf_auto_model = TFAutoModelForSequenceClassification
