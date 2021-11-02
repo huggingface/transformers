@@ -62,7 +62,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "QDQBertConfig"
-_TOKENIZER_FOR_DOC = "QDQBertTokenizer"
+_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
@@ -785,7 +785,7 @@ QDQBERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.QDQBertTokenizer`. See
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -1084,10 +1084,10 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import QDQBertTokenizer, QDQBertLMHeadModel, QDQBertConfig
+            >>> from transformers import BertTokenizer, QDQBertLMHeadModel, QDQBertConfig
             >>> import torch
 
-            >>> tokenizer = QDQBertTokenizer.from_pretrained('bert-base-cased')
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
             >>> config = QDQBertConfig.from_pretrained("bert-base-cased")
             >>> config.is_decoder = True
             >>> model = QDQBertLMHeadModel.from_pretrained('bert-base-cased', config=config)
@@ -1306,10 +1306,10 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import QDQBertTokenizer, QDQBertForNextSentencePrediction
+            >>> from transformers import BertTokenizer, QDQBertForNextSentencePrediction
             >>> import torch
 
-            >>> tokenizer = QDQBertTokenizer.from_pretrained('bert-base-uncased')
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
             >>> model = QDQBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
