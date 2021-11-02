@@ -45,13 +45,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def run_pipeline_test(self, model, tokenizer, feature_extractor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
-        return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
-
-    def run_pipeline_test(self, token_classifier, _):
-        model = token_classifier.model
-        tokenizer = token_classifier.tokenizer
 
         outputs = token_classifier("A simple string")
         self.assertIsInstance(outputs, list)

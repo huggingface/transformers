@@ -39,6 +39,7 @@ from .generation_logits_process import (
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
+    Timesteps,
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
@@ -650,6 +651,7 @@ class GenerationMixin:
         top_p: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
         bad_words_ids: Optional[Iterable[int]] = None,
+        banned_words: Optional[Dict] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -909,6 +911,7 @@ class GenerationMixin:
             # set input_ids as decoder_input_ids
             if "decoder_input_ids" in model_kwargs:
                 input_ids = model_kwargs.pop("decoder_input_ids")
+
             else:
                 input_ids = self._prepare_decoder_input_ids_for_generation(
                     input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
@@ -935,14 +938,12 @@ class GenerationMixin:
 
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
-
         if input_ids.shape[-1] >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
                 f"Input length of {input_ids_string} is {input_ids.shape[-1]}, but ``max_length`` is set to {max_length}. "
                 "This can lead to unexpected behavior. You should consider increasing ``config.max_length`` or ``max_length``."
             )
-
         # determine generation mode
         is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True
@@ -990,6 +991,7 @@ class GenerationMixin:
             return self.greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
+                banned_words = banned_words,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -1146,11 +1148,13 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
+
     def greedy_search(
         self,
         input_ids: torch.LongTensor,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
+        banned_words : Optional[Dict] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -1273,6 +1277,14 @@ class GenerationMixin:
         cur_len = input_ids.shape[-1]
 
         this_peer_finished = False  # used by synced_gpus only
+
+        revert = False  # used by banned_words decoding
+        detected_banned_words_length_greater_than_1 = None  # used by banned_words decoding
+        banned_words_ids = banned_words['ids']  # used by banned_words decoding
+        epsilon = banned_words['epsilon']  # used by banned_words decoding
+
+        timesteps = Timesteps()  # used by banned_words decoding
+
         while True:
 
             if synced_gpus:
@@ -1323,8 +1335,44 @@ class GenerationMixin:
             # pre-process distribution
             next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
-            # argmax
-            next_tokens = torch.argmax(next_tokens_scores, dim=-1)
+            _, sorted_next_token_indices = torch.topk(next_tokens_scores, next_tokens_scores.shape[1])
+            # The result below is the same as argmax
+            next_tokens = sorted_next_token_indices[0,0]
+
+            random_uniform = torch.rand((1,))
+
+            if revert and epsilon > random_uniform:
+                input_ids, next_tokens = timesteps.revert_timestep()
+                revert = False
+            else:
+                if detected_banned_words_length_greater_than_1 is not None:
+                    next_idx = detected_banned_words_length_greater_than_1['next_idx']
+
+                    if next_tokens != detected_banned_words_length_greater_than_1['ids'][next_idx]:
+                        """
+                        If the next_tokens is not equal to the subsequent token in the banned words,
+                        we will set the detected banned_words to None. 
+                        For e.g., banned_words = ['blue rabbits'], while the generated sequence
+                        is "In the early monday, the blue sky ..."                    
+                        """
+                        detected_banned_words_length_greater_than_1 = None
+                    else:
+                        if (detected_banned_words_length_greater_than_1['next_idx'] + 1) == \
+                                len(detected_banned_words_length_greater_than_1['ids']):
+                            revert = True
+                            detected_banned_words_length_greater_than_1 = None
+                        else:
+                            detected_banned_words_length_greater_than_1['next_idx'] += 1
+
+                else:
+                    for ids in banned_words_ids:
+                        if next_tokens == ids[0]:
+                            if len(ids) == 1:
+                                revert = True
+                            else:
+                                detected_banned_words_length_greater_than_1 = {'ids': ids,
+                                                                               'next_idx': 1}
+                            timesteps.update(input_ids, sorted_next_token_indices)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:

@@ -51,7 +51,6 @@ else:
 @require_timm
 @require_torch
 @is_pipeline_test
-@unittest.skip("Skip while fixing segmentation pipeline tests")
 class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
 
