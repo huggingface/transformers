@@ -24,9 +24,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+import datasets
 import numpy as np
 import torch
-import torchaudio
 from datasets import DatasetDict, load_dataset, load_metric
 
 import transformers
@@ -47,10 +47,9 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.13.0.dev0")
 
-# TODO(Patrick) Bump up as soon as audio features are merged
-require_version("datasets>=1.12.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
+require_version("datasets>=1.13.3", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
 
 logger = logging.getLogger(__name__)
@@ -179,13 +178,20 @@ class DataTrainingArguments:
     min_duration_in_seconds: Optional[float] = field(
         default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
-    only_data_preprocessing: Optional[bool] = field(
+    preprocessing_only: Optional[bool] = field(
         default=False,
         metadata={
             "help": "Whether to only do data preprocessing and skip training. "
             "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
-            "In this case, one should run the preprocessing in a non-distributed setup with `only_data_preprocessing=True` "
+            "In this case, one should run the preprocessing in a non-distributed setup with `preprocessing_only=True` "
             "so that the cached datasets can consequently be loaded in distributed training"
+        },
+    )
+    use_auth_token: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "If :obj:`True`, will use the token generated when running"
+            ":obj:`transformers-cli logiin as HTTP bearer authorization for remote files."
         },
     )
 
@@ -343,14 +349,14 @@ def main():
 
     if data_args.audio_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
-            f"--audio_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
+            f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--audio_column_name` to the correct audio column - one of "
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
 
     if data_args.text_column_name not in raw_datasets["train"].column_names:
         raise ValueError(
-            f"--text_column_name {data_args.audio_column_name} not found in dataset '{data_args.dataset_name}'. "
+            f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--text_column_name` to the correct text column - one of "
             f"{', '.join(raw_datasets['train'].column_names)}."
         )
@@ -389,38 +395,46 @@ def main():
     # the training and evaluation datasets
     # We need to make sure that only first rank saves vocabulary
     # make sure all processes wait until vocab is created
+    vocab_file = os.path.join(training_args.output_dir, "vocab.json")
 
-    with training_args.main_process_first(desc="dataset map vocabulary creation"):
-        vocab_dict = create_vocabulary_from_data(raw_datasets)
-
-        vocab_file = os.path.join(training_args.output_dir, "vocab.json")
-
-        # save vocab dict to be loaded into tokenizer
-        os.makedirs(training_args.output_dir, exist_ok=True)
+    with training_args.main_process_first():
         if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
             os.remove(vocab_file)
 
+    with training_args.main_process_first(desc="dataset map vocabulary creation"):
         if not os.path.isfile(vocab_file):
-            with open(vocab_file, "w") as vocab_file:
-                json.dump(vocab_dict, vocab_file)
+            os.makedirs(training_args.output_dir, exist_ok=True)
+            vocab_dict = create_vocabulary_from_data(raw_datasets)
+
+            # save vocab dict to be loaded into tokenizer
+            with open(vocab_file, "w") as file:
+                json.dump(vocab_dict, file)
 
     # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
     # Note for distributed training, the .from_pretrained methods guarantee that only
     # one local process can concurrently download model & vocab.
 
     # load config
-    config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+    )
+
+    # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
+    config_for_tokenizer = config if config.tokenizer_class is not None else None
+    tokenizer_type = config.model_type if config.tokenizer_class is None else None
 
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
         training_args.output_dir,
-        tokenizer_type=config.model_type,
+        config=config_for_tokenizer,
+        tokenizer_type=tokenizer_type,
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
+        use_auth_token=data_args.use_auth_token,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -443,48 +457,40 @@ def main():
 
     # create model
     model = AutoModelForCTC.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, config=config
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        config=config,
+        use_auth_token=data_args.use_auth_token,
     )
 
     # freeze encoder
     if model_args.freeze_feature_extractor:
         model.freeze_feature_extractor()
 
-    # 5. Now we preprocess the datasets which includes loading the audio, resampling and padding
+    # 5. Now we preprocess the datasets including loading the audio, resampling and normalization
+    # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
+    # so that we just need to set the correct target sampling rate and normalize the input
+    # via the `feature_extractor`
 
-    # The following code should be cleaned up as soon as
-    # https://github.com/huggingface/datasets/pull/2324 is merged
-
-    # Preprocessing the datasets.
-    # We need to read the audio files as arrays and tokenize the targets.
+    # make sure that dataset decodes audio with correct sampling rate
+    raw_datasets = raw_datasets.cast_column(
+        data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+    )
 
     # derive max & min input length for sample rate & max duration
     max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
     min_input_length = data_args.min_duration_in_seconds * processor.feature_extractor.sampling_rate
 
-    resampler = None
-    if raw_datasets["train"][data_args.audio_column_name][0].split(".")[-1] == "mp3":
-        # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
-        resampler = torchaudio.transforms.Resample(48_000, processor.feature_extractor.sampling_rate)
-
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
     def prepare_dataset(batch):
         # load audio
-        speech_array, sampling_rate = torchaudio.load(batch[data_args.audio_column_name])
-        speech_array = speech_array.squeeze()
-
-        # if necessary resample audio
-        if resampler is not None:
-            # TODO(PVP) - remove hard-coded 48_000 after audio feature is merged
-            speech_array = resampler(speech_array)
-            sampling_rate = resampler.new_freq
-
-        speech_array = speech_array.numpy()
+        sample = batch[data_args.audio_column_name]
 
         batch["input_values"] = processor(
-            speech_array, sampling_rate=sampling_rate, truncate=True, max_length=max_input_length
+            sample["array"], sampling_rate=sample["sampling_rate"], truncate=True, max_length=max_input_length
         ).input_values[0]
+        batch["input_length"] = len(batch["input_values"])
 
         # Setup the processor for targets
         with processor.as_target_processor():
@@ -502,9 +508,12 @@ def main():
         if min_input_length > 0.0:
             # filter data that is shorter than min_input_length
             vectorized_datasets = vectorized_datasets.filter(
-                lambda data: len(data["input_values"]) > min_input_length,
+                lambda x: x > min_input_length,
                 num_proc=data_args.preprocessing_num_workers,
+                input_columns=["input_length"],
             )
+
+        vectorized_datasets = vectorized_datasets.remove_columns("input_length")
 
     # 6. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
@@ -513,8 +522,13 @@ def main():
     # Define Metric during training
     wer_metric = load_metric("wer")
 
-    if data_args.only_data_preprocessing:
-        logger.info("Data preprocessing finished.")
+    # for large datasets it is advised to run the preprocessing on a
+    # single machine first with ``args.preprocessing_only`` since there will mostly likely
+    # be a timeout when running the script in distributed mode.
+    # In a second step ``args.preprocessing_only`` can then be set to `False` to load the
+    # cached dataset
+    if data_args.preprocessing_only:
+        logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
         return
 
     def compute_metrics(pred):
@@ -591,15 +605,16 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # Write model card and (optionally) push to hub
+    config_name = data_args.dataset_config_name if data_args.dataset_config_name is not None else "na"
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
-        "dataset_args": f"Config: {data_args.dataset_config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
-        "dataset": f"{data_args.dataset_name.upper()} - {data_args.dataset_config_name.upper()}",
+        "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
+        "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
     }
     if "common_voice" in data_args.dataset_name:
-        kwargs["language"] = data_args.dataset_config_name
+        kwargs["language"] = config_name
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)

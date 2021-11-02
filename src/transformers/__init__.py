@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.12.0.dev0"
+__version__ = "4.13.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -160,6 +160,7 @@ _import_structure = {
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
+    "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -251,6 +252,7 @@ _import_structure = {
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
@@ -278,6 +280,14 @@ _import_structure = {
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
         "TrOCRProcessor",
+    ],
+    "models.unispeech": [
+        "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UniSpeechConfig",
+    ],
+    "models.unispeech_sat": [
+        "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UniSpeechSatConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
@@ -350,6 +360,7 @@ _import_structure = {
 if is_sentencepiece_available():
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
+    _import_structure["models.bartpho"].append("BartphoTokenizer")
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
@@ -387,6 +398,7 @@ if is_tokenizers_available():
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
+    _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
@@ -465,6 +477,7 @@ if is_vision_available():
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
+    _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -572,6 +585,7 @@ if is_torch_available():
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
+            "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
@@ -582,6 +596,7 @@ if is_torch_available():
             "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_MAPPING",
@@ -1137,10 +1152,22 @@ if is_torch_available():
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.segformer"].extend(
+        [
+            "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SegformerDecodeHead",
+            "SegformerForImageClassification",
+            "SegformerForSemanticSegmentation",
+            "SegformerLayer",
+            "SegformerModel",
+            "SegformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.sew"].extend(
         [
             "SEW_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SEWForCTC",
+            "SEWForSequenceClassification",
             "SEWModel",
             "SEWPreTrainedModel",
         ]
@@ -1149,6 +1176,7 @@ if is_torch_available():
         [
             "SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SEWDForCTC",
+            "SEWDForSequenceClassification",
             "SEWDModel",
             "SEWDPreTrainedModel",
         ]
@@ -1208,6 +1236,26 @@ if is_torch_available():
     )
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
+    )
+    _import_structure["models.unispeech"].extend(
+        [
+            "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechForCTC",
+            "UniSpeechForPreTraining",
+            "UniSpeechForSequenceClassification",
+            "UniSpeechModel",
+            "UniSpeechPreTrainedModel",
+        ]
+    )
+    _import_structure["models.unispeech_sat"].extend(
+        [
+            "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechSatForCTC",
+            "UniSpeechSatForPreTraining",
+            "UniSpeechSatForSequenceClassification",
+            "UniSpeechSatModel",
+            "UniSpeechSatPreTrainedModel",
+        ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
     _import_structure["models.visual_bert"].extend(
@@ -2113,6 +2161,7 @@ if TYPE_CHECKING:
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -2134,6 +2183,8 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
+    from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
@@ -2209,6 +2260,7 @@ if TYPE_CHECKING:
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
+        from .models.bartpho import BartphoTokenizer
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
@@ -2234,6 +2286,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
+        from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
@@ -2295,6 +2348,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
+        from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
@@ -2380,6 +2434,7 @@ if TYPE_CHECKING:
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
+            MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -2390,6 +2445,7 @@ if TYPE_CHECKING:
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_MAPPING,
@@ -2855,8 +2911,29 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
-        from .models.sew import SEW_PRETRAINED_MODEL_ARCHIVE_LIST, SEWForCTC, SEWModel, SEWPreTrainedModel
-        from .models.sew_d import SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST, SEWDForCTC, SEWDModel, SEWDPreTrainedModel
+        from .models.segformer import (
+            SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SegformerDecodeHead,
+            SegformerForImageClassification,
+            SegformerForSemanticSegmentation,
+            SegformerLayer,
+            SegformerModel,
+            SegformerPreTrainedModel,
+        )
+        from .models.sew import (
+            SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWForCTC,
+            SEWForSequenceClassification,
+            SEWModel,
+            SEWPreTrainedModel,
+        )
+        from .models.sew_d import (
+            SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SEWDForCTC,
+            SEWDForSequenceClassification,
+            SEWDModel,
+            SEWDPreTrainedModel,
+        )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2901,6 +2978,22 @@ if TYPE_CHECKING:
             load_tf_weights_in_transfo_xl,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
+        from .models.unispeech import (
+            UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechForCTC,
+            UniSpeechForPreTraining,
+            UniSpeechForSequenceClassification,
+            UniSpeechModel,
+            UniSpeechPreTrainedModel,
+        )
+        from .models.unispeech_sat import (
+            UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechSatForCTC,
+            UniSpeechSatForPreTraining,
+            UniSpeechSatForSequenceClassification,
+            UniSpeechSatModel,
+            UniSpeechSatPreTrainedModel,
+        )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -27,6 +27,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine import data_adapter
+from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
@@ -43,6 +44,7 @@ from .file_utils import (
     is_remote_url,
 )
 from .generation_tf_utils import TFGenerationMixin
+from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -51,7 +53,15 @@ logger = logging.get_logger(__name__)
 tf_logger = tf.get_logger()
 
 TFModelInputType = Union[
-    List[tf.Tensor], List[np.ndarray], Dict[str, tf.Tensor], Dict[str, np.ndarray], np.ndarray, tf.Tensor
+    List[tf.Tensor],
+    List[np.ndarray],
+    List[KerasTensor],
+    Dict[str, tf.Tensor],
+    Dict[str, np.ndarray],
+    Dict[str, KerasTensor],
+    tf.Tensor,
+    np.ndarray,
+    KerasTensor,
 ]
 
 
@@ -347,7 +357,7 @@ def input_processing(func, config, input_ids, **kwargs):
     signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
-    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
+    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -431,7 +441,7 @@ def input_processing(func, config, input_ids, **kwargs):
             else:
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
-        if isinstance(input_ids, tf.Tensor) or input_ids is None:
+        if isinstance(input_ids, (tf.Tensor, KerasTensor)) or input_ids is None:
             output[parameter_names[0]] = input_ids
         else:
             raise ValueError(
@@ -787,6 +797,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
+        # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
+        # should be done only with the relevant ModelOutput param that is
+        # considered by the loss.
+        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
+            y_pred = y_pred["logits"]
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
@@ -813,17 +828,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
         y_pred = self(x, training=False)
-        if not self.loss:
-            self.loss_tracker.update_state(y_pred.loss)
-            return_metrics = {"loss": self.loss_tracker.result()}
-        else:
-            # Run anyway to update state
-            self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-            return_metrics = {}
-        # Updates stateful loss metrics.
         self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+        # Updates stateful loss metrics.
+        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
+            y_pred = y_pred["logits"]
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
+        return_metrics = {}
         for metric in self.metrics:
             result = metric.result()
             if isinstance(result, dict):

@@ -52,7 +52,7 @@ MAPPING = {
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.upsample.0": "encoder.upsample.projection",
     "encoder.layer_norm": "encoder.layer_norm",
-    "w2v_encoder.layer_norm": "layer_norm",
+    "w2v_model.layer_norm": "layer_norm",
     "w2v_encoder.proj": "lm_head",
     "mask_emb": "masked_spec_embed",
 }
@@ -106,7 +106,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             for key, mapped_key in MAPPING.items():
                 mapped_key = "sew." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
 
-                if key in name or key.split("w2v_encoder.")[-1] == name.split(".")[0]:
+                if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
                         layer_index = name.split(key)[0].split(".")[-2]
@@ -165,13 +165,13 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
         unused_weights.append(full_name)
 
 
-def convert_config(model):
+def convert_config(model, is_finetuned):
     config = SEWConfig()
-    fs_config = model.cfg
+    if is_finetuned:
+        fs_config = model.w2v_encoder.w2v_model.cfg
+    else:
+        fs_config = model.cfg
 
-    config.activation_dropout = fs_config.activation_dropout
-    config.apply_spec_augment = fs_config.mask_prob > 0 or fs_config.mask_channel_prob > 0
-    config.attention_dropout = fs_config.attention_dropout
     config.conv_bias = fs_config.conv_bias
     conv_layers = eval(fs_config.conv_feature_layers)
     config.conv_dim = [x[0] for x in conv_layers]
@@ -179,25 +179,37 @@ def convert_config(model):
     config.conv_stride = [x[2] for x in conv_layers]
     config.feat_extract_activation = "gelu"
     config.feat_extract_norm = "layer" if fs_config.extractor_mode == "layer_norm" else "group"
-    config.feat_proj_dropout = fs_config.dropout_input
     config.final_dropout = 0.0
     config.hidden_act = fs_config.activation_fn.name
-    config.hidden_dropout = fs_config.dropout
     config.hidden_size = fs_config.encoder_embed_dim
     config.initializer_range = 0.02
     config.intermediate_size = fs_config.encoder_ffn_embed_dim
     config.layer_norm_eps = 1e-5
     config.layerdrop = fs_config.encoder_layerdrop
-    config.mask_feature_length = fs_config.mask_channel_length
-    config.mask_feature_prob = fs_config.mask_channel_prob
-    config.mask_time_length = fs_config.mask_length
-    config.mask_time_prob = fs_config.mask_prob
     config.num_attention_heads = fs_config.encoder_attention_heads
     config.num_conv_pos_embedding_groups = fs_config.conv_pos_groups
     config.num_conv_pos_embeddings = fs_config.conv_pos
     config.num_feat_extract_layers = len(conv_layers)
     config.num_hidden_layers = fs_config.encoder_layers
     config.squeeze_factor = fs_config.squeeze_factor
+
+    # take care of any params that are overridden by the Wav2VecCtc model
+    if is_finetuned:
+        fs_config = model.cfg
+        config.final_dropout = fs_config.final_dropout
+        config.layerdrop = fs_config.layerdrop
+    config.activation_dropout = fs_config.activation_dropout
+    config.apply_spec_augment = fs_config.mask_prob > 0 or fs_config.mask_channel_prob > 0
+    config.attention_dropout = fs_config.attention_dropout
+    config.feat_proj_dropout = fs_config.dropout_input
+    config.hidden_dropout = fs_config.dropout
+    config.mask_feature_length = fs_config.mask_channel_length
+    config.mask_feature_prob = fs_config.mask_channel_prob
+    config.mask_time_length = fs_config.mask_length
+    config.mask_time_prob = fs_config.mask_prob
+
+    config.feature_extractor_type = "Wav2Vec2FeatureExtractor"
+    config.tokenizer_class = "Wav2Vec2CTCTokenizer"
 
     return config
 
@@ -220,7 +232,7 @@ def convert_sew_checkpoint(
     if config_path is not None:
         config = SEWConfig.from_pretrained(config_path)
     else:
-        config = convert_config(model[0])
+        config = convert_config(model[0], is_finetuned)
     model = model[0].eval()
 
     return_attention_mask = True if config.feat_extract_norm == "layer" else False
@@ -238,6 +250,8 @@ def convert_sew_checkpoint(
 
             # important change bos & pad token id since CTC symbol is <pad> and
             # not <s> as in fairseq
+            target_dict.indices[target_dict.bos_word] = target_dict.pad_index
+            target_dict.indices[target_dict.pad_word] = target_dict.bos_index
             config.bos_token_id = target_dict.pad_index
             config.pad_token_id = target_dict.bos_index
             config.eos_token_id = target_dict.eos_index
