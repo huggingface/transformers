@@ -34,7 +34,7 @@ Tips:
 
 QDQBERT requires the support of `Pytorch Quantization Toolkit <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`__.
 
-To install::
+To install:
 
 .. code-block:: bash
 
