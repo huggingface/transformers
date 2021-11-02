@@ -318,7 +318,8 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         decoder_batch_size, decoder_sequence_length = decoder_input_ids.shape
         if not decoder_batch_size == batch_size:
             raise ValueError(
-                f"The inputs of encoder and decoder should have the same batch size, but got {batch_size} for encoder and {decoder_batch_size} for decoder."
+                f"The inputs of encoder and decoder should have the same batch size, but got {batch_size} for encoder "
+                f"and {decoder_batch_size} for decoder."
             )
         decoder_position_ids = jnp.broadcast_to(
             jnp.arange(decoder_sequence_length)[None, :], (decoder_batch_size, decoder_sequence_length)
@@ -783,9 +784,11 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            assert (
-                encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            if encoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `encoder_model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has "
+                    "to be defined"
+                )
             from ..auto.modeling_flax_auto import FlaxAutoModel
 
             if "config" not in kwargs_encoder:
@@ -795,7 +798,8 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
 
                     logger.info(
-                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder "
+                        "model. Cross-attention and casual mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
@@ -808,9 +812,11 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            assert (
-                decoder_pretrained_model_name_or_path is not None
-            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+            if decoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has "
+                    "to be defined."
+                )
             from ..auto.modeling_flax_auto import FlaxAutoModelForCausalLM
 
             if "config" not in kwargs_decoder:
@@ -819,7 +825,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention "
+                        f"layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if "
+                        f"{decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -828,7 +836,11 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order "
+                    f"to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the "
+                    "attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to "
+                    "`.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to "
+                    "`.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = FlaxAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
