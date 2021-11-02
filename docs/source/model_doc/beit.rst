@@ -63,6 +63,17 @@ This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The JA
 contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found `here
 <https://github.com/microsoft/unilm/tree/master/beit>`__.
 
+
+BEiT specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.models.beit.modeling_beit.BeitModelOutputWithPooling
+    :members:
+
+.. autoclass:: transformers.models.beit.modeling_flax_beit.FlaxBeitModelOutputWithPooling
+    :members:
+
+
 BeitConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
