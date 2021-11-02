@@ -32,12 +32,14 @@ PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PLBartConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.PLBartModel` adapted from
-    :class:`~transformers.MBartConfig`. It is used to instantiate a PLBART model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the PLBART `uclanlp/plbart-base <https://huggingface.co/uclanlp/plbart-base>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.PLBartModel`. It is used to
+    instantiate an PLBART model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the PLBART `uclanlp/plbart-base
+    <https://huggingface.co/uclanlp/plbart-base>`__ architecture.
+
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50005):
@@ -79,31 +81,30 @@ class PLBartConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
-        num_labels: (:obj:`int`, `optional`, defaults to 2):
-            The number of labels to use in :class:`~transformers.PLBartForSequenceClassification`.
         forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
             The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
             :obj:`eos_token_id`.
 
     Example::
+
         >>> from transformers import PLBartModel, PLBartConfig
+
         >>> # Initializing a PLBART uclanlp/plbart-base style configuration
         >>> configuration = PLBartConfig()
+
         >>> # Initializing a model from the uclanlp/plbart-base style configuration
         >>> model = PLBartModel(configuration)
+
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
     model_type = "plbart"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
-
 
     def __init__(
         self,
@@ -115,8 +116,8 @@ class PLBartConfig(PretrainedConfig):
         decoder_layers=6,
         decoder_ffn_dim=3072,
         decoder_attention_heads=12,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
+        encoder_layerdrop=0.0,  # TODO: Check
+        decoder_layerdrop=0.0, # TODO: Check
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
@@ -125,24 +126,14 @@ class PLBartConfig(PretrainedConfig):
         attention_dropout=0.1,
         activation_dropout=0.0,
         init_std=0.02,
-        classifier_dropout=0.0,
+        classifier_dropout=0.0, # TODO: Verify
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            forced_eos_token_id=forced_eos_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -162,16 +153,15 @@ class PLBartConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            forced_eos_token_id=forced_eos_token_id,
+            **kwargs,
+        )
 
 
 class PLBartOnnxConfig(OnnxConfigWithPast):
