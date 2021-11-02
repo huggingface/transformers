@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
-    TokenClassifierOutput,
+    Seq2SeqTokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -1547,7 +1547,7 @@ class BartForTokenClassification(BartPretrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
+        output_type=Seq2SeqTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1615,10 +1615,9 @@ class BartForTokenClassification(BartPretrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TokenClassifierOutput(
+        return Seq2SeqTokenClassifierOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
