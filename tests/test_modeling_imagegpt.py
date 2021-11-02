@@ -26,7 +26,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 if is_torch_available():
     import torch
-    
+
     from transformers import (
         IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         ImageGPTForCausalLM,
@@ -259,9 +259,16 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-                
+
         return inputs_dict
-    
+
+    # we overwrite the _check_scores method of GenerationTesterMixin, as ImageGPTForCausalLM doesn't have tied input- and output embeddings
+    def _check_scores(self, batch_size, scores, length, config):
+        expected_shape = (batch_size, config.vocab_size - 1)
+        self.assertIsInstance(scores, tuple)
+        self.assertEqual(len(scores), length)
+        self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
+
     def setUp(self):
         self.model_tester = ImageGPTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ImageGPTConfig, n_embd=37)
