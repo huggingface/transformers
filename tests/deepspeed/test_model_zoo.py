@@ -43,6 +43,7 @@ set_seed(42)
 
 T5_SMALL = "t5-small"
 
+# *** Working Models ***
 ALBERT_TINY = "hf-internal-testing/tiny-albert"
 BART_TINY = "sshleifer/bart-tiny-random"
 BERT_TINY = "hf-internal-testing/tiny-bert"
@@ -62,7 +63,6 @@ GPT_NEO_TINY = "hf-internal-testing/tiny-random-gpt_neo"
 LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
 LED_TINY = "hf-internal-testing/tiny-random-led"
 LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
-M2M_100_TINY = "hf-internal-testing/tiny-random-m2m_100"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 MBART_TINY = "sshleifer/tiny-mbart"
 MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
@@ -77,22 +77,48 @@ VIT_TINY = "hf-internal-testing/tiny-random-vit"
 XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
 
+# *** To Fix ***
+M2M_100_TINY = "hf-internal-testing/tiny-random-m2m_100"
+# XXX: m2m_100 still needs work under z3 (works with z2) after PR is merged and this branch is re-based
+# PYTHONPATH=src deepspeed  --master_port 6666 --num_nodes 1 --num_gpus 2 examples/pytorch/translation/run_translation.py --train_file tests/fixtures/tests_samples/wmt_en_ro/train.json --source_lang en --target_lang ro --model_name_or_path hf-internal-testing/tiny-random-m2m_100 --do_train --max_train_samples 4 --per_device_train_batch_size 2 --num_train_epochs 1 --fp16 --report_to none --overwrite_output_dir --deepspeed tests/deepspeed/ds_config_zero3.json --output_dir /tmp/tmpi4k4wz8s --save_steps 1
+# if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
+# AttributeError: 'Parameter' object has no attribute 'ds_status'
 
-# Issues and missing model files
-CAMEMBERT_TINY = "hf-internal-testing/tiny-random-camembert"
-CLIP_TINY = "hf-internal-testing/tiny-random-clip"
-CONVBERT_TINY = "hf-internal-testing/tiny-random-convbert"
-CTRL_TINY = "hf-internal-testing/tiny-random-ctrl"
-HUBERT_TINY = "hf-internal-testing/tiny-random-hubert"
-IBERT_TINY = "hf-internal-testing/tiny-random-ibert"
-LAYOUTLMV2_TINY = "hf-internal-testing/tiny-random-layoutlmv2"
-LXMERT_TINY = "hf-internal-testing/tiny-random-lxmert"
+
+# *** tiny model issues ***
+# missing model files:
 MT5_TINY = "hf-internal-testing/tiny-random-mt5"
+CAMEMBERT_TINY = "hf-internal-testing/tiny-random-camembert"
 OPENAI_GPT_TINY = "hf-internal-testing/tiny-random-openai-gpt"
+
+# missing tokenizer files
+CONVBERT_TINY = "hf-internal-testing/tiny-random-convbert"
+LAYOUTLMV2_TINY = "hf-internal-testing/tiny-random-layoutlmv2"
+HUBERT_TINY = "hf-internal-testing/tiny-random-hubert"
+
+# issues with tokenizer
+CTRL_TINY = "hf-internal-testing/tiny-random-ctrl"
+TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl" # same as ctrl
+
+# other issues with tiny models
+IBERT_TINY = "hf-internal-testing/tiny-random-ibert" # multiple issues with either mlm/qa/clas
+REFORMER_TINY = "hf-internal-testing/tiny-random-reformer" # multiple issues with either mlm/qa/clas
+
+# *** Lacking official examples to test with ***
+# or not working with examples
+DPR_TINY ="hf-internal-testing/tiny-random-dpr"
+# - "dpr"  examples/research_projects/rag-end2end-retriever/
 RAG_TINY = "hf-internal-testing/tiny-random-rag"
-REFORMER_TINY = "hf-internal-testing/tiny-random-reformer"
+# - "rag" research_projects
+LUKE_TINY = ""
+# - "luke" Entities classes - no plan to make such example
+LXMERT_TINY = "hf-internal-testing/tiny-random-lxmert"
+# - "lxmert" doesn't work with run_qa.py
+CLIP_TINY = "hf-internal-testing/tiny-random-clip"
+# - "clip" nothing under pytorch examples - XXX: Suraj is working on adding some - check by end of Sep
 SPEECH_TO_TEXT_TINY = "hf-internal-testing/tiny-random-speech_to_text"
-TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"
+# - "speech_to_text", nothing under pytorch examples
+
 
 # *** Reactive mode ***
 # models with low usage, unstable API, things about to change - do nothing about the following until someone runs into a problem
@@ -102,24 +128,9 @@ TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
 # 2. "Table must be of type pd.DataFrame" failure
 
 
-# XXX: m2m_100 still needs work under z3 (works with z2) after PR is merged and this branch is re-based
-# PYTHONPATH=src deepspeed  --master_port 6666 --num_nodes 1 --num_gpus 2 examples/pytorch/translation/run_translation.py --train_file tests/fixtures/tests_samples/wmt_en_ro/train.json --source_lang en --target_lang ro --model_name_or_path hf-internal-testing/tiny-random-m2m_100 --do_train --max_train_samples 4 --per_device_train_batch_size 2 --num_train_epochs 1 --fp16 --report_to none --overwrite_output_dir --deepspeed tests/deepspeed/ds_config_zero3.json --output_dir /tmp/tmpi4k4wz8s --save_steps 1
-# if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
-# AttributeError: 'Parameter' object has no attribute 'ds_status'
 
-# TODO: to add:
+# TODO: new models to add:
 #
-
-# XXX:
-
-#
-# ** No official examples to test with:
-# - "dpr" DPR_TINY ="hf-internal-testing/tiny-random-dpr" examples/research_projects/rag-end2end-retriever/
-# - "rag" research_projects
-# - "luke" Entities classes - no plan to make such example
-# - "lxmert" doesn't work with run_qa.py
-# - "clip" nothing under pytorch examples - XXX: Suraj is working on adding some - check by end of Sep
-# - "speech_to_text", nothing under pytorch examples
 
 
 def get_launcher(distributed=False):
