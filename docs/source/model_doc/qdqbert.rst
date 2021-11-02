@@ -18,7 +18,7 @@ Overview
 
 The QDQBERT model can be referenced in `Integer Quantization for Deep Learning Inference: Principles and Empirical
 Evaluation <https://arxiv.org/abs/2004.09602>`__ by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius
-Micikevicius
+Micikevicius.
 
 The abstract from the paper is the following:
 
@@ -32,39 +32,26 @@ more difficult to quantize, such as MobileNets and BERT-large.*
 
 Tips:
 
-QDQBERT requires the support of `Pytorch Quantization Toolkit <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`__.
+- QDQBERT model adds fake quantization operations (pair of QuantizeLinear/DequantizeLinear ops) to (i) linear layer inputs and weights, (ii) matmul inputs, (iii) residual add inputs, in BERT model.
 
-To install:
+- QDQBERT requires the dependency of `Pytorch Quantization Toolkit <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`__.
 
-.. code-block:: bash
+    To install:
 
-    pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
+    .. code-block:: bash
 
-An example of using QDQBERT model to perform quatization aware training and post training quantization for SQUAD task
-can be found at transformers/examples/research_projects/qat-qdqbert/.
+        pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
 
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
-HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
+- QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *bert-base-uncased*), and perform Quantization Aware Training/Post Training Quantization.
+
+- An example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for SQUAD task can be found at `transformers/examples/research_projects/qat-qdqbert/ </examples/research_projects/qat-qdqbert/>`_.
+
+This model was contributed by `shangz <https://huggingface.co/shangz>`__.
 
 QDQBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.QDQBertConfig
-    :members:
-
-
-QDQBertTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.QDQBertTokenizer
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
-
-
-QDQBertTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.QDQBertTokenizerFast
     :members:
 
 
@@ -115,3 +102,4 @@ QDQBertForQuestionAnswering
 
 .. autoclass:: transformers.QDQBertForQuestionAnswering
     :members: forward
+
