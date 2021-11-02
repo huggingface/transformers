@@ -117,7 +117,7 @@ class PLBartConfig(PretrainedConfig):
         decoder_ffn_dim=3072,
         decoder_attention_heads=12,
         encoder_layerdrop=0.0,  # TODO: Check
-        decoder_layerdrop=0.0, # TODO: Check
+        decoder_layerdrop=0.0,  # TODO: Check
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
@@ -126,7 +126,7 @@ class PLBartConfig(PretrainedConfig):
         attention_dropout=0.1,
         activation_dropout=0.0,
         init_std=0.02,
-        classifier_dropout=0.0, # TODO: Verify
+        classifier_dropout=0.0,  # TODO: Verify
         scale_embedding=True,
         pad_token_id=1,
         bos_token_id=0,
