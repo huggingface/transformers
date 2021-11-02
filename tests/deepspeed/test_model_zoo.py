@@ -72,6 +72,7 @@ PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 SQUEEZEBERT_TINY = "hf-internal-testing/tiny-random-squeezebert"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
+T5_V1_TINY = "hf-internal-testing/tiny-random-t5-v1.1"
 VIT_TINY = "hf-internal-testing/tiny-random-vit"
 XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
@@ -153,6 +154,7 @@ def make_task_cmds():
             "marian",
             "mbart",
             "t5",
+            "t5_v1",
             "m2m_100",
             # "mt5", missing model files
         ],
