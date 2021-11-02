@@ -35,7 +35,17 @@ def is_torch_tensor(obj):
     return _is_torch(obj) if is_torch_available() else False
 
 
-def load_image(image: Union[str, "PIL.Image.Image"]):
+def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
+    """
+    Loads :obj:`image` to a PIL Image.
+
+    Args:
+        image (:obj:`str` or :obj:`PIL.Image.Image`):
+            The image to convert to the PIL Image format.
+
+    Returns:
+        :obj:`PIL.Image.Image`: A PIL Image.
+    """
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file

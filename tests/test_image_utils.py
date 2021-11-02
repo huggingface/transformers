@@ -396,7 +396,7 @@ class LoadImageTester(unittest.TestCase):
 
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
-        img = load_image(dataset[0]["file"])
+        img = load_image(dataset[0]["file"])  # img with mode RGBA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -410,7 +410,7 @@ class LoadImageTester(unittest.TestCase):
 
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
-        img = load_image(dataset[1]["file"])
+        img = load_image(dataset[1]["file"])  # img with mode LA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -424,7 +424,7 @@ class LoadImageTester(unittest.TestCase):
 
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
-        img = load_image(dataset[2]["file"])
+        img = load_image(dataset[2]["file"])  # img with mode L
         img_arr = np.array(img)
 
         self.assertEqual(
