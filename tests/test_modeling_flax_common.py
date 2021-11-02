@@ -22,19 +22,11 @@ from typing import List, Tuple
 import numpy as np
 
 import transformers
-from huggingface_hub import HfApi
+from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    ENDPOINT_STAGING,
-    PASS,
-    USER,
-    CaptureLogger,
-    is_pt_flax_cross_test,
-    is_staging_test,
-    require_flax,
-)
+from transformers.testing_utils import PASS, USER, CaptureLogger, is_pt_flax_cross_test, is_staging_test, require_flax
 from transformers.utils import logging
 
 
@@ -627,18 +619,17 @@ class FlaxModelTesterMixin:
 class FlaxModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-flax")
+            delete_repo(token=cls._token, name="test-model-flax")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-flax-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-model-flax-org", organization="valid_org")
         except HTTPError:
             pass
 
