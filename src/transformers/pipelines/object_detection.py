@@ -1,9 +1,7 @@
-import os
 from typing import Any, Dict, List, Union
 
-import requests
-
 from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
+from ..image_utils import load_image
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -45,29 +43,6 @@ class ObjectDetectionPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_OBJECT_DETECTION_MAPPING)
 
-    @staticmethod
-    def load_image(image: Union[str, "Image.Image"]):
-        if isinstance(image, str):
-            if image.startswith("http://") or image.startswith("https://"):
-                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
-                # like http_huggingface_co.png
-                image = Image.open(requests.get(image, stream=True).raw)
-            elif os.path.isfile(image):
-                image = Image.open(image)
-            else:
-                raise ValueError(
-                    f"Incorrect path or url, URLs must start with `http://` or `https://`, and {image} is not a valid path"
-                )
-        elif isinstance(image, Image.Image):
-            pass
-        else:
-            raise ValueError(
-                "Incorrect format used for image. Should be a URL linking to an image, a local path, or a PIL image."
-            )
-        image = ImageOps.exif_transpose(image)
-        image = image.convert("RGB")
-        return image
-
     def _sanitize_parameters(self, **kwargs):
         postprocess_kwargs = {}
         if "threshold" in kwargs:
@@ -106,7 +81,7 @@ class ObjectDetectionPipeline(Pipeline):
         return super().__call__(*args, **kwargs)
 
     def preprocess(self, image):
-        image = self.load_image(image)
+        image = load_image(image)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.feature_extractor(images=[image], return_tensors="pt")
         inputs["target_size"] = target_size
