@@ -849,11 +849,11 @@ class GenerationMixin:
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, repetition_penalty=1.2)
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
 
-            >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            >>> tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=False)
             >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
             >>> input_context = "My cute dog"
             >>> # get tokens of words that should not be generated
-            >>> bad_words_ids = [tokenizer(bad_word, add_prefix_space=True).input_ids for bad_word in ["idiot", "stupid", "shut up"]]
+            >>> bad_words_ids = tokenizer(["idiot", "stupid", "shut up"], add_prefix_space=True).input_ids
             >>> # encode input context
             >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
             >>> # generate sequences without allowing bad_words to be generated
