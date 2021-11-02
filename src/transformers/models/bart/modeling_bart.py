@@ -1531,7 +1531,7 @@ class BartForTokenClassification(BartPretrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bart = BartEncoder(config)
+        self.bart = BartModel(config)
         if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
@@ -1554,9 +1554,16 @@ class BartForTokenClassification(BartPretrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
         head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
         inputs_embeds=None,
+        decoder_inputs_embeds=None,
         labels=None,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1570,19 +1577,25 @@ class BartForTokenClassification(BartPretrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bart(
-            input_ids=input_ids,
+            input_ids,
             attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        hidden_states = outputs[0]
 
-        sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
+        hidden_states = self.dropout(hidden_states)
+        logits = self.classifier(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1605,8 +1618,8 @@ class BartForTokenClassification(BartPretrainedModel):
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            # hidden_states=outputs.hidden_states,
+            # attentions=outputs.attentions,
         )
 
 
