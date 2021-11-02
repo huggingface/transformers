@@ -40,7 +40,7 @@ One can directly plug in the weights of LayoutXLM into a LayoutLMv2 model, like 
 
     model = LayoutLMv2Model.from_pretrained('microsoft/layoutxlm-base') 
 
-Note that LayoutXLM requires a different tokenizer, based on
+Note that LayoutXLM has its own tokenizer, based on
 :class:`~transformers.LayoutXLMTokenizer`/:class:`~transformers.LayoutXLMTokenizerFast`. You can initialize it as
 follows:
 
