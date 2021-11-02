@@ -166,7 +166,7 @@ FAIRSEQ_LANGUAGE_CODES = [
     "java",
     "python",
     "en_XX",
-    "js",
+    "javascript",
     "php",
     "ruby",
     "go",
