@@ -23,7 +23,6 @@ from ...file_utils import _LazyModule, is_torch_available
 
 _import_structure = {
     "configuration_imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
-    "tokenization_imagegpt": ["ImageGPTTokenizer"],
 }
 
 if is_torch_available():
@@ -40,7 +39,6 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
-    from .tokenization_imagegpt import ImageGPTTokenizer
 
     if is_torch_available():
         from .modeling_imagegpt import (
