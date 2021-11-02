@@ -410,7 +410,7 @@ class FlaxPegasusEncoderLayer(nn.Module):
             num_heads=self.config.encoder_attention_heads,
             dropout=self.config.attention_dropout,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
@@ -422,7 +422,7 @@ class FlaxPegasusEncoderLayer(nn.Module):
         self.fc2 = nn.Dense(
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
         )
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
@@ -526,14 +526,14 @@ class FlaxPegasusDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.encoder_attn = FlaxPegasusAttention(
             config=self.config,
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
@@ -542,7 +542,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
         self.fc2 = nn.Dense(
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
         )
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
@@ -691,7 +691,7 @@ class FlaxPegasusEncoder(nn.Module):
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
         )
         self.layers = FlaxPegasusEncoderLayerCollection(self.config, self.dtype)
-        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
@@ -760,7 +760,7 @@ class FlaxPegasusDecoder(nn.Module):
         )
 
         self.layers = FlaxPegasusDecoderLayerCollection(self.config, self.dtype)
-        self.layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
