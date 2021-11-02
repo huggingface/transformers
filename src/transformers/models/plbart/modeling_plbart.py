@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 UCLA NLP, The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,13 +16,12 @@
 import copy
 import math
 import random
-import warnings
 from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -59,21 +58,26 @@ PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
-    Shift input ids one token to the right.
+    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that PLBart does not
+    have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
+    prev_output_tokens = input_ids.clone()
 
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
     # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+    prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
 
-    return shifted_input_ids
+    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
+    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
+    prev_output_tokens[:, 0] = decoder_start_tokens
+
+    return prev_output_tokens
 
 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -89,6 +93,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -103,6 +108,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->PLBart
 class PLBartLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -111,8 +117,6 @@ class PLBartLearnedPositionalEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         # PLBart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
-
-        # TODO: Check if `padding_idx` is needed as an
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
@@ -125,6 +129,7 @@ class PLBartLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions + self.offset)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PLBart
 class PLBartAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -141,9 +146,12 @@ class PLBartAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -371,10 +379,10 @@ class PLBartDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
+            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -446,6 +454,7 @@ class PLBartDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->PLBart
 class PLBartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -470,10 +479,10 @@ class PLBartClassificationHead(nn.Module):
         return hidden_states
 
 
-class PLBartPretrainedModel(PreTrainedModel):
+class PLBartPreTrainedModel(PreTrainedModel):
     config_class = PLBartConfig
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_unexpected = [r"encoder\.version", r"decoder\.version"]
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -486,6 +495,10 @@ class PLBartPretrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (PLBartDecoder, PLBartDecoder)):
+            module.gradient_checkpointing = value
+
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
@@ -495,14 +508,6 @@ class PLBartPretrainedModel(PreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
-
-
-class PretrainedPLBartModel(PLBartPretrainedModel):
-    def __init_subclass__(self):
-        warnings.warn(
-            "The class `PretrainedPLBartModel` has been depreciated, please use `PLBartPretrainedModel` instead.",
-            FutureWarning,
-        )
 
 
 PLBART_START_DOCSTRING = r"""
@@ -526,10 +531,10 @@ PLBART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration, PLBartConfig
 
-        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base-cnn')
-        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base-cnn')
+        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
+        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
 
         >>> # Generate Summary
@@ -540,10 +545,11 @@ PLBART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration
         >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
-        >>> TXT = "My friends are <mask> but they eat too many carbs."
+        >>> # de_DE is the language symbol id <LID> for German
+        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
 
         >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
-        >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
+        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='pt')['input_ids']
         >>> logits = model(input_ids).logits
 
         >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
@@ -580,7 +586,8 @@ PLBART_INPUTS_DOCSTRING = r"""
 
             `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
-            PLBart uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            PLBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
+            varies according to source and target language, *e.g.* 25004 for `en_XX`, and 25003 for `de_DE`. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
@@ -590,10 +597,6 @@ PLBART_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
-
-            If you want to change padding behavior, you should read :func:`modeling_plbart._prepare_decoder_inputs` and
-            modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
-            information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
@@ -655,7 +658,7 @@ PLBART_INPUTS_DOCSTRING = r"""
 """
 
 
-class PLBartEncoder(PLBartPretrainedModel):
+class PLBartEncoder(PLBartPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     :class:`PLBartEncoderLayer`.
@@ -687,8 +690,10 @@ class PLBartEncoder(PLBartPretrainedModel):
         )
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
+        # self.layer_norm = nn.LayerNorm(config.d_model) # TODO: Check if this is okay
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -784,7 +789,7 @@ class PLBartEncoder(PLBartPretrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
 
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -811,6 +816,8 @@ class PLBartEncoder(PLBartPretrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
+        # hidden_states = self.layer_norm(hidden_states) # TODO: Check if this is okay
+
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -821,7 +828,7 @@ class PLBartEncoder(PLBartPretrainedModel):
         )
 
 
-class PLBartDecoder(PLBartPretrainedModel):
+class PLBartDecoder(PLBartPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`PLBartDecoderLayer`
 
@@ -849,8 +856,10 @@ class PLBartDecoder(PLBartPretrainedModel):
         )
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
+        # self.layer_norm = nn.LayerNorm(config.d_model) # TODO: Check if this is okay
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -858,6 +867,7 @@ class PLBartDecoder(PLBartPretrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1022,12 +1032,11 @@ class PLBartDecoder(PLBartPretrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -1074,6 +1083,8 @@ class PLBartDecoder(PLBartPretrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
+        # hidden_states = self.layer_norm(hidden_states) # TODO: Check if this is okay
+
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -1098,7 +1109,7 @@ class PLBartDecoder(PLBartPretrainedModel):
     "The bare PLBART Model outputting raw hidden-states without any specific head on top.",
     PLBART_START_DOCSTRING,
 )
-class PLBartModel(PLBartPretrainedModel):
+class PLBartModel(PLBartPreTrainedModel):
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
 
@@ -1149,20 +1160,17 @@ class PLBartModel(PLBartPretrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-
-        # different to other models, PLBart automatically creates decoder_input_ids from
-        # input_ids if no decoder_input_ids are provided
-        if decoder_input_ids is None and decoder_inputs_embeds is None:
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
-            )
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # different to other models, PLBart automatically creates decoder_input_ids from
+        # input_ids if no decoder_input_ids are provided
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1216,9 +1224,14 @@ class PLBartModel(PLBartPretrainedModel):
 @add_start_docstrings(
     "The PLBART Model with a language modeling head. Can be used for summarization.", PLBART_START_DOCSTRING
 )
-class PLBartForConditionalGeneration(PLBartPretrainedModel):
+class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [
+        r"final_logits_bias",
+        r"encoder\.version",
+        r"decoder\.version",
+        r"lm_head\.weight",
+    ]
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -1283,14 +1296,13 @@ class PLBartForConditionalGeneration(PLBartPretrainedModel):
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
+
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
-                )
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
         outputs = self.model(
             input_ids,
@@ -1361,7 +1373,7 @@ class PLBartForConditionalGeneration(PLBartPretrainedModel):
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+        return shift_tokens_right(labels, self.config.pad_token_id)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -1381,7 +1393,7 @@ class PLBartForConditionalGeneration(PLBartPretrainedModel):
     """,
     PLBART_START_DOCSTRING,
 )
-class PLBartForSequenceClassification(PLBartPretrainedModel):
+class PLBartForSequenceClassification(PLBartPreTrainedModel):
     def __init__(self, config: PLBartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = PLBartModel(config)
@@ -1401,6 +1413,7 @@ class PLBartForSequenceClassification(PLBartPretrainedModel):
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
         input_ids=None,
@@ -1453,7 +1466,7 @@ class PLBartForSequenceClassification(PLBartPretrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id)
 
-        if len(torch.unique(eos_mask.sum(1))) > 1:
+        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
@@ -1462,14 +1475,26 @@ class PLBartForSequenceClassification(PLBartPretrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                # regression
+            if self.config.problem_type is None:
+                if self.config.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.config.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1494,7 +1519,7 @@ class PLBartForSequenceClassification(PLBartPretrainedModel):
     """,
     PLBART_START_DOCSTRING,
 )
-class PLBartForQuestionAnswering(PLBartPretrainedModel):
+class PLBartForQuestionAnswering(PLBartPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1513,6 +1538,7 @@ class PLBartForQuestionAnswering(PLBartPretrainedModel):
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
         self,
         input_ids=None,
@@ -1608,7 +1634,8 @@ class PLBartForQuestionAnswering(PLBartPretrainedModel):
         )
 
 
-class PLBartDecoderWrapper(PLBartPretrainedModel):
+# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->PLBart
+class PLBartDecoderWrapper(PLBartPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
@@ -1622,7 +1649,8 @@ class PLBartDecoderWrapper(PLBartPretrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-class PLBartForCausalLM(PLBartPretrainedModel):
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart
+class PLBartForCausalLM(PLBartPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)
