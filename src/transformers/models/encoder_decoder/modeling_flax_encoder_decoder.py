@@ -371,26 +371,6 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @property
-    def encoder(self):
-
-        encode_module = self.module.apply(
-            {"params": self.params},
-            method=lambda module: module._get_encoder_module(),
-        )
-
-        return encode_module
-
-    @property
-    def decoder(self):
-
-        decode_module = self.module.apply(
-            {"params": self.params},
-            method=lambda module: module._get_decoder_module(),
-        )
-
-        return decode_module
-
     @add_start_docstrings(ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def encode(
