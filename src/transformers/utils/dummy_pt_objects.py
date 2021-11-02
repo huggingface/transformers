@@ -2654,11 +2654,6 @@ class ImageGPTForImageClassification:
         requires_backends(self, ["torch"])
 
 
-class ImageGPTLayer:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ImageGPTModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
