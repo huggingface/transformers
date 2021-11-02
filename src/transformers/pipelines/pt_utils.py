@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
+from transformers.pipelines.audio_utils import ffmpeg_stream, frame_generator, vad_collector
+
 
 class PipelineDataset(Dataset):
     def __init__(self, dataset, process, params):
@@ -184,3 +186,86 @@ class KeyDataset(Dataset):
 
     def __getitem__(self, i):
         return self.dataset[i][self.key]
+
+
+class AudioVadDataset(IterableDataset):
+    def __init__(self, filenames, sampling_rate: int):
+        self.filenames = filenames
+        self.sampling_rate = sampling_rate
+
+    def __iter__(self):
+        sampling_rate = self.sampling_rate
+        try:
+            import webrtcvad
+        except ImportError:
+            raise ValueError(
+                "webrtcvad was not found but is required to chunk on voice activation, `pip install webrtcvad`."
+            )
+
+        for filename in self.filenames:
+            if not isinstance(filename, str):
+                raise ValueError("Chunk voice can only operate on large filenames")
+
+            inputs = ffmpeg_stream(filename, self.sampling_rate, format_for_conversion="s16le")
+            vad = webrtcvad.Vad(1)
+            frames = frame_generator(10, inputs, sampling_rate)
+            segments = vad_collector(sampling_rate, 10, 300, vad, frames)
+            max_int16 = 2 ** 15
+            max_chunk_duration = 20
+            max_len = int(max_chunk_duration * sampling_rate)
+            for i, segment in enumerate(segments):
+                audio = np.frombuffer(segment, dtype=np.int16).astype("float32") / max_int16
+                for i in range(0, audio.shape[0], max_len):
+                    yield audio[i : i + max_len]
+
+
+def AudioChunkDataset(IterableDataset):
+    def __init__(self, filenames, sampling_rate: int):
+        try:
+            from scipy import signal
+        except ImportError:
+            raise ValueError("scipy was not found but is required to chunk on voice activation, `pip install scipy`.")
+
+        self.filenames = filenames
+        self.sampling_rate = sampling_rate
+
+        f1 = 50  # 50Hz
+        f2 = 300  # 300Hz
+        fs = sampling_rate
+
+        nyq = 0.5 * fs
+        low = f1 / nyq
+        high = f2 / nyq
+        order = 10
+        self.sos = signal.butter(order, [low, high], analog=False, btype="band", output="sos")
+        chunk_min_duration = 5
+        chunk_max_duration = 20
+        chunk_pad_duration = 0.3
+        self.start_chunk = int(sampling_rate * chunk_min_duration)
+        self.stop_chunk = int(sampling_rate * chunk_max_duration)
+        self.pad_chunk = int(sampling_rate * chunk_pad_duration)
+
+    def __iter__(self):
+        from scipy import signal
+
+        for filename in self.filenames:
+            leftover = np.zeros((0,), dtype=np.float32)
+            pad = np.zeros((self.pad_chunk,), dtype=np.float32)
+            if not isinstance(filename, str):
+                raise ValueError("Chunk voice can only operate on large filenames")
+
+            for audio in ffmpeg_stream(filename, self.sampling_rate):
+                audio = np.concatenate([leftover, audio])
+                chunk_portion = audio[self.start_chunk : self.stop_chunk]
+                if chunk_portion.shape[0] == 0:
+                    padded = np.concatenate([pad, audio, pad])
+                    yield padded
+                    break
+                voice_filtered = signal.sosfilt(self.sos, chunk_portion)
+                index = self.start_chunk + voice_filtered.argmin()
+                chunked = audio[:index]
+
+                leftover = audio[index:]
+
+                padded = np.concatenate([pad, chunked, pad])
+                yield padded

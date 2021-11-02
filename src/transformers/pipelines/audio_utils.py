@@ -40,13 +40,23 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-def ffmpeg_stream(filename: str, sampling_rate: int):
+def ffmpeg_stream(
+    filename: str, sampling_rate: int, format_for_conversion: str = "f32le", chunk_max_duration_s: int = 10
+):
     """
     Helper function to read an audio file through ffmpeg.
     """
     ar = f"{sampling_rate}"
     ac = "1"
-    format_for_conversion = "s16le"
+    bufsize = 10 ** 8
+    if format_for_conversion == "s16le":
+        dtype = np.int16
+        size_of_sample = 2
+    elif format_for_conversion == "f32le":
+        dtype = np.float32
+        size_of_sample = 3
+    else:
+        raise ValueError("Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
     ffmpeg_command = [
         "ffmpeg",
         "-i",
@@ -64,13 +74,11 @@ def ffmpeg_stream(filename: str, sampling_rate: int):
     ]
 
     try:
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, bufsize=10 ** 8)
+        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, bufsize=bufsize)
     except FileNotFoundError:
-        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
+        raise ValueError("ffmpeg was not found but is required to stream audio files from filename")
 
-    size_of_sample = 2
-    chunk_max_duration = 10
-    buflen = int(sampling_rate * chunk_max_duration * size_of_sample)
+    buflen = int(sampling_rate * chunk_max_duration_s * size_of_sample)
     running = True
     while running:
         raw = ffmpeg_process.stdout.read(buflen)
@@ -78,81 +86,8 @@ def ffmpeg_stream(filename: str, sampling_rate: int):
             running = False
             break
 
-        audio = np.frombuffer(raw, dtype=np.int16)
+        audio = np.frombuffer(raw, dtype=dtype)
         yield audio
-
-
-def ffmpeg_stream2(filename: str, sampling_rate: int):
-    from scipy import signal
-
-    ar = f"{sampling_rate}"
-    ac = "1"
-    format_for_conversion = "f32le"
-    ffmpeg_command = [
-        "ffmpeg",
-        "-i",
-        filename,
-        "-ac",
-        ac,
-        "-ar",
-        ar,
-        "-f",
-        format_for_conversion,
-        "-hide_banner",
-        "-loglevel",
-        "quiet",
-        "pipe:1",
-    ]
-    try:
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, bufsize=10 ** 8)
-    except FileNotFoundError:
-        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
-
-    chunk_min_duration = 5
-    chunk_max_duration = 20
-    chunk_pad_duration = 0.3
-    size_of_sample = 4
-    buflen = int(sampling_rate * chunk_max_duration * size_of_sample)
-    start_chunk = int(sampling_rate * chunk_min_duration)
-    stop_chunk = int(sampling_rate * chunk_max_duration)
-    pad_chunk = int(sampling_rate * chunk_pad_duration)
-
-    f1 = 50  # 50Hz
-    f2 = 300  # 300Hz
-    fs = sampling_rate
-
-    nyq = 0.5 * fs
-    low = f1 / nyq
-    high = f2 / nyq
-    order = 10
-    sos = signal.butter(order, [low, high], analog=False, btype="band", output="sos")
-
-    leftover = np.zeros((0,), dtype=np.float32)
-    pad = np.zeros((pad_chunk,), dtype=np.float32)
-
-    running = True
-    while running:
-        leftover_len = leftover.shape[0] * size_of_sample
-        raw = ffmpeg_process.stdout.read(buflen - leftover_len)
-        if raw == b"":
-            running = False
-            if leftover.shape[0] == 0:
-                break
-        audio = np.frombuffer(raw, dtype=np.float32)
-        audio = np.concatenate([leftover, audio])
-        chunk_portion = audio[start_chunk:stop_chunk]
-        if chunk_portion.shape[0] == 0:
-            padded = np.concatenate([pad, audio, pad])
-            yield padded
-            break
-        voice_filtered = signal.sosfilt(sos, chunk_portion)
-        index = start_chunk + voice_filtered.argmin()
-        chunked = audio[:index]
-
-        leftover = audio[index:]
-
-        padded = np.concatenate([pad, chunked, pad])
-        yield padded
 
 
 # Taken from https://github.com/wiseman/py-webrtcvad/blob/master/example.py

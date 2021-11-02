@@ -17,8 +17,8 @@ import numpy as np
 
 from ..file_utils import is_torch_available
 from ..utils import logging
-from .audio_utils import ffmpeg_read, ffmpeg_stream, ffmpeg_stream2, frame_generator, vad_collector
-from .base import ChunkPipeline
+from .audio_utils import ffmpeg_read
+from .base import Pipeline
 
 
 if TYPE_CHECKING:
@@ -30,7 +30,7 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
-class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
+class AutomaticSpeechRecognitionPipeline(Pipeline):
     """
     Pipeline that aims at extracting spoken text contained within some audio.
 
@@ -98,66 +98,27 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def _sanitize_parameters(self, **kwargs):
         # No parameters on this pipeline right now
-        preprocess_params = {}
-        if "chunk_voice" in kwargs:
-            preprocess_params["chunk_voice"] = kwargs["chunk_voice"]
-        return preprocess_params, {}, {}
+        return {}, {}, {}
 
     def preprocess(self, inputs, chunk_voice=None):
-        if not chunk_voice:
-            if isinstance(inputs, str):
-                with open(inputs, "rb") as f:
-                    inputs = f.read()
+        if isinstance(inputs, str):
+            with open(inputs, "rb") as f:
+                inputs = f.read()
 
-            if isinstance(inputs, bytes):
-                inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
-            if not isinstance(inputs, np.ndarray):
-                raise ValueError("We expect a numpy ndarray as input")
-            if len(inputs.shape) != 1:
-                raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
+        if isinstance(inputs, bytes):
+            inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
+        if not isinstance(inputs, np.ndarray):
+            raise ValueError("We expect a numpy ndarray as input")
+        if len(inputs.shape) != 1:
+            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
-            processed = self.feature_extractor(
-                inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-            )
-            processed["is_last"] = True
-            yield processed
-        elif chunk_voice == "vad":
-            try:
-                import webrtcvad
-            except ImportError:
-                raise ValueError(
-                    "webrtcvad was not found but is required to chunk on voice activation, `pip install webrtcvad`."
-                )
-
-            if not isinstance(inputs, str):
-                raise ValueError("Chunk voice can only operate on large filenames")
-            inputs = ffmpeg_stream(inputs, self.feature_extractor.sampling_rate)
-            sample_rate = self.feature_extractor.sampling_rate
-            vad = webrtcvad.Vad(1)
-            frames = frame_generator(30, inputs, sample_rate)
-            segments = vad_collector(sample_rate, 30, 300, vad, frames)
-            max_int16 = 2 ** 15
-            max_chunk_duration = 20
-            max_len = int(max_chunk_duration * sample_rate)
-            for i, segment in enumerate(segments):
-                audio = np.frombuffer(segment, dtype=np.int16).astype("float32") / max_int16
-                for i in range(0, audio.shape[0], max_len):
-                    processed = self.feature_extractor(
-                        audio[i : i + max_len], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-                    )
-                    processed["is_last"] = True
-                    yield processed
-        else:
-            for chunk in ffmpeg_stream2(inputs, self.feature_extractor.sampling_rate):
-                processed = self.feature_extractor(
-                    chunk, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-                )
-                processed["is_last"] = True
-                yield processed
+        processed = self.feature_extractor(
+            inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+        )
+        return processed
 
     def _forward(self, model_inputs):
         model_class = self.model.__class__
-        is_last = model_inputs.pop("is_last")
         if model_class in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             encoder = self.model.get_encoder()
             # we need to pass `processed.get("attention_mask")` here since audio encoder
@@ -174,14 +135,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.argmax(dim=-1)
-        return {"tokens": tokens, "is_last": is_last}
+        return {"tokens": tokens}
 
     def postprocess(self, model_outputs):
         skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        string = ""
-        for output in model_outputs:
-            recognized_string = self.tokenizer.decode(
-                output["tokens"].squeeze(0), skip_special_tokens=skip_special_tokens
-            )
-            string += recognized_string
-        return {"text": string}
+        recognized_string = self.tokenizer.decode(
+            model_outputs["tokens"].squeeze(0), skip_special_tokens=skip_special_tokens
+        )
+        return {"text": recognized_string}
