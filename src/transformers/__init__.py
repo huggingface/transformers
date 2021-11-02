@@ -1364,7 +1364,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
-    _import_structure["keras_callbacks"] = []
+    _import_structure["keras_callbacks"] = ["PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
@@ -3093,6 +3093,7 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_utils import tf_top_k_top_p_filtering
+        from .keras_callbacks import PushToHubCallback
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
