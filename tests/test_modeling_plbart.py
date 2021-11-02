@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import PLBartConfig, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -32,13 +32,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        PLBartConfig,
+        AutoTokenizer,
+        BatchEncoding,
         PLBartForCausalLM,
         PLBartForConditionalGeneration,
         PLBartForQuestionAnswering,
         PLBartForSequenceClassification,
         PLBartModel,
-        PLBartTokenizer,
     )
     from transformers.models.plbart.modeling_plbart import PLBartDecoder, PLBartEncoder
 
@@ -49,20 +49,31 @@ def prepare_plbart_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
+    head_mask=None,
+    decoder_head_mask=None,
+    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
+    if head_mask is None:
+        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+    if decoder_head_mask is None:
+        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
+        "head_mask": head_mask,
+        "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
-@require_torch
 class PLBartModelTester:
     def __init__(
         self,
@@ -79,7 +90,7 @@ class PLBartModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=100,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -111,7 +122,12 @@ class PLBartModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = PLBartConfig(
+        config = self.get_config()
+        inputs_dict = prepare_plbart_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def get_config(self):
+        return PLBartConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -127,8 +143,6 @@ class PLBartModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_plbart_inputs_dict(config, input_ids, decoder_input_ids)
-        return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
@@ -138,9 +152,10 @@ class PLBartModelTester:
         model = PLBartModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
+        head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -165,7 +180,7 @@ class PLBartModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = PLBartModel(config=config).to(torch_device).eval()
@@ -210,7 +225,6 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     all_generative_model_classes = (PLBartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
 
     def setUp(self):
@@ -302,88 +316,127 @@ def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
 
 
-TOLERANCE = 1e-4
+@require_torch
+@require_sentencepiece
+@require_tokenizers
+class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
+    maxDiff = 1000  # longer string compare tracebacks
+    checkpoint_name = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name, use_fast=False)
+        return cls
+
+    @cached_property
+    def model(self):
+        """Only load the model if needed."""
+        model = PLBartForConditionalGeneration.from_pretrained(self.checkpoint_name).to(torch_device)
+        if "cuda" in torch_device:
+            model = model.half()
+        return model
 
 
 @require_torch
 @require_sentencepiece
 @require_tokenizers
-@slow
-class PLBartModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_tokenizer(self):
-        return PLBartTokenizer.from_pretrained("plbart-base")
+class PLBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
+    checkpoint_name = "uclanlp/plbart-java-cs"
+    src_text = [
+        " UN Chief Says There Is No Military Solution in Syria",
+        """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
+    ]
+    tgt_text = [
+        "Şeful ONU declară că nu există o soluţie militară în Siria",
+        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.',
+    ]
+    expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
 
-    def test_inference_no_head(self):
-        model = PLBartModel.from_pretrained("plbart-base").to(torch_device)
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
-        inputs_dict = prepare_plbart_inputs_dict(model.config, input_ids, decoder_input_ids)
-        with torch.no_grad():
-            output = model(**inputs_dict)[0]
-        expected_shape = torch.Size((1, 11, 1024))
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+    @slow
+    def test_enro_generate_one(self):
+        batch: BatchEncoding = self.tokenizer(
+            ["UN Chief Says There Is No Military Solution in Syria"], return_tensors="pt"
+        ).to(torch_device)
+        translated_tokens = self.model.generate(**batch)
+        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        self.assertEqual(self.tgt_text[0], decoded[0])
+        # self.assertEqual(self.tgt_text[1], decoded[1])
+
+    @slow
+    def test_enro_generate_batch(self):
+        batch: BatchEncoding = self.tokenizer(self.src_text, return_tensors="pt", padding=True, truncation=True).to(
+            torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        translated_tokens = self.model.generate(**batch)
+        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        assert self.tgt_text == decoded
 
-    def test_inference_head(self):
-        model = PLBartForConditionalGeneration.from_pretrained("plbart-base").to(torch_device)
+    def test_mbart_enro_config(self):
+        mbart_models = ["uclanlp/plbart-java-cs"]
+        expected = {"scale_embedding": True, "output_past": True}
+        for name in mbart_models:
+            config = PLBartConfig.from_pretrained(name)
+            for k, v in expected.items():
+                try:
+                    self.assertEqual(v, getattr(config, k))
+                except AssertionError as e:
+                    e.args += (name, k)
+                    raise
 
-        # change to intended input
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_plbart_inputs_dict(model.config, input_ids, decoder_input_ids)
-        with torch.no_grad():
-            output = model(**inputs_dict)[0]
-        expected_shape = torch.Size((1, 11, model.config.vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+    def test_mbart_fast_forward(self):
+        config = PLBartConfig(
+            vocab_size=99,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+            add_final_layer_norm=True,
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
-
-    def test_seq_to_seq_generation(self):
-        hf = PLBartForConditionalGeneration.from_pretrained("plbart-base").to(torch_device)
-        tok = PLBartTokenizer.from_pretrained("plbart-base")
-
-        batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
-        ]
-
-        # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
-            batch_input,
-            max_length=512,
-            padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
-            return_tensors="pt",
+        lm_model = PLBartForConditionalGeneration(config).to(torch_device)
+        context = torch.tensor(
+            [[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]], device=torch_device, dtype=torch.long
         )
+        summary = torch.tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]], device=torch_device, dtype=torch.long)
+        result = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
+        expected_shape = (*summary.shape, config.vocab_size)
+        self.assertEqual(result.logits.shape, expected_shape)
 
-        hypotheses_batch = hf.generate(
-            input_ids=dct["input_ids"].to(torch_device),
-            attention_mask=dct["attention_mask"].to(torch_device),
-            num_beams=2,
+
+@require_torch
+@require_sentencepiece
+@require_tokenizers
+class PLBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
+    checkpoint_name = "facebook/mbart-large-cc25"
+    src_text = [
+        " UN Chief Says There Is No Military Solution in Syria",
+        " I ate lunch twice yesterday",
+    ]
+    tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
+
+    @unittest.skip("This test is broken, still generates english")
+    def test_cc25_generate(self):
+        inputs = self.tokenizer([self.src_text[0]], return_tensors="pt").to(torch_device)
+        translated_tokens = self.model.generate(
+            input_ids=inputs["input_ids"].to(torch_device),
+            decoder_start_token_id=self.tokenizer.lang_code_to_id["ro_RO"],
         )
+        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        self.assertEqual(self.tgt_text[0], decoded[0])
 
-        EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
-        ]
-
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+    @slow
+    def test_fill_mask(self):
+        inputs = self.tokenizer(["One of the best <mask> I ever read!"], return_tensors="pt").to(torch_device)
+        outputs = self.model.generate(
+            inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id["en_XX"], num_beams=1
         )
-        assert generated == EXPECTED
+        prediction: str = self.tokenizer.batch_decode(
+            outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True
+        )[0]
+        self.assertEqual(prediction, "of the best books I ever read!")
 
 
 class PLBartStandaloneDecoderModelTester:
@@ -546,8 +599,10 @@ class PLBartStandaloneDecoderModelTester:
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -555,7 +610,7 @@ class PLBartStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
