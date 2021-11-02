@@ -908,7 +908,7 @@ class Pipeline(_ScikitCompat):
 
     def get_inference_context(self):
         inference_context = (
-            torch.no_grad if version.parse(torch.__version__) >= version.parse("1.9.0") else torch.no_grad
+            torch.inference_mode if version.parse(torch.__version__) >= version.parse("1.9.0") else torch.no_grad
         )
         return inference_context
 

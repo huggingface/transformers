@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import subprocess
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
 from ..file_utils import is_torch_available
 from ..utils import logging
-from .audio_utils import ffmpeg_read
 from .base import Pipeline
 
 
@@ -28,6 +28,42 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+
+
+def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
+    """
+    Helper function to read an audio file through ffmpeg.
+    """
+    ar = f"{sampling_rate}"
+    ac = "1"
+    format_for_conversion = "f32le"
+    ffmpeg_command = [
+        "ffmpeg",
+        "-i",
+        "pipe:0",
+        "-ac",
+        ac,
+        "-ar",
+        ar,
+        "-f",
+        format_for_conversion,
+        "-hide_banner",
+        "-loglevel",
+        "quiet",
+        "pipe:1",
+    ]
+
+    try:
+        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    except FileNotFoundError:
+        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
+    output_stream = ffmpeg_process.communicate(bpayload)
+    out_bytes = output_stream[0]
+
+    audio = np.frombuffer(out_bytes, np.float32)
+    if audio.shape[0] == 0:
+        raise ValueError("Malformed soundfile")
+    return audio
 
 
 class AutomaticSpeechRecognitionPipeline(Pipeline):
@@ -100,15 +136,16 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         # No parameters on this pipeline right now
         return {}, {}, {}
 
-    def preprocess(self, inputs, chunk_voice=None):
+    def preprocess(self, inputs):
         if isinstance(inputs, str):
             with open(inputs, "rb") as f:
                 inputs = f.read()
 
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
+
         if not isinstance(inputs, np.ndarray):
-            raise ValueError(f"We expect a numpy ndarray as input, got `{type(inputs)}`")
+            raise ValueError("We expect a numpy ndarray as input")
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
@@ -128,18 +165,17 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
             tokens = self.model.generate(
                 encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
             )
+            tokens = tokens.squeeze(0)
         elif model_class in MODEL_FOR_CTC_MAPPING.values():
             outputs = self.model(**model_inputs)
-            tokens = outputs.logits.argmax(dim=-1)
+            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
         else:
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
-            tokens = outputs.logits.argmax(dim=-1)
-        return {"tokens": tokens}
+            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+        return tokens
 
     def postprocess(self, model_outputs):
         skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        recognized_string = self.tokenizer.decode(
-            model_outputs["tokens"].squeeze(0), skip_special_tokens=skip_special_tokens
-        )
+        recognized_string = self.tokenizer.decode(model_outputs, skip_special_tokens=skip_special_tokens)
         return {"text": recognized_string}
