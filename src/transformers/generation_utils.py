@@ -961,7 +961,7 @@ class GenerationMixin:
                 "`temperature` is only used when `do_sample` is `True`, which is not the case currently. "
                 "Set `temperature` to `None` or `do_sample` to `True`."
             )
-            
+
         # set model_kwargs
         model_kwargs["use_cache"] = use_cache
 
