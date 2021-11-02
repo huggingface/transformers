@@ -45,26 +45,26 @@ class PLBartConfig(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 50005):
             Vocabulary size of the PLBART model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.PLBartModel`.
-        d_model (:obj:`int`, `optional`, defaults to 1024):
+        d_model (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the layers and the pooler layer.
-        encoder_layers (:obj:`int`, `optional`, defaults to 12):
+        encoder_layers (:obj:`int`, `optional`, defaults to 6):
             Number of encoder layers.
-        decoder_layers (:obj:`int`, `optional`, defaults to 12):
+        decoder_layers (:obj:`int`, `optional`, defaults to 6):
             Number of decoder layers.
-        encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
+        encoder_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
+        decoder_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
+        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
+        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
+        attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
