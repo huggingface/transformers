@@ -642,11 +642,8 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
         # prepare decoder inputs
-        decoder_start_token_id = self.config.decoder_start_token_id
-        if decoder_start_token_id is None:
-            decoder_start_token_id = self.config.decoder.decoder_start_token_id
         if decoder_input_ids is None:
-            decoder_input_ids = decoder_start_token_id * jnp.ones((pixel_values.shape[0], 1))
+            raise ValueError("`decoder_input_ids` can't be `None`.")
         if decoder_attention_mask is None:
             decoder_attention_mask = jnp.ones_like(decoder_input_ids)
         if decoder_position_ids is None:
