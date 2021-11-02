@@ -1395,7 +1395,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             print(commits, len(commits))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
-        num_gpus = get_gpu_count()
+        num_gpus = max(1, get_gpu_count())
         if num_gpus > 2:
             return
 
