@@ -480,11 +480,8 @@ if is_vision_available():
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
-<<<<<<< HEAD
-    _import_structure["models.segformer"].append("SegformerFeatureExtractor")
-=======
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
->>>>>>> Move LayoutXLM tokenizers and processor to separate folder
+    _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -2359,8 +2356,8 @@ if TYPE_CHECKING:
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
-        from .models.segformer import SegformerFeatureExtractor
         from .models.layoutxlm import LayoutXLMProcessor
+        from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
