@@ -92,8 +92,14 @@ OPENAI_GPT_TINY = "hf-internal-testing/tiny-random-openai-gpt"
 RAG_TINY = "hf-internal-testing/tiny-random-rag"
 REFORMER_TINY = "hf-internal-testing/tiny-random-reformer"
 SPEECH_TO_TEXT_TINY = "hf-internal-testing/tiny-random-speech_to_text"
-TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
 TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"
+
+# *** Reactive mode ***
+# models with low usage, unstable API, things about to change - do nothing about the following until someone runs into a problem
+TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
+# additional notes on tapas
+# 1. requires torch_scatter - skip if it's not installed?
+# 2. "Table must be of type pd.DataFrame" failure
 
 
 # XXX: m2m_100 still needs work under z3 (works with z2) after PR is merged and this branch is re-based
@@ -105,9 +111,6 @@ TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"
 #
 
 # XXX:
-# tapas
-# 1. requires torch_scatter - skip if it's not installed?
-# 2. "Table must be of type pd.DataFrame" failure
 
 #
 # ** No official examples to test with:
