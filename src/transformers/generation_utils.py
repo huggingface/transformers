@@ -16,6 +16,7 @@
 
 import warnings
 from dataclasses import dataclass
+import math
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
@@ -955,7 +956,12 @@ class GenerationMixin:
             raise ValueError(
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
-
+        if not do_sample and not (temperature is None or math.isclose(temperature, 1)):
+            raise ValueError(
+                "`temperature` is only used when `do_sample` is `True`, which is not the case currently. "
+                "Set `temperature` to `None` or `do_sample` to `True`."
+            )
+            
         # set model_kwargs
         model_kwargs["use_cache"] = use_cache
 
