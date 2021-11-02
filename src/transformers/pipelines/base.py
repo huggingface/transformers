@@ -1011,17 +1011,19 @@ class Pipeline(_ScikitCompat):
         """
         raise NotImplementedError("postprocess not implemented")
 
+    def get_inference_context(self):
+        inference_context = (
+            torch.inference_mode if version.parse(torch.__version__) >= version.parse("1.9.0") else torch.no_grad
+        )
+        return inference_context
+
     def forward(self, model_inputs, **forward_params):
         with self.device_placement():
             if self.framework == "tf":
                 model_inputs["training"] = False
                 model_outputs = self._forward(model_inputs, **forward_params)
             elif self.framework == "pt":
-                inference_context = (
-                    torch.inference_mode
-                    if version.parse(torch.__version__) >= version.parse("1.9.0")
-                    else torch.no_grad
-                )
+                inference_context = self.get_inference_context()
                 with inference_context():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
