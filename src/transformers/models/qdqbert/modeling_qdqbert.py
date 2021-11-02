@@ -66,7 +66,7 @@ _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
-    # See all QDQBERT models at https://huggingface.co/models?filter=qdqbert
+    # See all BERT models at https://huggingface.co/models?filter=bert
 ]
 
 
@@ -133,9 +133,8 @@ def load_tf_weights_in_qdqbert(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            if pointer.shape != array.shape:
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -166,6 +165,7 @@ class QuantEmbedding(nn.Embedding):
         )
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertEmbeddings with Bert -> QDQBert
 class QDQBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -179,10 +179,9 @@ class QDQBertEmbeddings(nn.Module):
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
@@ -384,6 +383,7 @@ class QDQBertSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertAttention with Bert -> QDQBert
 class QDQBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -471,6 +471,7 @@ class QDQBertOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertLayer with Bert -> QDQBert
 class QDQBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -480,7 +481,8 @@ class QDQBertLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = QDQBertAttention(config)
         self.intermediate = QDQBertIntermediate(config)
         self.output = QDQBertOutput(config)
@@ -515,9 +517,10 @@ class QDQBertLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -554,11 +557,13 @@ class QDQBertLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertEncoder with Bert -> QDQBert
 class QDQBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([QDQBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -585,12 +590,11 @@ class QDQBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -651,6 +655,7 @@ class QDQBertEncoder(nn.Module):
         )
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertPooler with Bert -> QDQBert
 class QDQBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -666,6 +671,7 @@ class QDQBertPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertPredictionHeadTransform with Bert -> QDQBert
 class QDQBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -683,6 +689,7 @@ class QDQBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertLMPredictionHead with Bert -> QDQBert
 class QDQBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -703,6 +710,7 @@ class QDQBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertOnlyMLMHead with Bert -> QDQBert
 class QDQBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -713,6 +721,7 @@ class QDQBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertOnlyNSPHead with Bert -> QDQBert
 class QDQBertOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -723,6 +732,7 @@ class QDQBertOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertPreTrainingHeads with Bert -> QDQBert
 class QDQBertPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -735,6 +745,7 @@ class QDQBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+# Copied from transformers.modeling.bert.modeling_bert.BertPreTrainedModel with Bert -> QDQBert
 class QDQBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -744,6 +755,7 @@ class QDQBertPreTrainedModel(PreTrainedModel):
     config_class = QDQBertConfig
     load_tf_weights = load_tf_weights_in_qdqbert
     base_model_prefix = "bert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -761,6 +773,10 @@ class QDQBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, QDQBertEncoder):
+            module.gradient_checkpointing = value
 
 
 QDQBERT_START_DOCSTRING = r"""
@@ -1255,7 +1271,9 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
         effective_batch_size = input_shape[0]
 
         #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+        if self.config.pad_token_id is None:
+            raise ValueError("The PAD token should be defined for generation")
+
         attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
