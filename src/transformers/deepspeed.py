@@ -111,6 +111,24 @@ class HfDeepSpeedConfig:
             return default
         return config.get(ds_key, default)
 
+    def del_config_sub_tree(self, ds_key_long, must_exist=False):
+        config = self.config
+
+        # find the config node of interest if it exists
+        nodes = ds_key_long.split(".")
+        for node in nodes:
+            parent_config = config
+            config = config.get(node)
+            if config is None:
+                if must_exist:
+                    raise ValueError(f"Can't find {ds_key_long} entry in the config")
+                else:
+                    return
+
+        # if found remove it
+        if parent_config is not None:
+            parent_config.pop(node)
+
     def is_true(self, ds_key_long):
         """
         Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
@@ -280,7 +298,7 @@ def deepspeed_config():
         return None
 
 
-def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
+def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
@@ -290,6 +308,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         trainer: Trainer object
         num_training_steps: per single gpu
         resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
+        inference: launch in inference mode (no optimizer)
 
     Returns: model, optimizer, lr_scheduler
 
@@ -357,7 +376,17 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     # set the Deepspeed log level consistent with the trainer
     ds_logger.setLevel(args.get_process_log_level())
 
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    if inference:
+        optimizer = None
+        lr_scheduler = None
+        hf_deepspeed_config.del_config_sub_tree("optimizer")
+        hf_deepspeed_config.del_config_sub_tree("lr_scheduler")
+        model_parameters = None
+    else:
+        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+
+    # XXX: validate
+    print(config)
 
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
         model=model,

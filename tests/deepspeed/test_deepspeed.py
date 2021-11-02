@@ -709,6 +709,34 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             fp16=False,
         )
 
+    @require_torch_multi_gpu
+    @parameterized.expand(stages)
+    def test_inference_fp16(self, stage):
+        # this is just inference, so no optimizer should be loaded
+        self.run_and_check(
+            stage=stage,
+            model_name=T5_TINY,
+            distributed=True,
+            do_train=False,
+            do_eval=True,
+            quality_checks=False,
+            fp16=True,
+        )
+
+    @require_torch_multi_gpu
+    @parameterized.expand(stages)
+    def test_inference_fp32(self, stage):
+        # this is just inference, so no optimizer should be loaded
+        self.run_and_check(
+            stage=stage,
+            model_name=T5_TINY,
+            distributed=True,
+            do_train=False,
+            do_eval=True,
+            quality_checks=False,
+            fp16=False,
+        )
+
     @parameterized.expand(stages)
     def test_resume_train_not_from_ds_checkpoint(self, stage):
         # do normal training and then resume not from the deepspeed checkpoint but explicitly from
