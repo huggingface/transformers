@@ -59,6 +59,7 @@ from . import (
     ibert,
     layoutlm,
     layoutlmv2,
+    layoutxlm,
     led,
     longformer,
     luke,
