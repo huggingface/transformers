@@ -478,7 +478,8 @@ class GenerationMixin:
         if attention_mask is not None:
             model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
 
-        lm_attention_mask = model_kwargs.get("lm_attention_mask", None)
+        if "lm_attention_mask" in model_kwargs:
+            lm_attention_mask = model_kwargs["lm_attention_mask"]
         if lm_attention_mask is not None:
             if lm_attention_mask.shape[0] != 1:
                 model_kwargs["lm_attention_mask"] = lm_attention_mask.index_select(0, expanded_return_idx)
