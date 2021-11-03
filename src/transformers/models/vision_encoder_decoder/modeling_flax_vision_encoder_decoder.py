@@ -236,7 +236,6 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
             attention_mask=decoder_attention_mask,
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
