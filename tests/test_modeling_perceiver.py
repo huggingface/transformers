@@ -18,7 +18,6 @@
 import copy
 import inspect
 import os
-import random
 import tempfile
 import unittest
 from typing import Dict, List, Tuple
@@ -26,7 +25,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 from transformers import PerceiverConfig
-from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.file_utils import WEIGHTS_NAME, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 

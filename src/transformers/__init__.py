@@ -2473,9 +2473,9 @@ if TYPE_CHECKING:
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
+        from .models.perceiver import PerceiverFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
-        from .models.perceiver import PerceiverFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 
