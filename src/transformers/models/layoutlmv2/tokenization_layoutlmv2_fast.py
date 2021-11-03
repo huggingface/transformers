@@ -235,14 +235,14 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
-                    "words must of type `List[str]` (single pretokenized example), "
+                    "Words must be of type `List[str]` (single pretokenized example), "
                     "or `List[List[str]]` (batch of pretokenized examples)."
                 )
         else:
             # in case only text is provided => must be words
             if not isinstance(text, (list, tuple)):
                 raise ValueError(
-                    "Words must of type `List[str]` (single pretokenized example), "
+                    "Words must be of type `List[str]` (single pretokenized example), "
                     "or `List[List[str]]` (batch of pretokenized examples)."
                 )
 
