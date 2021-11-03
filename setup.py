@@ -24,12 +24,14 @@ To create the package for pypi.
 
 3. Unpin specific versions from setup.py that use a git install.
 
-4. Commit these changes with the message: "Release: VERSION"
+4. Commit these changes with the message: "Release: VERSION" and push.
 
-5. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
+5. Wait for the tests on master to be completed and be green (otherwise revert and fix bugs)
+
+6. Add a tag in git to mark the release: "git tag <VERSION> -m 'Adds tag <VERSION> for pypi' "
    Push the tag to git: git push --tags origin master
 
-6. Build both the sources and the wheel. Do not change anything in setup.py between
+7. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
    For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
@@ -38,7 +40,7 @@ To create the package for pypi.
    For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
-7. Check that everything looks correct by uploading the package to the pypi test server:
+8. Check that everything looks correct by uploading the package to the pypi test server:
 
    twine upload dist/* -r pypitest
    (pypi suggest using twine as other methods upload files via plaintext.)
@@ -48,12 +50,17 @@ To create the package for pypi.
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
 
-8. Upload the final version to actual pypi:
+   Check you can run the following commands:
+   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))" 
+   python -c "from transformers import *"
+
+9. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
 
-9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
+10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-10. Run `make post-release` (or `make post-patch` for a patch release).
+11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release, 
+    you need to go back to master before executing this.
 """
 
 import os
