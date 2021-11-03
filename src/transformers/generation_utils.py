@@ -478,11 +478,18 @@ class GenerationMixin:
         if attention_mask is not None:
             model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
 
+<<<<<<< Updated upstream
         if "lm_attention_mask" in model_kwargs:
             lm_attention_mask = model_kwargs["lm_attention_mask"]
         if lm_attention_mask is not None:
             if lm_attention_mask.shape[0] != 1:
                 model_kwargs["lm_attention_mask"] = lm_attention_mask.index_select(0, expanded_return_idx)
+=======
+        attention_block_mask = model_kwargs.get("attention_block_mask", None)
+        if attention_block_mask is not None:
+            if attention_block_mask.shape[0] != 1:
+                model_kwargs["attention_block_mask"] = attention_block_mask.index_select(0, expanded_return_idx)
+>>>>>>> Stashed changes
 
         if is_encoder_decoder:
             if encoder_outputs is None:

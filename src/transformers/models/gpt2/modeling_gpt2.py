@@ -664,7 +664,7 @@ GPT2_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         attention_block_mask (:obj:`torch.BoolTensor` of shape or broadcastable to :obj:`(batch_size, num_heads, sequence_length, sequence_length)`, `optional`):
-            Mask to override causal masking for any generic masking:
+            If None, defaults to causal masking. Else, overrides causal masking for any generic masking:
 
             - :obj:`True` for attention weights that are **not masked**,
             - :obj:`False` for attention weights that are **masked**.
