@@ -75,7 +75,7 @@ Sphinx is not known for its helpful error messages, so you might have to try a f
 
 ## Code and documentation style
 
-Code formatting is applied to all the source files, the examples and the tests using black and isort. We also have a custom tool taking care of the formatting of docstrings and rst files. Both can be launched by executing
+Code formatting is applied to all the source files, the examples and the tests using black and isort. We also have a custom tool taking care of the formatting of docstrings and rst files (`utils/style_doc.py`), as well as the order of the lazy imports performed in the Transformers `__init__.py` files (`utils/custom_init_isort.py`). All of this can be launched by executing
 
 ```bash
 make style
@@ -93,7 +93,39 @@ This can take a lot of time, so to run the same thing on only the scripts you mo
 make fixup
 ```
 
-Those two commands will also run all the additional checks for the repository consistency. Let's have a look at them.
+This last command will also run all the additional checks for the repository consistency. Let's have a look at them.
 
 ## Repository consistency
 
+This regroups all the tests to make sure your PR leaves the repository in a good state, and is performed by the `ci/circleci: check_repository_consistency` check. You can locally run that check by executing the following:
+
+```bash
+make repo-consistency
+```
+
+This checks that:
+
+- All objects added to the init are documented (performed by `utils/check_repo.py`)
+- All `__init__.py` files have the same content in their two sections (performed by `utils/check_inits.py`)
+- All code identified as a copy from another module is consistent with the original (performed by `utils/check_copies.py`)
+- The translations of the READMEs and the index of the doc have the same model list as the main README (performed by `utils/check_copies.py`)
+- The auto-generated tables in the documentation are up to date (performed by `utils/check_table.py`)
+- The library has all objects available even if not all optional dependencies are installed (performed by `utils/check_dummies.py`)
+
+The first two need to be manually fixed, the last four can be fixed automatically for you by running the command
+
+```bash
+make fix-copies
+```
+
+Additional checks concern PRs that add a new model, mainly that:
+
+- All models added are in an Auto-mapping (performed by `utils/check_repo.py`)
+<!-- TODO Sylvain, add a check that makes sure the common tests are implemented.-->
+- All models are properly tested (performed by `utils/check_repo.py`)
+
+<!-- TODO Sylvain, add the following
+- All models are added to the main README, inside the master doc
+- All checkpoints used actually exist on the Hub
+
+-->

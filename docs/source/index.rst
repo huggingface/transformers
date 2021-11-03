@@ -559,6 +559,7 @@ Flax), PyTorch, and/or TensorFlow.
     testing
     debugging
     serialization
+    pr_tests
 
 .. toctree::
     :maxdepth: 2
