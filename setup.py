@@ -59,7 +59,8 @@ To create the package for pypi.
 
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-11. Run `make post-release` (or `make post-patch` for a patch release).
+11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release, 
+    you need to go back to master before executing this.
 """
 
 import os
