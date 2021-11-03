@@ -200,6 +200,15 @@ class LayoutLMv2TokenizerFast:
         requires_backends(cls, ["tokenizers"])
 
 
+class LayoutXLMTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tokenizers"])
+
+
 class LEDTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
