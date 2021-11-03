@@ -462,6 +462,8 @@ class GPT2ModelTester:
             modified_inputs_that_token, attention_block_mask=attention_block_mask
         ).last_hidden_state
 
+        # We check that our model outputs are unchanges as the attention_block_mask would prevent the model from
+        # attending that token anyway.
         self.parent.assertTrue(
             torch.allclose(
                 output[:, :random_token_id, :],
@@ -487,18 +489,22 @@ class GPT2ModelTester:
             modified_inputs_other_token, attention_block_mask=attention_block_mask
         ).last_hidden_state
 
-        self.parent.assertFalse(
-            torch.allclose(
-                output[:, :new_token_id, :],
-                output_other_token[:, :new_token_id, :],
+        if new_token_id > 0:
+            # Otherwise torch.allclose of empty tensor is true.
+            self.parent.assertFalse(
+                torch.allclose(
+                    output[:, :new_token_id, :],
+                    output_other_token[:, :new_token_id, :],
+                )
             )
-        )
-        self.parent.assertFalse(
-            torch.allclose(
-                output[:, new_token_id + 1 :, :],
-                output_other_token[:, new_token_id + 1 :, :],
+        if new_token_id + 1 < sequence_length:
+            # Otherwise torch.allclose of empty tensor is true.
+            self.parent.assertFalse(
+                torch.allclose(
+                    output[:, new_token_id + 1 :, :],
+                    output_other_token[:, new_token_id + 1 :, :],
+                )
             )
-        )
 
 
 @require_torch
