@@ -140,7 +140,6 @@ VISION_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
@@ -210,7 +209,6 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
     def __call__(
         self,
         pixel_values,
-        attention_mask,
         decoder_input_ids,
         decoder_attention_mask,
         decoder_position_ids,
@@ -653,7 +651,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         return self.module.apply(
             {"params": params or self.params},
             pixel_values=jnp.array(pixel_values, dtype=self.dtype),
-            attention_mask=encoder_attention_mask,
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
@@ -668,7 +665,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         self,
         decoder_input_ids,
         max_length,
-        attention_mask: Optional[jnp.DeviceArray] = None,
         decoder_attention_mask: Optional[jnp.DeviceArray] = None,
         encoder_outputs=None,
         **kwargs
@@ -692,7 +688,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         return {
             "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
-            "encoder_attention_mask": attention_mask,
             "decoder_attention_mask": extended_attention_mask,
             "decoder_position_ids": decoder_position_ids,
         }
