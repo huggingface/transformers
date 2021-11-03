@@ -31,9 +31,9 @@ deps_table_check_updated:
 
 autogenerate_code: deps_table_update
 
-# Check that source code meets quality standards
+# Check that the repo is in a good state
 
-extra_quality_checks:
+repo-consistency:
 	python utils/check_copies.py
 	python utils/check_table.py
 	python utils/check_dummies.py
@@ -42,12 +42,13 @@ extra_quality_checks:
 	python utils/tests_fetcher.py --sanity_check
 
 # this target runs checks on all files
+
 quality:
 	black --check $(check_dirs)
 	isort --check-only $(check_dirs)
 	python utils/custom_init_isort.py --check_only
 	flake8 $(check_dirs)
-	${MAKE} extra_quality_checks
+	python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
@@ -56,6 +57,7 @@ extra_style_checks:
 	python utils/style_doc.py src/transformers docs/source --max_len 119
 
 # this target runs checks on all files and potentially modifies some of them
+
 style:
 	black $(check_dirs)
 	isort $(check_dirs)
@@ -64,7 +66,7 @@ style:
 
 # Super fast fix and check target that only works on relevant modified files since the branch was made
 
-fixup: modified_only_fixup extra_style_checks autogenerate_code extra_quality_checks
+fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
 
 # Make marked copies of snippets of codes conform to the original
 
