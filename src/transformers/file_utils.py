@@ -48,7 +48,7 @@ from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
-from huggingface_hub import HfApi, HfFolder, Repository
+from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from transformers.utils.versions import importlib_metadata
 
 from . import __version__
@@ -1808,17 +1808,14 @@ def get_list_of_files(
     if is_offline_mode() or local_files_only:
         return []
 
-    # Otherwise we grab the token and use the model_info method.
+    # Otherwise we grab the token and use the list_repo_files method.
     if isinstance(use_auth_token, str):
         token = use_auth_token
     elif use_auth_token is True:
         token = HfFolder.get_token()
     else:
         token = None
-    model_info = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).model_info(
-        path_or_repo, revision=revision, token=token
-    )
-    return [f.rfilename for f in model_info.siblings]
+    return list_repo_files(path_or_repo, revision=revision, token=token)
 
 
 class cached_property(property):
@@ -2308,7 +2305,7 @@ class PushToHubMixin:
             token = None
 
         # Special provision for the test endpoint (CI)
-        return HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
+        return create_repo(
             token,
             repo_name,
             organization=organization,
@@ -2366,7 +2363,7 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
     if token is None:
         token = HfFolder.get_token()
     if organization is None:
-        username = HfApi().whoami(token)["name"]
+        username = whoami(token)["name"]
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"
