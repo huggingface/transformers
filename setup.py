@@ -107,7 +107,7 @@ _deps = [
     "jax>=0.2.8",
     "jaxlib>=0.1.65",
     "jieba",
-    "keras<2.7.0", # Remove when they fix their release
+    "keras!=2.7.0", # Remove when they fix their release
     "keras2onnx",
     "nltk",
     "numpy>=1.17",
