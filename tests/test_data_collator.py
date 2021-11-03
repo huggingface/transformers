@@ -24,6 +24,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
     DataCollatorForPermutationLanguageModeling,
     DataCollatorForTokenClassification,
+    DataCollatorForWholeWordMask,
     DataCollatorWithPadding,
     default_data_collator,
     is_tf_available,
@@ -223,6 +224,16 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         no_pad_features = [list(range(10)), list(range(10))]
         pad_features = [list(range(5)), list(range(10))]
         self._test_no_pad_and_pad(no_pad_features, pad_features)
+
+    def test_data_collator_for_whole_word_mask(self):
+        features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+
+        tokenizer = BertTokenizer(self.vocab_file)
+        data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 10)))
 
     def test_plm(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -488,6 +499,16 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         pad_features = [list(range(5)), list(range(10))]
         self._test_no_pad_and_pad(no_pad_features, pad_features)
 
+    def test_data_collator_for_whole_word_mask(self):
+        features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+
+        tokenizer = BertTokenizer(self.vocab_file)
+        data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="tf")
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape.as_list(), [2, 10])
+        self.assertEqual(batch["labels"].shape.as_list(), [2, 10])
+
     def test_plm(self):
         tokenizer = BertTokenizer(self.vocab_file)
         no_pad_features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
@@ -749,6 +770,16 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         no_pad_features = [list(range(10)), list(range(10))]
         pad_features = [list(range(5)), list(range(10))]
         self._test_no_pad_and_pad(no_pad_features, pad_features)
+
+    def test_data_collator_for_whole_word_mask(self):
+        features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+
+        tokenizer = BertTokenizer(self.vocab_file)
+        data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="np")
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 10))
+        self.assertEqual(batch["labels"].shape, (2, 10))
 
     def test_plm(self):
         tokenizer = BertTokenizer(self.vocab_file)
