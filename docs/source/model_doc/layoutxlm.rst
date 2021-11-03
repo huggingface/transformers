@@ -40,17 +40,45 @@ One can directly plug in the weights of LayoutXLM into a LayoutLMv2 model, like 
 
     model = LayoutLMv2Model.from_pretrained('microsoft/layoutxlm-base') 
 
-Note that LayoutXLM requires a different tokenizer, based on :class:`~transformers.XLMRobertaTokenizer`. You can
-initialize it as follows:
+Note that LayoutXLM has its own tokenizer, based on
+:class:`~transformers.LayoutXLMTokenizer`/:class:`~transformers.LayoutXLMTokenizerFast`. You can initialize it as
+follows:
 
 .. code-block::
 
-    from transformers import AutoTokenizer
+    from transformers import LayoutXLMTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained('microsoft/layoutxlm-base') 
+    tokenizer = LayoutXLMTokenizer.from_pretrained('microsoft/layoutxlm-base') 
+
+Similar to LayoutLMv2, you can use :class:`~transformers.LayoutXLMProcessor` (which internally applies
+:class:`~transformers.LayoutLMv2FeatureExtractor` and
+:class:`~transformers.LayoutXLMTokenizer`/:class:`~transformers.LayoutXLMTokenizerFast` in sequence) to prepare all
+data for the model.
 
 As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer to :doc:`LayoutLMv2's documentation page
 <layoutlmv2>` for all tips, code examples and notebooks.
 
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/microsoft/unilm>`__.
+
+
+LayoutXLMTokenizer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LayoutXLMTokenizer
+    :members: __call__, build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
+
+
+LayoutXLMTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LayoutXLMTokenizerFast
+    :members: __call__
+
+
+LayoutXLMProcessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LayoutXLMProcessor
+    :members: __call__
