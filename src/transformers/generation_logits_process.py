@@ -50,6 +50,55 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
+class Timesteps():
+    """
+    This class designed for ``banned words decoding`` to manage the timestep if
+    any of the specified banned_words get produced by the model.
+    """
+    def __init__(self):
+        self.timesteps_info = {'timesteps': [], 'sorted_scores_indices': [], 'token_idx': []}
+        self.revert_input_ids = None
+
+    def revert_timestep(self):
+        """
+        This function used to revert the timestep (input_ids) and shift the next_tokens
+        on the reverted timestep. The shifted value controlled by ``token_idx``.
+        """
+        timestep = len(self.revert_input_ids[0])
+        idx = self.timesteps_info['timesteps'].index(timestep)
+
+        token_idx = self.timesteps_info['token_idx'][idx]
+        sorted_scores_indices = self.timesteps_info['sorted_scores_indices'][idx]
+        next_tokens = sorted_scores_indices[0, token_idx]
+        input_ids = self.revert_input_ids
+        self.revert_input_ids = None
+
+        return input_ids, next_tokens
+
+    def init_timestep(self, timestep, sorted_next_token_indices):
+        """
+        This function used to initialize timestep
+        """
+        self.timesteps_info['timesteps'].append(timestep)
+        init_probs_idx = 1
+        self.timesteps_info['token_idx'].append(init_probs_idx)
+        self.timesteps_info['sorted_scores_indices'].append(sorted_next_token_indices)
+
+    def update(self, input_ids, sorted_next_token_indices):
+        """
+        This function only get executed when the
+        ``next_tokens`` match to the ``banned_words['ids'][0]``.
+        """
+
+        timestep = len(input_ids[0])
+        if timestep not in self.timesteps_info['timesteps']:
+            self.init_timestep(timestep, sorted_next_token_indices)
+        else:
+            idx = self.timesteps_info['timesteps'].index(timestep)
+            self.timesteps_info['token_idx'][idx] += 1
+
+        self.revert_input_ids = input_ids
+
 class LogitsProcessor(ABC):
     """Abstract base class for all logit processors that can be applied during generation."""
 
@@ -387,6 +436,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
                 raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+
         if self.static_bad_words_mask is None and len(self.bad_words_id_length_1) > 0:
             self.static_bad_words_mask = self._calc_static_bad_word_mask(scores)
 
