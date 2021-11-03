@@ -76,13 +76,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using the vision model's feature extractor. For example, using
             :class:`~transformers.ViTFeatureExtractor`. See :meth:`transformers.ViTFeatureExtractor.__call__` for
             details.
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -586,7 +579,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
     def __call__(
         self,
         pixel_values: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
@@ -652,13 +644,16 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
             )
 
+        # vision models don't use attention mask - set to `None` as done in `VisionEncoderDecoderModel`
+        encoder_attention_mask = None
+
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
 
         return self.module.apply(
             {"params": params or self.params},
             pixel_values=jnp.array(pixel_values, dtype=self.dtype),
-            attention_mask=jnp.array(attention_mask, dtype="i4") if attention_mask is not None else attention_mask,
+            attention_mask=encoder_attention_mask,
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
