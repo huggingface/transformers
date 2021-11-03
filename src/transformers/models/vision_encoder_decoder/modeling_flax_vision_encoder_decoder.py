@@ -447,7 +447,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         self,
         decoder_input_ids,
         encoder_outputs,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
         past_key_values: dict = None,
@@ -494,9 +493,8 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
         encoder_hidden_states = encoder_outputs[0]
 
-        if encoder_attention_mask is None:
-            batch_size, sequence_length = encoder_hidden_states.shape[:2]
-            encoder_attention_mask = jnp.ones((batch_size, sequence_length))
+        batch_size, sequence_length = encoder_hidden_states.shape[:2]
+        encoder_attention_mask = jnp.ones((batch_size, sequence_length))
 
         batch_size, sequence_length = decoder_input_ids.shape
         if decoder_attention_mask is None:
@@ -641,9 +639,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
             decoder_position_ids = jnp.broadcast_to(
                 jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
             )
-
-        # vision models don't use attention mask - set to `None` as done in `VisionEncoderDecoderModel`
-        encoder_attention_mask = None
 
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
