@@ -25,6 +25,7 @@ deps = {
     "jax": "jax>=0.2.8",
     "jaxlib": "jaxlib>=0.1.65",
     "jieba": "jieba",
+    "keras": "keras!=2.7.0",
     "keras2onnx": "keras2onnx",
     "nltk": "nltk",
     "numpy": "numpy>=1.17",
