@@ -22,7 +22,15 @@ from abc import abstractmethod
 from functools import lru_cache
 from unittest import skipIf
 
-from transformers import FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING, AutoFeatureExtractor, AutoTokenizer, pipeline
+from transformers import (
+    FEATURE_EXTRACTOR_MAPPING,
+    TOKENIZER_MAPPING,
+    AutoFeatureExtractor,
+    AutoTokenizer,
+    IBertConfig,
+    RobertaConfig,
+    pipeline,
+)
 from transformers.pipelines.base import _pad
 from transformers.testing_utils import is_pipeline_test, require_torch
 
@@ -143,7 +151,7 @@ class PipelineTestCaseMeta(type):
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
                         # XLNet actually defines it as -1.
-                        if model.config.__class__.__name__ == "RobertaConfig":
+                        if isinstance(model.config, (RobertaConfig, IBertConfig)):
                             tokenizer.model_max_length = model.config.max_position_embeddings - 2
                         elif (
                             hasattr(model.config, "max_position_embeddings")

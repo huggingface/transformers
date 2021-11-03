@@ -41,12 +41,19 @@ class FeatureExtractionPipeline(Pipeline):
             the associated CUDA device id.
     """
 
-    def _sanitize_parameters(self, **kwargs):
-        return {}, {}, {}
+    def _sanitize_parameters(self, truncation=None, **kwargs):
+        preprocess_params = {}
+        if truncation is not None:
+            preprocess_params["truncation"] = truncation
+        return preprocess_params, {}, {}
 
-    def preprocess(self, inputs) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, truncation=None) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
+        if truncation is None:
+            kwargs = {}
+        else:
+            kwargs = {"truncation": truncation}
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
         return model_inputs
 
     def _forward(self, model_inputs):
