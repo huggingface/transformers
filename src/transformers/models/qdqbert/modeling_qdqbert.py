@@ -26,16 +26,14 @@ from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from pytorch_quantization import calib as quant_calib
-from pytorch_quantization import nn as quant_nn
-from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
-
 from ...activations import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
+    is_quantization_available,
+    requires_backends,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -57,8 +55,18 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_qdqbert import QDQBertConfig
 
-
 logger = logging.get_logger(__name__)
+
+# soft dependency
+if is_quantization_available():
+    try:
+        from pytorch_quantization import nn as quant_nn
+        from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
+    except OSError:
+        logger.error(
+            "QDQBERT model are not usable since `pytorch_quantization` can't be loaded. "
+            "Please try to reinstall it following the instructions here: https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization."
+        )
 
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "QDQBertConfig"
@@ -866,6 +874,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
+        requires_backends(self, "quantization")
         super().__init__(config)
         self.config = config
 
