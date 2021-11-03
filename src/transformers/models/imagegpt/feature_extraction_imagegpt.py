@@ -45,7 +45,9 @@ def color_quantize(x, clusters):
 
 class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs an ImageGPT feature extractor.
+    Constructs an ImageGPT feature extractor. This feature extractor can be used to resize images to a smaller
+    resolution (such as 32x32 or 64x64), normalize them and finally color quantize them to obtain sequences of "pixel
+    values" (color clusters).
 
     This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
@@ -65,7 +67,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
             Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to normalize the input to the range of -1 to +1.
+            Whether or not to normalize the input to the range between -1 and +1.
     """
 
     model_input_names = ["pixel_values"]
@@ -92,6 +94,9 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
         if isinstance(image, Image.Image):
             image = self.to_numpy_array(image, rescale=False, channel_first=False)
+
+        if is_torch_tensor(image):
+            image = image.numpy()
 
         return image / 127.5 - 1
 
@@ -162,12 +167,13 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         if self.do_normalize:
             images = [self.normalize(image) for image in images]
 
-        # color quantize from (batch_size, self.size, self.size, 3) to (batch_size, self.size, self.size)
+        # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
         images = np.array(images)
         images = color_quantize(images, self.clusters).reshape(images.shape[:-1])
 
-        # flatten to (batch_size, sequence_length)
-        images = images.reshape(-1, self.size ** 2)
+        # flatten to (batch_size, height*width)
+        batch_size = images.shape[0]
+        images = images.reshape(batch_size, -1)
 
         # return as BatchFeature
         data = {"pixel_values": images}
