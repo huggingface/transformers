@@ -45,6 +45,7 @@ from .file_utils import (
     _LazyModule,
     is_flax_available,
     is_scatter_available,
+    is_quantization_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tf_available,
@@ -530,6 +531,30 @@ else:
         name for name in dir(dummy_scatter_objects) if not name.startswith("_")
     ]
 
+if is_torch_available() and is_quantization_available():
+    _import_structure["models.qdqbert"].extend(
+        [
+            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "QDQBertForMaskedLM",
+            "QDQBertForMultipleChoice",
+            "QDQBertForNextSentencePrediction",
+            "QDQBertForQuestionAnswering",
+            "QDQBertForSequenceClassification",
+            "QDQBertForTokenClassification",
+            "QDQBertLayer",
+            "QDQBertLMHeadModel",
+            "QDQBertModel",
+            "QDQBertPreTrainedModel",
+            "load_tf_weights_in_qdqbert",
+        ]
+    )
+else:
+    from .utils import dummy_quantization_and_torch_objects
+
+    _import_structure["utils.dummy_quantization_and_torch_objects"] = [
+        name for name in dir(dummy_quantization_and_torch_objects) if not name.startswith("_")
+    ]
+
 # PyTorch-backed objects
 if is_torch_available():
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
@@ -572,25 +597,6 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
-
-    # PyTorch models structure
-
-    _import_structure["models.qdqbert"].extend(
-        [
-            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "QDQBertForMaskedLM",
-            "QDQBertForMultipleChoice",
-            "QDQBertForNextSentencePrediction",
-            "QDQBertForQuestionAnswering",
-            "QDQBertForSequenceClassification",
-            "QDQBertForTokenClassification",
-            "QDQBertLayer",
-            "QDQBertLMHeadModel",
-            "QDQBertModel",
-            "QDQBertPreTrainedModel",
-            "load_tf_weights_in_qdqbert",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2434,8 +2440,7 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_scatter_objects import *
 
-    if is_torch_available():
-
+    if is_torch_available() and is_quantization_available():
         from .models.qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             QDQBertForMaskedLM,
@@ -2450,6 +2455,10 @@ if TYPE_CHECKING:
             QDQBertPreTrainedModel,
             load_tf_weights_in_qdqbert,
         )
+    else:
+        from .utils.dummy_quantization_and_torch_objects import *
+
+    if is_torch_available():
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
