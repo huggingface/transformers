@@ -319,7 +319,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         return self.module.init(
             rngs,
             pixel_values,
-            None,
             decoder_input_ids,
             decoder_attention_mask,
             decoder_position_ids,
