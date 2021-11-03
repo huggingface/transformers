@@ -91,7 +91,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self._ensure_format_supported(image)
 
         if isinstance(image, Image.Image):
-            image = self.to_numpy_array(image, rescale=False, channels_first=False)
+            image = self.to_numpy_array(image, rescale=False, channel_first=False)
 
         return image / 127.5 - 1
 
