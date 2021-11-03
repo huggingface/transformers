@@ -949,8 +949,8 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
-        mask = attention_mask.cumsum(dim=-1)[:, -1]
-        output_lengths = self._get_feat_extract_output_lengths(mask).to(torch.long)
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(torch.long)
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
