@@ -101,10 +101,10 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
         )
         self.wi = tf.keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi", kernel_initializer=wi_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.wo = tf.keras.layers.Dense(
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
-        )  # Dans - update init weights as in flax
+        )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
         self.act = tf.keras.activations.relu
 
@@ -127,13 +127,13 @@ class TFT5GatedGeluDense(tf.keras.layers.Layer):
         )
         self.wi_0 = tf.keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi_0", kernel_initializer=wi_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.wi_1 = tf.keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi_1", kernel_initializer=wi_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.wo = tf.keras.layers.Dense(
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
         self.act = get_tf_activation("gelu_new")
 
@@ -203,16 +203,16 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         self.q = tf.keras.layers.Dense(
             self.inner_dim, use_bias=False, name="q", kernel_initializer=q_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.k = tf.keras.layers.Dense(
             self.inner_dim, use_bias=False, name="k", kernel_initializer=k_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.v = tf.keras.layers.Dense(
             self.inner_dim, use_bias=False, name="v", kernel_initializer=v_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.o = tf.keras.layers.Dense(
             self.d_model, use_bias=False, name="o", kernel_initializer=o_initializer
-        )  # Dans - - update init weights as in flax
+        )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
         self.pruned_heads = set()
@@ -223,7 +223,7 @@ class TFT5Attention(tf.keras.layers.Layer):
                 self.relative_attention_bias = self.add_weight(
                     name="embeddings",
                     shape=[self.relative_attention_num_buckets, self.n_heads],
-                    initializer=self.relative_attention_bias_initializer,  # Dans add initializer
+                    initializer=self.relative_attention_bias_initializer,  # Add initializer
                 )
 
         return super().build(input_shape)
@@ -1316,7 +1316,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
             self.lm_head = tf.keras.layers.Dense(
                 config.vocab_size, use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
-            )  # Dans - - update init weights as in flax
+            )  # Update init weights as in flax
 
     def get_output_embeddings(self):
         if self.config.tie_word_embeddings:
@@ -1333,7 +1333,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
             self.lm_head = tf.keras.layers.Dense(
                 shape_list(value)[0], use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
-            )  # Dans - - update init weights as in flax
+            )  # Update init weights as in flax
             # in a dense layer the kernel has a shape (last_dim, units), for us (dim, num_tokens)
             # value has a shape (num_tokens, dim) then needs to be transposed
             transposed_value = tf.transpose(value)
