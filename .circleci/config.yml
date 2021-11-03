@@ -811,6 +811,28 @@ jobs:
             - run: python utils/custom_init_isort.py --check_only
             - run: flake8 examples tests src utils
             - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
+
+    check_repository_consistency:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-repository_consistency-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install isort GitPython
+            - run: pip install .[all,quality]
+            - save_cache:
+                  key: v0.4-repository_consistency-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python utils/check_copies.py
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
@@ -818,17 +840,6 @@ jobs:
             - run: python utils/check_inits.py
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
-
-    check_repository_consistency:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: small
-        parallelism: 1
-        steps:
-            - checkout
-            - run: pip install requests
-            - run: python ./utils/link_tester.py
 
     run_tests_layoutlmv2:
         working_directory: ~/transformers
