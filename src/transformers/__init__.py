@@ -2045,6 +2045,7 @@ if TYPE_CHECKING:
         is_faiss_available,
         is_flax_available,
         is_psutil_available,
+        is_mojimoji_available,
         is_py3nvml_available,
         is_scipy_available,
         is_sentencepiece_available,

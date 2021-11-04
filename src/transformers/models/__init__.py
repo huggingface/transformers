@@ -83,6 +83,7 @@ from . import (
     rembert,
     retribert,
     roberta,
+    roberta_japanese,
     roformer,
     segformer,
     sew,
