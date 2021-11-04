@@ -602,6 +602,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/bertweet
     model_doc/bertgeneration
     model_doc/bert_japanese
+    model_doc/roberta_japanese
     model_doc/bigbird
     model_doc/bigbird_pegasus
     model_doc/blenderbot
