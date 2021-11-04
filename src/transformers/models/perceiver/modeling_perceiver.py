@@ -2701,7 +2701,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
                 mask_token = self.mask[modality].expand(batch_size, -1, -1)
                 mask_prob = self.mask_probs[modality]
                 mask = torch.bernoulli(torch.full([batch_size, num_samples], mask_prob))
-                mask = torch.unsqueeze(mask, dim=2)
+                mask = torch.unsqueeze(mask, dim=2).to(mask_token.device)
                 output_padded = (1 - mask) * output_padded + mask * mask_token
 
             padded[modality] = output_padded
