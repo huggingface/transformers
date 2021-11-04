@@ -2697,7 +2697,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
             output_padded = torch.cat([output, padding], dim=2)
 
             # mask if required
-            if modality == "label" and modality in self.mask_probs:
+            if modality in self.mask_probs:
                 mask_token = self.mask[modality].expand(batch_size, -1, -1)
                 mask_prob = self.mask_probs[modality]
                 mask = torch.bernoulli(torch.full([batch_size, num_samples], mask_prob))
