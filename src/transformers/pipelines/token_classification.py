@@ -96,7 +96,6 @@ class TokenClassificationPipeline(Pipeline):
     default_input_names = "sequences"
 
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
-        self.ignore_labels = ["O"]
         super().__init__(*args, **kwargs)
         self.check_model_type(
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
@@ -216,7 +215,9 @@ class TokenClassificationPipeline(Pipeline):
             **model_inputs,
         }
 
-    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE):
+    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
+        if ignore_labels is None:
+            ignore_labels = ["O"]
         logits = model_outputs["logits"][0].numpy()
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
@@ -235,8 +236,8 @@ class TokenClassificationPipeline(Pipeline):
         entities = [
             entity
             for entity in grouped_entities
-            if entity.get("entity", None) not in self.ignore_labels
-            and entity.get("entity_group", None) not in self.ignore_labels
+            if entity.get("entity", None) not in ignore_labels
+            and entity.get("entity_group", None) not in ignore_labels
         ]
         return entities
 
