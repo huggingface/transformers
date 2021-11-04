@@ -106,12 +106,12 @@ def rename_keys(state_dict, task):
         name = name.replace("image_preprocessor/patches_linear/w", "input_preprocessor.conv_after_patches.weight")
 
         # rename multimodal preprocessor embeddings
-        name = name.replace("multimodal_preprocessor/audio_mask_token/pos_embs", "input_preprocessor.audio_mask")
-        name = name.replace("multimodal_preprocessor/audio_padding/pos_embs", "input_preprocessor.audio_padding")
-        name = name.replace("multimodal_preprocessor/image_mask_token/pos_embs", "input_preprocessor.image_mask")
-        name = name.replace("multimodal_preprocessor/image_padding/pos_embs", "input_preprocessor.image_padding")
-        name = name.replace("multimodal_preprocessor/label_mask_token/pos_embs", "input_preprocessor.label_mask")
-        name = name.replace("multimodal_preprocessor/label_padding/pos_embs", "input_preprocessor.label_padding")
+        name = name.replace("multimodal_preprocessor/audio_mask_token/pos_embs", "input_preprocessor.mask.audio")
+        name = name.replace("multimodal_preprocessor/audio_padding/pos_embs", "input_preprocessor.padding.audio")
+        name = name.replace("multimodal_preprocessor/image_mask_token/pos_embs", "input_preprocessor.mask.image")
+        name = name.replace("multimodal_preprocessor/image_padding/pos_embs", "input_preprocessor.padding.image")
+        name = name.replace("multimodal_preprocessor/label_mask_token/pos_embs", "input_preprocessor.mask.label")
+        name = name.replace("multimodal_preprocessor/label_padding/pos_embs", "input_preprocessor.padding.label")
 
         ## DECODERS ##
 
@@ -120,9 +120,9 @@ def rename_keys(state_dict, task):
         name = name.replace(
             "multimodal_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
         )
-        name = name.replace("multimodal_decoder/~decoder_query/audio_padding/pos_embs", "decoder.audio_padding")
-        name = name.replace("multimodal_decoder/~decoder_query/image_padding/pos_embs", "decoder.image_padding")
-        name = name.replace("multimodal_decoder/~decoder_query/label_padding/pos_embs", "decoder.label_padding")
+        name = name.replace("multimodal_decoder/~decoder_query/audio_padding/pos_embs", "decoder.padding.audio")
+        name = name.replace("multimodal_decoder/~decoder_query/image_padding/pos_embs", "decoder.padding.image")
+        name = name.replace("multimodal_decoder/~decoder_query/label_padding/pos_embs", "decoder.padding.label")
         name = name.replace("multimodal_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
         name = name.replace("multimodal_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
         if task == "multimodal_autoencoding":
@@ -374,12 +374,12 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         raise ValueError(f"Task {task} not supported")
     model.eval()
 
-    # multimodal autoencoding requires a dummy input first in order to create all parameters
-    # (as some parameters are defined in the forward pass)
-    input_mask = None
-    if task == "multimodal_autoencoding":
-        inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
-        outputs = model(inputs, attention_mask=input_mask, subsampled_output_points=subsampling)
+    # # multimodal autoencoding requires a dummy input first in order to create all parameters
+    # # (as some parameters are defined in the forward pass)
+    # input_mask = None
+    # if task == "multimodal_autoencoding":
+    #     inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
+    #     outputs = model(inputs, attention_mask=input_mask, subsampled_output_points=subsampling)
 
     # load weights
     model.load_state_dict(state_dict)

@@ -1677,6 +1677,8 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
                 raise ValueError("Value is required for inputs_without_pos if concat_preprocessed_input is True")
             pos_emb = torch.cat([inputs_without_pos, pos_emb], div=-1)
 
+        print("Shape of decoder query:", pos_emb.shape)
+        
         return pos_emb
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
@@ -1810,6 +1812,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
 
     @property
     def num_query_channels(self) -> int:
+        print("Num query channels of image modality:", self.decoder.num_query_channels)
         return self.decoder.num_query_channels
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
@@ -1896,6 +1899,8 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     def num_query_channels(self) -> int:
         max_channel_size = max(decoder.num_query_channels for _, decoder in self.modalities.items())
         common_channel_size = max_channel_size + self.min_padding_size
+
+        print("Max number of channels in decoder:", common_channel_size)
         return common_channel_size
 
     def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None, subsampled_points=None):
@@ -1907,6 +1912,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
 
         decoder_queries = dict()
         for modality, decoder in self.modalities.items():
+            print("Creating query for modality:", modality)
             # Get input_without_pos for this modality if it exists.
             input_without_pos = None
             if inputs_without_pos is not None:
@@ -2193,14 +2199,21 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
                 Defaults to None.
         """
         num_dims = len(self.max_resolution)
+        print("Number of dims:", num_dims)
         encoding_size = self.num_bands * num_dims
+        print("Encoding size:", encoding_size)
         if not self.sine_only:
             encoding_size *= 2
+        print("Encoding size after sine_only:", encoding_size)
         if self.concat_pos:
             if pos_dim is None:
+                print("we are here")
                 encoding_size += self.concat_pos * num_dims
             else:
+                print("pos_dim:", pos_dim)
                 encoding_size += self.concat_pos * pos_dim
+        print("Encoding size of Fourier embeddings:", encoding_size)
+        
         return encoding_size
 
     def forward(self, index_dims, batch_size, device, pos=None):
