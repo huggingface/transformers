@@ -32,9 +32,11 @@ more difficult to quantize, such as MobileNets and BERT-large.*
 
 Tips:
 
-- QDQBERT model adds fake quantization operations (pair of QuantizeLinear/DequantizeLinear ops) to (i) linear layer inputs and weights, (ii) matmul inputs, (iii) residual add inputs, in BERT model.
+- QDQBERT model adds fake quantization operations (pair of QuantizeLinear/DequantizeLinear ops) to (i) linear layer
+  inputs and weights, (ii) matmul inputs, (iii) residual add inputs, in BERT model.
 
-- QDQBERT requires the dependency of `Pytorch Quantization Toolkit <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`__.
+- QDQBERT requires the dependency of `Pytorch Quantization Toolkit
+  <https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization>`__.
 
     To install:
 
@@ -42,9 +44,11 @@ Tips:
 
         pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
 
-- QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *bert-base-uncased*), and perform Quantization Aware Training/Post Training Quantization.
+- QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *bert-base-uncased*), and
+  perform Quantization Aware Training/Post Training Quantization.
 
-- An example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for SQUAD task can be found at `transformers/examples/research_projects/qat-qdqbert/ </examples/research_projects/qat-qdqbert/>`_.
+- An example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for SQUAD task
+  can be found at `transformers/examples/research_projects/qat-qdqbert/ </examples/research_projects/qat-qdqbert/>`_.
 
 This model was contributed by `shangz <https://huggingface.co/shangz>`__.
 

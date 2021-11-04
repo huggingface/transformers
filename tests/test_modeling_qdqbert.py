@@ -526,7 +526,7 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
 class QDQBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        
+
         import pytorch_quantization.nn as quant_nn
         from pytorch_quantization.tensor_quant import QuantDescriptor
 
@@ -539,10 +539,10 @@ class QDQBertModelIntegrationTest(unittest.TestCase):
         quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
 
         output = model(input_ids)[0]
-        
+
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-        
+
         expected_slice = torch.tensor(
             [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
         )

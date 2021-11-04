@@ -23,8 +23,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-import pycuda.driver as cuda
 import pycuda.autoinit
+import pycuda.driver as cuda
 import tensorrt as trt
 
 
@@ -270,9 +270,6 @@ if args.seed is not None:
 #
 # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
 # 'text' is found. You can easily tweak this behavior (see below).
-#
-# In distributed training, the load_dataset function guarantee that only one local process can concurrently
-# download the dataset.
 if args.dataset_name is not None:
     # Downloading and loading a dataset from the hub.
     raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
@@ -347,6 +344,7 @@ def prepare_validation_features(examples):
         ]
 
     return tokenized_examples
+
 
 eval_examples = raw_datasets["validation"]
 # Validation Feature Creation
@@ -437,7 +435,6 @@ with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.d
         niter += 1
 
         start_logits, end_logits = outputs
-        # print(outputs)
         start_logits = torch.tensor(start_logits)
         end_logits = torch.tensor(end_logits)
 

@@ -25,12 +25,13 @@ In this example, we use QDQBERT model to do quantization on SQuAD task, includin
 Required:
 - [pytorch-quantization toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization)
 - [TensorRT >= 8.2](https://github.com/NVIDIA/TensorRT)
+- PyTorch >= 1.10.0
 
 ## Setup
 
-Build the docker image:
+Under the directory of `transformers/`, build the docker image:
 ```
-docker build . -f Dockerfile -t bert_quantization:latest
+docker build . -f examples/research_projects/qat-qdqbert/Dockerfile -t bert_quantization:latest
 ```
 
 Run the docker:
@@ -40,7 +41,7 @@ docker run --gpus all --privileged --rm -it --shm-size=1g --ulimit memlock=-1 --
 
 In the container:
 ```
-cd /transformers/examples/research_projects/qat-qdqbert/
+cd transformers/examples/research_projects/qat-qdqbert/
 ```
 
 ## Quantization Aware Training (QAT)

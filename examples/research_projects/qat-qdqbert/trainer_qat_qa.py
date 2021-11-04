@@ -41,9 +41,9 @@ class QuestionAnsweringTrainer(Trainer):
         self.eval_examples = eval_examples
         self.post_process_function = post_process_function
         self.quant_trainer_args = quant_trainer_args
-        self.calib_num = 128 # default number of calibration samples
+        self.calib_num = 128  # default number of calibration samples
 
-    def get_calib_dataloader(self, calib_dataset = None):
+    def get_calib_dataloader(self, calib_dataset=None):
         """
         Returns the calibration dataloader :class:`~torch.utils.data.DataLoader`.
 
@@ -74,7 +74,7 @@ class QuestionAnsweringTrainer(Trainer):
         quant_trainer.configure_model(model, self.quant_trainer_args, calib=True)
         model.eval()
         quant_trainer.enable_calibration(model)
-        
+
         logger.info("***** Running calibration *****")
         logger.info(f"  Num examples = {self.calib_num}")
         logger.info(f"  Batch size = {calib_dataloader.batch_size}")
@@ -82,7 +82,7 @@ class QuestionAnsweringTrainer(Trainer):
         for step, inputs in enumerate(calib_dataloader):
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only=True)
-            if (step+1) * calib_dataloader.batch_size >= self.calib_num:
+            if (step + 1) * calib_dataloader.batch_size >= self.calib_num:
                 break
 
         quant_trainer.finish_calibration(model, self.quant_trainer_args)
