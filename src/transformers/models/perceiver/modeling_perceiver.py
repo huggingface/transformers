@@ -1678,7 +1678,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             pos_emb = torch.cat([inputs_without_pos, pos_emb], div=-1)
 
         print("Shape of decoder query:", pos_emb.shape)
-        
+
         return pos_emb
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
@@ -2213,7 +2213,7 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
                 print("pos_dim:", pos_dim)
                 encoding_size += self.concat_pos * pos_dim
         print("Encoding size of Fourier embeddings:", encoding_size)
-        
+
         return encoding_size
 
     def forward(self, index_dims, batch_size, device, pos=None):
