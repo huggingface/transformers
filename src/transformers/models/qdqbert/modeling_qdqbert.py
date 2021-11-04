@@ -152,28 +152,6 @@ def load_tf_weights_in_qdqbert(model, config, tf_checkpoint_path):
     return model
 
 
-class QuantEmbedding(nn.Embedding):
-    """Quantized version of nn.Embedding."""
-
-    def __init__(self, *args, **kwargs):
-        super(QuantEmbedding, self).__init__(*args, **kwargs)
-        quant_desc_weight = quant_nn.QuantLinear.default_quant_desc_weight
-        self._weight_quantizer = TensorQuantizer(quant_desc_weight)
-        logger.info(
-            "Embedding weight is %squantized to %d bits in %s with axis %s!",
-            "" if not quant_desc_weight.fake_quant else "fake ",
-            quant_desc_weight.num_bits,
-            self.__class__.__name__,
-            quant_desc_weight.axis,
-        )
-
-    def forward(self, input):
-        quant_weight = self._weight_quantizer(self.weight)
-        return F.embedding(
-            input, quant_weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse
-        )
-
-
 # Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert -> QDQBert
 class QDQBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""

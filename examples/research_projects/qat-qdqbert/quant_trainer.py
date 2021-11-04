@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 name_width = 50  # max width of layer names
 qname_width = 70  # max width of quantizer names
 
-################################ Quant Trainer API #################################################
+# ========================================== Quant Trainer API ==========================================
 
 
 def add_arguments(parser):
@@ -158,7 +158,7 @@ def finish_calibration(model, args):
     print_quant_summary(model)
 
 
-################################## Helper Function #################################################
+# ========================================== Helper Function ==========================================
 
 
 def fuse_qkv(model, args):
@@ -199,7 +199,7 @@ def clip_gelu(model, maxval):
             amax_init = mod._input_quantizer._amax.data.detach().item()
             mod._input_quantizer._amax.data.detach().clamp_(max=maxval)
             amax = mod._input_quantizer._amax.data.detach().item()
-            logger.info(f"CLIP_GELU: {name:{name_width}} n={n:5.2f} {amax_init:5.2f} -> {amax:5.2f}")
+            logger.info(f"CLIP_GELU: {name:{name_width}} amax: {amax_init:5.2f} -> {amax:5.2f}")
 
 
 def set_dropout(model, p):

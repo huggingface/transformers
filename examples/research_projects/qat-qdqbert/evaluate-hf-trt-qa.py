@@ -19,23 +19,24 @@ import os
 import time
 import timeit
 
+import datasets
 import numpy as np
 import torch
+from absl import logging as absl_logging
+from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader
 
 import pycuda.autoinit
 import pycuda.driver as cuda
 import tensorrt as trt
+import transformers
+from accelerate import Accelerator
+from transformers import AutoTokenizer, EvalPrediction, default_data_collator, set_seed
+from transformers.trainer_pt_utils import nested_concat, nested_truncate
+from utils_qa import postprocess_qa_predictions
 
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-
-from absl import logging as absl_logging
-
-from transformers import AutoTokenizer, EvalPrediction, default_data_collator, set_seed
-from transformers.trainer_pt_utils import nested_concat, nested_truncate
-
-
 absl_logger = absl_logging.get_absl_logger()
 absl_logger.setLevel(logging.WARNING)
 
@@ -114,14 +115,6 @@ parser.add_argument(
 
 parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
-import datasets
-from datasets import load_dataset, load_metric
-
-import transformers
-from accelerate import Accelerator
-from utils_qa import postprocess_qa_predictions
-
-
 parser.add_argument(
     "--dataset_name",
     type=str,
@@ -164,7 +157,7 @@ else:
 
 logger.info("Training/evaluation parameters %s", args)
 
-args.eval_batch_size = args.per_device_eval_batch_size  # * max(1, args.n_gpu)
+args.eval_batch_size = args.per_device_eval_batch_size
 
 INPUT_SHAPE = (args.eval_batch_size, args.max_seq_length)
 
@@ -211,6 +204,7 @@ with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) 
         # serialize_engine and store in file (can be directly loaded and deserialized):
         with open(engine_name, "wb") as f:
             f.write(engine.serialize())
+
 
 # run inference with TRT
 def model_infer(inputs, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream):
@@ -298,6 +292,7 @@ if args.max_seq_length > tokenizer.model_max_length:
 
 max_seq_length = min(args.max_seq_length, tokenizer.model_max_length)
 
+
 # Validation preprocessing
 def prepare_validation_features(examples):
     # Some of the questions have lots of whitespace on the left, which is not useful and will make the
@@ -363,6 +358,7 @@ eval_dataset_for_model = eval_dataset.remove_columns(["example_id", "offset_mapp
 eval_dataloader = DataLoader(
     eval_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
 )
+
 
 # Post-processing:
 def post_processing_function(examples, features, predictions, stage="eval"):
