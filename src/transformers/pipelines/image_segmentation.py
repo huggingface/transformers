@@ -91,9 +91,6 @@ class ImageSegmentationPipeline(Pipeline):
 
         return super().__call__(*args, **kwargs)
 
-    def get_inference_context(self):
-        return torch.no_grad
-
     def preprocess(self, image):
         image = load_image(image)
         target_size = torch.IntTensor([[image.height, image.width]])
