@@ -834,6 +834,7 @@ if is_torch_available():
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ElectraForCausalLM",
             "ElectraForMaskedLM",
             "ElectraForMultipleChoice",
             "ElectraForPreTraining",
@@ -2650,6 +2651,7 @@ if TYPE_CHECKING:
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ElectraForCausalLM,
             ElectraForMaskedLM,
             ElectraForMultipleChoice,
             ElectraForPreTraining,

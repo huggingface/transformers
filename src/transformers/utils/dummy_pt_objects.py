@@ -1517,6 +1517,15 @@ class DPRReader:
 ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class ElectraForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class ElectraForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
