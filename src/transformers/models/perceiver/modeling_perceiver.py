@@ -789,7 +789,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
             modality_sizes = None
             inputs_without_pos = None
 
-        print("Shape of inputs before going into perceiver:", inputs.shape)
+        #print("Shape of inputs before going into perceiver:", inputs.shape)
         # print("First elements of inputs:", inputs[0,:3,:3])
 
         if inputs.size()[-1] != self.config.d_model:
@@ -1625,7 +1625,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if self.position_encoding_only:
             if "project_pos_dim" in self.position_encoding_kwargs:
                 return self.position_encoding_kwargs["project_pos_dim"]
-            return self.output_position_encodings.output_size(pos_dim=1)
+            return self.output_position_encodings.output_size()
         if self.final_project:
             return self.output_num_channels
         return self.num_channels
@@ -1676,9 +1676,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             if inputs_without_pos is None:
                 raise ValueError("Value is required for inputs_without_pos if concat_preprocessed_input is True")
             pos_emb = torch.cat([inputs_without_pos, pos_emb], div=-1)
-
-        print("Shape of decoder query:", pos_emb.shape)
-
+        
         return pos_emb
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
@@ -1812,7 +1810,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
 
     @property
     def num_query_channels(self) -> int:
-        print("Num query channels of image modality:", self.decoder.num_query_channels)
+        #print("Num query channels of image modality:", self.decoder.num_query_channels)
         return self.decoder.num_query_channels
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
@@ -1899,8 +1897,6 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     def num_query_channels(self) -> int:
         max_channel_size = max(decoder.num_query_channels for _, decoder in self.modalities.items())
         common_channel_size = max_channel_size + self.min_padding_size
-
-        print("Max number of channels in decoder:", common_channel_size)
         return common_channel_size
 
     def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None, subsampled_points=None):
@@ -1917,12 +1913,14 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             input_without_pos = None
             if inputs_without_pos is not None:
                 input_without_pos = inputs_without_pos.get(modality, None)
-            decoder_queries[modality] = decoder.decoder_query(
+            query = decoder.decoder_query(
                 inputs=inputs[modality],
                 modality_sizes=None,
                 inputs_without_pos=input_without_pos,
                 subsampled_points=subsampled_points.get(modality, None),
             )
+            print("Shape of query:", query.shape)
+            decoder_queries[modality] = query
 
         # Pad all queries with trainable position encodings to make them have the same channels
 
@@ -2191,29 +2189,15 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
     def num_dimensions(self) -> int:
         return len(self.max_resolution)
 
-    def output_size(self, pos_dim: Optional[int] = None):
-        """Returns size of positional encodings last dimension.
-
-        Args:
-            pos_dim: Size of the original position encoding. If None, will be equal to number of input dimensions.
-                Defaults to None.
-        """
+    def output_size(self):
+        """Returns size of positional encodings last dimension."""
         num_dims = len(self.max_resolution)
-        print("Number of dims:", num_dims)
         encoding_size = self.num_bands * num_dims
-        print("Encoding size:", encoding_size)
         if not self.sine_only:
             encoding_size *= 2
-        print("Encoding size after sine_only:", encoding_size)
         if self.concat_pos:
-            if pos_dim is None:
-                print("we are here")
-                encoding_size += self.concat_pos * num_dims
-            else:
-                print("pos_dim:", pos_dim)
-                encoding_size += self.concat_pos * pos_dim
-        print("Encoding size of Fourier embeddings:", encoding_size)
-
+            encoding_size += self.concat_pos * self.num_dimensions
+        
         return encoding_size
 
     def forward(self, index_dims, batch_size, device, pos=None):
@@ -2299,12 +2283,7 @@ class PerceiverMultimodalPostprocessor(nn.Module):
         if not self.input_is_dict:
             # Slice up modalities by their sizes.
             assert modality_sizes is not None
-            # print("Modality sizes:", modality_sizes)
             inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
-
-        # print("Shape of inputs after restructure:")
-        # for k,v in inputs.items():
-        # print(k, v.shape)
 
         outputs = {
             modality: postprocessor(inputs[modality], pos=pos, modality_sizes=None)
@@ -2492,8 +2471,6 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         elif self.position_encoding_type == "fourier":
             pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
 
-        print("Shape of pos encodings in image preprocessor:", pos_enc.shape)
-
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
 
@@ -2517,12 +2494,8 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             inputs = self.convnet(inputs)
 
         elif self.prep_type == "conv1x1":
-            # print("Shape of inputs:", inputs.shape)
-
             # map inputs to self.out_channels
             inputs = self.convnet_1x1(inputs)
-
-            # print("Shape of inputs after conv1x1:", inputs.shape)
 
         elif self.prep_type == "pixels":
             # if requested, downsamples in the crudest way
@@ -2557,9 +2530,6 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
                 inputs = torch.moveaxis(inputs, 2, -1)
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
-
-        # print("Shape of inputs before _build_network_inputs:", inputs.shape)
-        # print("First elements of inputs before _build_network_inputs:", inputs[0,:3,:3,:3])
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
         modality_sizes = None  # Size for each modality, only needed for multimodal
@@ -2629,7 +2599,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
         if self.project_pos_dim > 0:
             pos_dim = self.project_pos_dim
         else:
-            pos_dim = self.position_embeddings.output_size(1)
+            pos_dim = self.position_embeddings.output_size()
         if self.concat_or_add_pos == "add":
             return pos_dim
         return self.samples_per_patch + pos_dim
@@ -2648,8 +2618,6 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
 
-        print("Shape of pos enc in audio preprocessor:", pos_enc.shape)
-
         if self.concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
         elif self.concat_or_add_pos == "add":
@@ -2658,14 +2626,10 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
         return inputs_with_pos, inputs
 
     def forward(self, inputs, pos, network_input_is_1d: bool = True):
-        print("Shape of inputs:", inputs.shape)
-
         inputs = torch.reshape(inputs, [inputs.shape[0], -1, self.samples_per_patch])
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
         modality_sizes = None  # Size for each modality, only needed for multimodal
-
-        print("Output of audio preprocessor:", inputs.shape)
 
         return inputs, modality_sizes, inputs_without_pos
 
@@ -2708,34 +2672,23 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
     def num_channels(self) -> int:
         max_channel_size = max(processor.num_channels for _, processor in self.modalities.items())
         common_channel_size = max_channel_size + self.min_padding_size
-        print("Max number of channels:", common_channel_size)
         return common_channel_size
 
     def forward(
         self, inputs: Mapping[str, torch.Tensor], pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True
     ):
-
-        for k, v in inputs.items():
-            print(k, v.shape)
-
         padded = {}
         modality_sizes = {}
         inputs_without_pos = {}
         for modality, preprocessor in self.modalities.items():
-            print(f"Preprocessing modality {modality}")
-
             # preprocess each modality using the respective preprocessor.
             output, _, inputs_without_pos[modality] = preprocessor(
                 inputs[modality], pos=pos, network_input_is_1d=network_input_is_1d
             )
 
-            print("Shape of output:", output.shape)
-
             # pad to the same common_channel_size.
             batch_size, num_samples, num_channels = output.shape
             pos_enc = self.padding[modality].expand(batch_size, -1, -1)
-
-            print("Shape of pos_enc:", pos_enc.shape)
 
             padding = torch.broadcast_to(
                 pos_enc,

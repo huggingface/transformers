@@ -309,6 +309,9 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
 
+        if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+            inputs_dict["subsampled_output_points"] = self.model_tester.subsampling
+        
         if return_labels:
             if model_class in [
                 *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),

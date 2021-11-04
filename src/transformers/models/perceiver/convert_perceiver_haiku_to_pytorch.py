@@ -385,6 +385,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     model.load_state_dict(state_dict)
 
     # prepare dummy input
+    input_mask = None
     if task == "MLM":
         tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
         text = "This is an incomplete sentence where some words are missing."
