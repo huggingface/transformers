@@ -1521,8 +1521,6 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
     """ELECTRA Model with a `language modeling` head on top for CLM fine-tuning. """, ELECTRA_START_DOCSTRING
 )
 class ElectraForCausalLM(ElectraPreTrainedModel):
-    _keys_to_ignore_on_save = [r"generator_lm_head.weight", r"generator_lm_head.bias"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"generator_lm_head.weight", r"generator_lm_head.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1533,9 +1531,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         self.electra = ElectraModel(config)
         self.generator_predictions = ElectraGeneratorPredictions(config)
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
-
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["generator_lm_head.weight"])
 
         self.init_weights()
 
@@ -1638,7 +1633,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
+            output = (prediction_scores,) + outputs[1:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
