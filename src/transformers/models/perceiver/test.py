@@ -1,7 +1,8 @@
-import torch
 import numpy as np
+import torch
 
 from transformers import PerceiverConfig, PerceiverForMultimodalAutoencoding
+
 
 config = PerceiverConfig()
 
@@ -23,9 +24,9 @@ audio_chunk_size = audio.shape[1] // config.samples_per_patch // nchunks
 # process the first chunk
 chunk_idx = 0
 subsampling = {
-"image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
-"audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
-"label": None,
+    "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
+    "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
+    "label": None,
 }
 
 # define model

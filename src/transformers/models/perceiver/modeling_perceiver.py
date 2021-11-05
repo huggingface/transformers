@@ -674,12 +674,19 @@ class PerceiverPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif hasattr(module, "latents"):
+            module.latents.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif hasattr(module, "position_embeddings") and isinstance(module, PerceiverTrainablePositionEncoding):
+            module.position_embeddings.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, nn.ParameterDict):
+            for modality in module.keys():
+                module[modality].data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
@@ -789,7 +796,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
             modality_sizes = None
             inputs_without_pos = None
 
-        #print("Shape of inputs before going into perceiver:", inputs.shape)
+        # print("Shape of inputs before going into perceiver:", inputs.shape)
         # print("First elements of inputs:", inputs[0,:3,:3])
 
         if inputs.size()[-1] != self.config.d_model:
@@ -1676,7 +1683,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             if inputs_without_pos is None:
                 raise ValueError("Value is required for inputs_without_pos if concat_preprocessed_input is True")
             pos_emb = torch.cat([inputs_without_pos, pos_emb], div=-1)
-        
+
         return pos_emb
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
@@ -1810,7 +1817,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
 
     @property
     def num_query_channels(self) -> int:
-        #print("Num query channels of image modality:", self.decoder.num_query_channels)
+        # print("Num query channels of image modality:", self.decoder.num_query_channels)
         return self.decoder.num_query_channels
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
@@ -2196,8 +2203,8 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         if not self.sine_only:
             encoding_size *= 2
         if self.concat_pos:
-            encoding_size += self.concat_pos * self.num_dimensions
-        
+            encoding_size += self.num_dimensions
+
         return encoding_size
 
     def forward(self, index_dims, batch_size, device, pos=None):

@@ -31,7 +31,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -311,7 +311,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
         if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
             inputs_dict["subsampled_output_points"] = self.model_tester.subsampling
-        
+
         if return_labels:
             if model_class in [
                 *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
@@ -817,6 +817,20 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
                     with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = self._initialize_model(model_class, configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
