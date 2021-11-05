@@ -493,7 +493,10 @@ class Wav2Vec2Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # Use the class's parameter as the hidden_state's last dimension.
+        # This is required in case of using tensor-parallelism
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -579,7 +582,13 @@ class Wav2Vec2Attention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the class's embed_dim rather than input's, this is due to
+        # the reason that attn_output can be partitioned across GPUs
+        # when using tensor-parallelism, in which case the embed_dimension from 
+        # the input is not equal to the attention's last dimension after merging
+        # heads.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
