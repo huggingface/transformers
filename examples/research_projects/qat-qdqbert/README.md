@@ -27,7 +27,7 @@ Required:
 - [TensorRT >= 8.2](https://github.com/NVIDIA/TensorRT)
 - PyTorch >= 1.10.0
 
-## Setup
+## Setup the environment with Dockerfile
 
 Under the directory of `transformers/`, build the docker image:
 ```
@@ -38,6 +38,9 @@ Run the docker:
 ```
 docker run --gpus all --privileged --rm -it --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 bert_quantization:latest
 ```
+
+*Note that the current NGC pytorch container (pytorch:21.07-py3) has TensorRT 8.0 which doesn't meet the requiremnt of TensorRT >= 8.2. One can either update the Dockerfile with the latest [NGC pytorch container](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch) once it supports TensorRT 8.2, or manually download and install [TensorRT >= 8.2](https://developer.nvidia.com/nvidia-tensorrt-download) in the container.*
+
 
 In the container:
 ```
