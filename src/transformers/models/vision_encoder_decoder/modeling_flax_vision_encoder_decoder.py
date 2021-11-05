@@ -226,8 +226,8 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         # The advantage of explicitly setting this is TPU XLA compiler knows as soon as possible what shape this
-        # variable has and can better optimize. Also passing None can lead to some problems when jitting the model.
-        # In Flax/JAX, we only want to pass None for non-tensor function inputs. For all tensor function inputs, we
+        # variable has and can better optimize. Also passing `None` can lead to some problems when jitting the model.
+        # In Flax/JAX, we only want to pass `None` for non-tensor function inputs. For all tensor function inputs, we
         # should always pass a tensor and not `None`.
         batch_size, sequence_length = encoder_hidden_states.shape[:2]
         encoder_attention_mask = jnp.ones((batch_size, sequence_length))
