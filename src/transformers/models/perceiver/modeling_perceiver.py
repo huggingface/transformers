@@ -838,9 +838,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         sequence_output = encoder_outputs[0]
 
         print("Shape of encoder outputs:", sequence_output.shape)
-        # print("Encoder outputs:", sequence_output[0, :3, :3])
-
-        # print("Modality sizes before postprocessing:", modality_sizes)
+        print("Encoder outputs:", sequence_output[0, :3, :3])
 
         logits = None
         if self.decoder:
@@ -1927,6 +1925,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
                 subsampled_points=subsampled_points.get(modality, None),
             )
             print("Shape of query:", query.shape)
+            print("First elements of query:", query[0,:3,:3])
             decoder_queries[modality] = query
 
         # Pad all queries with trainable position encodings to make them have the same channels
@@ -2324,7 +2323,13 @@ class PerceiverAudioPostprocessor(nn.Module):
         self.classifier = nn.Linear(in_channels, config.samples_per_patch)
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
+        
+        print("Outputs before audio postprocessor:", inputs[0,:3,:3])
+        
         logits = self.classifier(inputs)
+
+        print("Outputs after audio postprocessor:", inputs[0,:3,:3])
+
         return torch.reshape(logits, [inputs.shape[0], -1])
 
 
