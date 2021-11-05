@@ -495,7 +495,7 @@ class Wav2Vec2Attention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         # Use the class's parameter as the hidden_state's last dimension.
-        # This is required in case of using tensor-parallelism
+        # This dimension cannot be used in case of enabling tensor-parallelism.
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
@@ -583,7 +583,7 @@ class Wav2Vec2Attention(nn.Module):
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
 
-        # Use the class's embed_dim rather than input's, this is due to
+        # Use the embed_dim from class rather than hidden_state, this is due to
         # the reason that attn_output can be partitioned across GPUs
         # when using tensor-parallelism, in which case the embed_dimension from 
         # the input is not equal to the attention's last dimension after merging
