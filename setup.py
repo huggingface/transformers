@@ -117,7 +117,6 @@ _deps = [
     "keras2onnx",
     "nltk",
     "numpy>=1.17",
-    "onnx",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
@@ -152,9 +151,8 @@ _deps = [
     "sphinxext-opengraph==0.4.1",
     "sphinx-intl",
     "starlette",
-    "tensorflow-cpu>=2.3",
-    "tensorflow>=2.3",
-    "tf2onnx",
+    "tensorflow-cpu>=2.3,<2.7",
+    "tensorflow>=2.3,<2.7",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.10.1,<0.11",
@@ -250,7 +248,7 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx", "onnx", "tf2onnx") + extras["onnxruntime"]
+extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
@@ -353,7 +351,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.12.0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.13.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
