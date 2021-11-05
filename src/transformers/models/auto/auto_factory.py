@@ -394,7 +394,7 @@ class _BaseAutoModelClass:
         kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                pretrained_model_name_or_path, return_unused_kwargs=True, trust_remote_code=trust_remote_code, **kwargs
             )
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
             if not trust_remote_code:

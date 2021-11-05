@@ -273,6 +273,8 @@ class ConfigPushToHubTester(unittest.TestCase):
             repo.push_to_hub()
 
         new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
+        # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
+        self.assertEqual(new_config.__class__.__name__, "FakeConfig")
         self.assertEqual(new_config.attribute, 42)
 
 
