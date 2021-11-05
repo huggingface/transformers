@@ -66,10 +66,10 @@ QDQBertModel
     :members: forward
 
 
-QDQBertForCausalLM
+QDQBertLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.QDQBertForCausalLM
+.. autoclass:: transformers.QDQBertLMHeadModel
     :members: forward
 
 
@@ -84,6 +84,13 @@ QDQBertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.QDQBertForSequenceClassification
+    :members: forward
+
+
+QDQBertForNextSentencePrediction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.QDQBertForNextSentencePrediction
     :members: forward
 
 
