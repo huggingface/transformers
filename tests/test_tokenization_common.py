@@ -27,11 +27,12 @@ from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-from huggingface_hub import delete_repo, login
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import (
     AlbertTokenizer,
     AlbertTokenizerFast,
+    AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
     PreTrainedTokenizer,
@@ -41,6 +42,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -3513,6 +3515,28 @@ class TokenizerTesterMixin:
                     self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
 
 
+class FakeTokenizer(BertTokenizer):
+    pass
+
+
+if is_tokenizers_available():
+
+    class FakeTokenizerFast(BertTokenizerFast):
+        pass
+
+
+# Make sure this is synchronized with the tokenizers above.
+FAKE_TOKENIZER_CODE = """
+from transformers import BertTokenizer, BertTokenizerFast
+
+class FakeTokenizer(BertTokenizer):
+    pass
+
+class FakeTokenizerFast(BertTokenizerFast):
+    pass
+"""
+
+
 @is_staging_test
 class TokenizerPushToHubTester(unittest.TestCase):
     vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "bla", "blou"]
@@ -3530,6 +3554,11 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
         try:
             delete_repo(token=cls._token, name="test-tokenizer-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-tokenizer")
         except HTTPError:
             pass
 
@@ -3561,6 +3590,48 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
             new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+
+    def test_push_to_hub_dynamic_tokenizer(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            tokenizer = FakeTokenizer(vocab_file)
+
+        # No fast custom tokenizer
+        tokenizer._auto_map = ("tokenizer.FakeTokenizer", None)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-tokenizer", use_auth_token=self._token)
+            print(os.listdir((tmp_dir)))
+            tokenizer.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "tokenizer.py"), "w") as f:
+                f.write(FAKE_TOKENIZER_CODE)
+
+            repo.push_to_hub()
+
+        tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
+        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
+        self.assertEqual(tokenizer.__class__.__name__, "FakeTokenizer")
+
+        # Fast and slow custom tokenizer
+        tokenizer._auto_map = ("tokenizer.FakeTokenizer", "tokenizer.FakeTokenizerFast")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-tokenizer", use_auth_token=self._token)
+            print(os.listdir((tmp_dir)))
+            tokenizer.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "tokenizer.py"), "w") as f:
+                f.write(FAKE_TOKENIZER_CODE)
+
+            repo.push_to_hub()
+
+        tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
+        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
+        self.assertEqual(tokenizer.__class__.__name__, "FakeTokenizerFast")
+        tokenizer = AutoTokenizer.from_pretrained(
+            f"{USER}/test-dynamic-tokenizer", use_fast=False, trust_remote_code=True
+        )
+        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
+        self.assertEqual(tokenizer.__class__.__name__, "FakeTokenizer")
 
 
 class TrieTest(unittest.TestCase):

@@ -67,7 +67,6 @@ if is_torch_available():
         AdaptiveEmbedding,
         BertConfig,
         BertModel,
-        PretrainedConfig,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -2211,10 +2210,15 @@ class ModelPushToHubTester(unittest.TestCase):
         self.assertEqual(new_model.__class__.__name__, "FakeModel")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
-    
+
     def test_push_to_hub_dynamic_model_and_config(self):
         config = FakeConfig(
-            attribute=42, vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            attribute=42,
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            intermediate_size=37,
         )
         config.auto_map = {"AutoConfig": "configuration.FakeConfig", "AutoModel": "modeling.FakeModel"}
         model = FakeModel(config)

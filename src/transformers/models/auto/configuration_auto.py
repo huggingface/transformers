@@ -24,6 +24,7 @@ from ...file_utils import CONFIG_NAME
 from ...utils import logging
 from .dynamic import get_class_from_dynamic_module
 
+
 logger = logging.get_logger(__name__)
 
 CONFIG_MAPPING_NAMES = OrderedDict(
@@ -567,7 +568,7 @@ class AutoConfig:
         if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
             if not trust_remote_code:
                 raise ValueError(
-                    f"Loading {pretrained_model_name_or_path} requires you to execute the modeling file in that repo "
+                    f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that repo "
                     "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
                     "the option `trust_remote_code=True` to remove this error."
                 )

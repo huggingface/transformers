@@ -41,6 +41,7 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)
@@ -412,6 +413,10 @@ class AutoTokenizer:
                 Whether or not to try to load the fast version of the tokenizer.
             tokenizer_type (:obj:`str`, `optional`):
                 Tokenizer type to be loaded.
+            trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
@@ -436,6 +441,7 @@ class AutoTokenizer:
 
         use_fast = kwargs.pop("use_fast", True)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -464,17 +470,45 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
+        tokenizer_auto_map = tokenizer_config.get("auto_map")
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
             if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
             config_tokenizer_class = config.tokenizer_class
+            if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
+                tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
         # If we have the tokenizer class from the tokenizer config or the model config we're good!
         if config_tokenizer_class is not None:
             tokenizer_class = None
-            if use_fast and not config_tokenizer_class.endswith("Fast"):
+            if tokenizer_auto_map is not None:
+                if not trust_remote_code:
+                    raise ValueError(
+                        f"Loading {pretrained_model_name_or_path} requires you to execute the tokenizer file in that repo "
+                        "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
+                        "the option `trust_remote_code=True` to remove this error."
+                    )
+                if kwargs.get("revision", None) is None:
+                    logger.warn(
+                        "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
+                        "no malicious code has been contributed in a newer revision."
+                    )
+
+                if use_fast and tokenizer_auto_map[1] is not None:
+                    class_ref = tokenizer_auto_map[1]
+                else:
+                    class_ref = tokenizer_auto_map[0]
+
+                module_file, class_name = class_ref.split(".")
+                tokenizer_class = get_class_from_dynamic_module(
+                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                )
+
+            elif use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None:

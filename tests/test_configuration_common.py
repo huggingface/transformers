@@ -190,7 +190,6 @@ class ConfigTester(object):
         self.check_config_arguments_init()
 
 
-
 class FakeConfig(PretrainedConfig):
     def __init__(self, attribute=1, **kwargs):
         self.attribute = attribute
@@ -206,6 +205,7 @@ class FakeConfig(PretrainedConfig):
         self.attribute = attribute
         super().__init__(**kwargs)
 """
+
 
 @is_staging_test
 class ConfigPushToHubTester(unittest.TestCase):
@@ -259,7 +259,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             for k, v in config.__dict__.items():
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
-    
+
     def test_push_to_hub_dynamic_config(self):
         config = FakeConfig(attribute=42)
         config.auto_map = {"AutoConfig": "configuration.FakeConfig"}

@@ -1784,6 +1784,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
+            init_kwargs.pop("auto_map", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -2028,6 +2029,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_class.endswith("Fast") and tokenizer_class != "PreTrainedTokenizerFast":
             tokenizer_class = tokenizer_class[:-4]
         tokenizer_config["tokenizer_class"] = tokenizer_class
+        if getattr(self, "_auto_map", None) is not None:
+            tokenizer_config["auto_map"] = self._auto_map
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
