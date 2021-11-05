@@ -22,22 +22,12 @@ import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
-from PIL import Image
 
 import numpy as np
-from datasets import (
-    ClassLabel,
-    load_dataset,
-    load_metric,
-    Features,
-    Sequence,
-    Value,
-    Array2D,
-    Array3D,
-)
+from datasets import Array2D, Array3D, ClassLabel, Features, Sequence, Value, load_dataset, load_metric
+from PIL import Image
 
 import transformers
-from transformers.trainer import Trainer
 from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
@@ -47,6 +37,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from transformers.trainer import Trainer
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils.versions import require_version
 
@@ -54,11 +45,17 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of dependencies are not installed. Remove at your own risks.
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt")
-require_version("transformers>=4.12.2", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt")
-require_version("detectron2>=0.6", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt")
+require_version(
+    "datasets>=1.8.0", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt"
+)
+require_version(
+    "transformers>=4.12.2", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt"
+)
+require_version(
+    "detectron2>=0.6", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt"
+)
 
-# TODO: remove unnecessary args
+
 @dataclass
 class ModelArguments:
     """
@@ -89,9 +86,8 @@ class ModelArguments:
             "with private models)."
         },
     )
-    
-    
-# TODO: remove unnecessary args
+
+
 @dataclass
 class DataTrainingArguments:
     """
@@ -216,7 +212,7 @@ def main():
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
-    
+
     if data_args.dataset_name is not None:
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
     else:
@@ -257,7 +253,7 @@ def main():
     else:
         label_list = get_label_list(datasets["train"][label_column_name])
     num_labels = len(label_list)
-    
+
     # Load pretrained model and processor
     #
     # Distributed training:
@@ -295,24 +291,28 @@ def main():
             "requirement"
         )
 
-    features = Features({
-        'image': Array3D(dtype="int64", shape=(3, 224, 224)),
-        'input_ids': Sequence(feature=Value(dtype='int64')),
-        'attention_mask': Sequence(Value(dtype='int64')),
-        'token_type_ids': Sequence(Value(dtype='int64')),
-        'bbox': Array2D(dtype="int64", shape=(512, 4)),
-        'labels': Sequence(ClassLabel(names=datasets['train'].features['ner_tags'].feature.names)),
-    })
+    features = Features(
+        {
+            "image": Array3D(dtype="int64", shape=(3, 224, 224)),
+            "input_ids": Sequence(feature=Value(dtype="int64")),
+            "attention_mask": Sequence(Value(dtype="int64")),
+            "token_type_ids": Sequence(Value(dtype="int64")),
+            "bbox": Array2D(dtype="int64", shape=(512, 4)),
+            "labels": Sequence(ClassLabel(names=datasets["train"].features["ner_tags"].feature.names)),
+        }
+    )
     # Pre-processing the dataset
-    
+
     def preprocess_data(examples):
-        images = [Image.open(path).convert("RGB") for path in examples['image_path']]
-        words = examples['words']
-        boxes = examples['bboxes']
-        word_labels = examples['ner_tags']
+        images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+        words = examples["words"]
+        boxes = examples["bboxes"]
+        word_labels = examples["ner_tags"]
         # Padding strategy
         padding = "max_length" if data_args.pad_to_max_length else False
-        encoded_inputs = processor(images, words, boxes=boxes, word_labels=word_labels, padding=padding, truncation=True)
+        encoded_inputs = processor(
+            images, words, boxes=boxes, word_labels=word_labels, padding=padding, truncation=True
+        )
         return encoded_inputs
 
     if training_args.do_train:
