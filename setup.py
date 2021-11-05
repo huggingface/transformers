@@ -151,7 +151,7 @@ _deps = [
     "sphinxext-opengraph==0.4.1",
     "sphinx-intl",
     "starlette",
-    "tensorflow-cpu>=2.3",
+    "tensorflow-cpu>=2.3,<2.7",
     "tensorflow>=2.3,<2.7",
     "timeout-decorator",
     "timm",
