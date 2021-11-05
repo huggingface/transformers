@@ -152,7 +152,7 @@ _deps = [
     "sphinx-intl",
     "starlette",
     "tensorflow-cpu>=2.3",
-    "tensorflow>=2.3",
+    "tensorflow>=2.3,<2.7",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.10.1,<0.11",

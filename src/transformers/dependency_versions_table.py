@@ -63,7 +63,7 @@ deps = {
     "sphinx-intl": "sphinx-intl",
     "starlette": "starlette",
     "tensorflow-cpu": "tensorflow-cpu>=2.3",
-    "tensorflow": "tensorflow>=2.3",
+    "tensorflow": "tensorflow>=2.3,<2.7",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",
     "tokenizers": "tokenizers>=0.10.1,<0.11",
