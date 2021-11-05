@@ -2328,7 +2328,7 @@ class PerceiverAudioPostprocessor(nn.Module):
         
         logits = self.classifier(inputs)
 
-        print("Outputs after audio postprocessor:", inputs[0,:3,:3])
+        print("Outputs after audio postprocessor:", logits[0,:3,:3])
 
         return torch.reshape(logits, [inputs.shape[0], -1])
 
