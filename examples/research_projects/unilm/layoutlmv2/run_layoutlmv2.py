@@ -1,40 +1,172 @@
 #!/usr/bin/env python
 # coding=utf-8
+# Copyright 2020 The HuggingFace Team All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Fine-tuning layoutlmv2 model
+"""
 
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+from PIL import Image
 
 import numpy as np
-from datasets import ClassLabel, load_dataset, load_metric
+from datasets import (
+    ClassLabel,
+    load_dataset,
+    load_metric,
+    Features,
+    Sequence,
+    Value,
+    Array2D,
+    Array3D,
+)
 
 import transformers
-from .data_utils import DataCollatorForKeyValueExtraction
-from .arg_utils import DataTrainingArguments, ModelArguments
 from transformers.trainer import Trainer
 from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
-    AutoTokenizer,
     HfArgumentParser,
+    LayoutLMv2Processor,
     PreTrainedTokenizerFast,
     TrainingArguments,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
 
-
-# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.5.0")
 
 logger = logging.getLogger(__name__)
 
+# Will error if the minimal version of dependencies are not installed. Remove at your own risks.
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt")
+require_version("transformers>=4.12.2", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt")
+require_version("detectron2>=0.6", "To fix: pip install -r examples/research_projects/unilm/layoutlmv2/requirements.txt")
+
+# TODO: remove unnecessary args
+@dataclass
+class ModelArguments:
+    """
+    Arguments pertaining to which model/config/processor we are going to fine-tune from.
+    """
+
+    model_name_or_path: str = field(
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+    )
+    config_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+    )
+    processor_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained LayoutLMv2 processor name or path if not the same as model_name"}
+    )
+    cache_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
+        },
+    )
+    
+    
+# TODO: remove unnecessary args
+@dataclass
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+    """
+
+    task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
+    dataset_name: Optional[str] = field(
+        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    )
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
+    )
+    validation_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+    )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
+    )
+    pad_to_max_length: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to pad all samples to model maximum sentence length. "
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+            "efficient on GPU but very bad for TPU."
+        },
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_val_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
+        },
+    )
+    max_test_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of test examples to this "
+            "value if set."
+        },
+    )
+    label_all_tokens: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to put the label for one word on all tokens of generated by that word or just on the "
+            "one (in which case the other tokens will have a padding index)."
+        },
+    )
+    return_entity_level_metrics: bool = field(
+        default=False,
+        metadata={"help": "Whether to return all the entity levels during evaluation or just the overall ones."},
+    )
+
 
 def main():
-    # See all possible arguments in layoutlmft/transformers/training_args.py
+    # See all possible arguments in transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
@@ -45,6 +177,27 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Setup logging
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+    log_level = training_args.get_process_log_level()
+    logger.setLevel(log_level if is_main_process(training_args.local_rank) else logging.WARN)
+
+    # Log on each process the small summary:
+    logger.warning(
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+    )
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -61,30 +214,21 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
-    # Setup logging
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
-
-    # Log on each process the small summary:
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
-    # Set the verbosity to info of the Transformers logger (on main process only):
-    if is_main_process(training_args.local_rank):
-        transformers.utils.logging.set_verbosity_info()
-        transformers.utils.logging.enable_default_handler()
-        transformers.utils.logging.enable_explicit_format()
-    logger.info(f"Training/evaluation parameters {training_args}")
-
     # Set seed before initializing model.
     set_seed(training_args.seed)
-
-    datasets = load_dataset("nielsr/funsd")
+    
+    if data_args.dataset_name is not None:
+        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+    else:
+        data_files = {}
+        if data_args.train_file is not None:
+            data_files["train"] = data_args.train_file
+        if data_args.validation_file is not None:
+            data_files["validation"] = data_args.validation_file
+        if data_args.test_file is not None:
+            data_files["test"] = data_args.test_file
+        extension = data_args.train_file.split(".")[-1]
+        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
 
     if training_args.do_train:
         column_names = datasets["train"].column_names
@@ -92,7 +236,6 @@ def main():
     else:
         column_names = datasets["validation"].column_names
         features = datasets["validation"].features
-    text_column_name = "tokens" if "tokens" in column_names else column_names[0]
     label_column_name = (
         f"{data_args.task_name}_tags" if f"{data_args.task_name}_tags" in column_names else column_names[1]
     )
@@ -111,14 +254,11 @@ def main():
 
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
-        # No need to convert the labels since they are already ints.
-        label_to_id = {i: i for i in range(len(label_list))}
     else:
         label_list = get_label_list(datasets["train"][label_column_name])
-        label_to_id = {l: i for i, l in enumerate(label_list)}
     num_labels = len(label_list)
-
-    # Load pretrained model and tokenizer
+    
+    # Load pretrained model and processor
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
@@ -131,13 +271,6 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        use_fast=True,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
     model = AutoModelForTokenClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
@@ -146,66 +279,41 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+    processor = LayoutLMv2Processor.from_pretrained(
+        model_args.processor_name if model_args.processor_name else model_args.processor_name,
+        use_fast=True,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
 
     # Tokenizer check: this script requires a fast tokenizer.
-    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+    if not isinstance(processor.tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
             "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
             "at https://huggingface.co/transformers/index.html#bigtable to find the model types that meet this "
             "requirement"
         )
 
-    # Preprocessing the dataset
-    # Padding strategy
-    padding = "max_length" if data_args.pad_to_max_length else False
-
-    # Tokenize all texts and align the labels with them.
-    def tokenize_and_align_labels(examples):
-        tokenized_inputs = tokenizer(
-            examples[text_column_name],
-            padding=padding,
-            truncation=True,
-            return_overflowing_tokens=True,
-            # We use this argument because the texts in our dataset are lists of words (with a label for each word).
-            is_split_into_words=True,
-        )
-
-        labels = []
-        bboxes = []
-        images = []
-        for batch_index in range(len(tokenized_inputs["input_ids"])):
-            word_ids = tokenized_inputs.word_ids(batch_index=batch_index)
-            org_batch_index = tokenized_inputs["overflow_to_sample_mapping"][batch_index]
-
-            label = examples[label_column_name][org_batch_index]
-            bbox = examples["bboxes"][org_batch_index]
-            image = examples["image"][org_batch_index]
-            previous_word_idx = None
-            label_ids = []
-            bbox_inputs = []
-            for word_idx in word_ids:
-                # Special tokens have a word id that is None. We set the label to -100 so they are automatically
-                # ignored in the loss function.
-                if word_idx is None:
-                    label_ids.append(-100)
-                    bbox_inputs.append([0, 0, 0, 0])
-                # We set the label for the first token of each word.
-                elif word_idx != previous_word_idx:
-                    label_ids.append(label_to_id[label[word_idx]])
-                    bbox_inputs.append(bbox[word_idx])
-                # For the other tokens in a word, we set the label to either the current label or -100, depending on
-                # the label_all_tokens flag.
-                else:
-                    label_ids.append(label_to_id[label[word_idx]] if data_args.label_all_tokens else -100)
-                    bbox_inputs.append(bbox[word_idx])
-                previous_word_idx = word_idx
-            labels.append(label_ids)
-            bboxes.append(bbox_inputs)
-            images.append(image)
-        tokenized_inputs["labels"] = labels
-        tokenized_inputs["bbox"] = bboxes
-        tokenized_inputs["image"] = images
-        return tokenized_inputs
+    features = Features({
+        'image': Array3D(dtype="int64", shape=(3, 224, 224)),
+        'input_ids': Sequence(feature=Value(dtype='int64')),
+        'attention_mask': Sequence(Value(dtype='int64')),
+        'token_type_ids': Sequence(Value(dtype='int64')),
+        'bbox': Array2D(dtype="int64", shape=(512, 4)),
+        'labels': Sequence(ClassLabel(names=datasets['train'].features['ner_tags'].feature.names)),
+    })
+    # Pre-processing the dataset
+    
+    def preprocess_data(examples):
+        images = [Image.open(path).convert("RGB") for path in examples['image_path']]
+        words = examples['words']
+        boxes = examples['bboxes']
+        word_labels = examples['ner_tags']
+        # Padding strategy
+        padding = "max_length" if data_args.pad_to_max_length else False
+        encoded_inputs = processor(images, words, boxes=boxes, word_labels=word_labels, padding=padding, truncation=True)
+        return encoded_inputs
 
     if training_args.do_train:
         if "train" not in datasets:
@@ -214,12 +322,14 @@ def main():
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
-            tokenize_and_align_labels,
+            preprocess_data,
             batched=True,
             remove_columns=remove_columns,
+            features=features,
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        train_dataset.set_format(type="torch")
 
     if training_args.do_eval:
         if "validation" not in datasets:
@@ -228,12 +338,14 @@ def main():
         if data_args.max_val_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
         eval_dataset = eval_dataset.map(
-            tokenize_and_align_labels,
+            preprocess_data,
             batched=True,
             remove_columns=remove_columns,
+            features=features,
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        eval_dataset.set_format(type="torch")
 
     if training_args.do_predict:
         if "test" not in datasets:
@@ -242,20 +354,14 @@ def main():
         if data_args.max_test_samples is not None:
             test_dataset = test_dataset.select(range(data_args.max_test_samples))
         test_dataset = test_dataset.map(
-            tokenize_and_align_labels,
+            preprocess_data,
             batched=True,
             remove_columns=remove_columns,
+            features=features,
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
         )
-
-    # Data collator
-    data_collator = DataCollatorForKeyValueExtraction(
-        tokenizer,
-        pad_to_multiple_of=8 if training_args.fp16 else None,
-        padding=padding,
-        max_length=512,
-    )
+        test_dataset.set_format(type="torch")
 
     # Metrics
     metric = load_metric("seqeval")
@@ -299,8 +405,6 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
 
@@ -309,7 +413,7 @@ def main():
         checkpoint = last_checkpoint if last_checkpoint else None
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         metrics = train_result.metrics
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+        trainer.save_model()
 
         max_train_samples = (
             data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
@@ -354,6 +458,20 @@ def main():
             with open(output_test_predictions_file, "w") as writer:
                 for prediction in true_predictions:
                     writer.write(" ".join(prediction) + "\n")
+
+    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "image-classification"}
+    if data_args.dataset_name is not None:
+        kwargs["dataset_tags"] = data_args.dataset_name
+        if data_args.dataset_config_name is not None:
+            kwargs["dataset_args"] = data_args.dataset_config_name
+            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+        else:
+            kwargs["dataset"] = data_args.dataset_name
+
+    if training_args.push_to_hub:
+        trainer.push_to_hub(**kwargs)
+    else:
+        trainer.create_model_card(**kwargs)
 
 
 def _mp_fn(index):
