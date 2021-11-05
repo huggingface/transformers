@@ -225,8 +225,7 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
         if self.enc_to_dec_proj is not None:
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
-        batch_size, sequence_length = encoder_hidden_states.shape[:2]
-        encoder_attention_mask = jnp.ones((batch_size, sequence_length))
+        encoder_attention_mask = None
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
