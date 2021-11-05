@@ -117,7 +117,7 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output, decimals=4),
             [
-                {"score": 0.9809, "label": "go"},
+                {"score": 0.981, "label": "go"},
                 {"score": 0.0073, "label": "up"},
                 {"score": 0.0064, "label": "_unknown_"},
                 {"score": 0.0015, "label": "down"},

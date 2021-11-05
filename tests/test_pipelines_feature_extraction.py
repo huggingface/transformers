@@ -105,3 +105,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         outputs = feature_extractor(["This is a test", "Another longer test"])
         shape = self.get_shape(outputs)
         self.assertEqual(shape[0], 2)
+
+        outputs = feature_extractor("This is a test" * 100, truncation=True)
+        shape = self.get_shape(outputs)
+        self.assertEqual(shape[0], 1)

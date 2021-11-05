@@ -606,6 +606,11 @@ class BeitForMaskedImageModeling:
         requires_backends(cls, ["torch"])
 
 
+class BeitForSemanticSegmentation:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BeitModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

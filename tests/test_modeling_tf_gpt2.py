@@ -19,7 +19,7 @@ from transformers import GPT2Config, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_tf_available():
@@ -120,6 +120,35 @@ class TFGPT2ModelTester:
             sequence_labels,
             token_labels,
             choice_labels,
+        )
+
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            mc_token_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
         )
 
     def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):

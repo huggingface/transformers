@@ -27,7 +27,7 @@ from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-from huggingface_hub import HfApi
+from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import (
     AlbertTokenizer,
@@ -44,7 +44,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    ENDPOINT_STAGING,
     PASS,
     USER,
     get_tests_dir,
@@ -3520,18 +3519,17 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-tokenizer")
+            delete_repo(token=cls._token, name="test-tokenizer")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-tokenizer-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-tokenizer-org", organization="valid_org")
         except HTTPError:
             pass
 
