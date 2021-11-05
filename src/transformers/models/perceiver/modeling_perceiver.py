@@ -2326,6 +2326,8 @@ class PerceiverAudioPostprocessor(nn.Module):
         
         print("Outputs before audio postprocessor:", inputs[0,:3,:3])
         
+        print("First elements of classifier weights:", self.classifier.weight[:3,:3])
+        
         logits = self.classifier(inputs)
 
         print("Outputs after audio postprocessor:", logits[0,:3,:3])
