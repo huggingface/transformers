@@ -744,7 +744,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             )
         else:
             extended_attention_mask = tf.reshape(
-                inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+                inputs["attention_mask"], (attention_mask_shape[0], 1, -1, attention_mask_shape[1])
             )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
