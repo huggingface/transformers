@@ -2324,10 +2324,11 @@ class PerceiverAudioPostprocessor(nn.Module):
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
         
-        print("Outputs before audio postprocessor:", inputs[0,:3,:3])
+        print("Inputs before audio postprocessor:", inputs[0,:3,:3])
+        print("Sum of elements of inputs:", inputs.sum())
         
         print("First elements of classifier weights:", self.classifier.weight[:3,:3])
-        
+
         logits = self.classifier(inputs)
 
         print("Shape of logits after postprocessing:", logits.shape)
