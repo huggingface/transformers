@@ -585,7 +585,7 @@ class Wav2Vec2Attention(nn.Module):
 
         # Use the embed_dim from class rather than hidden_state, this is due to
         # the reason that attn_output can be partitioned across GPUs
-        # when using tensor-parallelism, in which case the embed_dimension from 
+        # when using tensor-parallelism, in which case the embed_dimension from
         # the input is not equal to the attention's last dimension after merging
         # heads.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
