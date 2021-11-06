@@ -412,7 +412,7 @@ class QuestionAnsweringPipeline(Pipeline):
             end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
 
             if handle_impossible_answer:
-                min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+                min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())
 
             # Mask CLS
             start_[0, 0] = end_[0, 0] = 0.0
