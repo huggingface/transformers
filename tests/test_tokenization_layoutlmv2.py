@@ -1939,7 +1939,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                 "Token indices sequence length is longer than the specified maximum sequence length for this model"
                             )
                         )
-
+                # Check the order of Sequence of input ids, overflowing tokens and bbox sequence with truncation
                 truncated_first_sequence = (
                     tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)["input_ids"][:-2]
                     + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["input_ids"]
@@ -2217,8 +2217,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                 "Token indices sequence length is longer than the specified maximum sequence length for this model"
                             )
                         )
-
-                # Overflowing tokens
+                # Check the order of Sequence of input ids, overflowing tokens and bbox sequence with truncation
                 stride = 2
                 information = tokenizer(
                     seq_0,
