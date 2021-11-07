@@ -138,7 +138,7 @@ class BatchFeature(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            as_tensor = torch.tensor
+            as_tensor = lambda value: torch.tensor(value if not isinstance(value, list) else np.array(value))
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
