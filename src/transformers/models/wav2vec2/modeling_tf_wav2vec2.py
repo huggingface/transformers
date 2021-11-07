@@ -524,7 +524,10 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
 
     def build(self, input_shape):
         if not self.built:
+            input_shape = input_shape.as_list()
+            input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
+
             self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
             self.weight_v = self.kernel
 
