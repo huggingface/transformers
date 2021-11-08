@@ -15,13 +15,10 @@
 import unittest
 
 from transformers import (
+    FEATURE_EXTRACTOR_MAPPING,
     MODEL_MAPPING,
     TF_MODEL_MAPPING,
-    CLIPConfig,
     FeatureExtractionPipeline,
-    HubertConfig,
-    LxmertConfig,
-    Wav2Vec2Config,
     pipeline,
 )
 from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
@@ -74,8 +71,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         if tokenizer is None:
             self.skipTest("No tokenizer")
             return
-
-        elif isinstance(model.config, (LxmertConfig, CLIPConfig, Wav2Vec2Config, HubertConfig)):
+        elif type(model.config) in FEATURE_EXTRACTOR_MAPPING:
             self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
             return
         elif model.config.is_encoder_decoder:
