@@ -1967,20 +1967,28 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 bbox_first = [[0, 0, 0, 0]] * (len(seq_0) - 2)
                 bbox_first_sequence = bbox_first + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["bbox"]
                 overflowing_token_bbox_first_sequence_slow = [[0, 0, 0, 0]] * (2 + stride)
-                overflowing_token_bbox_first_sequence_fast = [[0, 0, 0, 0]] * (2 + stride) + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["bbox"]
+                overflowing_token_bbox_first_sequence_fast = [[0, 0, 0, 0]] * (2 + stride) + tokenizer(
+                    seq_1, boxes=boxes_1, add_special_tokens=False
+                )["bbox"]
 
                 bbox_second = [[0, 0, 0, 0]] * len(seq_0)
                 bbox_second_sequence = (
                     bbox_second + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["bbox"][:-2]
                 )
-                overflowing_token_bbox_second_sequence_slow = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["bbox"][-(2 + stride):]
-                overflowing_token_bbox_second_sequence_fast = [[0, 0, 0, 0]] * len(seq_0) + tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)["bbox"][-(2 + stride):]
+                overflowing_token_bbox_second_sequence_slow = tokenizer(
+                    seq_1, boxes=boxes_1, add_special_tokens=False
+                )["bbox"][-(2 + stride) :]
+                overflowing_token_bbox_second_sequence_fast = [[0, 0, 0, 0]] * len(seq_0) + tokenizer(
+                    seq_1, boxes=boxes_1, add_special_tokens=False
+                )["bbox"][-(2 + stride) :]
 
                 bbox_longest_sequence = (
                     bbox_first_sequence if len(seq0_tokens) > len(seq1_tokens) else bbox_second_sequence
                 )
                 overflowing_token_bbox_longest_sequence_fast = (
-                    overflowing_token_bbox_first_sequence_fast if len(seq0_tokens) > len(seq1_tokens) else overflowing_token_bbox_second_sequence_fast
+                    overflowing_token_bbox_first_sequence_fast
+                    if len(seq0_tokens) > len(seq1_tokens)
+                    else overflowing_token_bbox_second_sequence_fast
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
@@ -2278,7 +2286,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, sequence["input_ids"][-(2 + stride) :])
                     self.assertEqual(bbox, sequence["bbox"][:-2])
-                    self.assertEqual(overflowing_bbox, sequence["bbox"][-(2 + stride):])
+                    self.assertEqual(overflowing_bbox, sequence["bbox"][-(2 + stride) :])
 
     @unittest.skip("LayoutLMv2 tokenizer requires boxes besides sequences.")
     def test_pretokenized_inputs(self):
