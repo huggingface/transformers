@@ -21,7 +21,8 @@ from transformers import GPTJConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, tooslow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from .test_generation_utils import GenerationTesterMixin
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -142,7 +143,6 @@ class GPTJModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             use_cache=True,
@@ -351,7 +351,7 @@ class GPTJModelTester:
 
 
 @require_torch
-class GPTJModelTest(unittest.TestCase):
+class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
@@ -359,6 +359,7 @@ class GPTJModelTest(unittest.TestCase):
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
+    test_head_masking = False
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

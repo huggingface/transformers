@@ -244,7 +244,7 @@ class Trainer:
             detailed in :doc:`here <callback>`.
 
             If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
-        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
+        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, `optional`): A tuple
             containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
@@ -2644,7 +2644,9 @@ class Trainer:
                 commit_message = f"Training in progress, step {self.state.global_step}"
             else:
                 commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-            _, self.push_in_progress = self.repo.push_to_hub(commit_message=commit_message, blocking=False)
+            _, self.push_in_progress = self.repo.push_to_hub(
+                commit_message=commit_message, blocking=False, auto_lfs_prune=True
+            )
         finally:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
                 # Move back the checkpoint to its place
@@ -2680,12 +2682,16 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        git_head_commit_url = self.repo.push_to_hub(commit_message=commit_message, blocking=blocking)
+        git_head_commit_url = self.repo.push_to_hub(
+            commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
+        )
         # push separately the model card to be independant from the rest of the model
         if self.args.should_save:
             self.create_model_card(model_name=model_name, **kwargs)
             try:
-                self.repo.push_to_hub(commit_message="update model card README.md", blocking=blocking)
+                self.repo.push_to_hub(
+                    commit_message="update model card README.md", blocking=blocking, auto_lfs_prune=True
+                )
             except EnvironmentError as exc:
                 logger.error(f"Error pushing update to the model card. Please read logs and retry.\n${exc}")
 
