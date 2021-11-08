@@ -30,7 +30,14 @@ import numpy as np
 import transformers
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import AutoModel, AutoModelForSequenceClassification, PretrainedConfig, is_torch_available, logging
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    AutoModelForSequenceClassification,
+    PretrainedConfig,
+    is_torch_available,
+    logging,
+)
 from transformers.file_utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
@@ -2211,6 +2218,10 @@ class ModelPushToHubTester(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
+        new_model = AutoModel.from_config(config, trust_remote_code=True)
+        self.assertEqual(new_model.__class__.__name__, "FakeModel")
+
     def test_push_to_hub_dynamic_model_and_config(self):
         config = FakeConfig(
             attribute=42,
@@ -2242,3 +2253,7 @@ class ModelPushToHubTester(unittest.TestCase):
         self.assertEqual(new_model.__class__.__name__, "FakeModel")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
+        new_model = AutoModel.from_config(config, trust_remote_code=True)
+        self.assertEqual(new_model.__class__.__name__, "FakeModel")

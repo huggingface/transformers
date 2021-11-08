@@ -563,6 +563,7 @@ class AutoConfig:
             {'foo': False}
         """
         kwargs["_from_auto"] = True
+        kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", False)
         config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
