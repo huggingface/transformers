@@ -278,7 +278,6 @@ class LongformerModelTester:
 class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False  # pruning is not supported
     test_torchscript = False
-    test_sequence_classification_problem_types = True
 
     all_model_classes = (
         (

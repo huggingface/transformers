@@ -108,7 +108,7 @@ else:
             ),
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
-            ("blenderbot", ("BlenderbotTokenizer", None)),
+            ("blenderbot", ("BlenderbotTokenizer", "BlenderbotTokenizerFast")),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -124,6 +124,7 @@ else:
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
+            ("layoutxlm", ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
                 (

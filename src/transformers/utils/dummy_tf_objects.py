@@ -16,6 +16,11 @@ def tf_top_k_top_p_filtering(*args, **kwargs):
     requires_backends(tf_top_k_top_p_filtering, ["tf"])
 
 
+class PushToHubCallback:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

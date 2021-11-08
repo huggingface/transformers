@@ -50,6 +50,15 @@ class LayoutLMv2Processor:
         requires_backends(cls, ["vision"])
 
 
+class LayoutXLMProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["vision"])
+
+
 class SegformerFeatureExtractor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

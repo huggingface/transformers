@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library's seq2seq models for question answering.
+Fine-tuning the library's seq2seq models for question answering using the 🤗 Seq2SeqTrainer.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -46,7 +46,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.11.0.dev0")
+check_min_version("4.13.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 

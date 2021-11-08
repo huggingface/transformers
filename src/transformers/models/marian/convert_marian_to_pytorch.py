@@ -27,7 +27,7 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from huggingface_hub.hf_api import HfApi
+from huggingface_hub.hf_api import list_models
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 
 
@@ -64,8 +64,7 @@ def load_layers_(layer_lst: nn.ModuleList, opus_state: dict, converter, is_decod
 def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
-    api = HfApi()
-    model_list = api.list_models()
+    model_list = list_models()
     model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
@@ -456,7 +455,7 @@ BART_CONVERTER = {  # for each encoder and decoder layer
 
 
 class OpusState:
-    def __init__(self, source_dir):
+    def __init__(self, source_dir, eos_token_id=0):
         npz_path = find_model_file(source_dir)
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
@@ -493,7 +492,8 @@ class OpusState:
             d_model=cfg["dim-emb"],
             activation_function=cfg["transformer-aan-activation"],
             pad_token_id=self.pad_token_id,
-            eos_token_id=0,
+            eos_token_id=eos_token_id,
+            forced_eos_token_id=eos_token_id,
             bos_token_id=0,
             max_position_embeddings=cfg["dim-emb"],
             scale_embedding=True,
@@ -596,7 +596,11 @@ def convert(source_dir: Path, dest_dir):
     tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
     tokenizer.save_pretrained(dest_dir)
 
-    opus_state = OpusState(source_dir)
+    # retrieve EOS token and set correctly
+    tokenizer_has_eos_token_id = hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None
+    eos_token_id = tokenizer.eos_token_id if tokenizer_has_eos_token_id else 0
+
+    opus_state = OpusState(source_dir, eos_token_id=eos_token_id)
     if opus_state.cfg["vocab_size"] != len(tokenizer.encoder):
         raise ValueError(
             f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
