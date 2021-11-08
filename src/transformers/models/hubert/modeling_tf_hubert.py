@@ -526,6 +526,7 @@ class TFHubertWeightNormConv1D(tf.keras.layers.Conv1D):
     def build(self, input_shape):
         if not self.built:
             input_shape = input_shape.as_list()
+            # Conv1D output shapes are checked at build time since TF 2.7, so we need to account for padding
             input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
 
