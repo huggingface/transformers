@@ -1535,10 +1535,6 @@ class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
     def num_query_channels(self):
         raise NotImplementedError
 
-    # @abc.abstractmethod
-    # def output_shape(self, inputs):
-    #     raise NotImplementedError
-
     @abc.abstractmethod
     def forward(self, query, z, query_mask=None):
         raise NotImplementedError
@@ -1553,9 +1549,6 @@ class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         return None
-
-    # def output_shape(self, inputs):
-    #     return ((inputs.shape[0], self.num_labels), None)
 
     def forward(self, query, z, query_mask=None):
         # (batch_size, num_latents, d_latents) -> (batch_size, d_latents)
@@ -1644,9 +1637,6 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if self.final_project:
             return self.output_num_channels
         return self.num_channels
-
-    # def output_shape(self, inputs):
-    #     return ((inputs[0], self.subsampled_index_dims, self.output_num_channels), None)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         if self.position_encoding_type == "none":  # Queries come from elsewhere
@@ -1755,9 +1745,6 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
             inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_points
         )
 
-    # def output_shape(self, inputs):
-    #     return (inputs.shape[0], self.num_labels), None
-
     def forward(self, query, z, query_mask=None, output_attentions=False):
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
 
@@ -1781,11 +1768,6 @@ class PerceiverFlowDecoder(PerceiverAbstractDecoder):
     @property
     def num_query_channels(self) -> int:
         return self.decoder.num_query_channels
-
-    # def output_shape(self, inputs):
-    #     # The channel dimensions of output here don't necessarily correspond to
-    #     # (u, v) of flow: they may contain dims needed for the post-processor.
-    #     return ((inputs.shape[0],) + tuple(self.output_image_shape) + (self.output_num_channels,), None)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         if subsampled_points is not None:
@@ -1835,9 +1817,6 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
             inputs_without_pos=inputs_without_pos,
             subsampled_points=subsampled_points,
         )
-
-    # def output_shape(self, inputs):
-    #     return ([inputs.shape[0]] + self.output_shape[1:] + [self.output_num_channels], None)
 
     def forward(self, query, z, query_mask=None):
         decoder_outputs = self.decoder(query, z)
@@ -1952,13 +1931,6 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         return torch.cat(
             [embed(modality, decoder_queries[modality]) for modality in sorted(self.modalities.keys())], dim=1
         )
-
-    # def output_shape(self, inputs):
-    #     if self.subsampled_index_dims is not None:
-    #         subsampled_index_dims = sum(self.subsampled_index_dims.values())
-    #     else:
-    #         subsampled_index_dims = self.num_outputs
-    #     return ((inputs.shape[0], subsampled_index_dims, self.output_num_channels), self.subsampled_index_dims)
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
         # B x 1 x num_classes -> B x num_classes

@@ -365,11 +365,13 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
             "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
             "label": None,
         }
-        model = PerceiverForMultimodalAutoencoding(config, subsampling=subsampling)
+        model = PerceiverForMultimodalAutoencoding(config)
         # set labels
         filename = "kinetics700-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
     else:
         raise ValueError(f"Task {task} not supported")
     model.eval()
