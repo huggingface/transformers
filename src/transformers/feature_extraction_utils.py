@@ -142,7 +142,7 @@ class BatchFeature(UserDict):
             def as_tensor(value):
                 if isinstance(value, Sequence) and len(value) > 0:
                     first_elem = value[0]
-                    if isinstance(first_elem, np.ndarray)
+                    if isinstance(first_elem, np.ndarray):
                         value = np.array(value)
                 return torch.tensor(value)
 
