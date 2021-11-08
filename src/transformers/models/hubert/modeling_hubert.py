@@ -40,7 +40,7 @@ from .configuration_hubert import HubertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "HubertConfig"
-_CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
+_CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 _SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"

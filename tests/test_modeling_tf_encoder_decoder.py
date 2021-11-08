@@ -25,6 +25,7 @@ from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_
 
 from .test_modeling_tf_bert import TFBertModelTester
 from .test_modeling_tf_common import ids_tensor
+from .test_modeling_tf_gpt2 import TFGPT2ModelTester
 from .test_modeling_tf_rembert import TFRemBertModelTester
 from .test_modeling_tf_roberta import TFRobertaModelTester
 
@@ -39,6 +40,7 @@ if is_tf_available():
         TFBertLMHeadModel,
         TFBertModel,
         TFEncoderDecoderModel,
+        TFGPT2LMHeadModel,
         TFRemBertForCausalLM,
         TFRemBertModel,
         TFRobertaForCausalLM,
@@ -432,7 +434,7 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
-        """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`
+        """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`.
         (For Bert decoder, there is no issue, because `BertModel` is wrapped into `decoder` as `bert`)
         model = TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", from_pt=True)
         """
@@ -452,6 +454,95 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
         input_dict = tokenizer(ARTICLE_STUDENTS, return_tensors="tf")
         output_ids = model.generate(input_ids=input_dict["input_ids"], max_length=None).numpy().tolist()
         summary = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
+
+
+@require_tf
+class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
+    def get_pretrained_model(self):
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+
+    def get_encoder_decoder_model(self, config, decoder_config):
+        encoder_model = TFBertModel(config, name="encoder")
+        decoder_model = TFGPT2LMHeadModel(decoder_config, name="decoder")
+        return encoder_model, decoder_model
+
+    def prepare_config_and_inputs(self):
+        model_tester_encoder = TFBertModelTester(self, batch_size=13)
+        model_tester_decoder = TFGPT2ModelTester(self)
+        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            attention_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = encoder_config_and_inputs
+        (
+            decoder_config,
+            decoder_input_ids,
+            decoder_attention_mask,
+            decoder_head_mask,
+            decoder_token_type_ids,
+            decoder_sequence_labels,
+            decoder_token_labels,
+            decoder_choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = decoder_config_and_inputs
+
+        # make sure that cross attention layers are added
+        decoder_config.add_cross_attention = True
+        #  disable cache for now
+        decoder_config.use_cache = False
+        return {
+            "config": config,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_config": decoder_config,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_token_type_ids": decoder_token_type_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_sequence_labels": decoder_sequence_labels,
+            "decoder_token_labels": decoder_token_labels,
+            "decoder_choice_labels": decoder_choice_labels,
+            "encoder_hidden_states": encoder_hidden_states,
+            "labels": decoder_token_labels,
+        }
+
+    @slow
+    @is_pt_tf_cross_test
+    def test_bert2gpt2_summarization(self):
+
+        from transformers import EncoderDecoderModel
+
+        tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
+
+        """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`.
+        (For GPT2 decoder, there is no issue)
+        model = TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16", from_pt=True)
+        """
+
+        # workaround to load from pt
+        _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
+        _model.encoder.save_pretrained("./encoder")
+        _model.decoder.save_pretrained("./decoder")
+        model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
+        )
+        model.config = _model.config
+
+        ARTICLE_STUDENTS = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members singing a racist chant. SAE's national chapter suspended the students, but University of Oklahoma President David Boren took it a step further, saying the university's affiliation with the fraternity is permanently done. The news is shocking, but it's not the first time SAE has faced controversy. SAE was founded March 9, 1856, at the University of Alabama, five years before the American Civil War, according to the fraternity website. When the war began, the group had fewer than 400 members, of which "369 went to war for the Confederate States and seven for the Union Army," the website says. The fraternity now boasts more than 200,000 living alumni, along with about 15,000 undergraduates populating 219 chapters and 20 "colonies" seeking full membership at universities. SAE has had to work hard to change recently after a string of member deaths, many blamed on the hazing of new recruits, SAE national President Bradley Cohen wrote in a message on the fraternity's website. The fraternity's website lists more than 130 chapters cited or suspended for "health and safety incidents" since 2010. At least 30 of the incidents involved hazing, and dozens more involved alcohol. However, the list is missing numerous incidents from recent months. Among them, according to various media outlets: Yale University banned the SAEs from campus activities last month after members allegedly tried to interfere with a sexual misconduct investigation connected to an initiation rite. Stanford University in December suspended SAE housing privileges after finding sorority members attending a fraternity function were subjected to graphic sexual content. And Johns Hopkins University in November suspended the fraternity for underage drinking. "The media has labeled us as the 'nation's deadliest fraternity,' " Cohen said. In 2011, for example, a student died while being coerced into excessive alcohol consumption, according to a lawsuit. SAE's previous insurer dumped the fraternity. "As a result, we are paying Lloyd's of London the highest insurance rates in the Greek-letter world," Cohen said. Universities have turned down SAE's attempts to open new chapters, and the fraternity had to close 12 in 18 months over hazing incidents."""
+        EXPECTED_SUMMARY_STUDENTS = """SAS Alpha Epsilon suspended the students, but university president says it's permanent.\nThe fraternity has had to deal with a string of student deaths since 2010.\nSAS has more than 200,000 members, many of whom are students.\nA student died while being forced into excessive alcohol consumption."""
+
+        input_dict = tokenizer_in(ARTICLE_STUDENTS, return_tensors="tf")
+        output_ids = model.generate(input_ids=input_dict["input_ids"], max_length=None).numpy().tolist()
+        summary = tokenizer_out.batch_decode(output_ids, skip_special_tokens=True)
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
 
