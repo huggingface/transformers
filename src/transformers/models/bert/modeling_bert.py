@@ -16,6 +16,7 @@
 """PyTorch BERT model. """
 
 
+import copy
 import math
 import os
 import warnings
@@ -451,7 +452,11 @@ class BertLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BertAttention(config)
+            # cross attention cannot have relative position embeddings
+            cross_attention_config = copy.deepcopy(config)
+            cross_attention_config.position_embedding_type = "absolute"
+
+            self.crossattention = BertAttention(cross_attention_config)
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
