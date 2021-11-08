@@ -875,7 +875,7 @@ class TFModelTesterMixin:
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+        def check_equivalence(model, tuple_inputs, dict_inputs, **additional_kwargs):
             tuple_output = model(tuple_inputs, return_dict=False, **additional_kwargs)
             dict_output = model(dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 

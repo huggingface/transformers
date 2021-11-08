@@ -1366,7 +1366,7 @@ class ModelTesterMixin:
             t[t != t] = 0
             return t
 
-        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+        def check_equivalence(model, tuple_inputs, dict_inputs, **additional_kwargs):
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()

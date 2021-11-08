@@ -133,7 +133,9 @@ class DebugUnderflowOverflow:
 
     """
 
-    def __init__(self, model, max_frames_to_save=21, trace_batch_nums=[], abort_after_batch_num=None):
+    def __init__(self, model, max_frames_to_save=21, trace_batch_nums=None, abort_after_batch_num=None):
+        if trace_batch_nums is None:
+            trace_batch_nums = []
         self.model = model
         self.trace_batch_nums = trace_batch_nums
         self.abort_after_batch_num = abort_after_batch_num
