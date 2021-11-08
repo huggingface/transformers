@@ -838,12 +838,13 @@ class PerceiverModel(PerceiverPreTrainedModel):
         sequence_output = encoder_outputs[0]
 
         print("Shape of encoder outputs:", sequence_output.shape)
-        print("Encoder outputs:", sequence_output[0, :3, :3])
+        #print("Encoder outputs:", sequence_output[0, :3, :3])
 
         logits = None
         if self.decoder:
             _, output_modality_sizes = self.decoder.output_shape(inputs)
             output_modality_sizes = output_modality_sizes or modality_sizes
+            print("Output modality sizes:", output_modality_sizes)
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
@@ -864,7 +865,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
                 else:
                     encoder_outputs = encoder_outputs + decoder_outputs.cross_attentions
 
-            print("Shape of decoder outputs:", logits.shape)
+            #print("Shape of decoder outputs:", logits.shape)
 
             if self.output_postprocessor:
                 logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
@@ -1925,7 +1926,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
                 subsampled_points=subsampled_points.get(modality, None),
             )
             print("Shape of query:", query.shape)
-            print("First elements of query:", query[0,:3,:3])
+            #print("First elements of query:", query[0,:3,:3])
             decoder_queries[modality] = query
 
         # Pad all queries with trainable position encodings to make them have the same channels
@@ -2324,16 +2325,16 @@ class PerceiverAudioPostprocessor(nn.Module):
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
         
-        print("Inputs before audio postprocessor:", inputs[0,:3,:3])
-        print("Sum of elements of inputs:", inputs.sum())
+        #print("Inputs before audio postprocessor:", inputs[0,:3,:3])
+        #print("Sum of elements of inputs:", inputs.sum())
         
-        print("First elements of classifier weights:", self.classifier.weight[:3,:3])
+        #print("First elements of classifier weights:", self.classifier.weight[:3,:3])
 
         logits = self.classifier(inputs)
 
-        print("Shape of logits after postprocessing:", logits.shape)
+        #print("Shape of logits after postprocessing:", logits.shape)
 
-        print("Outputs after audio postprocessor:", logits[0,:3,:3])
+        #print("Outputs after audio postprocessor:", logits[0,:3,:3])
 
         return torch.reshape(logits, [inputs.shape[0], -1])
 
