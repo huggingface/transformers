@@ -20,7 +20,7 @@ import unittest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import QDQBertConfig, is_torch_available
-from transformers.testing_utils import require_quantization, require_torch, slow, torch_device
+from transformers.testing_utils import require_pytorch_quantization, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -406,7 +406,7 @@ class QDQBertModelTester:
 
 
 @require_torch
-@require_quantization
+@require_pytorch_quantization
 class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
@@ -522,7 +522,7 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_quantization
+@require_pytorch_quantization
 class QDQBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):

@@ -44,7 +44,7 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
-    is_quantization_available,
+    is_pytorch_quantization_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
@@ -531,7 +531,7 @@ else:
         name for name in dir(dummy_scatter_objects) if not name.startswith("_")
     ]
 
-if is_torch_available() and is_quantization_available():
+if is_torch_available() and is_pytorch_quantization_available():
     _import_structure["models.qdqbert"].extend(
         [
             "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -549,10 +549,10 @@ if is_torch_available() and is_quantization_available():
         ]
     )
 else:
-    from .utils import dummy_quantization_and_torch_objects
+    from .utils import dummy_pytorch_quantization_and_torch_objects
 
-    _import_structure["utils.dummy_quantization_and_torch_objects"] = [
-        name for name in dir(dummy_quantization_and_torch_objects) if not name.startswith("_")
+    _import_structure["utils.dummy_pytorch_quantization_and_torch_objects"] = [
+        name for name in dir(dummy_pytorch_quantization_and_torch_objects) if not name.startswith("_")
     ]
 
 # PyTorch-backed objects
@@ -2440,7 +2440,7 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_scatter_objects import *
 
-    if is_torch_available() and is_quantization_available():
+    if is_torch_available() and is_pytorch_quantization_available():
         from .models.qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             QDQBertForMaskedLM,
@@ -2456,7 +2456,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_qdqbert,
         )
     else:
-        from .utils.dummy_quantization_and_torch_objects import *
+        from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
         # Benchmarks

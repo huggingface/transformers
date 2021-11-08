@@ -31,7 +31,7 @@ from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_quantization_available,
+    is_pytorch_quantization_available,
     replace_return_docstrings,
     requires_backends,
 )
@@ -59,7 +59,7 @@ from .configuration_qdqbert import QDQBertConfig
 logger = logging.get_logger(__name__)
 
 # soft dependency
-if is_quantization_available():
+if is_pytorch_quantization_available():
     try:
         from pytorch_quantization import nn as quant_nn
         from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
@@ -853,7 +853,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
-        requires_backends(self, "quantization")
+        requires_backends(self, "pytorch_quantization")
         super().__init__(config)
         self.config = config
 

@@ -196,12 +196,12 @@ except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
 
 
-_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
+_pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
 try:
-    _quantization_version = importlib_metadata.version("pytorch_quantization")
-    logger.debug(f"Successfully imported pytorch-quantization version {_quantization_version}")
+    _pytorch_quantization_version = importlib_metadata.version("pytorch_quantization")
+    logger.debug(f"Successfully imported pytorch-quantization version {_pytorch_quantization_version}")
 except importlib_metadata.PackageNotFoundError:
-    _quantization_available = False
+    _pytorch_quantization_available = False
 
 
 _soundfile_available = importlib.util.find_spec("soundfile") is not None
@@ -439,8 +439,8 @@ def is_scatter_available():
     return _scatter_available
 
 
-def is_quantization_available():
-    return _quantization_available
+def is_pytorch_quantization_available():
+    return _pytorch_quantization_available
 
 
 def is_pandas_available():
@@ -623,7 +623,7 @@ explained here: https://github.com/rusty1s/pytorch_scatter.
 """
 
 # docstyle-ignore
-QUANTIZATION_IMPORT_ERROR = """
+PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
 """
@@ -679,7 +679,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
-        ("quantization", (is_quantization_available, QUANTIZATION_IMPORT_ERROR)),
+        ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
