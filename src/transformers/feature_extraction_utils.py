@@ -20,6 +20,7 @@ import copy
 import json
 import os
 from collections import UserDict
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -139,7 +140,11 @@ class BatchFeature(UserDict):
             import torch
 
             def as_tensor(value):
-                return torch.tensor(value if not isinstance(value, list) else np.array(value))
+                if isinstance(value, Sequence) and len(value) > 0:
+                    first_elem = value[0]
+                    if isinstance(first_elem, np.ndarray)
+                        value = np.array(value)
+                return torch.tensor(value)
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
