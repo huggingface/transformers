@@ -1907,6 +1907,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
 
     def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None, subsampled_points=None):
         # Partition the flat inputs among the different modalities
+        print("Shape of inputs before restructure:", inputs.shape)
         inputs = restructure(modality_sizes, inputs)
 
         # Obtain modality-specific decoders' queries
