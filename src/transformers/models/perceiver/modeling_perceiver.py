@@ -1308,16 +1308,16 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
 
 # @add_start_docstrings("""Example use of Perceiver for multimodal autoencoding. """, PERCEIVER_START_DOCSTRING)
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
-    def __init__(self, config, subsampling):
+    def __init__(self, config):
         super().__init__(config)
 
         n_audio_samples = config.num_frames * config.audio_samples_per_frame
 
-        subsampled_index_dims = {
-            "audio": subsampling["audio"].shape[0],
-            "image": subsampling["image"].shape[0],
-            "label": 1,
-        }
+        # subsampled_index_dims = {
+        #     "audio": subsampling["audio"].shape[0],
+        #     "image": subsampling["image"].shape[0],
+        #     "label": 1,
+        # }
 
         input_preprocessor = PerceiverMultimodalPreprocessor(
             min_padding_size=4,
@@ -1356,7 +1356,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
-            subsampled_index_dims=subsampling["image"],
+            #subsampled_index_dims=subsampling["image"],
             output_shape=config.output_shape,
             # num_z_channels=1024,
             output_num_channels=512,
@@ -1375,7 +1375,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
-            subsampled_index_dims=subsampled_index_dims,
+            #subsampled_index_dims=subsampled_index_dims,
             # Modality specific decoders are used ONLY to generate queries.
             # All modalties are decoded together using a unified decoder.
             modalities={
@@ -1383,7 +1383,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     config,
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
-                    subsampled_index_dims=subsampling["audio"],
+                    #subsampled_index_dims=subsampling["audio"],
                     output_index_dims=(n_audio_samples // config.samples_per_patch,),
                     # num_z_channels=1024,
                     output_num_channels=512,
@@ -1535,9 +1535,9 @@ class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
     def num_query_channels(self):
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def output_shape(self, inputs):
-        raise NotImplementedError
+    # @abc.abstractmethod
+    # def output_shape(self, inputs):
+    #     raise NotImplementedError
 
     @abc.abstractmethod
     def forward(self, query, z, query_mask=None):
@@ -1554,8 +1554,8 @@ class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         return None
 
-    def output_shape(self, inputs):
-        return ((inputs.shape[0], self.num_labels), None)
+    # def output_shape(self, inputs):
+    #     return ((inputs.shape[0], self.num_labels), None)
 
     def forward(self, query, z, query_mask=None):
         # (batch_size, num_latents, d_latents) -> (batch_size, d_latents)
@@ -1645,8 +1645,8 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             return self.output_num_channels
         return self.num_channels
 
-    def output_shape(self, inputs):
-        return ((inputs[0], self.subsampled_index_dims, self.output_num_channels), None)
+    # def output_shape(self, inputs):
+    #     return ((inputs[0], self.subsampled_index_dims, self.output_num_channels), None)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         if self.position_encoding_type == "none":  # Queries come from elsewhere
@@ -1755,8 +1755,8 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
             inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_points
         )
 
-    def output_shape(self, inputs):
-        return (inputs.shape[0], self.num_labels), None
+    # def output_shape(self, inputs):
+    #     return (inputs.shape[0], self.num_labels), None
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
         decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
@@ -1782,10 +1782,10 @@ class PerceiverFlowDecoder(PerceiverAbstractDecoder):
     def num_query_channels(self) -> int:
         return self.decoder.num_query_channels
 
-    def output_shape(self, inputs):
-        # The channel dimensions of output here don't necessarily correspond to
-        # (u, v) of flow: they may contain dims needed for the post-processor.
-        return ((inputs.shape[0],) + tuple(self.output_image_shape) + (self.output_num_channels,), None)
+    # def output_shape(self, inputs):
+    #     # The channel dimensions of output here don't necessarily correspond to
+    #     # (u, v) of flow: they may contain dims needed for the post-processor.
+    #     return ((inputs.shape[0],) + tuple(self.output_image_shape) + (self.output_num_channels,), None)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         if subsampled_points is not None:
@@ -1836,8 +1836,8 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
             subsampled_points=subsampled_points,
         )
 
-    def output_shape(self, inputs):
-        return ([inputs.shape[0]] + self.output_shape[1:] + [self.output_num_channels], None)
+    # def output_shape(self, inputs):
+    #     return ([inputs.shape[0]] + self.output_shape[1:] + [self.output_num_channels], None)
 
     def forward(self, query, z, query_mask=None):
         decoder_outputs = self.decoder(query, z)
@@ -1953,12 +1953,12 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             [embed(modality, decoder_queries[modality]) for modality in sorted(self.modalities.keys())], dim=1
         )
 
-    def output_shape(self, inputs):
-        if self.subsampled_index_dims is not None:
-            subsampled_index_dims = sum(self.subsampled_index_dims.values())
-        else:
-            subsampled_index_dims = self.num_outputs
-        return ((inputs.shape[0], subsampled_index_dims, self.output_num_channels), self.subsampled_index_dims)
+    # def output_shape(self, inputs):
+    #     if self.subsampled_index_dims is not None:
+    #         subsampled_index_dims = sum(self.subsampled_index_dims.values())
+    #     else:
+    #         subsampled_index_dims = self.num_outputs
+    #     return ((inputs.shape[0], subsampled_index_dims, self.output_num_channels), self.subsampled_index_dims)
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
         # B x 1 x num_classes -> B x num_classes

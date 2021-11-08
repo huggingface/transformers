@@ -299,12 +299,12 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = PerceiverModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
 
-    def _initialize_model(self, model_class, config):
-        if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
-            model = model_class(config, subsampling=self.model_tester.subsampling)
-        else:
-            model = model_class(config)
-        return model
+    # def _initialize_model(self, model_class, config):
+    #     if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+    #         model = model_class(config, subsampling=self.model_tester.subsampling)
+    #     else:
+    #         model = model_class(config)
+    #     return model
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -348,7 +348,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             # we overwrite this, as the embeddings of Perceiver are an instance of nn.Parameter
             # and Perceiver doesn't support get_output_embeddings
             self.assertIsInstance(model.get_input_embeddings(), (nn.Parameter))
@@ -379,7 +379,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
@@ -394,7 +394,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -432,7 +432,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -456,7 +456,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -475,7 +475,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -493,7 +493,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
 
@@ -564,7 +564,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
 
@@ -645,7 +645,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             ) = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
 
@@ -653,7 +653,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             torch.manual_seed(0)
             config.chunk_size_feed_forward = 1
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
 
@@ -674,7 +674,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -690,7 +690,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
                     with tempfile.TemporaryDirectory() as tmpdirname:
                         model.save_pretrained(tmpdirname)
-                        model = model_class.from_pretrained(tmpdirname, subsampling=self.model_tester.subsampling)
+                        model = model_class.from_pretrained(tmpdirname)
                         model.to(torch_device)
                         with torch.no_grad():
                             after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
@@ -723,7 +723,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
             if _keys_to_ignore_on_save is None:
                 continue
@@ -774,7 +774,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             # non-initialized weights throw errors nevertheless
             base_class_copy._init_weights = self._mock_init_weights
 
-            model = self._initialize_model(model_class, config)
+            model = model_class(config)
             state_dict = model.state_dict()
 
             # this will often delete a single weight of a multi-weight module
@@ -823,7 +823,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            model = self._initialize_model(model_class, configs_no_init)
+            model = model_class(configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
