@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/config.json",
-    # See all QDQBERT models at https://huggingface.co/models?filter=qdqbert
+    # QDQBERT models can be loaded from any BERT checkpoint, available at https://huggingface.co/models?filter=bert
 }
 
 
