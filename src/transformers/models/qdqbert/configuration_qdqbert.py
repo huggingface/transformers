@@ -40,8 +40,7 @@ class QDQBertConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the QDQBERT model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.QDQBertModel` or
-            :class:`~transformers.TFQDQBertModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.QDQBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
