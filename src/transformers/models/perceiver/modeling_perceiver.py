@@ -2723,7 +2723,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
                 output_padded = (1 - mask) * output_padded + mask * mask_token
 
             padded[modality] = output_padded
-            # print("Modality:", modality)
+            print(f"Modality size of modality {modality}:", output_padded.shape[1])
             # print("Shape of output_padded:", output_padded.shape)
             modality_sizes[modality] = output_padded.shape[1]
 
