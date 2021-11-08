@@ -1828,7 +1828,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 seq0_tokens = tokenizer(seq_0, boxes=boxes_0, add_special_tokens=False)
                 self.assertGreater(len(seq0_tokens["input_ids"]), 2 + stride)
                 question_1 = "This is another sentence to be encoded."
-                seq_1 = ["This", "is", "another", "sentence", "to", "be", "encoded."]
+                seq_1 = ["what", "a", "weird", "test", "weirdly", "weird"]
                 boxes_1 = [[i, i, i, i] for i in range(len(seq_1))]
                 seq1_tokens = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)
                 if abs(len(seq0_tokens["input_ids"]) - len(seq1_tokens["input_ids"])) <= 2:
