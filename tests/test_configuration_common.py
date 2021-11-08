@@ -19,9 +19,9 @@ import os
 import tempfile
 import unittest
 
-from huggingface_hub import delete_repo, login
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import BertConfig, GPT2Config, is_torch_available
+from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import PASS, USER, is_staging_test
 
@@ -190,6 +190,23 @@ class ConfigTester(object):
         self.check_config_arguments_init()
 
 
+class FakeConfig(PretrainedConfig):
+    def __init__(self, attribute=1, **kwargs):
+        self.attribute = attribute
+        super().__init__(**kwargs)
+
+
+# Make sure this is synchronized with the config above.
+FAKE_CONFIG_CODE = """
+from transformers import PretrainedConfig
+
+class FakeConfig(PretrainedConfig):
+    def __init__(self, attribute=1, **kwargs):
+        self.attribute = attribute
+        super().__init__(**kwargs)
+"""
+
+
 @is_staging_test
 class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
@@ -205,6 +222,11 @@ class ConfigPushToHubTester(unittest.TestCase):
 
         try:
             delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-config")
         except HTTPError:
             pass
 
@@ -237,6 +259,23 @@ class ConfigPushToHubTester(unittest.TestCase):
             for k, v in config.__dict__.items():
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
+
+    def test_push_to_hub_dynamic_config(self):
+        config = FakeConfig(attribute=42)
+        config.auto_map = {"AutoConfig": "configuration.FakeConfig"}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-config", use_auth_token=self._token)
+            config.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "configuration.py"), "w") as f:
+                f.write(FAKE_CONFIG_CODE)
+
+            repo.push_to_hub()
+
+        new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
+        # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
+        self.assertEqual(new_config.__class__.__name__, "FakeConfig")
+        self.assertEqual(new_config.attribute, 42)
 
 
 class ConfigTestUtils(unittest.TestCase):

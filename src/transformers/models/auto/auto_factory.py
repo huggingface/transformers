@@ -378,7 +378,24 @@ class _BaseAutoModelClass:
 
     @classmethod
     def from_config(cls, config, **kwargs):
-        if type(config) in cls._model_mapping.keys():
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
+        if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
+            if not trust_remote_code:
+                raise ValueError(
+                    "Loading this model requires you to execute the modeling file in that repo "
+                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
+                    "the option `trust_remote_code=True` to remove this error."
+                )
+            if kwargs.get("revision", None) is None:
+                logger.warn(
+                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
+                    "no malicious code has been contributed in a newer revision."
+                )
+            class_ref = config.auto_map[cls.__name__]
+            module_file, class_name = class_ref.split(".")
+            model_class = get_class_from_dynamic_module(config.name_or_path, module_file + ".py", class_name, **kwargs)
+            return model_class._from_config(config, **kwargs)
+        elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class._from_config(config, **kwargs)
 
@@ -394,7 +411,7 @@ class _BaseAutoModelClass:
         kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                pretrained_model_name_or_path, return_unused_kwargs=True, trust_remote_code=trust_remote_code, **kwargs
             )
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
             if not trust_remote_code:

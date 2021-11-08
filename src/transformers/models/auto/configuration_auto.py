@@ -21,7 +21,11 @@ from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import CONFIG_NAME
+from ...utils import logging
+from .dynamic import get_class_from_dynamic_module
 
+
+logger = logging.get_logger(__name__)
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
@@ -523,6 +527,10 @@ class AutoConfig:
                 If :obj:`True`, then this functions returns a :obj:`Tuple(config, unused_kwargs)` where `unused_kwargs`
                 is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
                 the part of ``kwargs`` which has not been used to update ``config`` and is otherwise ignored.
+            trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs(additional keyword arguments, `optional`):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -555,8 +563,28 @@ class AutoConfig:
             {'foo': False}
         """
         kwargs["_from_auto"] = True
+        kwargs["name_or_path"] = pretrained_model_name_or_path
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
         config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if "model_type" in config_dict:
+        if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
+            if not trust_remote_code:
+                raise ValueError(
+                    f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that repo "
+                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
+                    "the option `trust_remote_code=True` to remove this error."
+                )
+            if kwargs.get("revision", None) is None:
+                logger.warn(
+                    "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
+                    "ensure no malicious code has been contributed in a newer revision."
+                )
+            class_ref = config_dict["auto_map"]["AutoConfig"]
+            module_file, class_name = class_ref.split(".")
+            config_class = get_class_from_dynamic_module(
+                pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+            )
+            return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             return config_class.from_dict(config_dict, **kwargs)
         else:
