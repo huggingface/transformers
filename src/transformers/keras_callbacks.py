@@ -16,12 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 class KerasMetricCallback(Callback):
-    def __init__(self, metric_fn: Callable, val_data: tensorflow.data.Dataset, metric_name: Optional[str]):
 
-        """
-        metric_fn: Metric function provided by the user. val_data: Validation data to be used to evaluate the model at
-        the end of the epoch. metric_name: Name of the metric calculated in metric_fn.
-        """
+    """
+    Callback to prompt metrics.
+    
+    
+    Args:
+        metric_fn: Metric function provided by the user. 
+        val_data: Validation data to be used to evaluate the model at
+        the end of the epoch. 
+        metric_name: Name of the metric calculated in metric_fn.
+    """
+    def __init__(self, metric_fn: Callable, val_data: tensorflow.data.Dataset, metric_name: Optional[str]):
         super().__init__()
         self.model = model
         self.metric_fn = metric_fn
@@ -32,21 +38,16 @@ class KerasMetricCallback(Callback):
 
         metric_value = self.metric_fn(val_data)
         if metric_name is not None:
-            print("{} for epoch {} is {}".format(self.metric_name, self.epoch, metric_value))
+            print(f"{self.metric_name} for epoch {self.epoch} is {metric_value}")
         else:
-            print("At epoch {}: {}".format(self.epoch, metric_value))
+            print(f"At epoch {self.epoch}: {metric_value}")
 
 class PushToHubCallback(Callback):
-    def __init__(
-        self,
-        output_dir: Union[str, Path],
-        save_strategy: Union[str, IntervalStrategy] = "epoch",
-        save_steps: Optional[int] = None,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
-        hub_model_id: Optional[str] = None,
-        hub_token: Optional[str] = None,
-    ):
-        """
+    """
+    Callback for pushing the model to the Hub after training.
+    
+    
+    Args:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written and synced with the
             repository on the Hub.
@@ -71,6 +72,16 @@ class PushToHubCallback(Callback):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
         """
+    def __init__(
+        self,
+        output_dir: Union[str, Path],
+        save_strategy: Union[str, IntervalStrategy] = "epoch",
+        save_steps: Optional[int] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        hub_model_id: Optional[str] = None,
+        hub_token: Optional[str] = None,
+    ):
+        
         super().__init__()
         if isinstance(save_strategy, str):
             save_strategy = IntervalStrategy(save_strategy.lower())
