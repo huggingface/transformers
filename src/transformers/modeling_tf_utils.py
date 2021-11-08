@@ -611,7 +611,7 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
     size_diff = new_num_tokens - old_num_tokens
 
     # get detached tensor if not already detached
-    old_embeddings = old_embeddings.values() if hasattr(old_embeddings, "values") else old_embeddings
+    old_embeddings = old_embeddings.value() if hasattr(old_embeddings, "value") else old_embeddings
 
     # initialize new embeddings
     # Copy token embeddings from the previous ones
