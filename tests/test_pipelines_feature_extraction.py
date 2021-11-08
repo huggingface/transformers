@@ -19,6 +19,7 @@ from transformers import (
     TF_MODEL_MAPPING,
     CLIPConfig,
     FeatureExtractionPipeline,
+    HubertConfig,
     LxmertConfig,
     Wav2Vec2Config,
     pipeline,
@@ -74,10 +75,8 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             self.skipTest("No tokenizer")
             return
 
-        elif isinstance(model.config, (LxmertConfig, CLIPConfig, Wav2Vec2Config)):
-            self.skipTest(
-                "This is an Lxmert bimodal model, we need to find a more consistent way to switch on those models."
-            )
+        elif isinstance(model.config, (LxmertConfig, CLIPConfig, Wav2Vec2Config, HubertConfig)):
+            self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
             return
         elif model.config.is_encoder_decoder:
             self.skipTest(
