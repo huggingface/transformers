@@ -308,7 +308,7 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
-    model_kwargs: Dict[str, Any] = {},
+    model_kwargs: Dict[str, Any] = None,
     **kwargs
 ) -> Pipeline:
     """
@@ -420,6 +420,8 @@ def pipeline(
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
+    if model_kwargs is None:
+        model_kwargs = {}
     if model is None and tokenizer is not None:
         raise RuntimeError(
             "Impossible to instantiate a pipeline with tokenizer specified but not the model "
