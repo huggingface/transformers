@@ -92,7 +92,7 @@ def get_launcher(distributed=False):
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
-    master_port = os.environ.get('DS_TEST_PORT', DEFAULT_MASTER_PORT)
+    master_port = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
@@ -111,7 +111,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def setUp(self):
         super().setUp()
 
-        master_port = os.environ.get('DS_TEST_PORT', DEFAULT_MASTER_PORT)
+        master_port = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
         self.dist_env_1_gpu = dict(
             MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
@@ -180,8 +180,8 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments(".")
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
-        
-        master_port = os.environ.get('DS_TEST_PORT', DEFAULT_MASTER_PORT)
+
+        master_port = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
         self.dist_env_1_gpu = dict(
             MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )

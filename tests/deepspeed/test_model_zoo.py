@@ -92,7 +92,7 @@ def get_launcher(distributed=False):
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
-    master_port = os.environ.get('DS_TEST_PORT', DEFAULT_MASTER_PORT)
+    master_port = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
