@@ -610,22 +610,23 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
     old_num_tokens, old_embedding_dim = shape_list(old_embeddings)
     size_diff = new_num_tokens - old_num_tokens
 
+    # get detached tensor if not already detached
+    old_embeddings = old_embeddings.values() if hasattr(old_embeddings, "values") else old_embeddings
+
     # initialize new embeddings
     # Copy token embeddings from the previous ones
     if tf.math.greater(size_diff, 0):
         # if the new size is greater than the old one, we extend the current embeddings with a padding until getting new size
         # and we create a mask to properly identify the padded values and be replaced by the values of the newly created
         # embeddings
-        current_weights = tf.pad(
-            old_embeddings.value(), tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1
-        )
+        current_weights = tf.pad(old_embeddings, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1)
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
         mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
         mask = tf.pad(mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
     else:
         # if the new size if lower than the old one, we take the current embeddings until the new size
         current_weights = tf.slice(
-            old_embeddings.value(),
+            old_embeddings,
             tf.convert_to_tensor([0, 0]),
             tf.convert_to_tensor([new_num_tokens, old_embedding_dim]),
         )
@@ -1017,6 +1018,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if embeds is not None:
             return embeds
 
+        # if embedding_layer is already a `tf.Tensor` simply output it
+        if isinstance(embedding_layer, tf.Tensor):
+            return embedding_layer
+
         return None
 
     def _resize_token_embeddings(self, new_num_tokens):
@@ -1034,7 +1039,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if self.get_output_embeddings() is not None:
             old_lm_head_decoder = self._get_word_embedding_weight(self.get_output_embeddings())
             new_lm_head_decoder = self._get_resized_lm_head_decoder(old_lm_head_decoder, new_num_tokens)
-
             self.set_output_embeddings(new_lm_head_decoder)
 
         self.set_input_embeddings(new_embeddings)
@@ -1116,14 +1120,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             self._get_word_embedding_weight(self.get_input_embeddings()) == old_lm_head_decoder
         )
 
-        if old_lm_head_decoder is not None and not is_input_output_equals:
+        if old_lm_head_decoder is not None and (not is_input_output_equals or not self.config.tie_word_embeddings):
             old_embedding_dim = shape_list(old_lm_head_decoder)[1]
             decoder_mask, current_decoder = init_copy_embeddings(old_lm_head_decoder, new_num_tokens)
+            name = old_lm_head_decoder.name.split(":")[0] if not tf.executing_eagerly() else None
             new_lm_head_decoder = self.add_weight(
                 shape=(new_num_tokens, old_embedding_dim),
                 initializer="zeros",
                 trainable=True,
-                name=old_lm_head_decoder.name.split(":")[0],
+                name=name,
             )
             init_decoder = tf.where(decoder_mask, current_decoder, new_lm_head_decoder.value())
 
