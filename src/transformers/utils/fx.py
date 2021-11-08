@@ -235,9 +235,7 @@ class HFTracer(Tracer):
 
     default_methods_to_record = {"__bool__", "size", "dim"}
 
-    def __init__(self, batch_size=1, sequence_length=None, num_choices=-1):
-        if sequence_length is None:
-            sequence_length = [128, 128]
+    def __init__(self, batch_size=1, sequence_length=[128, 128], num_choices=-1):
         super().__init__()
 
         if not is_torch_fx_available():
