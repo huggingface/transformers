@@ -73,6 +73,7 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_auto"] = [
         "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
+        "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "TF_MODEL_FOR_MASKED_LM_MAPPING",
         "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -85,6 +86,7 @@ if is_tf_available():
         "TF_MODEL_WITH_LM_HEAD_MAPPING",
         "TFAutoModel",
         "TFAutoModelForCausalLM",
+        "TFAutoModelForImageClassification",
         "TFAutoModelForMaskedLM",
         "TFAutoModelForMultipleChoice",
         "TFAutoModelForPreTraining",
@@ -175,6 +177,7 @@ if TYPE_CHECKING:
     if is_tf_available():
         from .modeling_tf_auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -187,6 +190,7 @@ if TYPE_CHECKING:
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
             TFAutoModelForCausalLM,
+            TFAutoModelForImageClassification,
             TFAutoModelForMaskedLM,
             TFAutoModelForMultipleChoice,
             TFAutoModelForPreTraining,
