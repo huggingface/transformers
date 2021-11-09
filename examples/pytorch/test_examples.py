@@ -274,10 +274,8 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_squad_seq2seq.main()
             result = get_results(tmp_dir)
-            self.assertGreaterEqual(result["eval_rouge1"], 10)
-            self.assertGreaterEqual(result["eval_rouge2"], 10)
-            self.assertGreaterEqual(result["eval_rougeL"], 10)
-            self.assertGreaterEqual(result["eval_rougeLsum"], 10)
+            self.assertGreaterEqual(result["eval_f1"], 30)
+            self.assertGreaterEqual(result["eval_exact"], 30)
 
     def test_run_swag(self):
         stream_handler = logging.StreamHandler(sys.stdout)
