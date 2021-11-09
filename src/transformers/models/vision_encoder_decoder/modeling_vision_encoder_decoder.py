@@ -70,8 +70,8 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
     <https://arxiv.org/abs/2109.10282>`__ it is shown how leveraging large pretrained vision models for optical
     character recognition (OCR) yields a significant performance improvement.
 
-    After such an Vision-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
-    models (see the examples for more information).
+    After such a Vision-Encoder-Text-Decoder model has been trained/fine-tuned, it can be saved/loaded just like any
+    other models (see the examples for more information).
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -94,13 +94,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using a feature extractor (e.g. if you use ViT as the encoder,
             you should use :class:`~transformers.ViTFeatureExtractor`). See
             :meth:`transformers.ViTFeatureExtractor.__call__` for details.
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -130,10 +123,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
@@ -165,8 +154,8 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 class VisionEncoderDecoderModel(PreTrainedModel):
     r"""
     :class:`~transformers.VisionEncoderDecoderModel` is a generic model class that will be instantiated as a
-    transformer architecture with one of the base model classes of the library as encoder and another one as decoder
-    when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
+    transformer architecture with one of the base vision model classes of the library as encoder and another one as
+    decoder when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = VisionEncoderDecoderConfig
@@ -185,6 +174,15 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
+                raise ValueError(
+                    f"If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    f"it has to be equal to the encoder's `hidden_size`."
+                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
+                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                )
 
         # initialize with config
         # make sure input & output embeddings is not tied

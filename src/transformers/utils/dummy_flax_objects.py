@@ -174,6 +174,9 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING = None
+
+
 FLAX_MODEL_MAPPING = None
 
 
@@ -268,6 +271,15 @@ class FlaxAutoModelForSequenceClassification:
 
 
 class FlaxAutoModelForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxAutoModelForVision2Seq:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -941,6 +953,15 @@ class FlaxT5Model:
 
 
 class FlaxT5PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxVisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 

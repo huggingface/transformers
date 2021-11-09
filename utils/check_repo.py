@@ -187,6 +187,7 @@ def get_model_modules():
         "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
         "modeling_speech_encoder_decoder",
+        "modeling_flax_vision_encoder_decoder",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
