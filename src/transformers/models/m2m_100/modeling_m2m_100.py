@@ -330,9 +330,8 @@ class M2M100Attention(nn.Module):
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
 
-        # Use the embed_dim from class rather than hidden_state, this is due to the reason that attn_output can be partitioned
-        # across GPUs when using tensor-parallelism, in which case the embed_dimension from the input is not equal to the
-        # attention's last dimension after merging heads.
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
