@@ -3015,7 +3015,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Returns:
             :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
-            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing_tokens if
+            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing tokens if
             a pair of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
