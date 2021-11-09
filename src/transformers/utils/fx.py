@@ -1,5 +1,6 @@
 import functools
 import inspect
+import math
 import random
 from types import ModuleType
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
@@ -203,6 +204,15 @@ def _reset_tensor_methods(original_methods: Dict[str, Callable[..., Any]]):
         setattr(torch.Tensor, name, method)
 
 
+def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
+    if forbidden_values is None:
+        forbidden_values = []
+    value = random.randint(low, high)
+    while value in forbidden_values:
+        value = random.randint(low, high)
+    return value
+
+
 class HFTracer(Tracer):
     """
     Tracer that is able to symbolically trace models from the library. To do that, it uses the HFProxy instead of the
@@ -217,13 +227,21 @@ class HFTracer(Tracer):
         modeling_utils.ModuleUtilsMixin: {"create_extended_attention_mask_for_decoder"},
     }
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, autowrap_modules=(math,), autowrap_functions=(), enable_cpatching=False):
 
+        # Loading the leaf functions register
         self._leaf_functions_register = {}
         for module, names in self._FUNCTIONS_TO_AUTOWRAP.items():
             for name in names:
                 self._register_leaf_function(module, name)
+
+        autowrap_functions = autowrap_functions + tuple(
+            patched for (_, _, patched) in self._leaf_functions_register.values()
+        )
+
+        super().__init__(
+            autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions, enable_cpatching=enable_cpatching
+        )
 
         if not is_torch_fx_available():
             torch_version = version.parse(importlib_metadata.version("torch"))
@@ -430,8 +448,6 @@ class HFTracer(Tracer):
 
         self.record(root, input_names, method_names=method_names)
 
-        autowrap_functions = [patched for (_, _, patched) in self._leaf_functions_register.values()]
-        self._autowrap_function_ids.update(set([id(f) for f in autowrap_functions]))
         self._patch_leaf_functions_for_root(root)
 
         graph = super().trace(root, concrete_args=concrete_args)
@@ -508,58 +524,6 @@ class HFTracer(Tracer):
         if isinstance(a, range):
             return super().create_arg(list(a))
         return super().create_arg(a)
-
-
-# @transformation
-# def prepare_for_retracing(gm: GraphModule) -> Tuple[GraphModule, Dict[str, Any]]:
-#     """
-# Prepares a GraphModule produced by symbolic_trace for retracing by: # # - Caching all the attributes specific to the
-way the model was initially traced # - Patching back the model to a "static input shapes" version if it was traced to
-accept dynamic input shapes # For instance, the need to retrace a GraphModule can happen when applying quantization. #
-"""
-#     attributes = _cache_attributes(gm)
-#     _patch_arguments_(gm, gm.dynamic2static)
-#
-#     return gm, attributes
-
-
-# def restore_after_retracing_(gm: GraphModule, attributes: Dict[str, Any]):
-#     """Restores a GraphModule that was retraced to its initial state in terms of static / dynamic input shapes."""
-#     _restore_attributes_(gm, attributes)
-#     # transform_to_dynamic_input_ will override the static2dynamic and dynamic2static dictionaries which is the desired
-#     # behaviour as the previously restored dictionaries contain nodes from the original GraphModule as values.
-#     transform_to_dynamic_input_(gm, is_retracing=True)
-#     _patch_arguments_(gm, gm.static2dynamic)
-#     return gm
-
-
-# def retrace_graph_with(
-#     gm: GraphModule, tracer: Tracer = None, func: Callable[[GraphModule], GraphModule] = None
-# ) -> GraphModule:
-#     """
-# Retraces a GraphModule by either using a tracer or a function using a tracer (for instance #
-torch.quantization.quantize_fx.prepare_fx). It takes care of preparing the model for retracing, retracing it and #
-restoring anything necessary after the retrace. #
-"""
-#     if tracer is None and func is None:
-#         raise ValueError("Either a tracer or a function using a tracer must be provided.")
-#     elif tracer is not None and func is not None:
-#         raise ValueError("Either provide a tracer or a function using a tracer, but not both.")
-#     else:
-#         gm, attributes = prepare_for_retracing(gm)
-#         tracing_func = tracer.trace if tracer else func
-#         traced = tracing_func(gm)
-#         restore_after_retracing_(traced, attributes)
-#         return traced
-
-
-def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None) -> int:
-    if forbidden_values is None:
-        forbidden_values = []
-    value = random.randint(low, high)
-    while value in forbidden_values:
-        value = random.randint(low, high)
-    return value
 
 
 def symbolic_trace(
