@@ -13,14 +13,17 @@ def _convert_past_list_to_tuple(past):
     """
     The type of past_key_values is tuple(tuple(torch.FloatTensor)) which is not TorchScript-compatible.
     This will convert past values from a list to tuple(tuple(torch.FloatTensor)) for the inner decoder.
-    """
 
+    According to the definition of past_key_values, each inner tuple(torch.FloatTensor) has 4 tensors,
+    so we convert every 4 elements in the list as a tuple(torch.FloatTensor).
+    """
+    count_of_each_inner_tuple = 4
     results = ()
     temp_result = ()
-    count_n = len(past) // 4
+    count_n = len(past) // count_of_each_inner_tuple
     for idx in range(count_n):
-        real_idx = idx * 4
-        temp_result = tuple(past[real_idx : real_idx + 4])
+        real_idx = idx * count_of_each_inner_tuple
+        temp_result = tuple(past[real_idx : real_idx + count_of_each_inner_tuple])
         results += ((temp_result),)
 
     return results
