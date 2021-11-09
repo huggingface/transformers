@@ -163,7 +163,6 @@ def _function_to_leaf(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _function_leaf_getter(func_name: str, mapping: Dict[str, Callable[..., Any]]) -> Callable[..., Any]:
-
     @functools.wraps(mapping[func_name])
     def wrapper(*args, **kwargs):
         return mapping[func_name](*args, **kwargs)
