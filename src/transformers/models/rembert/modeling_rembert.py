@@ -328,7 +328,6 @@ class RemBertSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RemBert
 class RemBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -336,6 +335,7 @@ class RemBertAttention(nn.Module):
         self.output = RemBertSelfOutput(config)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -354,6 +354,7 @@ class RemBertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,
         hidden_states,
@@ -409,7 +410,6 @@ class RemBertOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RemBert
 class RemBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -425,6 +425,7 @@ class RemBertLayer(nn.Module):
         self.intermediate = RemBertIntermediate(config)
         self.output = RemBertOutput(config)
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states,
@@ -489,6 +490,7 @@ class RemBertLayer(nn.Module):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
