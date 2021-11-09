@@ -1,8 +1,8 @@
-import copy
 import functools
 import inspect
 import random
-from typing import Any, Callable, Dict, ModuleType, List, Optional, Tuple, Type, Union
+from types import ModuleType
+from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
 import torch
 from packaging import version
@@ -24,20 +24,13 @@ from .. import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     MODEL_MAPPING,
     GPT2DoubleHeadsModel,
-    XLNetForQuestionAnswering,
     PretrainedConfig,
     PreTrainedModel,
+    XLNetForQuestionAnswering,
     logging,
 )
 from ..file_utils import TORCH_FX_REQUIRED_VERSION, importlib_metadata, is_torch_fx_available
 from ..models.auto import get_values
-from .fx_transformations import (
-    _cache_attributes,
-    _patch_arguments_,
-    _restore_attributes_,
-    transform_to_dynamic_input_,
-    transformation,
-)
 
 
 logger = logging.get_logger(__name__)
@@ -176,6 +169,7 @@ class HFProxy(Proxy):
 
 def _function_to_leaf(func: Callable[..., Any]) -> Callable[..., Any]:
     """Wrapper that marks func as a leaf function, meaning that it will not be traced through by HFTracer."""
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -183,7 +177,7 @@ def _function_to_leaf(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-def _function_leaf_getter(func_name, mapping):
+def _function_leaf_getter(func_name: str, mapping: Dict[str, Callable[..., Any]]) -> Callable[..., Any]:
     @functools.wraps(mapping[func_name])
     def wrapper(*args, **kwargs):
         return mapping[func_name](*args, **kwargs)
@@ -191,7 +185,7 @@ def _function_leaf_getter(func_name, mapping):
     return wrapper
 
 
-def _create_recorded_proxy_method(proxy, method_name, cache_name, return_proxy):
+def _create_recorded_proxy_method(proxy: HFProxy, method_name: str, cache_name: str, return_proxy: bool):
     """
     Helper function that sets a recorded torch.Tensor method as a HFProxy method that will use the recorded values
     during symbolic tracing.
@@ -219,7 +213,7 @@ def _create_recorded_proxy_method(proxy, method_name, cache_name, return_proxy):
     setattr(proxy, method_name, bound_method)
 
 
-def _reset_tensor_methods(original_methods):
+def _reset_tensor_methods(original_methods: Dict[str, Callable[..., Any]]):
     """Helper function that resets the monkey patched torch.Tensor methods to their original values."""
     for name, method in original_methods.items():
         setattr(torch.Tensor, name, method)
@@ -239,7 +233,7 @@ class HFTracer(Tracer):
         modeling_utils.ModuleUtilsMixin: {"create_extended_attention_mask_for_decoder"},
     }
 
-    def __init__(self, batch_size=1, sequence_length=128, num_choices=-1):
+    def __init__(self, batch_size: int = 1, sequence_length: int = 128, num_choices: int = -1):
         super().__init__()
 
         self._leaf_functions_register = {}
@@ -265,7 +259,8 @@ class HFTracer(Tracer):
         patched_func.__module__ = __name__
         self._leaf_functions_register[name] = (module, orig_func, patched_func)
 
-    def _patch_leaf_functions_for_root(self, root: PreTrainedModel, restore=False):
+    def _patch_leaf_functions_for_root(self, root: PreTrainedModel, restore: bool = False):
+        """Patches leaf functions specifically for root."""
         for name in self._leaf_functions_register:
             module, orig_func, patched_func = self._leaf_functions_register[name]
             if restore:
@@ -277,7 +272,12 @@ class HFTracer(Tracer):
                 leaf_getter.__module__ = __name__
                 setattr(module, name, leaf_getter)
 
-    def _method_is_called_in_leaf_module(self, module_ids):
+    def _method_is_called_in_leaf_module(self, module_ids: List[int]) -> bool:
+        """
+        Finds out if the method (that is being recorded) is called inside a leaf module, this allows to not record
+        outputs that will not be encountered by the tracer.
+        """
+
         currentframe = inspect.currentframe()
         while currentframe:
             if currentframe is None:
@@ -288,7 +288,9 @@ class HFTracer(Tracer):
             currentframe = currentframe.f_back
         return False
 
-    def _wrap_method_for_model_recording(self, model, method_name, cache_name, module_ids):
+    def _wrap_method_for_model_recording(
+        self, model: PreTrainedModel, method_name: str, cache_name: str, module_ids: List[int]
+    ):
         """Helper function that wraps a torch.Tensor method to record its outputs during forward pass."""
         method = getattr(torch.Tensor, method_name)
 
@@ -305,7 +307,7 @@ class HFTracer(Tracer):
 
         return wrapped
 
-    def _monkey_patch_tensor_methods_for_model_recording(self, model, method_names):
+    def _monkey_patch_tensor_methods_for_model_recording(self, model: PreTrainedModel, method_names: Iterable[str]):
         """
         Helper function that patches torch.Tensor methods (specified by the method_names list) to record model inference
         before symbolic tracing.
@@ -320,7 +322,11 @@ class HFTracer(Tracer):
                 logger.info(f"torch.Tensor has no method called {method_name}, skipping patching.")
                 continue
             original_methods[method_name] = getattr(torch.Tensor, method_name)
-            setattr(torch.Tensor, method_name, self._wrap_method_for_model_recording(model, method_name, cache_name, module_ids))
+            setattr(
+                torch.Tensor,
+                method_name,
+                self._wrap_method_for_model_recording(model, method_name, cache_name, module_ids),
+            )
 
             if method_name == "size":
                 original_methods["shape"] = torch.Tensor.shape
@@ -328,7 +334,7 @@ class HFTracer(Tracer):
 
         return cache_names, original_methods
 
-    def _generate_dummy_input(self, model, input_name):
+    def _generate_dummy_input(self, model: PreTrainedModel, input_name: str) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         model_class = model.__class__
         device = model.device
@@ -370,9 +376,9 @@ class HFTracer(Tracer):
 
         return inputs_dict
 
-    def record(self, model, input_names, method_names=None):
+    def record(self, model: PreTrainedModel, input_names: List[str], method_names: Optional[Iterable[str]] = None):
         """
-        Records torch.Tensor method outputs (specified by the method_names list) that will then be used during symbolic
+        Records torch.Tensor method outputs (specified by method_names) that will then be used during symbolic
         tracing.
         """
         if method_names is None:
@@ -391,18 +397,11 @@ class HFTracer(Tracer):
 
         model(**inputs)
 
-        # Useful because sometime the config is changed at inference time, for instance for
-        # classification tasks where config.problem_type can be set.
-        # model.config = clone.config
-
         _reset_tensor_methods(original_methods)
 
         self.recorded_methods = {
             method_name: cache_name for method_name, cache_name in cache_names.items() if hasattr(model, cache_name)
         }
-
-        # for cache_name in self.recorded_methods.values():
-        #     setattr(model, cache_name, getattr(clone, cache_name))
 
     def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
         if isinstance(attr_val, torch.nn.Parameter):
@@ -428,7 +427,12 @@ class HFTracer(Tracer):
                 _create_recorded_proxy_method(p, method_name, cache_name, return_proxy)
         return p
 
-    def trace(self, root: PreTrainedModel, concrete_args: Optional[Dict[str, Any]] = None, method_names=None) -> Graph:
+    def trace(
+        self,
+        root: PreTrainedModel,
+        concrete_args: Optional[Dict[str, Any]] = None,
+        method_names: Optional[Iterable[str]] = None,
+    ) -> Graph:
         if concrete_args is None:
             concrete_args = {}
 
@@ -461,7 +465,7 @@ class HFTracer(Tracer):
 
         return graph
 
-    def _insert_module_as_submodule(self, mod):
+    def _insert_module_as_submodule(self, mod: nn.Module) -> str:
         """
         Helper method which tries to insert a module that was not declared as submodule.
         """
@@ -507,7 +511,7 @@ class HFTracer(Tracer):
             self.prev_module = path
             return path
 
-    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+    def is_leaf_module(self, m: nn.Module, module_qualified_name: str) -> bool:
         is_loss_module = m.__module__.startswith("torch.nn.modules.loss")
         return (not is_loss_module) and super().is_leaf_module(m, module_qualified_name)
 
@@ -517,52 +521,52 @@ class HFTracer(Tracer):
         return super().create_arg(a)
 
 
-@transformation
-def prepare_for_retracing(gm: GraphModule) -> Tuple[GraphModule, Dict[str, Any]]:
-    """
-    Prepares a GraphModule produced by symbolic_trace for retracing by:
-
-        - Caching all the attributes specific to the way the model was initially traced
-        - Patching back the model to a "static input shapes" version if it was traced to accept dynamic input shapes
-    For instance, the need to retrace a GraphModule can happen when applying quantization.
-    """
-    attributes = _cache_attributes(gm)
-    _patch_arguments_(gm, gm.dynamic2static)
-
-    return gm, attributes
-
-
-def restore_after_retracing_(gm: GraphModule, attributes: Dict[str, Any]):
-    """Restores a GraphModule that was retraced to its initial state in terms of static / dynamic input shapes."""
-    _restore_attributes_(gm, attributes)
-    # transform_to_dynamic_input_ will override the static2dynamic and dynamic2static dictionaries which is the desired
-    # behaviour as the previously restored dictionaries contain nodes from the original GraphModule as values.
-    transform_to_dynamic_input_(gm, is_retracing=True)
-    _patch_arguments_(gm, gm.static2dynamic)
-    return gm
+# @transformation
+# def prepare_for_retracing(gm: GraphModule) -> Tuple[GraphModule, Dict[str, Any]]:
+#     """
+#     Prepares a GraphModule produced by symbolic_trace for retracing by:
+#
+#         - Caching all the attributes specific to the way the model was initially traced
+#         - Patching back the model to a "static input shapes" version if it was traced to accept dynamic input shapes
+#     For instance, the need to retrace a GraphModule can happen when applying quantization.
+#     """
+#     attributes = _cache_attributes(gm)
+#     _patch_arguments_(gm, gm.dynamic2static)
+#
+#     return gm, attributes
 
 
-def retrace_graph_with(
-    gm: GraphModule, tracer: Tracer = None, func: Callable[[GraphModule], GraphModule] = None
-) -> GraphModule:
-    """
-    Retraces a GraphModule by either using a tracer or a function using a tracer (for instance
-    torch.quantization.quantize_fx.prepare_fx). It takes care of preparing the model for retracing, retracing it and
-    restoring anything necessary after the retrace.
-    """
-    if tracer is None and func is None:
-        raise ValueError("Either a tracer or a function using a tracer must be provided.")
-    elif tracer is not None and func is not None:
-        raise ValueError("Either provide a tracer or a function using a tracer, but not both.")
-    else:
-        gm, attributes = prepare_for_retracing(gm)
-        tracing_func = tracer.trace if tracer else func
-        traced = tracing_func(gm)
-        restore_after_retracing_(traced, attributes)
-        return traced
+# def restore_after_retracing_(gm: GraphModule, attributes: Dict[str, Any]):
+#     """Restores a GraphModule that was retraced to its initial state in terms of static / dynamic input shapes."""
+#     _restore_attributes_(gm, attributes)
+#     # transform_to_dynamic_input_ will override the static2dynamic and dynamic2static dictionaries which is the desired
+#     # behaviour as the previously restored dictionaries contain nodes from the original GraphModule as values.
+#     transform_to_dynamic_input_(gm, is_retracing=True)
+#     _patch_arguments_(gm, gm.static2dynamic)
+#     return gm
 
 
-def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
+# def retrace_graph_with(
+#     gm: GraphModule, tracer: Tracer = None, func: Callable[[GraphModule], GraphModule] = None
+# ) -> GraphModule:
+#     """
+#     Retraces a GraphModule by either using a tracer or a function using a tracer (for instance
+#     torch.quantization.quantize_fx.prepare_fx). It takes care of preparing the model for retracing, retracing it and
+#     restoring anything necessary after the retrace.
+#     """
+#     if tracer is None and func is None:
+#         raise ValueError("Either a tracer or a function using a tracer must be provided.")
+#     elif tracer is not None and func is not None:
+#         raise ValueError("Either provide a tracer or a function using a tracer, but not both.")
+#     else:
+#         gm, attributes = prepare_for_retracing(gm)
+#         tracing_func = tracer.trace if tracer else func
+#         traced = tracing_func(gm)
+#         restore_after_retracing_(traced, attributes)
+#         return traced
+
+
+def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None) -> int:
     if forbidden_values is None:
         forbidden_values = []
     value = random.randint(low, high)
@@ -599,16 +603,11 @@ def symbolic_trace(
 
     Example:
 
-    ```python
-    from transformers.utils.fx import symbolic_trace
-
-    traced_model = symbolic_trace(
-        model,
-        input_names=["input_ids", "attention_mask", "token_type_ids"],
-        batch_size=1,
-        sequence_length=128,
-    )
-    ```"""
+        ```python
+        from transformers.utils.fx import symbolic_trace
+        traced_model = symbolic_trace(model, input_names=["input_ids", "attention_mask", "token_type_ids"])
+        ```
+    """
     if input_names is None:
         input_names = model.dummy_inputs.keys()
 
