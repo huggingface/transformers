@@ -330,9 +330,9 @@ class RemBertSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RemBert
 class RemBertAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = RemBertSelfAttention(config)
+        self.self = RemBertSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = RemBertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -421,7 +421,7 @@ class RemBertLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = RemBertAttention(config)
+            self.crossattention = RemBertAttention(config, position_embedding_type="absolute")
         self.intermediate = RemBertIntermediate(config)
         self.output = RemBertOutput(config)
 

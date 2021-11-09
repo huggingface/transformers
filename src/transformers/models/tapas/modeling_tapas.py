@@ -458,9 +458,9 @@ class TapasSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Tapas
 class TapasAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = TapasSelfAttention(config)
+        self.self = TapasSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = TapasSelfOutput(config)
         self.pruned_heads = set()
 
@@ -549,7 +549,7 @@ class TapasLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = TapasAttention(config)
+            self.crossattention = TapasAttention(config, position_embedding_type="absolute")
         self.intermediate = TapasIntermediate(config)
         self.output = TapasOutput(config)
 
