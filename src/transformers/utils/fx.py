@@ -40,6 +40,7 @@ def _generate_supported_model_classes(
     model_name: Type[PretrainedConfig],
     supported_tasks: Optional[Union[str, List[str]]] = None,
 ) -> List[Type[PreTrainedModel]]:
+
     model_config_class = CONFIG_MAPPING[model_name]
     task_mapping = {
         "default": MODEL_MAPPING,
@@ -80,15 +81,10 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gptj",
     "gpt_neo",
     "t5",
-]
+    "roberta",
+    "layoutlm",
+    "xlnet",
 
-_REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS_FOR_DYNAMIC_AXES = [
-    "albert",
-    "bert",
-    "distilbert",
-    "mobilebert",
-    "electra",
-    "megatron-bert",
 ]
 
 _REGULAR_SUPPORTED_MODELS = []
@@ -100,20 +96,9 @@ for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
 
 _SPECIAL_SUPPORTED_MODELS = [
     GPT2DoubleHeadsModel,
+    XLNetForQuestionAnswering,
 ]
 _SUPPORTED_MODELS = tuple(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)
-
-_REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = []
-for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS_FOR_DYNAMIC_AXES:
-    if isinstance(item, dict):
-        _REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES.extend(_generate_supported_model_classes(**item))
-    else:
-        _REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES.extend(_generate_supported_model_classes(item))
-
-_SPECIAL_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = []
-_SUPPORTED_MODELS_FOR_DYNAMIC_AXES = tuple(
-    _REGULAR_SUPPORTED_MODELS_FOR_DYNAMIC_AXES + _SPECIAL_SUPPORTED_MODELS_FOR_DYNAMIC_AXES
-)
 
 
 class HFProxy(Proxy):
@@ -233,7 +218,7 @@ class HFTracer(Tracer):
         modeling_utils.ModuleUtilsMixin: {"create_extended_attention_mask_for_decoder"},
     }
 
-    def __init__(self, batch_size: int = 1, sequence_length: int = 128, num_choices: int = -1):
+    def __init__(self):
         super().__init__()
 
         self._leaf_functions_register = {}
@@ -248,7 +233,6 @@ class HFTracer(Tracer):
                 f"{TORCH_FX_REQUIRED_VERSION} is supported."
             )
 
-        self.shape = [batch_size, sequence_length]
         self.prev_module = None
         self.recorded_methods = None
 
@@ -334,14 +318,14 @@ class HFTracer(Tracer):
 
         return cache_names, original_methods
 
-    def _generate_dummy_input(self, model: PreTrainedModel, input_name: str) -> Dict[str, torch.Tensor]:
+    def _generate_dummy_input(self, model: PreTrainedModel, input_name: str, shape: List[int]) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         model_class = model.__class__
         device = model.device
         inputs_dict = {}
 
         if input_name in ["labels", "start_positions", "end_positions"]:
-            batch_size = self.shape[0]
+            batch_size = shape[0]
             if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
             elif model_class in [
@@ -364,15 +348,15 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
                 GPT2DoubleHeadsModel,
             ]:
-                inputs_dict["labels"] = torch.zeros(self.shape, dtype=torch.long, device=device)
+                inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             else:
                 raise NotImplementedError(f"{model_class} not supported yet.")
 
         elif "mask" in input_name or "ids" in input_name:
-            inputs_dict[input_name] = torch.zeros(self.shape, dtype=torch.long, device=device)
+            inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         else:
-            shape = self.shape + [model.config.hidden_size]
-            inputs_dict[input_name] = torch.zeros(shape, dtype=torch.float, device=device)
+            shape_with_hidden_size = shape + [model.config.hidden_size]
+            inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
 
         return inputs_dict
 
@@ -384,13 +368,18 @@ class HFTracer(Tracer):
         if method_names is None:
             method_names = self._DEFAULT_METHODS_TO_RECORD
 
-        num_choices = _generate_random_int(low=2, high=5)
+        # Creating a random input shape to generate dummy inputs.
+        batch_size = _generate_random_int()
+        sequence_length = _generate_random_int()
+        shape = [batch_size, sequence_length]
+
         if model.__class__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-            self.shape.insert(1, num_choices)
+            num_choices = _generate_random_int(low=2, high=5)
+            shape.insert(1, num_choices)
 
         inputs = {}
         for input_name in input_names:
-            inputs.update(self._generate_dummy_input(model, input_name))
+            inputs.update(self._generate_dummy_input(model, input_name, shape))
 
         cache_names, original_methods = self._monkey_patch_tensor_methods_for_model_recording(model, method_names)
         self.original_methods = original_methods
@@ -578,7 +567,6 @@ def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Option
 def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
-    num_choices: int = -1,
 ) -> GraphModule:
 
     """
@@ -589,14 +577,6 @@ def symbolic_trace(
             The model to trace.
         input_names (`List[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs().keys() are used instead.
-        batch_size (`int`, *optional*, defaults to 1):
-            The batch size of the traced model inputs.
-        sequence_length (`int` or `List[int]]`):
-            The sequence length of the traced model inputs. For sequence-to-sequence models with different sequence
-            lengths between the encoder and the decoder inputs, this must be `[encoder_sequence_length,
-            decoder_sequence_length]`.
-        num_choices (`int`, *optional*, defaults to -1):
-            The number of possible choices for a multiple choice task.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
@@ -614,26 +594,14 @@ def symbolic_trace(
     sig = inspect.signature(model.forward)
     concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
-    forbidden_values = []
-    batch_size = _generate_random_int(forbidden_values=forbidden_values)
-    forbidden_values.append(batch_size)
-    sequence_length = _generate_random_int(forbidden_values=forbidden_values)
-
-    # if not isinstance(model, _SUPPORTED_MODELS):
-    #     supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
-    #     raise NotImplementedError(
-    #         f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-    #     )
-    # if (use_dynamic_batch_size or use_dynamic_sequence_length) and not isinstance(
-    #     model, _SUPPORTED_MODELS_FOR_DYNAMIC_AXES
-    # ):
-    #     supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS_FOR_DYNAMIC_AXES))
-    #     raise NotImplementedError(
-    #         f"Dynamic axes are not supported for {model.__class__.__name__} yet, supported models: {supported_model_names}"
-    #     )
+    if not isinstance(model, _SUPPORTED_MODELS):
+        supported_model_names = ", ".join((cls.__name__ for cls in _SUPPORTED_MODELS))
+        raise NotImplementedError(
+            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+        )
 
     # Tracing.
-    tracer = HFTracer(batch_size=batch_size, sequence_length=sequence_length, num_choices=num_choices)
+    tracer = HFTracer()
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 

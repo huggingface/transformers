@@ -704,20 +704,13 @@ class ModelTesterMixin:
                     model_output = model(**filtered_inputs)
 
                     rank = len(input_ids.shape)
-                    if rank == 2:
-                        batch_size, sequence_length = input_ids.shape
-                        num_choices = -1
-                    elif rank == 3:
-                        batch_size, num_choices, sequence_length = input_ids.shape
-                    else:
+                    if rank not in [2, 3]:
                         raise NotImplementedError(
                             f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
                         )
 
-                    # import pytest; pytest.set_trace()
-                    traced_model = symbolic_trace(model, input_names, num_choices=num_choices)
+                    traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
-                    # import pytest; pytest.set_trace()
 
             except RuntimeError:
                 self.fail("Couldn't trace module.")
