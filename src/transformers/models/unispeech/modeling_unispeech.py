@@ -457,8 +457,6 @@ class UniSpeechAttention(nn.Module):
         # for the decoder
         is_cross_attention = key_value_states is not None
 
-        # Use the class's parameter as the hidden_state's last dimension.
-        # This dimension cannot be used in case of enabling tensor-parallelism.
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
@@ -546,11 +544,9 @@ class UniSpeechAttention(nn.Module):
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
 
-        # Use the embed_dim from class rather than hidden_state, this is due to
-        # the reason that attn_output can be partitioned across GPUs
-        # when using tensor-parallelism, in which case the embed_dimension from
-        # the input is not equal to the attention's last dimension after merging
-        # heads.
+        # Use the embed_dim from class rather than hidden_state, this is due to the reason that attn_output can be partitioned
+        # across GPUs when using tensor-parallelism, in which case the embed_dimension from the input is not equal to the
+        # attention's last dimension after merging heads.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
