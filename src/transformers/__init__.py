@@ -1396,6 +1396,7 @@ if is_tf_available():
     _import_structure["models.auto"].extend(
         [
             "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
+            "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_MASKED_LM_MAPPING",
             "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -1408,6 +1409,7 @@ if is_tf_available():
             "TF_MODEL_WITH_LM_HEAD_MAPPING",
             "TFAutoModel",
             "TFAutoModelForCausalLM",
+            "TFAutoModelForImageClassification",
             "TFAutoModelForMaskedLM",
             "TFAutoModelForMultipleChoice",
             "TFAutoModelForPreTraining",
@@ -1732,6 +1734,13 @@ if is_tf_available():
             "TFTransfoXLMainLayer",
             "TFTransfoXLModel",
             "TFTransfoXLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vit"].extend(
+        [
+            "TFViTForImageClassification",
+            "TFViTModel",
+            "TFViTPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -3133,6 +3142,7 @@ if TYPE_CHECKING:
         )
         from .models.auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -3145,6 +3155,7 @@ if TYPE_CHECKING:
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
             TFAutoModelForCausalLM,
+            TFAutoModelForImageClassification,
             TFAutoModelForMaskedLM,
             TFAutoModelForMultipleChoice,
             TFAutoModelForPreTraining,
@@ -3406,6 +3417,7 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
