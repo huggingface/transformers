@@ -44,6 +44,7 @@ from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
+from .image_segmentation import ImageSegmentationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
@@ -92,6 +93,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForCTC,
         AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
@@ -231,6 +233,12 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "google/vit-base-patch16-224"}},
     },
+    "image-segmentation": {
+        "impl": ImageSegmentationPipeline,
+        "tf": (),
+        "pt": (AutoModelForImageSegmentation,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
+    },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
@@ -300,7 +308,7 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
-    model_kwargs: Dict[str, Any] = {},
+    model_kwargs: Dict[str, Any] = None,
     **kwargs
 ) -> Pipeline:
     """
@@ -412,6 +420,8 @@ def pipeline(
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
+    if model_kwargs is None:
+        model_kwargs = {}
     if model is None and tokenizer is not None:
         raise RuntimeError(
             "Impossible to instantiate a pipeline with tokenizer specified but not the model "

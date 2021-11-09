@@ -944,7 +944,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
         >>>     batch["speech"] = speech
         >>>     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
@@ -1045,7 +1045,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
         >>>     batch["speech"] = speech
         >>>     return batch
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
@@ -1233,7 +1233,7 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
         ...     return batch
 
 
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
         >>> input_values = feature_extractor(ds["speech"][0], return_tensors="np").input_values  # Batch size 1

@@ -461,6 +461,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
+    @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a PyTorch model.
+        """
+        return "pt"
+
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
@@ -782,9 +789,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(
-            self.device, dtype=old_embeddings.weight.dtype
-        )
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -855,7 +861,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Build new lm head
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
-        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias).to(self.device)
+        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
+        new_lm_head = new_lm_head.to(self.device, dtype=old_lm_head.weight.dtype)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
@@ -939,7 +946,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def gradient_checkpointing_enable(self, flag: bool = True):
+    def gradient_checkpointing_enable(self):
         """
         Activates gradient checkpointing for the current model.
 
@@ -950,7 +957,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
-    def gradient_checkpointing_disable(self, flag: bool = True):
+    def gradient_checkpointing_disable(self):
         """
         Deactivates gradient checkpointing for the current model.
 
@@ -959,6 +966,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if self.supports_gradient_checkpointing:
             self.apply(partial(self._set_gradient_checkpointing, value=False))
+
+    @property
+    def is_gradient_checkpointing(self) -> bool:
+        """
+        Whether gradient checkpointing is activated for this model or not.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
 
     def save_pretrained(
         self,
@@ -1032,7 +1049,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
-            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
+            for ignore_key in self._keys_to_ignore_on_save:
+                del state_dict[ignore_key]
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
@@ -1230,7 +1248,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -1478,13 +1495,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # key re-naming operations are never done on the keys
         # that are loaded, but always on the keys of the newly initialized model
-        remove_prefix = not has_prefix_module and expects_prefix_module
-        add_prefix = has_prefix_module and not expects_prefix_module
+        remove_prefix_from_model = not has_prefix_module and expects_prefix_module
+        add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
-        if remove_prefix:
+        if remove_prefix_from_model:
             expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
-        elif add_prefix:
+        elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
@@ -1496,10 +1513,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if ignore_mismatched_sizes:
             for checkpoint_key in loaded_keys:
                 model_key = checkpoint_key
-                if remove_prefix and checkpoint_key.startswith(prefix):
-                    model_key = ".".join(checkpoint_key.split(".")[1:])
-                elif add_prefix:
+                if remove_prefix_from_model:
+                    # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
                     model_key = f"{prefix}.{checkpoint_key}"
+                elif add_prefix_to_model:
+                    # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                    model_key = ".".join(checkpoint_key.split(".")[1:])
 
                 if (
                     model_key in model_state_dict
@@ -1523,7 +1542,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if _fast_init:
             # retrieve unintialized modules and initialize
             uninitialized_modules = model.retrieve_modules_from_names(
-                missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+                missing_keys, add_prefix=add_prefix_to_model, remove_prefix=remove_prefix_from_model
             )
             for module in uninitialized_modules:
                 model._init_weights(module)

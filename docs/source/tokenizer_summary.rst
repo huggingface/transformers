@@ -182,9 +182,10 @@ base vocabulary, we obtain:
 
 BPE then counts the frequency of each possible symbol pair and picks the symbol pair that occurs most frequently. In
 the example above ``"h"`` followed by ``"u"`` is present `10 + 5 = 15` times (10 times in the 10 occurrences of
-``"hug"``, 5 times in the 5 occurrences of "hugs"). However, the most frequent symbol pair is ``"u"`` followed by "g",
-occurring `10 + 5 + 5 = 20` times in total. Thus, the first merge rule the tokenizer learns is to group all ``"u"``
-symbols followed by a ``"g"`` symbol together. Next, "ug" is added to the vocabulary. The set of words then becomes
+``"hug"``, 5 times in the 5 occurrences of ``"hugs"``). However, the most frequent symbol pair is ``"u"`` followed by
+``"g"``, occurring `10 + 5 + 5 = 20` times in total. Thus, the first merge rule the tokenizer learns is to group all
+``"u"`` symbols followed by a ``"g"`` symbol together. Next, ``"ug"`` is added to the vocabulary. The set of words then
+becomes
 
 .. code-block::
 
