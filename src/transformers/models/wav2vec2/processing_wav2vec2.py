@@ -232,9 +232,9 @@ class Wav2Vec2ProcessorWithLM:
         # ---------------------
         from pyctcdecode import LanguageModel
         if self._is_ken_lm_model(pretrained_model_name_or_path):
-            language_model = LanguageModel.from_pretrained("...")
+            language_model = LanguageModel.load_from_hf_hub("...")
         elif self._is_hf_lm_model(pretrained_model_name_or_path):
-            language_model = HfLanguageModel.from_pretrained("...")
+            language_model = HfLanguageModel.load_from_hf_hub("...")
         # (this requires the followirg:
         # a. add `.from_pretrained(...)` class in kensho-technologies/pyctcdecode
         # => requires very little work and should be pretty easy (need to discuss with pyctcdecode)
@@ -244,7 +244,7 @@ class Wav2Vec2ProcessorWithLM:
         # ---------------------
         # do the whole model loading ourselves and create a `AutoLanguageModel` class in `transformers`
         # => requires fair amount of work but no need to discuss with pyctcdecode
-        language_model = AutoLanguageModel.from_pretrained("...")
+        language_model = AutoLanguageModel.load_from_hf_hub("...")
 
         # iii.) Build ctc decoder
         # see: https://github.com/kensho-technologies/pyctcdecode/blob/94dfdae1d18ad95e799286173826aec2dec9a6b2/pyctcdecode/decoder.py#L181
