@@ -1060,7 +1060,7 @@ class TFRoFormerClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+        super().__init__(*inputs, **kwargs)
 
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
