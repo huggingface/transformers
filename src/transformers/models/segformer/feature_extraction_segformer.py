@@ -172,8 +172,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         padding_value (:obj:`int`, `optional`, defaults to 0):
             Fill value for padding images.
         segmentation_padding_value (:obj:`int`, `optional`, defaults to 255):
-            Fill value for padding segmentation maps. One must make sure the :obj:`ignore_index` of the
-            :obj:`CrossEntropyLoss` is set equal to this value.
+            Fill value for padding segmentation maps. One must make sure the :obj:`semantic_ignore_index` attribute of
+            the configuration of the semantic segmentation model is set equal to this value.
         reduce_zero_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to reduce all label values by 1. Usually used for datasets where 0 is the background label.
     """
@@ -493,13 +493,6 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                     self.pad(map, size=self.crop_size, padding_value=self.segmentation_padding_value)
                     for map in segmentation_maps
                 ]
-
-        print("Shape of images + maps after padding:")
-        for image in images:
-            print(image.shape)
-        if segmentation_maps is not None:
-            for map in segmentation_maps:
-                print(map.shape)
 
         # return as BatchFeature
         data = {"pixel_values": images}
