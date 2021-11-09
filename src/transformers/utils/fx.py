@@ -84,7 +84,6 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "roberta",
     "layoutlm",
     "xlnet",
-
 ]
 
 _REGULAR_SUPPORTED_MODELS = []
@@ -293,8 +292,8 @@ class HFTracer(Tracer):
 
     def _monkey_patch_tensor_methods_for_model_recording(self, model: PreTrainedModel, method_names: Iterable[str]):
         """
-        Helper function that patches torch.Tensor methods (specified by the method_names list) to record model inference
-        before symbolic tracing.
+        Helper function that patches torch.Tensor methods (specified by the method_names list) to record model
+        inference before symbolic tracing.
         """
         cache_names = {}
         original_methods = {}
@@ -318,7 +317,9 @@ class HFTracer(Tracer):
 
         return cache_names, original_methods
 
-    def _generate_dummy_input(self, model: PreTrainedModel, input_name: str, shape: List[int]) -> Dict[str, torch.Tensor]:
+    def _generate_dummy_input(
+        self, model: PreTrainedModel, input_name: str, shape: List[int]
+    ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         model_class = model.__class__
         device = model.device
@@ -362,8 +363,7 @@ class HFTracer(Tracer):
 
     def record(self, model: PreTrainedModel, input_names: List[str], method_names: Optional[Iterable[str]] = None):
         """
-        Records torch.Tensor method outputs (specified by method_names) that will then be used during symbolic
-        tracing.
+        Records torch.Tensor method outputs (specified by method_names) that will then be used during symbolic tracing.
         """
         if method_names is None:
             method_names = self._DEFAULT_METHODS_TO_RECORD
@@ -513,12 +513,10 @@ class HFTracer(Tracer):
 # @transformation
 # def prepare_for_retracing(gm: GraphModule) -> Tuple[GraphModule, Dict[str, Any]]:
 #     """
-#     Prepares a GraphModule produced by symbolic_trace for retracing by:
-#
-#         - Caching all the attributes specific to the way the model was initially traced
-#         - Patching back the model to a "static input shapes" version if it was traced to accept dynamic input shapes
-#     For instance, the need to retrace a GraphModule can happen when applying quantization.
-#     """
+# Prepares a GraphModule produced by symbolic_trace for retracing by: # # - Caching all the attributes specific to the
+way the model was initially traced # - Patching back the model to a "static input shapes" version if it was traced to
+accept dynamic input shapes # For instance, the need to retrace a GraphModule can happen when applying quantization. #
+"""
 #     attributes = _cache_attributes(gm)
 #     _patch_arguments_(gm, gm.dynamic2static)
 #
@@ -539,10 +537,10 @@ class HFTracer(Tracer):
 #     gm: GraphModule, tracer: Tracer = None, func: Callable[[GraphModule], GraphModule] = None
 # ) -> GraphModule:
 #     """
-#     Retraces a GraphModule by either using a tracer or a function using a tracer (for instance
-#     torch.quantization.quantize_fx.prepare_fx). It takes care of preparing the model for retracing, retracing it and
-#     restoring anything necessary after the retrace.
-#     """
+# Retraces a GraphModule by either using a tracer or a function using a tracer (for instance #
+torch.quantization.quantize_fx.prepare_fx). It takes care of preparing the model for retracing, retracing it and #
+restoring anything necessary after the retrace. #
+"""
 #     if tracer is None and func is None:
 #         raise ValueError("Either a tracer or a function using a tracer must be provided.")
 #     elif tracer is not None and func is not None:
