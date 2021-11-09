@@ -603,6 +603,7 @@ if is_torch_available():
             "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_VISION_2_SEQ_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
@@ -622,6 +623,7 @@ if is_torch_available():
             "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
+            "AutoModelForVision2Seq",
             "AutoModelWithLMHead",
         ]
     )
@@ -1825,6 +1827,7 @@ if is_flax_available():
             "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING",
             "FLAX_MODEL_MAPPING",
             "FlaxAutoModel",
             "FlaxAutoModelForCausalLM",
@@ -1837,6 +1840,7 @@ if is_flax_available():
             "FlaxAutoModelForSeq2SeqLM",
             "FlaxAutoModelForSequenceClassification",
             "FlaxAutoModelForTokenClassification",
+            "FlaxAutoModelForVision2Seq",
         ]
     )
 
@@ -1957,6 +1961,7 @@ if is_flax_available():
         ]
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
+    _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
@@ -2457,6 +2462,7 @@ if TYPE_CHECKING:
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -2476,6 +2482,7 @@ if TYPE_CHECKING:
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
+            AutoModelForVision2Seq,
             AutoModelWithLMHead,
         )
         from .models.bart import (
@@ -3482,6 +3489,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
             FLAX_MODEL_MAPPING,
             FlaxAutoModel,
             FlaxAutoModelForCausalLM,
@@ -3494,6 +3502,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
+            FlaxAutoModelForVision2Seq,
         )
         from .models.bart import (
             FlaxBartForConditionalGeneration,
@@ -3579,6 +3588,7 @@ if TYPE_CHECKING:
             FlaxRobertaPreTrainedModel,
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
