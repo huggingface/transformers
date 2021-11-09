@@ -373,7 +373,6 @@ class RoFormerAttention(nn.Module):
         self.output = RoFormerSelfOutput(config)
         self.pruned_heads = set()
 
-    # End Copy
     # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
