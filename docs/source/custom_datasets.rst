@@ -13,9 +13,13 @@
 How to fine-tune a model for common downstream tasks
 =======================================================================================================================
 
-This guide will show you how to fine-tune 🤗 Transformers models for common downstream tasks. You will use the 🤗 Datasets library to quickly load and preprocess the datasets, getting them ready for training with PyTorch and TensorFlow.
+This guide will show you how to fine-tune 🤗 Transformers models for common downstream tasks. You will use the 🤗
+Datasets library to quickly load and preprocess the datasets, getting them ready for training with PyTorch and
+TensorFlow.
 
-Before you begin, make sure you have the 🤗 Datasets library installed. For more detailed installation instructions, refer to the 🤗 Datasets `installation page <https://huggingface.co/docs/datasets/installation.html>`_. All of the examples in this guide will use 🤗 Datasets to load and preprocess a dataset.
+Before you begin, make sure you have the 🤗 Datasets library installed. For more detailed installation instructions,
+refer to the 🤗 Datasets `installation page <https://huggingface.co/docs/datasets/installation.html>`_. All of the
+examples in this guide will use 🤗 Datasets to load and preprocess a dataset.
 
 .. code-block:: bash
 
@@ -32,14 +36,20 @@ Learn how to fine-tune a model for:
 Sequence classification with IMDb reviews
 -----------------------------------------------------------------------------------------------------------------------
 
-Sequence classification refers to the task of classifying sequences of text according to a given number of classes. In this example, learn how to fine-tune a model on the `IMDb dataset <https://huggingface.co/datasets/imdb>`_ to determine whether a review is positive or negative. 
+Sequence classification refers to the task of classifying sequences of text according to a given number of classes. In
+this example, learn how to fine-tune a model on the `IMDb dataset <https://huggingface.co/datasets/imdb>`_ to determine
+whether a review is positive or negative.
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for text classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb>`__ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification-tf.ipynb>`__.
+    For a more in-depth example of how to fine-tune a model for text classification, take a look at the corresponding
+    `PyTorch notebook
+    <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb>`__
+    or `TensorFlow notebook
+    <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification-tf.ipynb>`__.
 
 Load IMDb dataset
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The 🤗 Datasets library makes it simple to load a dataset:
 
@@ -58,29 +68,37 @@ This loads a ``DatasetDict`` object which you can index into to view an example:
     }
 
 Preprocess
-~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The next step is to tokenize the text into a readable format by the model. It is important to load the same tokenizer a model was trained with to ensure appropriately tokenized words. Load the DistilBERT tokenizer with the :class:`~transformers.AutoTokenizer` because we will eventually train a classifier using a pretrained `DistilBERT <https://huggingface.co/distilbert-base-uncased>`_ model:
+The next step is to tokenize the text into a readable format by the model. It is important to load the same tokenizer a
+model was trained with to ensure appropriately tokenized words. Load the DistilBERT tokenizer with the
+:class:`~transformers.AutoTokenizer` because we will eventually train a classifier using a pretrained `DistilBERT
+<https://huggingface.co/distilbert-base-uncased>`_ model:
 
 .. code-block:: python
 
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
-Now that you have instantiated a tokenizer, create a function that will tokenize the text. You should also truncate longer sequences in the text to be no longer than the model's maximum input length:
+Now that you have instantiated a tokenizer, create a function that will tokenize the text. You should also truncate
+longer sequences in the text to be no longer than the model's maximum input length:
 
 .. code-block:: python
 
     def preprocess_function(examples):
         return tokenizer(examples["text"], truncation=True)
 
-Use 🤗 Datasets ``map`` function to apply the preprocessing function to the entire dataset. You can also set ``batched=True`` to apply the preprocessing function to multiple elements of the dataset at once for faster preprocessing:
+Use 🤗 Datasets ``map`` function to apply the preprocessing function to the entire dataset. You can also set
+``batched=True`` to apply the preprocessing function to multiple elements of the dataset at once for faster
+preprocessing:
 
 .. code-block:: python
 
     tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
-Lastly, pad your text so they are a uniform length. While it is possible to pad your text in the ``tokenizer`` function by setting ``padding=True``, it is more efficient to only pad the text to the length of the longest element in its batch. This is known as **dynamic padding**. You can do this with the ``DataCollatorWithPadding`` function:
+Lastly, pad your text so they are a uniform length. While it is possible to pad your text in the ``tokenizer`` function
+by setting ``padding=True``, it is more efficient to only pad the text to the length of the longest element in its
+batch. This is known as **dynamic padding**. You can do this with the ``DataCollatorWithPadding`` function:
 
 .. code-block:: python
 
@@ -88,7 +106,7 @@ Lastly, pad your text so they are a uniform length. While it is possible to pad 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
 Fine-tune with the Trainer API
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Now load your model with the :class:`~transformers.AutoModel` class along with the number of expected labels:
 
@@ -100,7 +118,8 @@ Now load your model with the :class:`~transformers.AutoModel` class along with t
 At this point, only three steps remain:
 
 1. Define your training hyperparameters in :class:`~transformers.TrainingArguments`.
-2. Pass the training arguments to a :class:`~transformers.Trainer` along with the model, dataset, tokenizer, and data collator.
+2. Pass the training arguments to a :class:`~transformers.Trainer` along with the model, dataset, tokenizer, and data
+   collator.
 3. Call ``trainer.train`` to fine-tune your model.
 
 .. code-block:: python
@@ -128,18 +147,20 @@ At this point, only three steps remain:
     trainer.train()
 
 Fine-tune with TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Fine-tuning with TensorFlow is just as easy, with only a few differences.
 
-Start by batching the processed examples together with dynamic padding using the ``DataCollatorWithPadding`` function. Make sure you set ``return_tensors="tf"`` to return ``tf.Tensor`` outputs instead of PyTorch tensors!
+Start by batching the processed examples together with dynamic padding using the ``DataCollatorWithPadding`` function.
+Make sure you set ``return_tensors="tf"`` to return ``tf.Tensor`` outputs instead of PyTorch tensors!
 
 .. code-block:: python
 
     from transformers import DataCollatorWithPadding
     data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
 
-Next, convert your datasets to the ``tf.data.Dataset`` format with ``to_tf_dataset``. Specify inputs and labels in the ``columns`` argument:
+Next, convert your datasets to the ``tf.data.Dataset`` format with ``to_tf_dataset``. Specify inputs and labels in the
+``columns`` argument:
 
 .. code-block:: python
 
@@ -203,14 +224,21 @@ Finally, fine-tune the model by calling ``model.fit``:
 Token classification with WNUT emerging entities
 -----------------------------------------------------------------------------------------------------------------------
 
-Token classification refers to the task of classifying individual tokens in a sentence. One of the most common token classification tasks is Named Entity Recognition (NER). NER attempts to find a label for each entity in a sentence, such as a person, location, or organization. In this example, learn how to fine-tune a model on the `WNUT 17 <https://huggingface.co/datasets/wnut_17>`_ dataset to detect new entities.
+Token classification refers to the task of classifying individual tokens in a sentence. One of the most common token
+classification tasks is Named Entity Recognition (NER). NER attempts to find a label for each entity in a sentence,
+such as a person, location, or organization. In this example, learn how to fine-tune a model on the `WNUT 17
+<https://huggingface.co/datasets/wnut_17>`_ dataset to detect new entities.
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb>`__ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification-tf.ipynb>`__.
+    For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding
+    `PyTorch notebook
+    <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb>`__
+    or `TensorFlow notebook
+    <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification-tf.ipynb>`__.
 
 Load WNUT 17 dataset
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Load the WNUT 17 dataset from the 🤗 Datasets library:
 
@@ -253,11 +281,12 @@ View the specific NER tags by:
 A letter prefixes each NER tag which can mean:
 
 * ``B-`` indicates the beginning of an entity.
-* ``I-`` indicates a token is contained inside the same entity (e.g., the ``State`` token is a part of an entity like ``Empire State Building``).
+* ``I-`` indicates a token is contained inside the same entity (e.g., the ``State`` token is a part of an entity like
+  ``Empire State Building``).
 * ``0`` indicates the token doesn't correspond to any entity.
 
 Preprocess
-~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Now you need to tokenize the text. Load the DistilBERT tokenizer with an :class:`~transformers.AutoTokenizer`:
 
@@ -266,7 +295,8 @@ Now you need to tokenize the text. Load the DistilBERT tokenizer with an :class:
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
-Since the input has already been split into words, set ``is_split_into_words=True`` to tokenize the words into subwords:
+Since the input has already been split into words, set ``is_split_into_words=True`` to tokenize the words into
+subwords:
 
 .. code-block:: python
 
@@ -275,10 +305,12 @@ Since the input has already been split into words, set ``is_split_into_words=Tru
     tokens
     ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 
-The addition of the special tokens ``[CLS]`` and ``[SEP]`` and subword tokenization creates a mismatch between the input and labels. Realign the labels and tokens by:
+The addition of the special tokens ``[CLS]`` and ``[SEP]`` and subword tokenization creates a mismatch between the
+input and labels. Realign the labels and tokens by:
 
 1. Mapping all tokens to their corresponding word with the ``word_ids`` method.
-2. Assigning the label ``-100`` to the special tokens ``[CLS]`` and ``[SEP]``` so the PyTorch loss function ignores them.
+2. Assigning the label ``-100`` to the special tokens ``[CLS]`` and ``[SEP]``` so the PyTorch loss function ignores
+   them.
 3. Only labeling the first token of a given word. Assign ``-100`` to the other subtokens from the same word.
 
 Here is how you can create a function that will realign the labels and tokens:
@@ -318,7 +350,7 @@ Finally, pad your text and labels, so they are a uniform length:
     data_collator = DataCollatorForTokenClassification(tokenizer)
 
 Fine-tune with the Trainer API
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Load your model with the :class:`~transformers.AutoModel` class along with the number of expected labels:
 
@@ -361,7 +393,7 @@ Fine-tune your model:
     trainer.train()
 
 Fine-tune with TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Batch your examples together and pad your text and labels, so they are a uniform length:
 
@@ -380,7 +412,7 @@ Convert your datasets to the ``tf.data.Dataset`` format with ``to_tf_dataset``:
         batch_size=16,
         collate_fn=data_collator,
     )
-    
+
     tf_validation_set = tokenized_wnut["validation"].to_tf_dataset(
         columns=["attention_mask", "input_ids", "labels"],
         shuffle=False,
@@ -433,14 +465,20 @@ Call ``model.fit`` to fine-tune your model:
 Question Answering with SQuAD
 -----------------------------------------------------------------------------------------------------------------------
 
-There are many types of question answering (QA) tasks. Extractive QA focuses on identifying the answer from the text given a question. In this example, learn how to fine-tune a model on the `SQuAD <https://huggingface.co/datasets/squad>`_ dataset.
+There are many types of question answering (QA) tasks. Extractive QA focuses on identifying the answer from the text
+given a question. In this example, learn how to fine-tune a model on the `SQuAD
+<https://huggingface.co/datasets/squad>`_ dataset.
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for question answering, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb>`__ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering-tf.ipynb>`__.
+    For a more in-depth example of how to fine-tune a model for question answering, take a look at the corresponding
+    `PyTorch notebook
+    <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb>`__
+    or `TensorFlow notebook
+    <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering-tf.ipynb>`__.
 
 Load SQuAD dataset
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Load the SQuAD dataset from the 🤗 Datasets library:
 
@@ -462,7 +500,7 @@ Take a look at an example from the dataset:
     }
 
 Preprocess
-~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Load the DistilBERT tokenizer with an :class:`~transformers.AutoTokenizer`:
 
@@ -473,9 +511,12 @@ Load the DistilBERT tokenizer with an :class:`~transformers.AutoTokenizer`:
 
 There are a few things to be aware of when preprocessing text for question answering:
 
-1. Some examples in a dataset may have a very long ``context`` that exceeds the maximum input length of the model. You can deal with this by truncating the ``context`` and set ``truncation="only_second"``.
-2. Next, you need to map the start and end positions of the answer to the original context. Set ``return_offset_mapping=True`` to handle this.
-3. With the mapping in hand, you can find the start and end tokens of the answer. Use the ``sequence_ids`` method to find which part of the offset corresponds to the question, and which part of the offset corresponds to the context.
+1. Some examples in a dataset may have a very long ``context`` that exceeds the maximum input length of the model. You
+   can deal with this by truncating the ``context`` and set ``truncation="only_second"``.
+2. Next, you need to map the start and end positions of the answer to the original context. Set
+   ``return_offset_mapping=True`` to handle this.
+3. With the mapping in hand, you can find the start and end tokens of the answer. Use the ``sequence_ids`` method to
+   find which part of the offset corresponds to the question, and which part of the offset corresponds to the context.
 
 Assemble everything in a preprocessing function as shown below:
 
@@ -546,7 +587,7 @@ Batch the processed examples together:
     data_collator = default_data_collator
 
 Fine-tune with the Trainer API
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Load your model with the :class:`~transformers.AutoModel` class:
 
@@ -589,7 +630,7 @@ Fine-tune your model:
     trainer.train()
 
 Fine-tune with TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Batch the processed examples together with a TensorFlow default data collator:
 
@@ -609,7 +650,7 @@ Convert your datasets to the ``tf.data.Dataset`` format with the ``to_tf_dataset
         batch_size=16,
         collate_fn=data_collator,
     )
-    
+
     tf_validation_set = tokenized_squad["validation"].to_tf_dataset(
         columns=["attention_mask", "input_ids", "start_positions", "end_positions"],
         dummy_labels=True,
