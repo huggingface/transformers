@@ -456,14 +456,14 @@ class TapasSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Tapas
 class TapasAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
-        self.self = TapasSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = TapasSelfAttention(config)
         self.output = TapasSelfOutput(config)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -482,6 +482,7 @@ class TapasAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,
         hidden_states,
@@ -537,7 +538,6 @@ class TapasOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Tapas
 class TapasLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -549,10 +549,11 @@ class TapasLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = TapasAttention(config, position_embedding_type="absolute")
+            self.crossattention = TapasAttention(config)
         self.intermediate = TapasIntermediate(config)
         self.output = TapasOutput(config)
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states,
@@ -617,6 +618,7 @@ class TapasLayer(nn.Module):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)

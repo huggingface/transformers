@@ -367,10 +367,9 @@ class RoFormerSelfOutput(nn.Module):
 
 
 class RoFormerAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->RoFormer
     def __init__(self, config):
         super().__init__()
-        self.self = RoFormerSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = RoFormerSelfAttention(config)
         self.output = RoFormerSelfOutput(config)
         self.pruned_heads = set()
 
@@ -453,7 +452,6 @@ class RoFormerOutput(nn.Module):
 
 
 class RoFormerLayer(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertLayer.__init__ with Bert->RoFormer
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -464,11 +462,10 @@ class RoFormerLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = RoFormerAttention(config, position_embedding_type="absolute")
+            self.crossattention = RoFormerAttention(config)
         self.intermediate = RoFormerIntermediate(config)
         self.output = RoFormerOutput(config)
 
-    # End Copy
     def forward(
         self,
         hidden_states,
