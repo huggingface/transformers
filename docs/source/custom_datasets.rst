@@ -36,7 +36,7 @@ Sequence classification refers to the task of classifying sequences of text acco
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for text classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb>`_ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification-tf.ipynb>`_.
+    For a more in-depth example of how to fine-tune a model for text classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb>`__ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification-tf.ipynb>`__.
 
 Load IMDb dataset
 ~~~~~~~~~~~~~~~~~
@@ -207,7 +207,7 @@ Token classification refers to the task of classifying individual tokens in a se
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb>`_ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification-tf.ipynb>`_.
+    For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb>`__ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification-tf.ipynb>`__.
 
 Load WNUT 17 dataset
 ~~~~~~~~~~~~~~~~~~~~
@@ -437,7 +437,7 @@ There are many types of question answering (QA) tasks. Extractive QA focuses on 
 
 .. note::
 
-    For a more in-depth example of how to fine-tune a model for question answering, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb>`_ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering-tf.ipynb>`_.
+    For a more in-depth example of how to fine-tune a model for question answering, take a look at the corresponding `PyTorch notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb>`__ or `TensorFlow notebook <https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering-tf.ipynb>`__.
 
 Load SQuAD dataset
 ~~~~~~~~~~~~~~~~~~
