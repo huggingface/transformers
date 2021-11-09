@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VisionEncoderDecoderConfig"
 
-ENCODER_DECODER_START_DOCSTRING = r"""
+VISION_ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize an image-to-text-sequence model with any pretrained vision autoencoding model
     as the encoder and any pretrained text autoregressive model as the decoder. The encoder is loaded via
     :meth:`~transformers.TFAutoModel.from_pretrained` function and the decoder is loaded via
@@ -144,7 +144,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(VISION_ENCODER_DECODER_INPUTS_DOCSTRING)
+@add_start_docstrings(VISION_ENCODER_DECODER_START_DOCSTRING)
 class TFVisionEncoderDecoderModel(TFPreTrainedModel):
     r"""
     :class:`~transformers.TFVisionEncoderDecoder` is a generic model class that will be instantiated as a transformer

@@ -2690,6 +2690,18 @@ class TFTransfoXLPreTrainedModel:
         requires_backends(self, ["tf"])
 
 
+class TFVisionEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFViTForImageClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
@@ -2708,18 +2720,6 @@ class TFViTModel:
 
 
 class TFViTPreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["tf"])
-
-    def call(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFVisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
