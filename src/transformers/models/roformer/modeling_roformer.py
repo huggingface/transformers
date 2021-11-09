@@ -367,14 +367,12 @@ class RoFormerSelfOutput(nn.Module):
 
 
 class RoFormerAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->RoFormer
     def __init__(self, config):
         super().__init__()
         self.self = RoFormerSelfAttention(config)
         self.output = RoFormerSelfOutput(config)
         self.pruned_heads = set()
 
-    # End Copy
     # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -453,7 +451,6 @@ class RoFormerOutput(nn.Module):
 
 
 class RoFormerLayer(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertLayer.__init__ with Bert->RoFormer
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -468,7 +465,6 @@ class RoFormerLayer(nn.Module):
         self.intermediate = RoFormerIntermediate(config)
         self.output = RoFormerOutput(config)
 
-    # End Copy
     def forward(
         self,
         hidden_states,
