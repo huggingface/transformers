@@ -239,6 +239,9 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 The size to use for resizing/rescaling the image.
             resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
                 The filter to user for resampling.
+
+        Returns:
+            image (:obj:`PIL.Image.Image`): The resized image.
         """
         if not isinstance(image, Image.Image):
             image = self.to_pil_image(image)
@@ -304,6 +307,9 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 Image to crop.
             segmentation_map (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`, `optional`):
                 Optional corresponding segmentation map.
+
+        Returns:
+            image (:obj:`np.ndarray`); Randomly cropped image.
         """
         image = self.to_numpy_array(image)
         crop_bbox = self._get_crop_bbox(image)
@@ -322,7 +328,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         Pads :obj:`image` to the given :obj:`size` with :obj:`padding_value` using np.pad.
 
         Args:
-            image (:obj:`np.ndarray`):
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
                 The image to pad. Can be a 2D or 3D image. In case the image is 3D, shape should be (num_channels,
                 height, width). In case the image is 2D, shape should be (height, width).
             size (:obj:`int` or :obj:`List[int, int] or Tuple[int, int]`):
@@ -331,6 +337,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             padding_value (:obj:`int`):
                 The padding value to use.
         """
+
+        image = self.to_numpy_array(image, rescale=False, channel_first=False)
 
         # add dummy channel dimension if image is 2D
         is_2d = False
@@ -419,16 +427,20 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         # Check that segmentation maps has a valid type
         if segmentation_maps is not None:
-            if isinstance(segmentation_maps, (Image.Image, np.ndarray)):
+            if isinstance(segmentation_maps, (Image.Image, np.ndarray)) or is_torch_tensor(segmentation_maps):
                 valid_segmentation_maps = True
             elif isinstance(segmentation_maps, (list, tuple)):
-                if len(segmentation_maps) == 0 or isinstance(segmentation_maps[0], (Image.Image, np.ndarray)):
+                if (
+                    len(segmentation_maps) == 0
+                    or isinstance(segmentation_maps[0], (Image.Image, np.ndarray))
+                    or is_torch_tensor(segmentation_maps[0])
+                ):
                     valid_segmentation_maps = True
 
             if not valid_segmentation_maps:
                 raise ValueError(
-                    "Segmentation maps must of type `PIL.Image.Image` or `np.ndarray` (single example),"
-                    "`List[PIL.Image.Image]` or `List[np.ndarray]` (batch of examples)."
+                    "Segmentation maps must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
+                    "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
                 )
 
         is_batched = bool(
@@ -481,6 +493,13 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                     self.pad(map, size=self.crop_size, padding_value=self.segmentation_padding_value)
                     for map in segmentation_maps
                 ]
+
+        print("Shape of images + maps after padding:")
+        for image in images:
+            print(image.shape)
+        if segmentation_maps is not None:
+            for map in segmentation_maps:
+                print(map.shape)
 
         # return as BatchFeature
         data = {"pixel_values": images}

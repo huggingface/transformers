@@ -17,6 +17,7 @@
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
@@ -84,6 +85,26 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
             "image_std": self.image_std,
             "do_pad": self.do_pad,
         }
+
+
+def prepare_segformer_single_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+
+    image = Image.open(ds[0]["file"])
+    map = Image.open(ds[1]["file"])
+
+    return image, map
+
+
+def prepare_segformer_batch_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+
+    image1 = Image.open(ds[0]["file"])
+    map1 = Image.open(ds[1]["file"])
+    image2 = Image.open(ds[2]["file"])
+    map2 = Image.open(ds[3]["file"])
+
+    return [image1, image2], [map1, map2]
 
 
 @require_torch
@@ -252,25 +273,23 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         self.assertEqual(encoded_images.shape, expected_shape)
 
     def test_random_crop(self):
-        from datasets import load_dataset
-
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-
-        image = Image.open(ds[0]["file"])
-        segmentation_map = Image.open(ds[1]["file"])
+        # Test not batched input
+        image, segmentation_map = prepare_segformer_single_inputs()
 
         w, h = image.size
-
-        # Initialize feature_extractor
         feature_extractor = SegformerFeatureExtractor(crop_size=[w - 20, h - 20], do_pad=False)
 
-        # Encode image + segmentation map
         encoded_images = feature_extractor(images=image, segmentation_maps=segmentation_map, return_tensors="pt")
-
-        # Verify shape of pixel_values
         self.assertEqual(encoded_images.pixel_values.shape[-2:], (h - 20, w - 20))
+        self.assertEqual(encoded_images.labels.shape[-2:], (h - 20, w - 20))
 
-        # Verify shape of labels
+        # Test batched input
+        images, segmentation_maps = prepare_segformer_batch_inputs()
+
+        w, h = images[0].size
+        feature_extractor = SegformerFeatureExtractor(crop_size=[w - 20, h - 20], do_pad=False)
+        encoded_images = feature_extractor(images=images, segmentation_maps=segmentation_maps, return_tensors="pt")
+        self.assertEqual(encoded_images.pixel_values.shape[-2:], (h - 20, w - 20))
         self.assertEqual(encoded_images.labels.shape[-2:], (h - 20, w - 20))
 
     def test_pad(self):
@@ -280,11 +299,13 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         )
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        maps = []
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
+            maps.append(torch.zeros(image.shape[-2:]).long())
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+        encoded_images = feature_extractor(image_inputs[0], maps[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -295,11 +316,37 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         )
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        encoded_images = feature_extractor(image_inputs, maps, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
                 self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                *self.feature_extract_tester.crop_size[::-1],
+            ),
+        )
+
+        # Test not batched input (PIL images)
+        image, segmentation_map = prepare_segformer_single_inputs()
+
+        encoded_images = feature_extractor(image, segmentation_map, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                *self.feature_extract_tester.crop_size[::-1],
+            ),
+        )
+
+        # Test batched input (PIL images)
+        images, segmentation_maps = prepare_segformer_batch_inputs()
+
+        encoded_images = feature_extractor(images, segmentation_maps, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                2,
                 self.feature_extract_tester.num_channels,
                 *self.feature_extract_tester.crop_size[::-1],
             ),
