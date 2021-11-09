@@ -449,6 +449,10 @@ class HFTracer(Tracer):
 
         self.record(root, input_names, method_names=method_names)
 
+        # TODO: adapt the way leaf function are wrapped with the "autowrap function" feature from Tracer.
+        autowrap_functions = [patched for (_, _, patched) in self._leaf_functions_register.values()]
+        self._autowrap_function_ids.update(set([id(f) for f in autowrap_functions]))
+
         self._patch_leaf_functions_for_root(root)
 
         graph = super().trace(root, concrete_args=concrete_args)
