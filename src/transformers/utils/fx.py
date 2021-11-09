@@ -163,6 +163,7 @@ def _function_to_leaf(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _function_leaf_getter(func_name: str, mapping: Dict[str, Callable[..., Any]]) -> Callable[..., Any]:
+
     @functools.wraps(mapping[func_name])
     def wrapper(*args, **kwargs):
         return mapping[func_name](*args, **kwargs)
@@ -235,9 +236,10 @@ class HFTracer(Tracer):
             for name in names:
                 self._register_leaf_function(module, name)
 
-        autowrap_functions = autowrap_functions + tuple(
-            patched for (_, _, patched) in self._leaf_functions_register.values()
-        )
+        # TODO: adapt the way leaf function are wrapped with the "autowrap function" feature from Tracer.
+        # autowrap_functions = autowrap_functions + tuple(
+        #     patched for (_, _, patched) in self._leaf_functions_register.values()
+        # )
 
         super().__init__(
             autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions, enable_cpatching=enable_cpatching
@@ -453,6 +455,7 @@ class HFTracer(Tracer):
         graph = super().trace(root, concrete_args=concrete_args)
 
         self._patch_leaf_functions_for_root(root, restore=True)
+
         _reset_tensor_methods(self.original_methods)
 
         # TODO: keep this until necessary.
