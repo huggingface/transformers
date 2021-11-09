@@ -143,5 +143,4 @@ It has been verified that the script works for the following datasets:
 | Keyword Spotting | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) | 12 | 0.9826 | 1 V100 GPU | 14min  | [here](https://huggingface.co/anton-l/wav2vec2-base-ft-keyword-spotting) |
 | Keyword Spotting | [facebook/hubert-base-ls960](https://huggingface.co/facebook/hubert-base-ls960) | 12 | 0.9819 | 1 V100 GPU | 14min  | [here](https://huggingface.co/anton-l/hubert-base-ft-keyword-spotting) |
 | Keyword Spotting | [asapp/sew-mid-100k](https://huggingface.co/asapp/sew-mid-100k) | 24 | 0.9757 | 1 V100 GPU | 15min  | [here](https://huggingface.co/anton-l/sew-mid-100k-ft-keyword-spotting) |
-| Common Language | [ntu-spml/distilhubert](https://huggingface.co/ntu-spml/distilhubert) | 2 | 0.2797 | 4 V100 GPUs | 38min  | [here](https://huggingface.co/anton-l/distilhubert-ft-common-language) |
 | Common Language | [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) | 12 | 0.7945 | 4 V100 GPUs | 1h10m  | [here](https://huggingface.co/anton-l/wav2vec2-base-lang-id) |

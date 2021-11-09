@@ -21,13 +21,24 @@ import re
 
 import numpy
 
+from .file_utils import ExplicitEnum
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=""):
+class TransposeType(ExplicitEnum):
+    """
+    Possible ...
+    """
+
+    NO = "no"
+    SIMPLE = "simple"
+    CONV2D = "conv2d"
+
+
+def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="", tf_weight_shape=None):
     """
     Convert a TF 2.0 model variable name in a pytorch model weight name.
 
@@ -39,8 +50,8 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     return tuple with:
 
         - pytorch model weight name
-        - transpose: boolean indicating whether TF2.0 and PyTorch weights matrices are transposed with regards to each
-          other
+        - transpose: `TransposeType` member indicating whether and how TF2.0 and PyTorch weights matrices should be
+          transposed with regards to each other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
     tf_name = re.sub(
@@ -56,11 +67,17 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    transpose = bool(
+    if tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 4:
+        # A simple heuristic to detect conv layer using weight array shape
+        transpose = TransposeType.CONV2D
+    elif bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
         or "emb_projs" in tf_name
         or "out_projs" in tf_name
-    )
+    ):
+        transpose = TransposeType.SIMPLE
+    else:
+        transpose = TransposeType.NO
 
     # Convert standard TF2.0 names in PyTorch names
     if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":
@@ -165,7 +182,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            sw_name, start_prefix_to_remove=start_prefix_to_remove
+            sw_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=symbolic_weight.shape
         )
 
         # Find associated numpy array in pytorch model state dict
@@ -182,7 +199,12 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
         array = pt_state_dict[name].numpy()
 
-        if transpose:
+        if transpose is TransposeType.CONV2D:
+            # Conv2D weight:
+            #    PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
+            # -> TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
+            array = numpy.transpose(array, axes=(2, 3, 1, 0))
+        elif transpose is TransposeType.SIMPLE:
             array = numpy.transpose(array)
 
         if len(symbolic_weight.shape) < len(array.shape):
@@ -326,7 +348,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     tf_weights_map = {}
     for tf_weight in tf_weights:
         pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            tf_weight.name, start_prefix_to_remove=start_prefix_to_remove
+            tf_weight.name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=tf_weight.shape
         )
         tf_weights_map[pt_name] = (tf_weight.numpy(), transpose)
 
@@ -350,7 +372,12 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
         array, transpose = tf_weights_map[pt_weight_name]
 
-        if transpose:
+        if transpose is TransposeType.CONV2D:
+            # Conv2D weight:
+            #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
+            # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
+            array = numpy.transpose(array, axes=(3, 2, 0, 1))
+        elif transpose is TransposeType.SIMPLE:
             array = numpy.transpose(array)
 
         if len(pt_weight.shape) < len(array.shape):

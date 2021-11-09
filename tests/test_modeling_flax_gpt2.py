@@ -95,7 +95,6 @@ class FlaxGPT2ModelTester:
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
             n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
             use_cache=False,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,

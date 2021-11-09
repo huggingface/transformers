@@ -45,8 +45,13 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
+        return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
+
+    def run_pipeline_test(self, token_classifier, _):
+        model = token_classifier.model
+        tokenizer = token_classifier.tokenizer
 
         outputs = token_classifier("A simple string")
         self.assertIsInstance(outputs, list)
@@ -620,6 +625,15 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
                 {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
             ],
+        )
+
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", ignore_labels=["O", "I-MISC"]
+        )
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [],
         )
 
     @require_torch

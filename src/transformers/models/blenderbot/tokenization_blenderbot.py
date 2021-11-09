@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from ...utils import logging
 from ..roberta.tokenization_roberta import RobertaTokenizer
@@ -58,7 +58,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A Blenderbot sequence has the following format:

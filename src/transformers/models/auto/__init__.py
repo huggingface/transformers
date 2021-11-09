@@ -46,6 +46,7 @@ if is_torch_available():
         "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
         "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
         "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+        "MODEL_FOR_VISION_2_SEQ_MAPPING",
         "MODEL_MAPPING",
         "MODEL_WITH_LM_HEAD_MAPPING",
         "AutoModel",
@@ -65,12 +66,14 @@ if is_torch_available():
         "AutoModelForSpeechSeq2Seq",
         "AutoModelForTableQuestionAnswering",
         "AutoModelForTokenClassification",
+        "AutoModelForVision2Seq",
         "AutoModelWithLMHead",
     ]
 
 if is_tf_available():
     _import_structure["modeling_tf_auto"] = [
         "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
+        "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "TF_MODEL_FOR_MASKED_LM_MAPPING",
         "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -83,6 +86,7 @@ if is_tf_available():
         "TF_MODEL_WITH_LM_HEAD_MAPPING",
         "TFAutoModel",
         "TFAutoModelForCausalLM",
+        "TFAutoModelForImageClassification",
         "TFAutoModelForMaskedLM",
         "TFAutoModelForMultipleChoice",
         "TFAutoModelForPreTraining",
@@ -105,6 +109,7 @@ if is_flax_available():
         "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+        "FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING",
         "FLAX_MODEL_MAPPING",
         "FlaxAutoModel",
         "FlaxAutoModelForCausalLM",
@@ -117,6 +122,7 @@ if is_flax_available():
         "FlaxAutoModelForSeq2SeqLM",
         "FlaxAutoModelForSequenceClassification",
         "FlaxAutoModelForTokenClassification",
+        "FlaxAutoModelForVision2Seq",
     ]
 
 
@@ -144,6 +150,7 @@ if TYPE_CHECKING:
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -163,12 +170,14 @@ if TYPE_CHECKING:
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
+            AutoModelForVision2Seq,
             AutoModelWithLMHead,
         )
 
     if is_tf_available():
         from .modeling_tf_auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -181,6 +190,7 @@ if TYPE_CHECKING:
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
             TFAutoModelForCausalLM,
+            TFAutoModelForImageClassification,
             TFAutoModelForMaskedLM,
             TFAutoModelForMultipleChoice,
             TFAutoModelForPreTraining,
@@ -203,6 +213,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
             FLAX_MODEL_MAPPING,
             FlaxAutoModel,
             FlaxAutoModelForCausalLM,
@@ -215,6 +226,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
             FlaxAutoModelForTokenClassification,
+            FlaxAutoModelForVision2Seq,
         )
 
 else:

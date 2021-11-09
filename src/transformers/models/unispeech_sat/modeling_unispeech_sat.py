@@ -457,7 +457,8 @@ class UniSpeechSatAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -543,7 +544,10 @@ class UniSpeechSatAttention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -948,7 +952,10 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(torch.long)
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
@@ -1157,6 +1164,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
 
         self.speaker_proj = nn.Linear(config.hidden_size, config.codevector_dim)
         self.label_embeddings_concat = nn.Parameter(torch.FloatTensor(config.num_clusters, config.codevector_dim))
+        self.label_embeddings_concat.data.zero_()
 
         self.layer_norm_for_extract = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         if self.config.do_stable_layer_norm:
@@ -1268,21 +1276,24 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         # quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
 
-        # layer normalization (has no effect when `config.do_stable_layer_norm == False`)
-        extract_features = self.layer_norm_for_extract(extract_features)
-        quantized_features, codevector_perplexity = self.quantizer(extract_features)
-
-        # project quantized features twice
-        quantized_features = self.project_q(quantized_features)
-        quantized_features = self.project_hid(quantized_features)
-
         # TODO(PVP) - add pretraining logic and add to tests
-        loss = None
-        logits = None
+        logits = extract_features
+        loss = quantized_features = codevector_perplexity = None
+
+        # layer normalization (has no effect when `config.do_stable_layer_norm == False`)
+        #        extract_features = self.layer_norm_for_extract(extract_features)
+        #        quantized_features, codevector_perplexity = self.quantizer(extract_features)
+        #
+        # project quantized features twice
+        #        quantized_features = self.project_q(quantized_features)
+        #        quantized_features = self.project_hid(quantized_features)
+        #
+        #        loss = None
+        #        logits = quantized_features
         if not return_dict:
             if loss is not None:
-                return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-            return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+                return (loss, logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+            return (logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
 
         return UniSpeechSatForPreTrainingOutput(
             loss=loss,

@@ -98,9 +98,9 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
-            Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            For training, :obj:`decoder_input_ids` are automatically created by the model by shifting the :obj:`labels`
+            to the right, replacing -100 by the :obj:`pad_token_id` and prepending them with the
+            :obj:`decoder_start_token_id`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -425,12 +425,14 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
             >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
 
-            >>> # forward
-            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
-
             >>> # training
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+            >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
+            >>> model.config.pad_token_id = tokenizer.pad_token_id
+            >>> model.config.vocab_size = model.config.decoder.vocab_size
+
+            >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt").input_ids
+            >>> labels = tokenizer("Salut, mon chien est mignon", return_tensors="pt").input_ids
+            >>> outputs = model(input_ids=input_ids, labels=input_ids)
             >>> loss, logits = outputs.loss, outputs.logits
 
             >>> # save and load from pretrained

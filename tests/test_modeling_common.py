@@ -28,13 +28,19 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 import transformers
-from huggingface_hub import HfApi, Repository
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import AutoModel, AutoModelForSequenceClassification, is_torch_available, logging
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    AutoModelForSequenceClassification,
+    PretrainedConfig,
+    is_torch_available,
+    logging,
+)
 from transformers.file_utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    ENDPOINT_STAGING,
     PASS,
     USER,
     CaptureLogger,
@@ -68,7 +74,6 @@ if is_torch_available():
         AdaptiveEmbedding,
         BertConfig,
         BertModel,
-        PretrainedConfig,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -88,7 +93,7 @@ if is_torch_fx_available():
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key:
+        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
     return configs_no_init
 
@@ -113,7 +118,6 @@ class ModelTesterMixin:
     test_missing_keys = True
     test_model_parallel = False
     is_encoder_decoder = False
-    test_sequence_classification_problem_types = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -387,12 +391,13 @@ class ModelTesterMixin:
         if not self.model_tester.is_training:
             return
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
             if model_class in get_values(MODEL_MAPPING):
                 continue
+
             model = model_class(config)
             model.to(torch_device)
             model.train()
@@ -401,14 +406,14 @@ class ModelTesterMixin:
             loss.backward()
 
     def test_training_gradient_checkpointing(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
             return
 
-        config.use_cache = False
-        config.return_dict = True
-
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+
             if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
                 continue
             model = model_class(config)
@@ -1471,6 +1476,8 @@ class ModelTesterMixin:
                     tf_inputs_dict[key] = tensor
                 elif key == "input_values":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "pixel_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
 
@@ -1519,6 +1526,8 @@ class ModelTesterMixin:
                     tensor = np.array(tensor, dtype=bool)
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor, dtype=tf.int32)
                 elif key == "input_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "pixel_values":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
@@ -1842,9 +1851,6 @@ class ModelTesterMixin:
             model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
 
     def test_problem_types(self):
-        if not self.test_sequence_classification_problem_types:
-            return
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         problem_types = [
@@ -1880,7 +1886,11 @@ class ModelTesterMixin:
                     # See https://github.com/huggingface/transformers/issues/11780
                     with warnings.catch_warnings(record=True) as warning_list:
                         loss = model(**inputs).loss
-                    self.assertListEqual(warning_list, [])
+                    for w in warning_list:
+                        if "Using a target size that is different to the input size" in str(w.message):
+                            raise ValueError(
+                                f"Something is going wrong in the regression problem: intercepted {w.message}"
+                            )
 
                     loss.backward()
 
@@ -2078,6 +2088,23 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.dtype, torch.float16)
 
 
+class FakeConfig(PretrainedConfig):
+    def __init__(self, attribute=1, **kwargs):
+        self.attribute = attribute
+        super().__init__(**kwargs)
+
+
+# Make sure this is synchronized with the config above.
+FAKE_CONFIG_CODE = """
+from transformers import PretrainedConfig
+
+class FakeConfig(PretrainedConfig):
+    def __init__(self, attribute=1, **kwargs):
+        self.attribute = attribute
+        super().__init__(**kwargs)
+"""
+
+
 if is_torch_available():
 
     class FakeModel(PreTrainedModel):
@@ -2121,23 +2148,27 @@ class FakeModel(PreTrainedModel):
 class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model")
+            delete_repo(token=cls._token, name="test-model")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-dynamic-model")
+            delete_repo(token=cls._token, name="test-dynamic-model")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-model-config")
         except HTTPError:
             pass
 
@@ -2184,8 +2215,49 @@ class ModelPushToHubTester(unittest.TestCase):
                 f.write(FAKE_MODEL_CODE)
 
             repo.push_to_hub()
-            print(os.listdir(tmp_dir))
 
         new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
+        # Can't make an isinstance check because the new_model is from the FakeModel class of a dynamic module
+        self.assertEqual(new_model.__class__.__name__, "FakeModel")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
+        new_model = AutoModel.from_config(config, trust_remote_code=True)
+        self.assertEqual(new_model.__class__.__name__, "FakeModel")
+
+    def test_push_to_hub_dynamic_model_and_config(self):
+        config = FakeConfig(
+            attribute=42,
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            intermediate_size=37,
+        )
+        config.auto_map = {"AutoConfig": "configuration.FakeConfig", "AutoModel": "modeling.FakeModel"}
+        model = FakeModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model-config", use_auth_token=self._token)
+            model.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "configuration.py"), "w") as f:
+                f.write(FAKE_CONFIG_CODE)
+            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
+                f.write(FAKE_MODEL_CODE)
+
+            repo.push_to_hub()
+
+        new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model-config", trust_remote_code=True)
+        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
+        self.assertEqual(new_model.config.__class__.__name__, "FakeConfig")
+        self.assertEqual(new_model.config.attribute, 42)
+
+        # Can't make an isinstance check because the new_model is from the FakeModel class of a dynamic module
+        self.assertEqual(new_model.__class__.__name__, "FakeModel")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
+        new_model = AutoModel.from_config(config, trust_remote_code=True)
+        self.assertEqual(new_model.__class__.__name__, "FakeModel")

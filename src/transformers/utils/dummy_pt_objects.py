@@ -313,6 +313,9 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
+MODEL_FOR_CTC_MAPPING = None
+
+
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
@@ -343,10 +346,16 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
+
+
 MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
+
+
+MODEL_FOR_VISION_2_SEQ_MAPPING = None
 
 
 MODEL_MAPPING = None
@@ -508,6 +517,15 @@ class AutoModelForTokenClassification:
         requires_backends(cls, ["torch"])
 
 
+class AutoModelForVision2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class AutoModelWithLMHead:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -598,6 +616,11 @@ class BeitForMaskedImageModeling:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+
+class BeitForSemanticSegmentation:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class BeitModel:
