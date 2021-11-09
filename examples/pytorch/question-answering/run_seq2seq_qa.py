@@ -409,7 +409,7 @@ def main():
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
-    def preprocess_sqaud_batch(
+    def preprocess_squad_batch(
         examples,
         question_column: str,
         context_column: str,
@@ -427,7 +427,7 @@ def main():
         return inputs, targets
 
     def preprocess_function(examples):
-        inputs, targets = preprocess_sqaud_batch(examples, question_column, context_column, answer_column)
+        inputs, targets = preprocess_squad_batch(examples, question_column, context_column, answer_column)
 
         model_inputs = tokenizer(inputs, max_length=max_seq_length, padding=padding, truncation=True)
         # Setup the tokenizer for targets
@@ -446,7 +446,7 @@ def main():
 
     # Validation preprocessing
     def preprocess_validation_function(examples):
-        inputs, targets = preprocess_sqaud_batch(examples, question_column, context_column, answer_column)
+        inputs, targets = preprocess_squad_batch(examples, question_column, context_column, answer_column)
 
         model_inputs = tokenizer(
             inputs,
