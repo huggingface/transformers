@@ -58,6 +58,7 @@ class OnnxConfig(ABC):
 
     _TASKS_TO_COMMON_OUTPUTS = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),

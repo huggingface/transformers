@@ -1,7 +1,8 @@
 from functools import partial, reduce
-from typing import Callable, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 from .. import is_torch_available
+from .config import OnnxConfig
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
@@ -22,6 +23,7 @@ if is_torch_available():
     from transformers.models.auto import (
         AutoModel,
         AutoModelForCausalLM,
+        AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
@@ -49,6 +51,7 @@ def supported_features_mapping(*supported_features, onnx_config_cls=None):
 class FeaturesManager:
     _TASKS_TO_AUTOMODELS = {
         "default": AutoModel,
+        "masked-lm": AutoModelForMaskedLM,
         "causal-lm": AutoModelForCausalLM,
         "seq2seq-lm": AutoModelForSeq2SeqLM,
         "sequence-classification": AutoModelForSequenceClassification,
@@ -58,27 +61,104 @@ class FeaturesManager:
     }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
-    _SUPPORTED_MODEL_KIND = {
-        "albert": supported_features_mapping("default", onnx_config_cls=AlbertOnnxConfig),
-        "bart": supported_features_mapping("default", onnx_config_cls=BartOnnxConfig),
-        "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
-        "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
-        "camembert": supported_features_mapping(
+    _SUPPORTED_MODEL_TYPE = {
+        "albert": supported_features_mapping(
             "default",
+            "masked-lm",
+            "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=AlbertOnnxConfig
+        ),
+        "bart": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            "sequence-classification",
+            "sequence-classification-with-past",
+            "question-answering",
+            "question-answering-with-past",
+            onnx_config_cls=BartOnnxConfig
+        ),
+        "mbart": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            "sequence-classification",
+            "sequence-classification-with-past",
+            "question-answering",
+            "question-answering-with-past",
+            onnx_config_cls=MBartOnnxConfig
+        ),
+        "bert": supported_features_mapping(
+            "default",
+            "masked-lm",
             "causal-lm",
             "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=BertOnnxConfig
+        ),
+        "camembert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            # "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=CamembertOnnxConfig,
         ),
-        "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
+        "distilbert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=DistilBertOnnxConfig
+        ),
         "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
-        "longformer": supported_features_mapping("default", onnx_config_cls=LongformerOnnxConfig),
-        "roberta": supported_features_mapping("default", onnx_config_cls=RobertaOnnxConfig),
+        "longformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=LongformerOnnxConfig
+        ),
+        "roberta": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=RobertaOnnxConfig
+        ),
         "t5": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
         ),
-        "xlm-roberta": supported_features_mapping("default", onnx_config_cls=XLMRobertaOnnxConfig),
+        "xlm-roberta": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=XLMRobertaOnnxConfig
+        ),
         "gpt-neo": supported_features_mapping(
             "default",
             "causal-lm",
@@ -97,14 +177,35 @@ class FeaturesManager:
         ),
     }
 
-    AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_KIND.values())))
+    AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
+
+    @staticmethod
+    def get_supported_features_for_model_type(model_type: str, model_name: Optional[str] = None) -> Dict[str, OnnxConfig]:
+        model_type = model_type.lower()
+        if model_type not in FeaturesManager._SUPPORTED_MODEL_TYPE:
+            model_type_and_model_name = f"{model_type} ({model_name})" if model_name else model_type
+            raise KeyError(
+                f"{model_type_and_model_name} is not supported yet. "
+                f"Only {list(FeaturesManager._SUPPORTED_MODEL_TYPE.keys())} are supported. "
+                f"If you want to support {model_type} please propose a PR or open up an issue."
+            )
+        return FeaturesManager._SUPPORTED_MODEL_TYPE[model_type]
 
     @staticmethod
     def feature_to_task(feature: str) -> str:
         return feature.replace("-with-past", "")
 
     @staticmethod
-    def get_model_from_feature(feature: str, model: str):
+    def get_model_class_for_feature(feature: str):
+        task = FeaturesManager.feature_to_task(feature)
+        if task not in FeaturesManager._TASKS_TO_AUTOMODELS:
+            raise KeyError(
+                f"Unknown task: {feature}. "
+                f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
+            )
+        return FeaturesManager._TASKS_TO_AUTOMODELS[task]
+
+    def get_model_from_feature(feature: str, model: str) -> PreTrainedModel:
         """
         Attempt to retrieve a model from a model's name and the feature to be enabled.
 
@@ -115,14 +216,8 @@ class FeaturesManager:
         Returns:
 
         """
-        task = FeaturesManager.feature_to_task(feature)
-        if task not in FeaturesManager._TASKS_TO_AUTOMODELS:
-            raise KeyError(
-                f"Unknown task: {feature}. "
-                f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
-            )
-
-        return FeaturesManager._TASKS_TO_AUTOMODELS[task].from_pretrained(model)
+        model_class = FeaturesManager.get_model_from_feature(feature)
+        return model_class.from_pretrained(model)
 
     @staticmethod
     def check_supported_model_or_raise(model: PreTrainedModel, feature: str = "default") -> Tuple[str, Callable]:
@@ -140,19 +235,11 @@ class FeaturesManager:
         model_type = model.config.model_type.replace("_", "-")
         model_name = getattr(model, "name", "")
         model_name = f"({model_name})" if model_name else ""
-        if model_type not in FeaturesManager._SUPPORTED_MODEL_KIND:
-            raise KeyError(
-                f"{model.config.model_type} ({model_name}) is not supported yet. "
-                f"Only {FeaturesManager._SUPPORTED_MODEL_KIND} are supported. "
-                f"If you want to support ({model.config.model_type}) please propose a PR or open up an issue."
-            )
-
-        # Look for the features
-        model_features = FeaturesManager._SUPPORTED_MODEL_KIND[model_type]
+        model_features = FeaturesManager.supported_features_for_model_type(model_type, model_name=model_name)
         if feature not in model_features:
             raise ValueError(
                 f"{model.config.model_type} doesn't support feature {feature}. "
-                f"Supported values are: {list(model_features.keys())}"
+                f"Supported values are: {model_features}"
             )
 
-        return model.config.model_type, FeaturesManager._SUPPORTED_MODEL_KIND[model_type][feature]
+        return model.config.model_type, FeaturesManager._SUPPORTED_MODEL_TYPE[model_type][feature]
