@@ -95,6 +95,7 @@ class QDQBertModelTester:
         # Set default quantizers before creating the model.
         import pytorch_quantization.nn as quant_nn
         from pytorch_quantization.tensor_quant import QuantDescriptor
+
         input_desc = QuantDescriptor(num_bits=8, calib_method="max")
         # The default tensor quantizer is set to be per-channel quantization for weights
         weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
@@ -541,6 +542,7 @@ class QDQBertModelIntegrationTest(unittest.TestCase):
         # Set default quantizers before creating the model.
         import pytorch_quantization.nn as quant_nn
         from pytorch_quantization.tensor_quant import QuantDescriptor
+
         input_desc = QuantDescriptor(num_bits=8, calib_method="max")
         # The default tensor quantizer is set to be per-channel quantization for weights
         weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
@@ -553,5 +555,7 @@ class QDQBertModelIntegrationTest(unittest.TestCase):
         output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[0.4571, -0.0735,  0.8594], [0.2774, -0.0278,  0.8794], [0.3548, -0.0473,  0.7593]]])
+        expected_slice = torch.tensor(
+            [[[0.4571, -0.0735, 0.8594], [0.2774, -0.0278, 0.8794], [0.3548, -0.0473, 0.7593]]]
+        )
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
