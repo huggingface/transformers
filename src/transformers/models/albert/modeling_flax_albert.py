@@ -152,6 +152,7 @@ class FlaxAlbertEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
@@ -385,12 +386,6 @@ class FlaxAlbertLayerGroups(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.layers_per_group = int(self.config.num_hidden_layers / self.config.num_hidden_groups)
-        self.embedding_hidden_mapping_in = nn.Dense(
-            self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
-            dtype=self.dtype,
-        )
         self.layers = [
             FlaxAlbertLayerCollections(self.config, name=str(i), layer_index=str(i), dtype=self.dtype)
             for i in range(self.config.num_hidden_groups)
@@ -440,7 +435,7 @@ class FlaxAlbertEncoder(nn.Module):
     def setup(self):
         self.embedding_hidden_mapping_in = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.albert_layer_groups = FlaxAlbertLayerGroups(self.config, dtype=self.dtype)
