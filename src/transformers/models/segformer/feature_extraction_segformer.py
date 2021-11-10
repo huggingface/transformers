@@ -15,7 +15,7 @@
 """Feature extractor class for SegFormer."""
 
 from collections import abc
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -175,7 +175,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             Fill value for padding segmentation maps. One must make sure the :obj:`semantic_ignore_index` attribute of
             the configuration of the semantic segmentation model is set equal to this value.
         reduce_zero_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to reduce all label values by 1. Usually used for datasets where 0 is the background label.
+            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
+            the background label.
     """
 
     model_input_names = ["pixel_values"]
@@ -372,7 +373,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
     def __call__(
         self,
         images: ImageInput,
-        segmentation_maps: Union[Image.Image, np.ndarray, List[Image.Image], List[np.ndarray]] = None,
+        segmentation_maps: ImageInput = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ) -> BatchFeature:
@@ -390,7 +391,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is
                 the number of channels, H and W are image height and width.
 
-            segmentation_maps (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, `optional`):
+            segmentation_maps (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`, `optional`):
                 Optionally, the corresponding semantic segmentation maps with the pixel-wise annotations.
 
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):

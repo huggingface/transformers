@@ -348,6 +348,6 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             (
                 2,
                 self.feature_extract_tester.num_channels,
-                *self.feature_extract_tester.crop_size[::-1],
+                *self.feature_extract_tester.crop_size,
             ),
         )
