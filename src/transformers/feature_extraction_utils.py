@@ -20,7 +20,6 @@ import copy
 import json
 import os
 from collections import UserDict
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import numpy as np
