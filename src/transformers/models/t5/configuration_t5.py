@@ -134,38 +134,23 @@ class T5OnnxConfig(OnnxConfigWithPast):
             [
                 ("input_ids", {0: "batch", 1: "encoder_sequence"}),
                 ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-                ("decoder_input_ids", {0: "batch"}),
-                ("decoder_attention_mask", {0: "batch"}),
             ]
         )
+        if self.use_past:
+            axes_info = {0: "batch"}
+        else:
+            axes_info = {0: "batch", 1: "decoder_sequence"}
+        common_inputs["decoder_inputs_ids"] = axes_info
+        common_inputs["decoder_attention_mask"] = axes_info
 
         if self.use_past:
-            for i in range(0, self._config.num_layers):
+            for i in range(self.num_layers):
                 common_inputs[f"past_key_values.{i}.decoder.key"] = {0: "batch", 2: "past_sequence"}
                 common_inputs[f"past_key_values.{i}.decoder.value"] = {0: "batch", 2: "past_sequence"}
                 common_inputs[f"past_key_values.{i}.encoder.key"] = {0: "batch", 2: "past_sequence"}
                 common_inputs[f"past_key_values.{i}.encoder.value"] = {0: "batch", 2: "past_sequence"}
 
         return common_inputs
-
-    # @property
-    # def outputs(self) -> Mapping[str, Mapping[int, str]]:
-    #     common_outputs = super().outputs
-
-    #     if "last_hidden_state" in common_outputs:
-    #         common_outputs["last_hidden_state"] = {0: "batch", 1: "decoder_sequence"}
-
-    #     if self.use_past:
-    #         for i in range(self._config.num_layers):
-    #             common_outputs[f"present.{i}.decoder.key"] = {0: "batch", 2: "decoder_sequence"}
-    #             common_outputs[f"present.{i}.decoder.value"] = {0: "batch", 2: "decoder_sequence"}
-    #             common_outputs[f"present.{i}.encoder.key"] = {0: "batch", 2: "encoder_sequence"}
-    #             common_outputs[f"present.{i}.encoder.value"] = {0: "batch", 2: "encoder_sequence"}
-
-    #     if self.task == "default":
-    #         common_outputs["encoder_last_hidden_state"] = {0: "batch", 2: "encoder_sequence"}
-
-    #     return common_outputs
 
     def generate_dummy_inputs(
         self,

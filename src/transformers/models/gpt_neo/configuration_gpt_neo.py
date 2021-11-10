@@ -222,18 +222,6 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
 
         return common_inputs
 
-    # @property
-    # def outputs(self) -> Mapping[str, Mapping[int, str]]:
-    #     common_outputs = super().outputs
-    #     if self.use_past:
-    #         for i in range(self._config.num_layers):
-    #             common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-    #             common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
-
-    #         return common_outputs
-
-    #     return common_outputs
-
     def generate_dummy_inputs(
         self,
         tokenizer: PreTrainedTokenizer,

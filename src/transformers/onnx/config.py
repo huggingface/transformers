@@ -95,15 +95,12 @@ class OnnxConfig(ABC):
 
     @property
     def num_layers(self) -> int:
-        num_layers_names = ["num_layers", "n_layer", "num_hidden_layers"]
-        for name in num_layers_names:
-            if hasattr(self._config, name):
-                return getattr(self._config, name)
-
-        if not self.is_encoder_decoder:
-            raise AttributeError("could not find the number of layer attribute in the model configuration")
-
-        return -1
+        if not hasattr(self._config, "num_layers"):
+            if self.is_encoder_decoder:
+                return -1
+            else:
+                raise AttributeError("could not find the number of layers attribute in the model configuration, override the num_layers property of the model ONNXConfig to solve this")
+        return self._config.num_layers
 
     @classmethod
     def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":

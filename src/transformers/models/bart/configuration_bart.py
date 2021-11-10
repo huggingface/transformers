@@ -185,27 +185,26 @@ class BartOnnxConfig(OnnxConfigWithPast):
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
+        common_inputs = OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
             ]
         )
 
-    # @property
-    # def outputs(self) -> Mapping[str, Mapping[int, str]]:
-    #     if self.use_past:
-    #         return OrderedDict(
-    #             [
-    #                 ("last_hidden_state", {0: "batch", 1: "sequence"}),
-    #                 ("past_keys", {0: "batch", 2: "sequence"}),
-    #                 ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-    #             ]
-    #         )
-    #     else:
-    #         return OrderedDict(
-    #             [
-    #                 ("last_hidden_state", {0: "batch", 1: "sequence"}),
-    #                 ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-    #             ]
-    #         )
+        if self.task in ["seq2seq-lm", "seq2seq-lm-with-past"]:
+            if self.use_past:
+                axes_info = {0: "batch"}
+            else:
+                axes_info = {0: "batch", 1: "decoder_sequence"}
+            common_inputs["decoder_inputs_ids"] = axes_info
+            common_inputs["decoder_attention_mask"] = axes_info
+
+        if self.use_past:
+            for i in range(self.num_layers):
+                common_inputs[f"past_key_values.{i}.decoder.key"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.decoder.value"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.encoder.key"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.encoder.value"] = {0: "batch", 2: "past_sequence"}
+
+        return common_inputs

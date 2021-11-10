@@ -208,16 +208,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
 
         return common_inputs
 
-    # @property
-    # def outputs(self) -> Mapping[str, Mapping[int, str]]:
-    #     common_outputs = OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}})
-    #     if self.use_past:
-    #         for i in range(self._config.n_layer * 2):
-    #             common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
-
-    #         return common_outputs
-
-    #     return common_outputs
+    @property
+    def num_layers(self):
+        return self._config.n_layer
 
     def generate_dummy_inputs(
         self,
