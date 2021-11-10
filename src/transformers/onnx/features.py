@@ -73,27 +73,27 @@ class FeaturesManager:
         ),
         "bart": supported_features_mapping(
             "default",
-            "default-with-past",
             "causal-lm",
-            "causal-lm-with-past",
             "seq2seq-lm",
-            "seq2seq-lm-with-past",
             "sequence-classification",
-            "sequence-classification-with-past",
             "question-answering",
+            "default-with-past",
+            "causal-lm-with-past",
+            "seq2seq-lm-with-past",
+            "sequence-classification-with-past",
             "question-answering-with-past",
             onnx_config_cls=BartOnnxConfig
         ),
         "mbart": supported_features_mapping(
             "default",
-            "default-with-past",
             "causal-lm",
-            "causal-lm-with-past",
             "seq2seq-lm",
-            "seq2seq-lm-with-past",
             "sequence-classification",
-            "sequence-classification-with-past",
             "question-answering",
+            "default-with-past",
+            "causal-lm-with-past",
+            "seq2seq-lm-with-past",
+            "sequence-classification-with-past",
             "question-answering-with-past",
             onnx_config_cls=MBartOnnxConfig
         ),
@@ -126,7 +126,6 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig
         ),
-        "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
         "longformer": supported_features_mapping(
             "default",
             "masked-lm",
@@ -158,6 +157,17 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=XLMRobertaOnnxConfig
+        ),
+        "gpt2": supported_features_mapping(
+            "default",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "default-with-past",
+            "causal-lm-with-past",
+            "sequence-classification-with-past",
+            "token-classification-with-past",
+            onnx_config_cls=GPT2OnnxConfig
         ),
         "gpt-neo": supported_features_mapping(
             "default",
@@ -216,7 +226,7 @@ class FeaturesManager:
         Returns:
 
         """
-        model_class = FeaturesManager.get_model_from_feature(feature)
+        model_class = FeaturesManager.get_model_class_for_feature(feature)
         return model_class.from_pretrained(model)
 
     @staticmethod
@@ -235,7 +245,7 @@ class FeaturesManager:
         model_type = model.config.model_type.replace("_", "-")
         model_name = getattr(model, "name", "")
         model_name = f"({model_name})" if model_name else ""
-        model_features = FeaturesManager.supported_features_for_model_type(model_type, model_name=model_name)
+        model_features = FeaturesManager.get_supported_features_for_model_type(model_type, model_name=model_name)
         if feature not in model_features:
             raise ValueError(
                 f"{model.config.model_type} doesn't support feature {feature}. "

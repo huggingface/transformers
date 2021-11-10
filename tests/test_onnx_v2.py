@@ -205,11 +205,11 @@ if is_torch_available():
 
     PYTORCH_EXPORT_MODELS = {
         # ("albert", "hf-internal-testing/tiny-albert"),
-        # ("BART", "facebook/bart-base"),
+        # ("bart", "facebook/bart-base"),
         # ("bert", "bert-base-cased"),
         # ("camembert", "camembert-base"),
         # ("distilbert", "distilbert-base-cased"),
-        # ("gpt2", "gpt2"),
+        ("gpt2", "gpt2"),
         # ("gpt-neo", "EleutherAI/gpt-neo-125M"),
         # ("longFormer", "longformer-base-4096"),
         # ("roberta", "roberta-base"),
@@ -241,6 +241,9 @@ class OnnxExportTestCaseV2(TestCase):
             with self.subTest(name):
                 tokenizer = AutoTokenizer.from_pretrained(model)
                 config = AutoConfig.from_pretrained(model)
+                # Useful for causal lm models that do not use pad tokens.
+                if not getattr(config, "pad_token_id", None):
+                    config.pad_token_id = tokenizer.eos_token_id
                 for feature, onnx_config_class_constructor in supported_features.items():
                     with self.subTest(feature):
 

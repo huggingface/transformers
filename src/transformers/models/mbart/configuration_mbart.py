@@ -175,20 +175,20 @@ class MBartOnnxConfig(OnnxConfigWithPast):
             ]
         )
 
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.use_past:
-            return OrderedDict(
-                [
-                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
-                    ("past_keys", {0: "batch", 2: "sequence"}),
-                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-                ]
-            )
-        else:
-            return OrderedDict(
-                [
-                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
-                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-                ]
-            )
+    # @property
+    # def outputs(self) -> Mapping[str, Mapping[int, str]]:
+    #     if self.use_past:
+    #         return OrderedDict(
+    #             [
+    #                 ("last_hidden_state", {0: "batch", 1: "sequence"}),
+    #                 ("past_keys", {0: "batch", 2: "sequence"}),
+    #                 ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
+    #             ]
+    #         )
+    #     else:
+    #         return OrderedDict(
+    #             [
+    #                 ("last_hidden_state", {0: "batch", 1: "sequence"}),
+    #                 ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
+    #             ]
+    #         )

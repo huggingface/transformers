@@ -55,6 +55,7 @@ class OnnxConfig(ABC):
 
     DEFAULT_FIXED_BATCH = 2
     DEFAULT_FIXED_SEQUENCE = 8
+    IS_ENCODER_DECODER = False
 
     _TASKS_TO_COMMON_OUTPUTS = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
@@ -88,6 +89,22 @@ class OnnxConfig(ABC):
                 final_spec = dataclasses.replace(spec, orig_op=getattr(spec.o, spec.name))
             self._patching_specs.append(final_spec)
 
+    @property
+    def is_encoder_decoder(self) -> bool:
+        return getattr(self._config, "is_encoder_decoder", False)
+
+    @property
+    def num_layers(self) -> int:
+        num_layers_names = ["num_layers", "n_layer", "num_hidden_layers"]
+        for name in num_layers_names:
+            if hasattr(self._config, name):
+                return getattr(self._config, name)
+
+        if not self.is_encoder_decoder:
+            raise AttributeError("could not find the number of layer attribute in the model configuration")
+
+        return -1
+
     @classmethod
     def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
         """
@@ -120,7 +137,18 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        return self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        if self.IS_ENCODER_DECODER:
+            # Renaming the outputs axes properly.
+            for name, axes_names in common_outputs.items():
+                sequence_name = "encoder_sequence" if "encoder" in name else "decoder_sequence"
+                for axis_idx, name in axes_names.items():
+                    if "sequence" in name:
+                        axes_names[axis_idx] = sequence_name
+                    # We reset the value as the order in common_outputs (OrderedDict) is lost otherwise
+                    else:
+                        axes_names[axis_idx] = name
+        return common_outputs
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
@@ -272,6 +300,43 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             OnnxConfig with `.use_past = True`
         """
         return cls(config, task=task, use_past=True)
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = super().outputs
+        if self.use_past:
+            if self.IS_ENCODER_DECODER:
+                # If the number of encoder and decoder layers are present in the model configuration, both are considered
+                if hasattr(self._config, "encoder_layers") and hasattr(self._config, "decoder_layers"):
+                    encoder_layers = self._config.encoder_layers
+                    decoder_layers = self._config.decoder_layers
+                    min_num_layers = min(encoder_layers, decoder_layers)
+                    max_num_layers = max(encoder_layers, decoder_layers) - min_num_layers
+                    remaining_side_name = "encoder" if encoder_layers > decoder_layers else "decoder"
+                else:
+                    min_num_layers = self.num_layers
+                    max_num_layers = min_num_layers
+                    remaining_side_name = ""
+
+                for i in range(min_num_layers):
+                    common_outputs[f"present.{i}.decoder.key"] = {0: "batch", 2: "past_decoder_sequence + sequence"}
+                    common_outputs[f"present.{i}.decoder.value"] = {0: "batch", 2: "past_decoder_sequence + sequence"}
+                    common_outputs[f"present.{i}.encoder.key"] = {0: "batch", 2: "encoder_sequence"}
+                    common_outputs[f"present.{i}.encoder.value"] = {0: "batch", 2: "encoder_sequence"}
+
+                for i in range(min_num_layers, max_num_layers):
+                    if remaining_side_name == "encoder":
+                        axes_info = {0: "batch", 2: "encoder_sequence"}
+                    else:
+                        axes_info = {0: "batch", 2: "past_decoder_sequence + sequence"}
+                    common_outputs[f"present.{i}.{remaining_side_name}.key"] = axes_info
+
+            else:
+                for i in range(self.num_layers):
+                    common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
+                    common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+
+        return common_outputs
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:

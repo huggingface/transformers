@@ -198,8 +198,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch"}})
         if self.use_past:
-            for i in range(self._config.n_layer * 2):
-                common_inputs[f"past_key_values.{i}"] = {0: "batch", 2: "sequence"}
+            for i in range(self.num_layers):
+                common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "sequence"}
+                common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "sequence"}
 
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
         else:
@@ -207,16 +208,16 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
 
         return common_inputs
 
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}})
-        if self.use_past:
-            for i in range(self._config.n_layer * 2):
-                common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
+    # @property
+    # def outputs(self) -> Mapping[str, Mapping[int, str]]:
+    #     common_outputs = OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}})
+    #     if self.use_past:
+    #         for i in range(self._config.n_layer * 2):
+    #             common_outputs[f"present.{i}"] = {0: "batch", 2: "sequence"}
 
-            return common_outputs
+    #         return common_outputs
 
-        return common_outputs
+    #     return common_outputs
 
     def generate_dummy_inputs(
         self,

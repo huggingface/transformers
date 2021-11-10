@@ -181,6 +181,8 @@ class BartConfig(PretrainedConfig):
 
 
 class BartOnnxConfig(OnnxConfigWithPast):
+    IS_ENCODER_DECODER = True
+
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
