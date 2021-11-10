@@ -687,7 +687,6 @@ class FlaxPegasusEncoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
-                dtype=self.dtype,
             )
 
         self.embed_positions = create_sinusoidal_positions(
@@ -757,7 +756,6 @@ class FlaxPegasusDecoder(nn.Module):
                 self.config.vocab_size,
                 embed_dim,
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
-                dtype=self.dtype,
             )
 
         self.embed_positions = create_sinusoidal_positions(
