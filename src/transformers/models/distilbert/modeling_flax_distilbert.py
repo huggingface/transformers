@@ -144,7 +144,6 @@ class FlaxEmbeddings(nn.Module):
         # Embed
         batch_size, seq_length = input_ids.shape
         inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
-        print(inputs_embeds.dtype)
         if not self.config.sinusoidal_pos_embds:
             position_ids = jnp.arange(seq_length).astype("i4")
             position_ids = jnp.broadcast_to(position_ids, shape=(batch_size, seq_length))
@@ -152,16 +151,14 @@ class FlaxEmbeddings(nn.Module):
         else:
             position_embeds = self.pos_encoding[:, :seq_length, :]
             # explictly cast the positions here, since self.embed_positions are not registered as parameters
-            # position_embeds = position_embeds.astype(inputs_embeds.dtype)
+            position_embeds = position_embeds.astype(inputs_embeds.dtype)
 
-        print(inputs_embeds.dtype, position_embeds.dtype)
         # Sum all embeddings
         hidden_states = inputs_embeds + position_embeds
 
         # Layer Norm
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        print("layernorm hidden type ", hidden_states.dtype)
         return hidden_states
 
 

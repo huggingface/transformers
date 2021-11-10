@@ -706,7 +706,6 @@ class FlaxMarianEncoder(nn.Module):
         input_ids = input_ids.reshape(-1, input_shape[-1])
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-        print(inputs_embeds.dtype)
 
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
         # explictly cast the positions here, since self.embed_positions are not registered as parameters
