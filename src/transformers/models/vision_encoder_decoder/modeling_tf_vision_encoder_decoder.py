@@ -15,6 +15,7 @@
 """ Classes to support TF Vision-Encoder-Text-Decoder architectures """
 
 
+import tempfile
 from typing import Optional
 
 import tensorflow as tf
@@ -241,7 +242,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         If there are only pytorch checkpoints for a particular encoder-decoder model, a workaround is::
 
             >>> # a workaround to load from pytorch checkpoint
-            >>> _model = VisionEncoderDecoderModel.from_pretrained("ydshieh/ydshieh/vit-gpt2-coco-en")
+            >>> _model = VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
             >>> _model.encoder.save_pretrained("./encoder")
             >>> _model.decoder.save_pretrained("./decoder")
             >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -249,6 +250,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             ... )
             >>> # This is only for copying some specific attributes of this particular model.
             >>> model.config = _model.config
+
+        Example::
+
+            >>> from transformers import TFVisionEncoderDecoderModel
+            >>> model = TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
         """
 
@@ -364,6 +370,14 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             kwargs_encoder["load_weight_prefix"] = cls.load_weight_prefix
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
+            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            if kwargs_encoder.get("from_pt", None):
+                del kwargs_encoder["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    encoder.save_pretrained(tmp_dirname)
+                    del encoder
+                    encoder = TFAutoModel.from_pretrained(tmp_dirname, *model_args, **kwargs_encoder)
+
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
             if decoder_pretrained_model_name_or_path is None:
@@ -391,6 +405,14 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             kwargs_decoder["name"] = "decoder"
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            if kwargs_decoder.get("from_pt", None):
+                del kwargs_decoder["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    decoder.save_pretrained(tmp_dirname)
+                    del decoder
+                    decoder = TFAutoModelForCausalLM.from_pretrained(tmp_dirname, **kwargs_decoder)
 
         # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         if encoder.name != "encoder":
