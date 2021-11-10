@@ -28,7 +28,7 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, input_processing
+from ...modeling_tf_utils import TFPreTrainedModel, input_processing, shape_list
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
@@ -79,13 +79,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using the vision's model's feature extractor. For example, using
             :class:`~transformers.ViTFeatureExtractor`. See :meth:`transformers.ViTFeatureExtractor.__call__` for
             details.
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -211,7 +204,12 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         batch_size, seq_len = decoder_input_ids.shape
 
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(batch_size, self.config.num_channels, self.config.image_size, self.config.image_size),
+            shape=(
+                batch_size,
+                self.config.encoder.num_channels,
+                self.config.encoder.image_size,
+                self.config.encoder.image_size,
+            ),
             dtype=tf.float32,
         )
         pixel_values = tf.constant(VISION_DUMMY_INPUTS)
@@ -431,7 +429,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
     def call(
         self,
         pixel_values=None,
-        attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -467,7 +464,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
                 "func": self.encoder.call,
                 "config": self.encoder.config,
                 "input_ids": pixel_values,
-                "attention_mask": attention_mask,
                 "output_attentions": output_attentions,
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict,
@@ -499,13 +495,16 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
 
         encoder_hidden_states = encoder_outputs[0]
 
+        batch_size, sequence_length = shape_list(encoder_hidden_states)[:2]
+        encoder_attention_mask = tf.ones(shape=(batch_size, sequence_length), dtype=tf.int32)
+
         decoder_processing_inputs = {
             "func": self.decoder.call,
             "config": self.decoder.config,
             "input_ids": decoder_input_ids,
             "attention_mask": decoder_attention_mask,
             "encoder_hidden_states": encoder_hidden_states,
-            "encoder_attention_mask": attention_mask,
+            "encoder_attention_mask": encoder_attention_mask,
             "inputs_embeds": decoder_inputs_embeds,
             "labels": labels,
             "output_attentions": output_attentions,
@@ -590,7 +589,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         self,
         decoder_input_ids,
         past,
-        attention_mask,
         use_cache=None,
         **kwargs,
     ):
@@ -630,7 +628,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
