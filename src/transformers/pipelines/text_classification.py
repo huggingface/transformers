@@ -66,13 +66,15 @@ class TextClassificationPipeline(Pipeline):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.check_model_type(
-            dict(
-                MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items()
-                + FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items()
-                + TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items()
-            )
-        )
+        types = {}
+        if MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING is not None:
+            types.update(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+        if TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING is not None:
+            types.update(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+        if FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING is not None:
+            types.update(FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+
+        self.check_model_type(types)
 
     def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, **tokenizer_kwargs):
         preprocess_params = tokenizer_kwargs
