@@ -662,7 +662,7 @@ class FlaxModelTesterMixin:
             # cast all params to fp16
             params = model.to_fp16(model.params)
             types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
-            # test if all params are in bf16
+            # test if all params are in fp16
             for name, type_ in types.items():
                 self.assertEqual(type_, jnp.float16, msg=f"param {name} is not in fp16.")
 
@@ -680,6 +680,73 @@ class FlaxModelTesterMixin:
                     self.assertEqual(type_, jnp.float32, msg=f"param {name} should be in fp32.")
                 else:
                     self.assertEqual(type_, jnp.float16, msg=f"param {name} is not in fp16.")
+
+    def test_to_fp32(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            # cast all params to fp16 and back to fp32
+            params = model.to_fp16(model.params)
+            params = model.to_fp32(params)
+
+            # test if all params are in fp32
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.float32, msg=f"param {name} is not in fp32.")
+
+            # test masking
+            flat_params = flatten_dict(params)
+            key = random.choice(list(flat_params.keys()))  # choose a random param
+            mask = {path: path != key for path in flat_params}  # don't cast the key
+            mask = unflatten_dict(mask)
+
+            # cast to fp16 and back to fp32 with mask
+            params = model.to_fp16(model.params)
+            params = model.to_fp32(params, mask)
+
+            # test if all params are in fp32 except key
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            for name, type_ in types.items():
+                if name == key:
+                    self.assertEqual(type_, jnp.float16, msg=f"param {name} should be in fp16.")
+                else:
+                    self.assertEqual(type_, jnp.float32, msg=f"param {name} is not in fp32.")
+
+    def test_save_load_in_fp16(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+        # convert weights to fp16 and save
+        params = model.to_fp16(model.params)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, params=params)
+
+            # load the weights again and check if they are still in fp16
+            model = model_class.from_pretrained(tmpdirname)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, model.params))
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.float16, msg=f"param {name} is not in fp16.")
+
+    def test_save_load_in_bf16(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+        # convert weights to bf16 and save
+        params = model.to_bf16(model.params)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, params=params)
+
+            # load the weights again and check if they are still in fp16
+            model = model_class.from_pretrained(tmpdirname)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, model.params))
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.bfloat16, msg=f"param {name} is not in bf16.")
 
 
 @require_flax
