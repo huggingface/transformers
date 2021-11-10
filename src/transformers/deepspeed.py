@@ -225,6 +225,8 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # whole config section is missing then the fallback is fp16
         if self.is_false("fp16.enabled"):
             self._dtype = torch.float32
+        if self.is_false("fp16.enabled") and self.is_true("bfloat16.enabled"):
+            self._dtype = torch.bfloat16
         # later there will be other dtypes besides just fp16 and fp32
         # also not quite sure what dtype should be under apex, defaulting to fp16 for now
 
