@@ -265,7 +265,9 @@ class CommonPipelineTest(unittest.TestCase):
 
     @require_torch
     def test_check_task_auto_inference(self):
-        pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+
+        self.assertIsInstance(pipe, TextClassificationPipeline)
 
     @require_torch
     def test_pipeline_override(self):
@@ -274,7 +276,7 @@ class CommonPipelineTest(unittest.TestCase):
 
         text_classifier = pipeline(model="Narsil/tiny-distilbert-sequence-classification", pipeline_class=MyPipeline)
 
-        self.assertTrue(isinstance(text_classifier, MyPipeline))
+        self.assertIsInstance(text_classifier, MyPipeline)
 
     def test_check_task(self):
         task = get_task("gpt2")
