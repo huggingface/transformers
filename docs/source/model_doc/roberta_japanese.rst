@@ -20,11 +20,11 @@ The RoBERTa model trained on Japanese text.
 
 There are models with two different tokenization methods:
 
-- Tokenize with MeCab and BPE. This requires some extra dependencies, `fugashi
-  <https://github.com/polm/fugashi>`__ which is a wrapper around `MeCab <https://taku910.github.io/mecab/>`__.
+- Tokenize with MeCab and BPE. This requires some extra dependencies, `fugashi <https://github.com/polm/fugashi>`__
+  which is a wrapper around `MeCab <https://taku910.github.io/mecab/>`__.
 
-You should ``pip install transformers["ja"]`` (or ``pip install -e .["ja"]`` if you install
-from source) to install dependencies.
+You should ``pip install transformers["ja"]`` (or ``pip install -e .["ja"]`` if you install from source) to install
+dependencies.
 
 Example of using a model with MeCab and BPE tokenization:
 
@@ -48,8 +48,8 @@ Example of using a model with MeCab and BPE tokenization:
 
 Tips:
 
-- This implementation is the same as XLMRoBERTa, except for tokenization method. Refer to the :doc:`documentation of XLMRoBERTa
-  <xlmroberta>` for more usage examples.
+- This implementation is the same as XLMRoBERTa, except for tokenization method. Refer to the :doc:`documentation of
+  XLMRoBERTa <xlmroberta>` for more usage examples.
 
 
 RobertaJapaneseTokenizer
