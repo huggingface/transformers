@@ -142,6 +142,7 @@ SUPPORTED_TASKS = {
         "impl": TextClassificationPipeline,
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+        "flax": (),
         "default": {
             "model": {
                 "pt": "distilbert-base-uncased-finetuned-sst-2-english",
@@ -407,8 +408,8 @@ def pipeline(
             :obj:`config` is loaded (if it is a string). However, if :obj:`config` is also not given or not a string,
             then the default feature extractor for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
-            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow or :obj:`"flax"` for
-            Jax. The specified framework must be installed.
+            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow or :obj:`"flax"` for Jax. The specified framework
+            must be installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
@@ -505,7 +506,7 @@ def pipeline(
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None
     # Will load the correct model if possible
-    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"], "flax": targeted_task["pt"]}
+    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"], "flax": targeted_task["flax"]}
     framework, model = infer_framework_load_model(
         model,
         model_classes=model_classes,
