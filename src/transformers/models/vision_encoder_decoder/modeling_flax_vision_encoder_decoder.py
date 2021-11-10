@@ -185,7 +185,7 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
         ):
             self.enc_to_dec_proj = nn.Dense(
                 self.decoder.config.hidden_size,
-                kernel_init=jax.nn.initializers.normal(self.decoder.config.initializer_range, self.dtype),
+                kernel_init=jax.nn.initializers.normal(self.decoder.config.initializer_range),
                 dtype=self.dtype,
             )
         else:
