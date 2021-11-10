@@ -171,8 +171,9 @@ class TFModelTesterMixin:
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
             new_model = model_class.from_config(model.get_config())
+            _ = new_model(self._prepare_for_class(inputs_dict, model_class))  # Build model
             new_model.set_weights(model.get_weights())
-            after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            after_outputs = new_model(self._prepare_for_class(inputs_dict, model_class))
 
             self.assert_outputs_same(after_outputs, outputs)
 
