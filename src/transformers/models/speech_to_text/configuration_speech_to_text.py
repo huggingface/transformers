@@ -134,7 +134,6 @@ class Speech2TextConfig(PretrainedConfig):
         decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -165,7 +164,6 @@ class Speech2TextConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
@@ -177,9 +175,9 @@ class Speech2TextConfig(PretrainedConfig):
 
         if len(self.conv_kernel_sizes) != self.num_conv_layers:
             raise ValueError(
-                "Configuration for convolutional module is incorrect."
-                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers`"
-                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`,"
+                "Configuration for convolutional module is incorrect. "
+                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers` "
+                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 

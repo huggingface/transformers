@@ -90,8 +90,8 @@ class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
-            # in forward, put the weights on correct device
-            emb_weights = emb_weights.to(self.weights.device)
+            # in forward put the weights on the correct dtype and device of the param
+            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
         self.weights = nn.Parameter(emb_weights)
         self.weights.requires_grad = False
@@ -164,9 +164,12 @@ class Speech2Text2Attention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -192,7 +195,8 @@ class Speech2Text2Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -278,7 +282,10 @@ class Speech2Text2Attention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -407,6 +414,7 @@ class Speech2Text2DecoderLayer(nn.Module):
 class Speech2Text2PreTrainedModel(PreTrainedModel):
     config_class = Speech2Text2Config
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -418,6 +426,10 @@ class Speech2Text2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, Speech2Text2Decoder):
+            module.gradient_checkpointing = value
 
 
 SPEECH_TO_TEXT_2_START_DOCSTRING = r"""
@@ -465,6 +477,7 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
         self.layers = nn.ModuleList([Speech2Text2DecoderLayer(config) for _ in range(config.decoder_layers)])
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -635,11 +648,11 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
+                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
                     )
                     use_cache = False
 

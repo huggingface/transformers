@@ -16,6 +16,11 @@ def tf_top_k_top_p_filtering(*args, **kwargs):
     requires_backends(tf_top_k_top_p_filtering, ["tf"])
 
 
+class PushToHubCallback:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -171,6 +176,9 @@ class TFAlbertPreTrainedModel:
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
+TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
+
+
 TF_MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -211,6 +219,15 @@ class TFAutoModel:
 
 
 class TFAutoModelForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFAutoModelForImageClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -921,6 +938,15 @@ class TFElectraModel:
 
 
 class TFElectraPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -1712,6 +1738,15 @@ class TFRemBertPreTrainedModel:
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class TFRobertaForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
 class TFRobertaForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
@@ -1940,6 +1975,29 @@ class TFTransfoXLModel:
 
 
 class TFTransfoXLPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFViTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+
+class TFViTPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 

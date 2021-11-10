@@ -41,6 +41,9 @@ with ExtendSysPath(tests_dir):
 
 set_seed(42)
 
+# default torch.distributed port
+DEFAULT_MASTER_PORT = "10999"
+
 # translation
 FSMT_TINY = "stas/tiny-wmt19-en-de"
 BART_TINY = "sshleifer/bart-tiny-random"
@@ -89,7 +92,8 @@ def get_launcher(distributed=False):
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
-    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+    master_port = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
 def make_task_cmds():

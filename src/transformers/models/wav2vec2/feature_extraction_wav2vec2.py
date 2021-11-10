@@ -91,7 +91,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
             for vector, length in zip(input_values, attention_mask.sum(-1)):
                 normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
-                if length > normed_slice.shape[0]:
+                if length < normed_slice.shape[0]:
                     normed_slice[length:] = padding_value
 
                 normed_input_values.append(normed_slice)
@@ -170,12 +170,12 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}. "
                     f"Please make sure that the provided `raw_speech` input was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the ``sampling_rate`` argument to this function."
+                "It is strongly recommended to pass the ``sampling_rate`` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 

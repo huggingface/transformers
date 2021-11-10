@@ -174,6 +174,9 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING = None
+
+
 FLAX_MODEL_MAPPING = None
 
 
@@ -276,6 +279,15 @@ class FlaxAutoModelForTokenClassification:
         requires_backends(cls, ["flax"])
 
 
+class FlaxAutoModelForVision2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
@@ -313,6 +325,38 @@ class FlaxBartModel:
 
 
 class FlaxBartPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxBeitForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBeitForMaskedImageModeling:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxBeitModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxBeitPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -909,6 +953,15 @@ class FlaxT5Model:
 
 
 class FlaxT5PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
+class FlaxVisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 

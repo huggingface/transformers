@@ -28,6 +28,8 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("fnet", "FNetModel"),
+        ("segformer", "SegformerModel"),
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
         ("beit", "BeitModel"),
@@ -45,6 +47,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextModel"),
         ("vit", "ViTModel"),
         ("wav2vec2", "Wav2Vec2Model"),
+        ("unispeech-sat", "UniSpeechSatModel"),
+        ("unispeech", "UniSpeechModel"),
         ("hubert", "HubertModel"),
         ("m2m_100", "M2M100Model"),
         ("convbert", "ConvBertModel"),
@@ -91,12 +95,15 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasModel"),
         ("ibert", "IBertModel"),
         ("splinter", "SplinterModel"),
+        ("sew", "SEWModel"),
+        ("sew-d", "SEWDModel"),
     ]
 )
 
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("retribert", "RetriBertModel"),
@@ -130,12 +137,15 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForMaskedLM"),
         ("deberta-v2", "DebertaV2ForMaskedLM"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
+        ("unispeech-sat", "UniSpeechSatForPreTraining"),
+        ("unispeech", "UniSpeechForPreTraining"),
     ]
 )
 
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+        ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForMaskedLM"),
         ("roformer", "RoFormerForMaskedLM"),
@@ -185,6 +195,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForCausalLM"),
         ("roformer", "RoFormerForCausalLM"),
@@ -222,12 +233,27 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("beit", "BeitForImageClassification"),
+        ("segformer", "SegformerForImageClassification"),
+    ]
+)
+
+MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Image Segmentation mapping
+        ("detr", "DetrForSegmentation"),
+    ]
+)
+
+MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
 )
 
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("fnet", "FNetForMaskedLM"),
         ("rembert", "RemBertForMaskedLM"),
         ("roformer", "RoFormerForMaskedLM"),
         ("big_bird", "BigBirdForMaskedLM"),
@@ -287,9 +313,17 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
+        ("speech_to_text", "Speech2TextForConditionalGeneration"),
+    ]
+)
+
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("fnet", "FNetForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
         ("layoutlmv2", "LayoutLMv2ForSequenceClassification"),
         ("rembert", "RemBertForSequenceClassification"),
@@ -334,6 +368,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("fnet", "FNetForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
         ("canine", "CanineForQuestionAnswering"),
@@ -379,6 +414,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("fnet", "FNetForTokenClassification"),
         ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
         ("canine", "CanineForTokenClassification"),
@@ -412,6 +448,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        ("fnet", "FNetForMultipleChoice"),
         ("rembert", "RemBertForMultipleChoice"),
         ("canine", "CanineForMultipleChoice"),
         ("roformer", "RoFormerForMultipleChoice"),
@@ -440,6 +477,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
         ("bert", "BertForNextSentencePrediction"),
+        ("fnet", "FNetForNextSentencePrediction"),
         ("megatron-bert", "MegatronBertForNextSentencePrediction"),
         ("mobilebert", "MobileBertForNextSentencePrediction"),
     ]
@@ -449,7 +487,23 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
+        ("unispeech-sat", "UniSpeechSatForSequenceClassification"),
+        ("unispeech", "UniSpeechForSequenceClassification"),
         ("hubert", "HubertForSequenceClassification"),
+        ("sew", "SEWForSequenceClassification"),
+        ("sew-d", "SEWDForSequenceClassification"),
+    ]
+)
+
+MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Connectionist temporal classification (CTC) mapping
+        ("wav2vec2", "Wav2Vec2ForCTC"),
+        ("unispeech-sat", "UniSpeechSatForCTC"),
+        ("unispeech", "UniSpeechForCTC"),
+        ("hubert", "HubertForCTC"),
+        ("sew", "SEWForCTC"),
+        ("sew-d", "SEWDForCTC"),
     ]
 )
 
@@ -460,6 +514,10 @@ MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_C
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
+MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES
+)
+MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 MODEL_FOR_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES)
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
@@ -484,6 +542,8 @@ MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 )
+MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CTC_MAPPING_NAMES)
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
 
 
 class AutoModel(_BaseAutoModelClass):
@@ -588,6 +648,13 @@ class AutoModelForImageClassification(_BaseAutoModelClass):
 AutoModelForImageClassification = auto_class_update(AutoModelForImageClassification, head_doc="image classification")
 
 
+class AutoModelForImageSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
+
+
+AutoModelForImageSegmentation = auto_class_update(AutoModelForImageSegmentation, head_doc="image segmentation")
+
+
 class AutoModelForObjectDetection(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
@@ -595,11 +662,34 @@ class AutoModelForObjectDetection(_BaseAutoModelClass):
 AutoModelForObjectDetection = auto_class_update(AutoModelForObjectDetection, head_doc="object detection")
 
 
+class AutoModelForVision2Seq(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
+
+
+AutoModelForVision2Seq = auto_class_update(AutoModelForVision2Seq, head_doc="vision-to-text modeling")
+
+
 class AutoModelForAudioClassification(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
 
 AutoModelForAudioClassification = auto_class_update(AutoModelForAudioClassification, head_doc="audio classification")
+
+
+class AutoModelForCTC(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_CTC_MAPPING
+
+
+AutoModelForCTC = auto_class_update(AutoModelForCTC, head_doc="connectionist temporal classification")
+
+
+class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+
+
+AutoModelForSpeechSeq2Seq = auto_class_update(
+    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeing"
+)
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

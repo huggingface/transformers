@@ -33,6 +33,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),
         ("bert", "FlaxBertModel"),
+        ("beit", "FlaxBeitModel"),
         ("big_bird", "FlaxBigBirdModel"),
         ("bart", "FlaxBartModel"),
         ("gpt2", "FlaxGPT2Model"),
@@ -95,6 +96,13 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("vit", "FlaxViTForImageClassification"),
+        ("beit", "FlaxBeitForImageClassification"),
+    ]
+)
+
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("vision-encoder-decoder", "FlaxVisionEncoderDecoderModel"),
     ]
 )
 
@@ -174,6 +182,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
 FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
@@ -277,3 +286,10 @@ class FlaxAutoModelForImageClassification(_BaseAutoModelClass):
 FlaxAutoModelForImageClassification = auto_class_update(
     FlaxAutoModelForImageClassification, head_doc="image classification"
 )
+
+
+class FlaxAutoModelForVision2Seq(_BaseAutoModelClass):
+    _model_mapping = FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING
+
+
+FlaxAutoModelForVision2Seq = auto_class_update(FlaxAutoModelForVision2Seq, head_doc="vision-to-text modeling")

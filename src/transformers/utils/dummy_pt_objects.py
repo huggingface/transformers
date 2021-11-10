@@ -313,7 +313,13 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
+MODEL_FOR_CTC_MAPPING = None
+
+
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
+
+
+MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
 
 
 MODEL_FOR_MASKED_LM_MAPPING = None
@@ -340,10 +346,16 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
+
+
 MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
+
+
+MODEL_FOR_VISION_2_SEQ_MAPPING = None
 
 
 MODEL_MAPPING = None
@@ -379,7 +391,25 @@ class AutoModelForCausalLM:
         requires_backends(cls, ["torch"])
 
 
+class AutoModelForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class AutoModelForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForImageSegmentation:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -460,6 +490,15 @@ class AutoModelForSequenceClassification:
         requires_backends(cls, ["torch"])
 
 
+class AutoModelForSpeechSeq2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class AutoModelForTableQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -470,6 +509,15 @@ class AutoModelForTableQuestionAnswering:
 
 
 class AutoModelForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForVision2Seq:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -568,6 +616,11 @@ class BeitForMaskedImageModeling:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+
+class BeitForSemanticSegmentation:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class BeitModel:
@@ -1444,6 +1497,15 @@ class DPRPretrainedContextEncoder:
         requires_backends(self, ["torch"])
 
 
+class DPRPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class DPRPretrainedQuestionEncoder:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -1606,6 +1668,87 @@ class FlaubertModel:
 
 
 class FlaubertWithLMHeadModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+FNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class FNetForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class FNetForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class FNetForNextSentencePrediction:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FNetForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FNetForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class FNetForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class FNetForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class FNetLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FNetModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class FNetPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -3161,6 +3304,117 @@ def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
 
 
+SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SegformerDecodeHead:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerForSemanticSegmentation:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegformerModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SegformerPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+SEW_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SEWForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SEWForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SEWDForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SEWDForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWDModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class SEWDPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class SpeechEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3367,58 +3621,6 @@ def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
 
 
-TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TapasForMaskedLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class TapasPreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-def load_tf_weights_in_tapas(*args, **kwargs):
-    requires_backends(load_tf_weights_in_tapas, ["torch"])
-
-
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3465,6 +3667,116 @@ class TransfoXLPreTrainedModel:
 
 def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
+
+
+TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TrOCRForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class TrOCRPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class UniSpeechForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UniSpeechForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UniSpeechForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class UniSpeechModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class UniSpeechPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class UniSpeechSatForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UniSpeechSatForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UniSpeechSatForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class UniSpeechSatModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class UniSpeechSatPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class VisionEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None

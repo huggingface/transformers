@@ -42,8 +42,6 @@ class GPTJConfig(PretrainedConfig):
         n_positions (:obj:`int`, `optional`, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_ctx (:obj:`int`, `optional`, defaults to 2048):
-            Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 4096):
             Dimensionality of the embeddings and hidden states.
         n_layer (:obj:`int`, `optional`, defaults to 28):
@@ -68,8 +66,6 @@ class GPTJConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_attn_weights (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Scale attention weights by dividing by sqrt(hidden_size).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -98,7 +94,6 @@ class GPTJConfig(PretrainedConfig):
         self,
         vocab_size=50400,
         n_positions=2048,
-        n_ctx=2048,
         n_embd=4096,
         n_layer=28,
         n_head=16,
@@ -111,14 +106,13 @@ class GPTJConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         scale_attn_weights=True,
-        gradient_checkpointing=False,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        tie_word_embeddings=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer
@@ -131,11 +125,12 @@ class GPTJConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )

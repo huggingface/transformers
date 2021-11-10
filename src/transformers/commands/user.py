@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import subprocess
-import sys
 from argparse import ArgumentParser
 from getpass import getpass
 from typing import List, Union
 
-from huggingface_hub.hf_api import HfApi, HfFolder
+from huggingface_hub.hf_api import HfFolder, create_repo, list_repos_objs, login, logout, whoami
 from requests.exceptions import HTTPError
 
 from . import BaseTransformersCLICommand
@@ -142,7 +140,6 @@ def tabulate(rows: List[List[Union[str, int]]], headers: List[str]) -> str:
 class BaseUserCommand:
     def __init__(self, args):
         self.args = args
-        self._api = HfApi()
 
 
 class LoginCommand(BaseUserCommand):
@@ -166,7 +163,7 @@ class LoginCommand(BaseUserCommand):
         username = input("Username: ")
         password = getpass()
         try:
-            token = self._api.login(username, password)
+            token = login(username, password)
         except HTTPError as e:
             # probably invalid credentials, display error message.
             print(e)
@@ -191,7 +188,7 @@ class WhoamiCommand(BaseUserCommand):
             print("Not logged in")
             exit()
         try:
-            user, orgs = self._api.whoami(token)
+            user, orgs = whoami(token)
             print(user)
             if orgs:
                 print(ANSI.bold("orgs: "), ",".join(orgs))
@@ -214,7 +211,7 @@ class LogoutCommand(BaseUserCommand):
             print("Not logged in")
             exit()
         HfFolder.delete_token()
-        self._api.logout(token)
+        logout(token)
         print("Successfully logged out.")
 
 
@@ -222,46 +219,24 @@ class ListObjsCommand(BaseUserCommand):
     def run(self):
         print(
             ANSI.red(
-                "WARNING! Managing repositories through transformers-cli is deprecated. "
-                "Please use `huggingface-cli` instead."
+                "Command removed: it used to be the way to delete an object on S3."
+                " We now use a git-based system for storing models and other artifacts."
+                " Use list-repo-objs instead"
             )
         )
-        token = HfFolder.get_token()
-        if token is None:
-            print("Not logged in")
-            exit(1)
-        try:
-            objs = self._api.list_objs(token, organization=self.args.organization)
-        except HTTPError as e:
-            print(e)
-            print(ANSI.red(e.response.text))
-            exit(1)
-        if len(objs) == 0:
-            print("No shared file yet")
-            exit()
-        rows = [[obj.filename, obj.LastModified, obj.ETag, obj.Size] for obj in objs]
-        print(tabulate(rows, headers=["Filename", "LastModified", "ETag", "Size"]))
+        exit(1)
 
 
 class DeleteObjCommand(BaseUserCommand):
     def run(self):
         print(
             ANSI.red(
-                "WARNING! Managing repositories through transformers-cli is deprecated. "
-                "Please use `huggingface-cli` instead."
+                "Command removed: it used to be the way to delete an object on S3."
+                " We now use a git-based system for storing models and other artifacts."
+                " Use delete-repo instead"
             )
         )
-        token = HfFolder.get_token()
-        if token is None:
-            print("Not logged in")
-            exit(1)
-        try:
-            self._api.delete_obj(token, filename=self.args.filename, organization=self.args.organization)
-        except HTTPError as e:
-            print(e)
-            print(ANSI.red(e.response.text))
-            exit(1)
-        print("Done")
+        exit(1)
 
 
 class ListReposObjsCommand(BaseUserCommand):
@@ -277,7 +252,7 @@ class ListReposObjsCommand(BaseUserCommand):
             print("Not logged in")
             exit(1)
         try:
-            objs = self._api.list_repos_objs(token, organization=self.args.organization)
+            objs = list_repos_objs(token, organization=self.args.organization)
         except HTTPError as e:
             print(e)
             print(ANSI.red(e.response.text))
@@ -320,7 +295,7 @@ class RepoCreateCommand(BaseUserCommand):
             )
         print("")
 
-        user, _ = self._api.whoami(token)
+        user, _ = whoami(token)
         namespace = self.args.organization if self.args.organization is not None else user
         full_name = f"{namespace}/{self.args.name}"
         print(f"You are about to create {ANSI.bold(full_name)}")
@@ -331,7 +306,7 @@ class RepoCreateCommand(BaseUserCommand):
                 print("Abort")
                 exit()
         try:
-            url = self._api.create_repo(token, name=self.args.name, organization=self.args.organization)
+            url = create_repo(token, name=self.args.name, organization=self.args.organization)
         except HTTPError as e:
             print(e)
             print(ANSI.red(e.response.text))
@@ -356,73 +331,12 @@ class DeprecatedUploadCommand(BaseUserCommand):
 
 
 class UploadCommand(BaseUserCommand):
-    def walk_dir(self, rel_path):
-        """
-        Recursively list all files in a folder.
-        """
-        entries: List[os.DirEntry] = list(os.scandir(rel_path))
-        files = [(os.path.join(os.getcwd(), f.path), f.path) for f in entries if f.is_file()]  # (filepath, filename)
-        for f in entries:
-            if f.is_dir():
-                files += self.walk_dir(f.path)
-        return files
-
     def run(self):
         print(
             ANSI.red(
-                "WARNING! Managing repositories through transformers-cli is deprecated. "
-                "Please use `huggingface-cli` instead."
+                "Deprecated: used to be the way to upload a model to S3."
+                " We now use a git-based system for storing models and other artifacts."
+                " Use the `repo create` command instead."
             )
         )
-        token = HfFolder.get_token()
-        if token is None:
-            print("Not logged in")
-            exit(1)
-        local_path = os.path.abspath(self.args.path)
-        if os.path.isdir(local_path):
-            if self.args.filename is not None:
-                raise ValueError("Cannot specify a filename override when uploading a folder.")
-            rel_path = os.path.basename(local_path)
-            files = self.walk_dir(rel_path)
-        elif os.path.isfile(local_path):
-            filename = self.args.filename if self.args.filename is not None else os.path.basename(local_path)
-            files = [(local_path, filename)]
-        else:
-            raise ValueError(f"Not a valid file or directory: {local_path}")
-
-        if sys.platform == "win32":
-            files = [(filepath, filename.replace(os.sep, "/")) for filepath, filename in files]
-
-        if len(files) > UPLOAD_MAX_FILES:
-            print(
-                f"About to upload {ANSI.bold(len(files))} files to S3. This is probably wrong. Please filter files "
-                "before uploading."
-            )
-            exit(1)
-
-        user, _ = self._api.whoami(token)
-        namespace = self.args.organization if self.args.organization is not None else user
-
-        for filepath, filename in files:
-            print(
-                f"About to upload file {ANSI.bold(filepath)} to S3 under filename {ANSI.bold(filename)} and namespace "
-                f"{ANSI.bold(namespace)}"
-            )
-
-        if not self.args.yes:
-            choice = input("Proceed? [Y/n] ").lower()
-            if not (choice == "" or choice == "y" or choice == "yes"):
-                print("Abort")
-                exit()
-        print(ANSI.bold("Uploading... This might take a while if files are large"))
-        for filepath, filename in files:
-            try:
-                access_url = self._api.presign_and_upload(
-                    token=token, filename=filename, filepath=filepath, organization=self.args.organization
-                )
-            except HTTPError as e:
-                print(e)
-                print(ANSI.red(e.response.text))
-                exit(1)
-            print("Your file now lives at:")
-            print(access_url)
+        exit(1)

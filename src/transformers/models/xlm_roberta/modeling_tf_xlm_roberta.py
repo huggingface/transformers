@@ -18,6 +18,7 @@
 from ...file_utils import add_start_docstrings
 from ...utils import logging
 from ..roberta.modeling_tf_roberta import (
+    TFRobertaForCausalLM,
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
     TFRobertaForQuestionAnswering,
@@ -79,6 +80,19 @@ XLM_ROBERTA_START_DOCSTRING = r"""
 class TFXLMRobertaModel(TFRobertaModel):
     """
     This class overrides :class:`~transformers.TFRobertaModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+@add_start_docstrings(
+    "XLM-RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.",
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class XLMRobertaForCausalLM(TFRobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.TFRobertaForCausalLM`. Please check the superclass for the appropriate
     documentation alongside usage examples.
     """
 

@@ -13,8 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+from typing import List, Union
+
 import numpy as np
 import PIL.Image
+import PIL.ImageOps
+
+import requests
 
 from .file_utils import _is_torch, is_torch_available
 
@@ -24,9 +30,46 @@ IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
 IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
 IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
 
+ImageInput = Union[
+    PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
+]
+
 
 def is_torch_tensor(obj):
     return _is_torch(obj) if is_torch_available() else False
+
+
+def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
+    """
+    Loads :obj:`image` to a PIL Image.
+
+    Args:
+        image (:obj:`str` or :obj:`PIL.Image.Image`):
+            The image to convert to the PIL Image format.
+
+    Returns:
+        :obj:`PIL.Image.Image`: A PIL Image.
+    """
+    if isinstance(image, str):
+        if image.startswith("http://") or image.startswith("https://"):
+            # We need to actually check for a real protocol, otherwise it's impossible to use a local file
+            # like http_huggingface_co.png
+            image = PIL.Image.open(requests.get(image, stream=True).raw)
+        elif os.path.isfile(image):
+            image = PIL.Image.open(image)
+        else:
+            raise ValueError(
+                f"Incorrect path or url, URLs must start with `http://` or `https://`, and {image} is not a valid path"
+            )
+    elif isinstance(image, PIL.Image.Image):
+        image = image
+    else:
+        raise ValueError(
+            "Incorrect format used for image. Should be an url linking to an image, a local path, or a PIL image."
+        )
+    image = PIL.ImageOps.exif_transpose(image)
+    image = image.convert("RGB")
+    return image
 
 
 # In the future we can add a TF implementation here when we have TF models.
@@ -101,7 +144,7 @@ class ImageFeatureExtractionMixin:
         if rescale:
             image = image.astype(np.float32) / 255.0
 
-        if channel_first:
+        if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
 
         return image
@@ -156,8 +199,10 @@ class ImageFeatureExtractionMixin:
         """
         self._ensure_format_supported(image)
 
-        if not isinstance(size, tuple):
+        if isinstance(size, int):
             size = (size, size)
+        elif isinstance(size, list):
+            size = tuple(size)
         if not isinstance(image, PIL.Image.Image):
             image = self.to_pil_image(image)
 

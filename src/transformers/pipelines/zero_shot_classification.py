@@ -150,6 +150,7 @@ class ZeroShotClassificationPipeline(Pipeline):
     def __call__(
         self,
         sequences: Union[str, List[str]],
+        *args,
         **kwargs,
     ):
         """
@@ -182,11 +183,18 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
+        if kwargs.get("batch_size", 1) > 1:
+            logger.error("Batch size > 1 is not supported for zero-shot pipeline, setting batch_size=1.")
+            kwargs["batch_size"] = 1
 
-        result = super().__call__(sequences, **kwargs)
-        if len(result) == 1:
-            return result[0]
-        return result
+        if len(args) == 0:
+            pass
+        elif len(args) == 1 and "candidate_labels" not in kwargs:
+            kwargs["candidate_labels"] = args[0]
+        else:
+            raise ValueError(f"Unable to understand extra arguments {args}")
+
+        return super().__call__(sequences, **kwargs)
 
     def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
         sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
@@ -256,4 +264,6 @@ class ZeroShotClassificationPipeline(Pipeline):
                     "scores": scores[iseq, top_inds].tolist(),
                 }
             )
+        if len(result) == 1:
+            return result[0]
         return result
