@@ -411,7 +411,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    # fx_ready_model_classes = all_model_classes
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False

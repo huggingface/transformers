@@ -285,26 +285,6 @@ class ModuleUtilsMixin:
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
-                # batch_size, seq_length = input_shape
-                # seq_ids = torch.arange(seq_length, device=device)
-                # causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-                # # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-                # # causal and attention masks must have same type with pytorch version < 1.3
-                # causal_mask = causal_mask.to(attention_mask.dtype)
-
-                # if causal_mask.shape[1] < attention_mask.shape[1]:
-                #     prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
-                #     causal_mask = torch.cat(
-                #         [
-                #             torch.ones(
-                #                 (batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype
-                #             ),
-                #             causal_mask,
-                #         ],
-                #         axis=-1,
-                #     )
-
-                # extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
                 extended_attention_mask = self.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask, device
                 )

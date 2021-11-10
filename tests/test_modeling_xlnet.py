@@ -527,7 +527,6 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         (XLNetLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
 
-    fx_ready_model_classes = all_model_classes
     test_pruning = False
 
     # XLNet has 2 QA models -> need to manually set the correct labels for one of them here

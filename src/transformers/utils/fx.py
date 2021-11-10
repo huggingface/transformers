@@ -83,8 +83,9 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gpt_neo",
     "t5",
     "roberta",
-    "layoutlm",
-    "xlnet",
+    # TODO: add support for them as it should be quite easy to do so (small blocking issues).
+    # "layoutlm",
+    # "xlnet",
 ]
 
 _REGULAR_SUPPORTED_MODELS = []

@@ -108,7 +108,7 @@ class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
-    fx_ready_model_classes = ()
+    fx_ready = False
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -658,14 +658,13 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available():
+        if not is_torch_fx_available() or not self.fx_ready:
             return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
 
-        model_classes = self.fx_ready_model_classes
-        for model_class in model_classes:
+        for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
