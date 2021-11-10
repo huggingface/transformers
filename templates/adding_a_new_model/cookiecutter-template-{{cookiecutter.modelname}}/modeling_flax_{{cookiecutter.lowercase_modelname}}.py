@@ -2319,7 +2319,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGenerationModule(nn.
         else:
             lm_logits = self.lm_head(hidden_states)
 
-        lm_logits += self.final_logits_bias
+        lm_logits += self.final_logits_bias.astype(self.dtype)
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -2435,7 +2435,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Flax{{coo
             else:
                 lm_logits = module.lm_head(hidden_states)
 
-            lm_logits += module.final_logits_bias
+            lm_logits += module.final_logits_bias.astype(self.dtype)
             return lm_logits, outputs
 
         outputs = self.module.apply(
