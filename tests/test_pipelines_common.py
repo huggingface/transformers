@@ -286,6 +286,28 @@ class CommonPipelineTest(unittest.TestCase):
             # Wrong framework
             get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
 
+    @require_torch
+    def test_iterator_data(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(out, {"label": "LABEL_1", "score": 0.5023466348648071})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+        # When using multiple workers on streamable data it should still work
+        # This will force using `num_workers=1` with a warning for now.
+        results = []
+        for out in pipe(data(10), num_workers=2):
+            self.assertEqual(out, {"label": "LABEL_1", "score": 0.5023466348648071})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
 
 @is_pipeline_test
 class PipelinePadTest(unittest.TestCase):

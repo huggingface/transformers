@@ -18,6 +18,7 @@ import json
 import os
 import pickle
 import sys
+import types
 import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
@@ -1035,10 +1036,23 @@ class Pipeline(_ScikitCompat):
     def get_iterator(
         self, inputs, num_workers: int, batch_size: int, preprocess_params, forward_params, postprocess_params
     ):
+        try:
+            n = len(inputs)
+        except TypeError:
+            # Iterator
+            n = None
+        if n is not None:
+            dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
+        else:
+            if num_workers > 1:
+                logger.warning(
+                    "For iterable dataset using num_workers>1 is likely to result in errors since everything is iterable, setting `num_workers=1` to guarantee correctness."
+                )
+                num_workers = 1
+            dataset = PipelineIterator(inputs, self.preprocess, preprocess_params)
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
@@ -1070,7 +1084,12 @@ class Pipeline(_ScikitCompat):
                 return outputs
             else:
                 return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
-        elif Dataset is not None and isinstance(inputs, Dataset):
+        elif (
+            Dataset is not None
+            and isinstance(inputs, Dataset)
+            or isinstance(inputs, types.GeneratorType)
+            and self.framework == "pt"
+        ):
             return self.get_iterator(
                 inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
             )
