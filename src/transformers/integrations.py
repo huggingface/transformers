@@ -83,6 +83,10 @@ def is_ray_tune_available():
     return importlib.util.find_spec("ray.tune") is not None
 
 
+def is_sigopt_available():
+    return importlib.util.find_spec("sigopt") is not None
+
+
 def is_azureml_available():
     if importlib.util.find_spec("azureml") is None:
         return False
@@ -117,6 +121,10 @@ def hp_params(trial):
         if isinstance(trial, dict):
             return trial
 
+    if is_sigopt_available():
+        if isinstance(trial, dict):
+            return trial
+
     raise RuntimeError(f"Unknown type for trial {trial.__class__}")
 
 
@@ -125,6 +133,8 @@ def default_hp_search_backend():
         return "optuna"
     elif is_ray_tune_available():
         return "ray"
+    elif is_sigopt_available():
+        return "sigopt"
 
 
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
@@ -288,6 +298,45 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     return best_run
 
 
+def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+
+    from sigopt import Connection
+
+    conn = Connection()
+    proxies = kwargs.pop("proxies", None)
+    if proxies is not None:
+        conn.set_proxies(proxies)
+
+    experiment = conn.experiments().create(
+        name="huggingface-tune",
+        parameters=trainer.hp_space(None),
+        metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+        parallel_bandwidth=1,
+        observation_budget=n_trials,
+        project="huggingface",
+    )
+    logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+
+    while experiment.progress.observation_count < experiment.observation_budget:
+        suggestion = conn.experiments(experiment.id).suggestions().create()
+        trainer.objective = None
+        trainer.train(resume_from_checkpoint=None, trial=suggestion)
+        # If there hasn't been any evaluation during the training loop.
+        if getattr(trainer, "objective", None) is None:
+            metrics = trainer.evaluate()
+            trainer.objective = trainer.compute_objective(metrics)
+
+        values = [dict(name="objective", value=trainer.objective)]
+        obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
+        logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
+        experiment = conn.experiments(experiment.id).fetch()
+
+    best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
+    best_run = BestRun(best.id, best.value, best.assignments)
+
+    return best_run
+
+
 def get_available_reporting_integrations():
     integrations = []
     if is_azureml_available():
@@ -309,9 +358,13 @@ def rewrite_logs(d):
     new_d = {}
     eval_prefix = "eval_"
     eval_prefix_len = len(eval_prefix)
+    test_prefix = "test_"
+    test_prefix_len = len(test_prefix)
     for k, v in d.items():
         if k.startswith(eval_prefix):
             new_d["eval/" + k[eval_prefix_len:]] = v
+        elif k.startswith(test_prefix):
+            new_d["test/" + k[test_prefix_len:]] = v
         else:
             new_d["train/" + k] = v
     return new_d
@@ -329,9 +382,10 @@ class TensorBoardCallback(TrainerCallback):
 
     def __init__(self, tb_writer=None):
         has_tensorboard = is_tensorboard_available()
-        assert (
-            has_tensorboard
-        ), "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+        if not has_tensorboard:
+            raise RuntimeError(
+                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+            )
         if has_tensorboard:
             try:
                 from torch.utils.tensorboard import SummaryWriter  # noqa: F401
@@ -364,7 +418,8 @@ class TensorBoardCallback(TrainerCallback):
             if trial_name is not None:
                 log_dir = os.path.join(args.logging_dir, trial_name)
 
-        self._init_summary_writer(args, log_dir)
+        if self.tb_writer is None:
+            self._init_summary_writer(args, log_dir)
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
@@ -411,7 +466,8 @@ class WandbCallback(TrainerCallback):
 
     def __init__(self):
         has_wandb = is_wandb_available()
-        assert has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
+        if not has_wandb:
+            raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
 
@@ -533,7 +589,8 @@ class CometCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert _has_comet, "CometCallback requires comet-ml to be installed. Run `pip install comet-ml`."
+        if not _has_comet:
+            raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
         self._initialized = False
 
     def setup(self, args, state, model):
@@ -589,9 +646,8 @@ class AzureMLCallback(TrainerCallback):
     """
 
     def __init__(self, azureml_run=None):
-        assert (
-            is_azureml_available()
-        ), "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
+        if not is_azureml_available():
+            raise RuntimeError("AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`.")
         self.azureml_run = azureml_run
 
     def on_init_end(self, args, state, control, **kwargs):
@@ -613,7 +669,8 @@ class MLflowCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert is_mlflow_available(), "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
+        if not is_mlflow_available():
+            raise RuntimeError("MLflowCallback requires mlflow to be installed. Run `pip install mlflow`.")
         import mlflow
 
         self._MAX_PARAM_VAL_LENGTH = mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
@@ -669,9 +726,10 @@ class MLflowCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
+            metrics = {}
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
-                    self._ml_flow.log_metric(k, v, step=state.global_step)
+                    metrics[k] = v
                 else:
                     logger.warning(
                         f"Trainer is attempting to log a value of "
@@ -679,6 +737,7 @@ class MLflowCallback(TrainerCallback):
                         f"MLflow's log_metric() only accepts float and "
                         f"int types so we dropped this attribute."
                     )
+            self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
@@ -699,9 +758,10 @@ class NeptuneCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert (
-            is_neptune_available()
-        ), "NeptuneCallback requires neptune-client to be installed. Run `pip install neptune-client`."
+        if not is_neptune_available():
+            raise ValueError(
+                "NeptuneCallback requires neptune-client to be installed. Run `pip install neptune-client`."
+            )
         import neptune.new as neptune
 
         self._neptune = neptune
@@ -769,9 +829,10 @@ class CodeCarbonCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert (
-            is_codecarbon_available()
-        ), "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+        if not is_codecarbon_available():
+            raise RuntimeError(
+                "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+            )
         import codecarbon
 
         self._codecarbon = codecarbon

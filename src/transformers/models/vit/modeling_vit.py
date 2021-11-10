@@ -169,9 +169,9 @@ class ViTSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -352,6 +352,7 @@ class ViTEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -370,7 +371,7 @@ class ViTEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -411,6 +412,7 @@ class ViTPreTrainedModel(PreTrainedModel):
 
     config_class = ViTConfig
     base_model_prefix = "vit"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -427,6 +429,10 @@ class ViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ViTEncoder):
+            module.gradient_checkpointing = value
 
 
 VIT_START_DOCSTRING = r"""
@@ -499,6 +505,7 @@ class ViTModel(ViTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,

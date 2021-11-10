@@ -23,7 +23,7 @@ from typing import List, Optional, Tuple
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -1077,6 +1077,7 @@ class LEDClassificationHead(nn.Module):
 class LEDPreTrainedModel(PreTrainedModel):
     config_class = LEDConfig
     base_model_prefix = "led"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1088,6 +1089,10 @@ class LEDPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (LEDDecoder, LEDEncoder)):
+            module.gradient_checkpointing = value
 
     @property
     def dummy_inputs(self):
@@ -1625,6 +1630,7 @@ class LEDEncoder(LEDPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def _merge_to_attention_mask(self, attention_mask: torch.Tensor, global_attention_mask: torch.Tensor):
         # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
@@ -1809,7 +1815,7 @@ class LEDEncoder(LEDPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
 
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -1852,6 +1858,11 @@ class LEDEncoder(LEDPreTrainedModel):
         if padding_len > 0:
             # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
             hidden_states = hidden_states[:, :-padding_len]
+            if output_hidden_states:
+                encoder_states = tuple([state[:, :-padding_len] for state in encoder_states])
+
+            if output_attentions:
+                all_attentions = tuple([state[:, :, :-padding_len, :] for state in all_attentions])
 
         if not return_dict:
             return tuple(
@@ -1894,6 +1905,7 @@ class LEDDecoder(LEDPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.init_weights()
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -2061,12 +2073,11 @@ class LEDDecoder(LEDPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -2163,7 +2174,7 @@ class LEDModel(LEDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2457,7 +2468,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2516,7 +2527,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id)
 
-        if len(torch.unique(eos_mask.sum(1))) > 1:
+        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
@@ -2525,9 +2536,26 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            if self.config.problem_type is None:
+                if self.config.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
 
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.config.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -2567,7 +2595,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

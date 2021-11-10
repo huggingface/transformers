@@ -248,6 +248,7 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     config_class = ConvBertConfig
     load_tf_weights = load_tf_weights_in_convbert
     base_model_prefix = "convbert"
+    supports_gradient_checkpointing = True
     authorized_missing_keys = [r"position_ids"]
     authorized_unexpected_keys = [r"convbert\.embeddings_project\.weight", r"convbert\.embeddings_project\.bias"]
 
@@ -266,6 +267,10 @@ class ConvBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ConvBertEncoder):
+            module.gradient_checkpointing = value
 
 
 class SeparableConv1D(nn.Module):
@@ -603,6 +608,7 @@ class ConvBertEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ConvBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -624,7 +630,7 @@ class ConvBertEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False):
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -787,7 +793,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -890,7 +896,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -993,7 +999,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1090,7 +1096,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         CONVBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1185,7 +1191,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1272,7 +1278,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -26,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
-from huggingface_hub import HfApi, Repository
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import (
     AutoTokenizer,
@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     require_optuna,
     require_ray,
     require_sentencepiece,
+    require_sigopt,
     require_tokenizers,
     require_torch,
     require_torch_gpu,
@@ -489,7 +490,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.predict(eval_dataset)
 
     def test_evaluation_with_keys_to_drop(self):
-        config = GPT2Config(vocab_size=100, n_positions=128, n_ctx=128, n_embd=32, n_layer=3, n_head=4)
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
         eval_dataset = RepeatDataset(x)
@@ -530,7 +531,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(train_output.global_step, 10)
 
     def test_logging_inf_nan_filter(self):
-        config = GPT2Config(vocab_size=100, n_positions=128, n_ctx=128, n_embd=32, n_layer=3, n_head=4)
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
@@ -1306,19 +1307,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step"]:
             try:
-                cls._api.delete_repo(token=cls._token, name=model)
+                delete_repo(token=cls._token, name=model)
             except HTTPError:
                 pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
         except HTTPError:
             pass
 
@@ -1395,6 +1395,10 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             print(commits, len(commits))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
+        num_gpus = max(1, get_gpu_count())
+        if num_gpus > 2:
+            return
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
                 output_dir=os.path.join(tmp_dir, "test-trainer-step"),
@@ -1408,7 +1412,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
-            expected_commits = [f"Training in progress, step {i}" for i in range(20, 0, -5)]
+            total_steps = 20 // num_gpus
+            expected_commits = [f"Training in progress, step {i}" for i in range(total_steps, 0, -5)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
             print(commits, len(commits))
@@ -1522,3 +1527,54 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
         with ray_start_client_server():
             assert ray.util.client.ray.is_connected()
             self.ray_hyperparameter_search()
+
+
+@require_torch
+@require_sigopt
+class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+            return [
+                {"bounds": {"min": -4, "max": 4}, "name": "a", "type": "int"},
+                {"bounds": {"min": -4, "max": 4}, "name": "b", "type": "int"},
+            ]
+
+        def model_init(trial):
+            if trial is not None:
+                a = trial.assignments["a"]
+                b = trial.assignments["b"]
+            else:
+                a = 0
+                b = 0
+            config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(config)
+
+        def hp_name(trial):
+            return MyTrialShortNamer.shortname(trial.assignments)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                num_train_epochs=4,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="sigopt", n_trials=4
+            )

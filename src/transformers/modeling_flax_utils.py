@@ -120,6 +120,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return cls(config, **kwargs)
 
     @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a Flax model.
+        """
+        return "flax"
+
+    @property
     def config(self) -> PretrainedConfig:
         return self._config
 
@@ -210,7 +217,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -270,7 +277,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -328,7 +334,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                    f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                     f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named {WEIGHTS_NAME}.\n\n"
                 )
                 raise EnvironmentError(msg)
@@ -521,7 +528,7 @@ def overwrite_call_docstring(model_class, docstring):
 def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
-        tokenizer_class=tokenizer_class,
+        processor_class=tokenizer_class,
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,

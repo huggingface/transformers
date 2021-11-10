@@ -154,7 +154,7 @@ input elements was ``6.27e+04`` and same for the output was ``inf``.
 You can see here, that ``T5DenseGatedGeluDense.forward`` resulted in output activations, whose absolute max value was
 around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have ``Dropout`` which renormalizes
 the weights, after it zeroed some of the elements, which pushes the absolute max value to more than 64K, and we get an
-overlow (``inf``).
+overflow (``inf``).
 
 As you can see it's the previous frames that we need to look into when the numbers start going into very large for fp16
 numbers.
