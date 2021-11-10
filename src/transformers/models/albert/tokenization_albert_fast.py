@@ -20,6 +20,7 @@ from shutil import copyfile
 from typing import List, Optional, Tuple
 
 from ...file_utils import is_sentencepiece_available
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -134,6 +135,13 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it and
+        # is included in the raw text, there should be a match in a non-normalized sentence.
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             vocab_file,
