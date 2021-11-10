@@ -617,8 +617,8 @@ class FlaxModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            # check if all params are still in float32 when dtype of computation is bfloat16
-            model = model_class(config, dtype=jnp.dtype("bfloat16"))
+            # check if all params are still in float32 when dtype of computation is half-precision
+            model = model_class(config, dtype=jnp.float16)
             types = jax.tree_map(lambda x: x.dtype, model.params)
             types = flatten_dict(types)
 
