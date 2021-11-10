@@ -15,6 +15,7 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TextClassificationPipeline,
@@ -29,6 +30,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
     @require_torch
     def test_small_model_pt(self):

@@ -31,7 +31,7 @@ import numpy as np
 from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
+from ..file_utils import ModelOutput, add_end_docstrings, is_flax_available, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
@@ -44,6 +44,9 @@ if is_tf_available():
     import tensorflow as tf
 
     from ..models.auto.modeling_tf_auto import TFAutoModel
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FlaxAutoModel
 
 if is_torch_available():
     import torch
@@ -181,11 +184,15 @@ def infer_framework_load_model(
         class_tuple = ()
         look_pt = is_torch_available() and framework in {"pt", None}
         look_tf = is_tf_available() and framework in {"tf", None}
+        look_flax = is_flax_available() and framework in {"flax", None}
         if model_classes:
             if look_pt:
                 class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
             if look_tf:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
+            if look_flax:
+                class_tuple = class_tuple + model_classes.get("flax", (FlaxAutoModel,))
+
         if config.architectures:
             classes = []
             for architecture in config.architectures:
@@ -196,6 +203,10 @@ def infer_framework_load_model(
                         classes.append(_class)
                 if look_tf:
                     _class = getattr(transformers_module, f"TF{architecture}", None)
+                    if _class is not None:
+                        classes.append(_class)
+                if look_flax:
+                    _class = getattr(transformers_module, f"Flax{architecture}", None)
                     if _class is not None:
                         classes.append(_class)
             class_tuple = class_tuple + tuple(classes)
@@ -230,7 +241,12 @@ def infer_framework_load_model(
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    if model.__class__.__name__.startswith("TF"):
+        framework = "tf"
+    elif model.__class__.__name__.startswith("Flax"):
+        framework = "flax"
+    else:
+        framework = "pt"
     return framework, model
 
 
@@ -847,6 +863,10 @@ class Pipeline(_ScikitCompat):
         self.modelcard = modelcard
         self.framework = framework
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+        if self.framework == "flax":
+            import jax
+
+            self.model.__call__ = jax.jit(self.model.__call__)
         self.binary_output = binary_output
 
         # Special handling
@@ -1035,6 +1055,8 @@ class Pipeline(_ScikitCompat):
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
+            elif self.framework == "flax":
+                model_outputs = self._forward(model_inputs, **forward_params)
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs

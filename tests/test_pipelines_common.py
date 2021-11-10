@@ -195,7 +195,7 @@ class PipelineTestCaseMeta(type):
 
             return test
 
-        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
+        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping"), ("flax", "flax_model_mapping")]:
             mapping = dct.get(key, {})
             if mapping:
                 for configuration, model_architectures in mapping.items():

@@ -2,15 +2,14 @@ from typing import Dict
 
 import numpy as np
 
-from ..file_utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from transformers import (
+    FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+)
+
+from ..file_utils import ExplicitEnum, add_end_docstrings
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
-
-
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
-
-if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
 
 def sigmoid(_outputs):
@@ -68,9 +67,11 @@ class TextClassificationPipeline(Pipeline):
         super().__init__(**kwargs)
 
         self.check_model_type(
-            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+            dict(
+                MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items()
+                + FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items()
+                + TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items()
+            )
         )
 
     def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, **tokenizer_kwargs):
@@ -132,6 +133,8 @@ class TextClassificationPipeline(Pipeline):
 
     def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
+        if self.framework == "flax":
+            return_tensors = "np"
         return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
 
     def _forward(self, model_inputs):
@@ -150,7 +153,10 @@ class TextClassificationPipeline(Pipeline):
                 function_to_apply = ClassificationFunction.NONE
 
         outputs = model_outputs["logits"][0]
-        outputs = outputs.numpy()
+        if self.framework == "flax":
+            outputs = outputs.to_py()
+        else:
+            outputs = outputs.numpy()
 
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)
