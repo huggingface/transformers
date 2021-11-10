@@ -92,6 +92,17 @@ class QDQBertModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
+        # Set default quantizers before creating the model.
+        import pytorch_quantization.nn as quant_nn
+        from pytorch_quantization.tensor_quant import QuantDescriptor
+        input_desc = QuantDescriptor(num_bits=8, calib_method="max")
+        # The default tensor quantizer is set to be per-channel quantization for weights
+        weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
+        quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
+        quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
+        # For the test cases, since QDQBert model is tested in one run without calibration, the quantized tensors are set as fake quantized tensors which give float type tensors in the end.
+        quant_nn.TensorQuantizer.use_fb_fake_quant = True
+
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -518,6 +529,7 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     # Override
     def test_feed_forward_chunking(self):
+        # feed forward chunking is not supported in QDQBert
         pass
 
 
@@ -526,24 +538,20 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
 class QDQBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-
+        # Set default quantizers before creating the model.
         import pytorch_quantization.nn as quant_nn
         from pytorch_quantization.tensor_quant import QuantDescriptor
-
-        model = QDQBertForMaskedLM.from_pretrained("bert-base-uncased")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-
         input_desc = QuantDescriptor(num_bits=8, calib_method="max")
+        # The default tensor quantizer is set to be per-channel quantization for weights
         weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
         quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
         quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
 
-        output = model(input_ids)[0]
-
+        model = QDQBertModel.from_pretrained("bert-base-uncased")
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
-        )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        expected_slice = torch.tensor([[[0.4571, -0.0735,  0.8594], [0.2774, -0.0278,  0.8794], [0.3548, -0.0473,  0.7593]]])
+        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))

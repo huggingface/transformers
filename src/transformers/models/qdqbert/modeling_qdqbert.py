@@ -48,7 +48,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import (
     PreTrainedModel,
-    apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
@@ -462,7 +461,6 @@ class QDQBertOutput(nn.Module):
 class QDQBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = QDQBertAttention(config)
         self.is_decoder = config.is_decoder
@@ -527,9 +525,7 @@ class QDQBertLayer(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
+        layer_output = self.feed_forward_chunk(attention_output)
         outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
