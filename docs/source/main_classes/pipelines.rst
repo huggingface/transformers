@@ -55,7 +55,7 @@ Simple call on one item:
     >>> pipe("This restaurant is awesome")
     [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
 
-If you want to use a specific model from the `hub <https://huggingface.co>`_ you can ignore the task if the model on
+If you want to use a specific model from the `hub <https://huggingface.co>`__ you can ignore the task if the model on
 the hub already defines it:
 
 .. code-block::
