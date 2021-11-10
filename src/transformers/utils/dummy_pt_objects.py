@@ -3901,6 +3901,46 @@ class Wav2Vec2PreTrainedModel:
         requires_backends(cls, ["torch"])
 
 
+WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class WavLMForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WavLMForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WavLMForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class WavLMModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class WavLMPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
