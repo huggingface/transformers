@@ -407,8 +407,8 @@ def pipeline(
             :obj:`config` is loaded (if it is a string). However, if :obj:`config` is also not given or not a string,
             then the default feature extractor for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
-            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow or :obj:`"flax"` for Jax. The specified framework
-            must be installed.
+            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow or :obj:`"flax"` for
+            Jax. The specified framework must be installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
