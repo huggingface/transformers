@@ -2733,11 +2733,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         first_element = required_input[0]
         if isinstance(first_element, (list, tuple)):
             # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
-            index = 0
-            while len(required_input[index]) == 0:
-                index += 1
-            if index < len(required_input):
-                first_element = required_input[index][0]
+            for item in required_input:
+                if len(item) != 0:
+                    first_element = item[0]
+                    break
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and _is_tensorflow(first_element):
