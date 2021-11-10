@@ -75,6 +75,13 @@ You can open any page of the documentation as a notebook in colab (there is a bu
 | [How to fine-tune a model on translation](https://github.com/huggingface/notebooks/blob/master/examples/translation-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on WMT. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/translation-tf.ipynb)|
 | [How to fine-tune a model on summarization](https://github.com/huggingface/notebooks/blob/master/examples/summarization-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained model on XSUM. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/summarization-tf.ipynb)|
 
+### Optimum notebooks
+
+🤗  [Optimum](https://github.com/huggingface/optimum) is an extension of 🤗 Transformers, providing a set of performance optimization tools enabling maximum efficiency to train and run models on targeted hardwares.
+
+| Notebook     |      Description      |   |
+|:----------|:-------------|------:|
+| [How to quantize a model for text classification](https://github.com/huggingface/notebooks/blob/master/examples/text_classification_quantization_inc.ipynb) | Show how to apply [Intel Neural Compressor (INC)](https://github.com/intel/neural-compressor) quantization on a model for any GLUE task. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification_quantization_inc.ipynb)|
 
 ## Community notebooks:
 
