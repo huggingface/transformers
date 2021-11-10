@@ -266,7 +266,7 @@ def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
         raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
     if "pipeline_tag" not in data:
         raise RuntimeError(
-            f"The model {model} does not seem to have a correct `pipline_tag` set to infer the task automatically"
+            f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
         )
     if data.get("library_name", "transformers") != "transformers":
         raise RuntimeError(f"This model is meant to be used with {data['library_name']} not with transformers")
