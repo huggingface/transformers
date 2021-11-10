@@ -1356,7 +1356,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
-            #subsampled_index_dims=subsampling["image"],
+            # subsampled_index_dims=subsampling["image"],
             output_shape=config.output_shape,
             # num_z_channels=1024,
             output_num_channels=512,
@@ -1375,7 +1375,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
-            #subsampled_index_dims=subsampled_index_dims,
+            # subsampled_index_dims=subsampled_index_dims,
             # Modality specific decoders are used ONLY to generate queries.
             # All modalties are decoded together using a unified decoder.
             modalities={
@@ -1383,7 +1383,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     config,
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
-                    #subsampled_index_dims=subsampling["audio"],
+                    # subsampled_index_dims=subsampling["audio"],
                     output_index_dims=(n_audio_samples // config.samples_per_patch,),
                     # num_z_channels=1024,
                     output_num_channels=512,
