@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import requests
 import yaml
-from huggingface_hub import HfApi
+from huggingface_hub import model_info
 
 from . import __version__
 from .file_utils import (
@@ -45,6 +45,7 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -60,6 +61,7 @@ from .utils import logging
 TASK_MAPPING = {
     "text-generation": MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "image-segmentation": MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
     "fill-mask": MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     "object-detection": MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -273,6 +275,7 @@ should probably proofread and complete it, then remove this comment. -->
 TASK_TAG_TO_NAME_MAPPING = {
     "fill-mask": "Masked Language Modeling",
     "image-classification": "Image Classification",
+    "image-segmentation": "Image Segmentation",
     "multiple-choice": "Multiple Choice",
     "object-detection": "Object Detection",
     "question-answering": "Question Answering",
@@ -384,8 +387,8 @@ class TrainingSummary:
             and len(self.finetuned_from) > 0
         ):
             try:
-                model_info = HfApi().model_info(self.finetuned_from)
-                for tag in model_info.tags:
+                info = model_info(self.finetuned_from)
+                for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
             except requests.exceptions.HTTPError:
@@ -443,7 +446,7 @@ class TrainingSummary:
             if "task" in result and "dataset" in result and "metrics" in result:
                 model_index["results"].append(result)
             else:
-                logger.info(f"Dropping the following result as it does not have all the necessary field:\n{result}")
+                logger.info(f"Dropping the following result as it does not have all the necessary fields:\n{result}")
 
         return [model_index]
 

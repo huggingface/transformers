@@ -26,31 +26,6 @@ of the script.
 
 The following example fine-tunes BERT on SQuAD:
 
-To begin with it is recommended to create a model repository to save the trained model and logs.
-Here we call the model `"bert-qa-squad-test"`, but you can change the model name as you like.
-
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create bert-qa-squad-test
-```
-
-Next we clone the model repository to add the tokenizer and model files.
-
-```
-git clone https://huggingface.co/<your-username>/bert-qa-squad-test
-```
-
-Great, we have set up our model repository. During training, we will automatically
-push the training logs and model weights to the repo.
-
-Next, let's add a symbolic link to the `run_qa.py`.
-
-```bash
-export MODEL_DIR="./bert-qa-squad-test"
-ln -s ~/transformers/examples/flax/question-answering/run_qa.py run_qa.py
-```
 
 ```bash
 python run_qa.py \
@@ -63,7 +38,7 @@ python run_qa.py \
   --learning_rate 3e-5 \
   --num_train_epochs 2 \
   --per_device_train_batch_size 12 \
-  --output_dir ${MODEL_DIR} \
+  --output_dir ./bert-qa-squad \
   --eval_steps 1000 \
   --push_to_hub
 ```
@@ -101,8 +76,9 @@ python run_qa.py   \
 --num_train_epochs 2   \
 --max_seq_length 384   \
 --doc_stride 128   \
---output_dir /tmp/wwm_uncased_finetuned_squad/ \
---eval_steps 1000
+--output_dir ./wwm_uncased_finetuned_squad/ \
+--eval_steps 1000 \
+--push_to_hub
 ```
 
 Training with the previously defined hyper-parameters yields the following results:

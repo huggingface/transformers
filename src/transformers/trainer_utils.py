@@ -427,6 +427,8 @@ class TrainerMemoryTracker:
             self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
             self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
             self.gpu[self.cur_stage] = dict(
+                begin=self.gpu_mem_used_at_start,
+                end=self.gpu_mem_used_now,
                 alloc=(self.gpu_mem_used_now - self.gpu_mem_used_at_start),
                 peaked=max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
             )
@@ -434,6 +436,8 @@ class TrainerMemoryTracker:
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
         self.cpu[self.cur_stage] = dict(
+            begin=self.cpu_mem_used_at_start,
+            end=self.cpu_mem_used_now,
             alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
             peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
         )
@@ -462,6 +466,25 @@ class TrainerMemoryTracker:
                     metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
                 if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
+            # if we need additional debug info, enable the following
+            # for t in ["begin", "end"]:
+            #     if stage in self.cpu and t in self.cpu[stage]:
+            #         metrics[f"{stage}_mem_cpu_{t}"] = self.cpu[stage][t]
+            #     if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
+            #         metrics[f"{stage}_mem_gpu_{t}"] = self.gpu[stage][t]
+
+        # since memory can be allocated before init, and it might be difficult to track overall
+        # memory usage, in particular for GPU, let's report memory usage at the point init was called
+        if stages[0] == "init":
+            metrics["before_init_mem_cpu"] = self.cpu["init"]["begin"]
+            if self.torch is not None:
+                metrics["before_init_mem_gpu"] = self.gpu["init"]["begin"]
+            # if we also wanted to report any additional memory allocations in between init and
+            # whatever the next stage was we could also report this:
+            # if self.cpu["init"]["end"] != self.cpu[stage]["begin"]:
+            #     metrics[f"after_init_mem_cpu_delta"] = self.cpu[stage]["begin"] - self.cpu["init"]["end"]
+            # if self.torch is not None and self.gpu["init"]["end"] != self.gpu[stage]["begin"]:
+            #     metrics[f"after_init_mem_gpu_delta"] = self.gpu[stage]["begin"] - self.gpu["init"]["end"]
 
     def stop_and_update_metrics(self, metrics=None):
         """combine stop and metrics update in one call for simpler code"""

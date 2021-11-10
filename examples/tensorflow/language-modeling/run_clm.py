@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...)
+Fine-tuning the library models for causal language modeling (GPT-2, GPT-Neo...)
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
+https://huggingface.co/models?filter=causal-lm
 """
-# You can also adapt this script on your own mlm task. Pointers for this are left as comments.
+# You can also adapt this script on your own clm task. Pointers for this are left as comments.
 
 # region Imports
 import logging

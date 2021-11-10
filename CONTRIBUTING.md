@@ -273,8 +273,10 @@ Follow these steps to start contributing:
    - If you are adding a new tokenizer, write tests, and make sure
      `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
    CircleCI does not run the slow tests, but github actions does every night!
-6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an
+6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_bert.py` for an
    example.
+
+See more about the checks run on a pull request in our [PR guide](https://huggingface.co/transformers/master/pr_tests.html)
 
 ### Tests
 

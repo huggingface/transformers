@@ -181,6 +181,45 @@ jobs:
           name: run_all_tests_tf_gpu_test_reports
           path: reports
 
+  run_all_examples_torch_xla_tpu:
+    runs-on: [self-hosted, docker-tpu-test, tpu-v3-8]
+    container:
+      image: gcr.io/tpu-pytorch/xla:nightly_3.8_tpuvm
+      options: --privileged -v "/lib/libtpu.so:/lib/libtpu.so" -v /mnt/cache/.cache/huggingface:/mnt/cache/ --shm-size 16G
+    steps:
+      - name: Launcher docker
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install .[testing]
+
+      - name: Are TPUs recognized by our DL frameworks
+        env:
+          XRT_TPU_CONFIG: localservice;0;localhost:51011
+        run: |
+          python -c "import torch_xla.core.xla_model as xm; print(xm.xla_device())"
+
+      - name: Run example tests on TPU
+        env:
+          XRT_TPU_CONFIG: "localservice;0;localhost:51011"
+          MKL_SERVICE_FORCE_INTEL: "1"  # See: https://github.com/pytorch/pytorch/issues/37377
+
+        run: |
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_xla_tpu examples/pytorch/test_xla_examples.py
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_xla_tpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_examples_torch_xla_tpu
+          path: reports
+
   run_all_tests_torch_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:

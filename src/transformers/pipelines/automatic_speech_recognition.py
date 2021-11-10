@@ -106,7 +106,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         if self.framework == "tf":
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
-        self.check_model_type(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items())
+        self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
 
     def __call__(
         self,
@@ -167,6 +167,10 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
             )
             tokens = tokens.squeeze(0)
         elif model_class in MODEL_FOR_CTC_MAPPING.values():
+            outputs = self.model(**model_inputs)
+            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+        else:
+            logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.squeeze(0).argmax(dim=-1)
         return tokens
