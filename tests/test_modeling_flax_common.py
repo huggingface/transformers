@@ -601,7 +601,7 @@ class FlaxModelTesterMixin:
 
                     logits = new_model(**inputs_dict)["logits"]
                     self.assertEqual(logits.shape[1], 42)
-                    
+
                     with CaptureLogger(logger) as cl:
                         new_model_without_prefix = FlaxAutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
