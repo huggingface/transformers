@@ -156,7 +156,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def _cast_floating_to(self, params: Union[Dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
         """
-        Helper method to cast the floating-point values from given ``params`` tree to the given ```dtype```.
+        Helper method to cast floating-point values of given parameter ``PyTree`` to given ``dtype``.
         """
 
         # taken from https://github.com/deepmind/jmp/blob/3a8318abc3292be38582794dbf7b094e6583b192/jmp/_src/policy.py#L27
@@ -180,8 +180,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point ``parmas`` to ``jax.numpy.bfloat16``. This method can be used to explicitly convert the
-        model paramters to ``bfloat16``.
+        Cast the floating-point ``params`` to ``jax.numpy.bfloat16``. This method can be used to explicitly convert the
+        model paramters to bfloat16 precision.
 
         Arguments:
             params (:obj:`Union[Dict, FrozenDict]`):
@@ -193,10 +193,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         Examples::
 
             >>> from transformers import FlaxBertModel
-            >>> # Download model and configuration from huggingface.co
+            >>> # load model
             >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
-            >>> # By default, the model params will be in fp32, to cast these to bfloat16
-            >>> params = model.to_bf16(model.params)
+            >>> # By default, the model parameters will be in fp32 precision, to cast these to bfloat16 precision
+            >>> model.params = model.to_bf16(model.params)
             >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
             >>> # then pass the mask as follows
             >>> from flax import traverse_util
@@ -204,14 +204,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             >>> flat_params = traverse_util.flatten_dict(model.params)
             >>> mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
             >>> mask = traverse_util.unflatten_dict(mask)
-            >>> params = model.to_bf16(model.params, mask)
+            >>> model.params = model.to_bf16(model.params, mask)
         """
         return self._cast_floating_to(params, jnp.bfloat16, mask)
 
     def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point ``parmas`` to ``jax.numpy.float32``. This method can be used to explicitly convert the
-        model paramters to ``float32``.
+        model parameters to fp32 precision
 
         Arguments:
             params (:obj:`Union[Dict, FrozenDict]`):
@@ -236,7 +236,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point ``parmas`` to ``jax.numpy.float16``. This method can be used to explicitly convert the
-        model paramters to ``float16``.
+        model parameters to float16 precision.
 
         Arguments:
             params (:obj:`Union[Dict, FrozenDict]`):
