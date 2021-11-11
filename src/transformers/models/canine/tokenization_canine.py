@@ -95,8 +95,13 @@ class CanineTokenizer(PreTrainedTokenizer):
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
 
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        # Mask token behave like a normal word, i.e. include the space before it and
+        # is included in the raw text, there should be a match in a non-normalized sentence.
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             bos_token=bos_token,

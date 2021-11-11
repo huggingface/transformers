@@ -117,8 +117,13 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
         **kwargs
     ):
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        # Mask token behave like a normal word, i.e. include the space before it and
+        # is included in the raw text, there should be a match in a non-normalized sentence.
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             vocab_file,
