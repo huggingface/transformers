@@ -68,6 +68,18 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
+        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
+            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
+            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given ``dtype``.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see
+            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
 """
 
 VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
@@ -185,7 +197,7 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
         ):
             self.enc_to_dec_proj = nn.Dense(
                 self.decoder.config.hidden_size,
-                kernel_init=jax.nn.initializers.normal(self.decoder.config.initializer_range, self.dtype),
+                kernel_init=jax.nn.initializers.normal(self.decoder.config.initializer_range),
                 dtype=self.dtype,
             )
         else:
