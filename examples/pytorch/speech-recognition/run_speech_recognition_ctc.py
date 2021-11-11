@@ -541,7 +541,7 @@ def main():
     # Let's use word error rate (WER) as our evaluation metric,
     # instantiate a data collator and the trainer
 
-    # Define evaluation metrics during training
+    # Define evaluation metrics during training, *i.e.* word error rate, character error rate
     eval_metrics = {metric: load_metric(metric) for metric in data_args.eval_metrics}
 
     # for large datasets it is advised to run the preprocessing on a
