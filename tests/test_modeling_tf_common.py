@@ -163,6 +163,20 @@ class TFModelTesterMixin:
 
                 self.assert_outputs_same(after_outputs, outputs)
 
+    def test_save_load_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            new_model = model_class.from_config(model.get_config())
+            _ = new_model(self._prepare_for_class(inputs_dict, model_class))  # Build model
+            new_model.set_weights(model.get_weights())
+            after_outputs = new_model(self._prepare_for_class(inputs_dict, model_class))
+
+            self.assert_outputs_same(after_outputs, outputs)
+
     @tooslow
     def test_graph_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
