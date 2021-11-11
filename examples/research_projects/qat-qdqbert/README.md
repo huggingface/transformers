@@ -24,7 +24,7 @@ In this example, we use QDQBERT model to do quantization on SQuAD task, includin
 
 Required:
 - [pytorch-quantization toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization)
-- [TensorRT >= 8.2](https://github.com/NVIDIA/TensorRT)
+- [TensorRT >= 8.2](https://developer.nvidia.com/tensorrt)
 - PyTorch >= 1.10.0
 
 ## Setup the environment with Dockerfile

@@ -69,7 +69,7 @@ class QDQBertConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
 
-        Example::
+    Examples::
 
         >>> from transformers import QDQBertModel, QDQBertConfig
 

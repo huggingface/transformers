@@ -96,6 +96,7 @@ class QDQBertModelTester:
         import pytorch_quantization.nn as quant_nn
         from pytorch_quantization.tensor_quant import QuantDescriptor
 
+        # The default tensor quantizer is set to use Max calibration method
         input_desc = QuantDescriptor(num_bits=8, calib_method="max")
         # The default tensor quantizer is set to be per-channel quantization for weights
         weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
@@ -543,6 +544,7 @@ class QDQBertModelIntegrationTest(unittest.TestCase):
         import pytorch_quantization.nn as quant_nn
         from pytorch_quantization.tensor_quant import QuantDescriptor
 
+        # The default tensor quantizer is set to use Max calibration method
         input_desc = QuantDescriptor(num_bits=8, calib_method="max")
         # The default tensor quantizer is set to be per-channel quantization for weights
         weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
