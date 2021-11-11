@@ -17,7 +17,6 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 
 from typing import Callable, Optional, Tuple
-from jax._src.dtypes import dtype
 
 import numpy as np
 
