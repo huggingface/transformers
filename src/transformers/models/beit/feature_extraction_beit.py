@@ -64,7 +64,7 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             The sequence of means for each channel, to be used when normalizing images.
         image_std (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
-        reduce_zero_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        reduce_labels (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
             the background label.
     """
@@ -81,7 +81,7 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_normalize=True,
         image_mean=None,
         image_std=None,
-        reduce_zero_label=False,
+        reduce_labels=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -93,7 +93,7 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.reduce_zero_label = reduce_zero_label
+        self.reduce_labels = reduce_labels
 
     def __call__(
         self,
@@ -180,7 +180,7 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 segmentation_maps = [segmentation_maps]
 
         # reduce zero label if needed
-        if self.reduce_zero_label:
+        if self.reduce_labels:
             if segmentation_maps is not None:
                 for idx, map in enumerate(segmentation_maps):
                     if not isinstance(map, np.ndarray):
