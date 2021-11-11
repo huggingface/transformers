@@ -43,8 +43,8 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     CONFIG_NAME,
-    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     TF2_WEIGHTS_NAME,
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
