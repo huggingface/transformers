@@ -300,6 +300,19 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                       :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `pt index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In this
                       case, ``from_pt`` should be set to :obj:`True`.
+            dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
+                The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
+                GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+
+                This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+                specified all the computation will be performed with the given ``dtype``.
+
+                **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+                parameters.**
+
+                If you wish to change the dtype of the model parameters, see
+                :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and
+                :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
             model_args (sequence of positional arguments, `optional`):
                 All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
