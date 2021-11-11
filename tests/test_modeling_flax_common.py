@@ -384,6 +384,35 @@ class FlaxModelTesterMixin:
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config)
+            model.params = model.to_bf16(model.params)
+            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+
+            # convert Flax model to PyTorch model
+            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model = pt_model_class(config).eval()
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

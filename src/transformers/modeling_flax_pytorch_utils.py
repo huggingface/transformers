@@ -21,6 +21,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 
+import jax
 import jax.numpy as jnp
 import transformers
 from flax.serialization import from_bytes
@@ -188,6 +189,12 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
         )
         raise
+
+    # convert all weights to fp32 if the are bf16 since torch.from_numpy can-not handle bf16
+    # and bf16 is not fully supported in PT yet.
+    flax_state = jax.tree_map(
+        lambda params: params.astype(np.float32) if params.dtype == jnp.bfloat16 else params, flax_state
+    )
 
     flax_state_dict = flatten_dict(flax_state)
     pt_model_dict = pt_model.state_dict()
