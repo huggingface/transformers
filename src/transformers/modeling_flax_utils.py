@@ -180,15 +180,18 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point ``params`` to ``jax.numpy.bfloat16``. This method can be used to explicitly convert the
-        model paramters to bfloat16 precision.
+        Cast the floating-point ``params`` to ``jax.numpy.bfloat16``. This returns a new ``params`` tree and does not
+        cast the ``params`` in place.
+
+        This method can be used on TPU to explicitly convert the model parameters to bfloat16 precision to do full
+        half-precision training or to save weights in bfloat16 for inference in order to save memory and improve speed.
 
         Arguments:
             params (:obj:`Union[Dict, FrozenDict]`):
                 A ``PyTree`` of model parameters.
             mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
-                params you want to cast, and should be :obj:`False` for those you want to skip
+                A ``PyTree`` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
+                params you want to cast, and should be :obj:`False` for those you want to skip.
 
         Examples::
 
@@ -211,13 +214,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point ``parmas`` to ``jax.numpy.float32``. This method can be used to explicitly convert the
-        model parameters to fp32 precision
+        model parameters to fp32 precision. This returns a new ``params`` tree and does not cast the ``params`` in
+        place.
 
         Arguments:
             params (:obj:`Union[Dict, FrozenDict]`):
                 A ``PyTree`` of model parameters.
             mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
+                A ``PyTree`` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
                 params you want to cast, and should be :obj:`False` for those you want to skip
 
         Examples::
@@ -227,22 +231,25 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
             >>> # By default, the model params will be in fp32, to illustrate the use of this method,
             >>> # we'll first cast to fp16 and back to fp32
-            >>> params = model.to_f16(model.params)
+            >>> model.params = model.to_f16(model.params)
             >>> # now cast back to fp32
-            >>> params = model.to_fp32(params)
+            >>> model.params = model.to_fp32(model.params)
         """
         return self._cast_floating_to(params, jnp.float32, mask)
 
     def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point ``parmas`` to ``jax.numpy.float16``. This method can be used to explicitly convert the
-        model parameters to float16 precision.
+        Cast the floating-point ``parmas`` to ``jax.numpy.float16``. This returns a new ``params`` tree and does not
+        cast the ``params`` in place.
+
+        This method can be used on GPU to explicitly convert the model parameters to float16 precision to do full
+        half-precision training or to save weights in float16 for inference in order to save memory and improve speed.
 
         Arguments:
             params (:obj:`Union[Dict, FrozenDict]`):
                 A ``PyTree`` of model parameters.
             mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
+                A ``PyTree`` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
                 params you want to cast, and should be :obj:`False` for those you want to skip
 
         Examples::
@@ -251,15 +258,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             >>> # Download model and configuration from huggingface.co
             >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
             >>> # By default, the model params will be in fp32, to cast these to float16
-            >>> params = model.to_f16(model.params)
+            >>> model.params = model.to_f16(model.params)
             >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
             >>> # then pass the mask as follows
             >>> from flax import traverse_util
             >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
             >>> flat_params = traverse_util.flatten_dict(model.params)
-            >>> mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+            >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
             >>> mask = traverse_util.unflatten_dict(mask)
-            >>> params = model.to_f16(model.params, mask)
+            >>> model.params = model.to_f16(model.params, mask)
         """
         return self._cast_floating_to(params, jnp.float16, mask)
 
