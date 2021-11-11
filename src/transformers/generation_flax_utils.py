@@ -132,13 +132,13 @@ class FlaxGenerationMixin:
             state = body_fn(state)
         return state
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self, input_ids, model_kwargs):
+    def _prepare_encoder_decoder_kwargs_for_generation(self, input_ids, params, model_kwargs):
         encoder_kwargs = {
             argument: value
             for argument, value in model_kwargs.items()
             if not (argument.startswith("decoder_") or argument.startswith("cross_attn"))
         }
-        model_kwargs["encoder_outputs"] = self.encode(input_ids, return_dict=True, **encoder_kwargs)
+        model_kwargs["encoder_outputs"] = self.encode(input_ids, params=params, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
     @staticmethod
@@ -251,7 +251,7 @@ class FlaxGenerationMixin:
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
             input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
