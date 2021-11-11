@@ -134,7 +134,10 @@ class TextClassificationPipeline(Pipeline):
             return result
 
     def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
-        return self.tokenizer(inputs, return_tensors="np", **tokenizer_kwargs)
+        return_tensors = self.framework
+        if self.framework == "flax":
+            return_tensors = "np"
+        return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
 
     def _forward(self, model_inputs):
         return self.model(**model_inputs)

@@ -859,9 +859,6 @@ class Pipeline(_ScikitCompat):
             elif self.framework == "flax":
                 from jax.numpy import DeviceArray
 
-                # Align multiple of 8
-                # model_inputs = pad_collate_fn(self.tokenizer, self.feature_extractor, align_to=8)(model_inputs)
-
                 model_outputs = self._forward(model_inputs, **forward_params)
                 # Back to numpy
                 model_outputs = model_outputs.__class__(

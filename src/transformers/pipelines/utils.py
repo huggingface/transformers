@@ -9,6 +9,7 @@ from ..utils import logging
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
+    import tensorflow as tf
     from tensorflow import Tensor as TFTensor
 else:
 
@@ -201,18 +202,23 @@ def no_collate_fn(items):
 
 def _pad(items, key, padding_value, padding_side, align_to=None):
     batch_size = len(items)
-    if isinstance(items[0][key], (TorchTensor, np.ndarray)):
+    first_item = items[0][key]
+    if isinstance(first_item, (TorchTensor, TFTensor, np.ndarray)):
         if isinstance(items[0][key], TorchTensor):
             cat = torch.cat
             zeros = torch.zeros
-            is_torch = True
+            type_ = "pt"
+        elif isinstance(first_item, TFTensor):
+            cat = tf.concat
+            zeros = np.zeros
+            type_ = "tf"
         else:
             cat = np.concatenate
             zeros = np.zeros
-            is_torch = False
+            type_ = "np"
 
         # Others include `attention_mask` etc...
-        shape = items[0][key].shape
+        shape = first_item.shape
         dim = len(shape)
         if dim == 4:
             # This is probable image so padding shouldn't be necessary
@@ -224,7 +230,9 @@ def _pad(items, key, padding_value, padding_side, align_to=None):
             if r != 0:
                 max_length += align_to - r
 
-        dtype = items[0][key].dtype
+        dtype = first_item.dtype
+        if type_ == "tf":
+            dtype = items[0][key].numpy().dtype
 
         if dim == 2:
             tensor = zeros((batch_size, max_length), dtype=dtype) + padding_value
@@ -233,8 +241,10 @@ def _pad(items, key, padding_value, padding_side, align_to=None):
 
         for i, item in enumerate(items):
             small_tensor = item[key][0]
-            if is_torch:
-                tensor = tensor.clone()
+            if type_ == "pt":
+                small_tensor = small_tensor.clone()
+            elif type_ == "tf":
+                small_tensor = small_tensor.numpy()
             if dim == 2:
                 if padding_side == "left":
                     tensor[i, -len(small_tensor) :] = small_tensor
@@ -245,6 +255,8 @@ def _pad(items, key, padding_value, padding_side, align_to=None):
                     tensor[i, -len(small_tensor) :, :] = small_tensor
                 else:
                     tensor[i, : len(small_tensor), :] = small_tensor
+        if type_ == "tf":
+            tensor = tf.convert_to_tensor(tensor)
         return tensor
     else:
         return [item[key] for item in items]
