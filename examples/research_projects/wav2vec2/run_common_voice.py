@@ -84,12 +84,6 @@ class ModelArguments:
             "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
         },
     )
-    gradient_checkpointing: Optional[bool] = field(
-        default=True,
-        metadata={
-            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
-        },
-    )
     layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
 
 
@@ -373,7 +367,7 @@ def main():
         hidden_dropout=model_args.hidden_dropout,
         feat_proj_dropout=model_args.feat_proj_dropout,
         mask_time_prob=model_args.mask_time_prob,
-        gradient_checkpointing=model_args.gradient_checkpointing,
+        gradient_checkpointing=training_args.gradient_checkpointing,
         layerdrop=model_args.layerdrop,
         ctc_loss_reduction="mean",
         pad_token_id=processor.tokenizer.pad_token_id,
