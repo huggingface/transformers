@@ -68,11 +68,11 @@ class TextClassificationPipeline(Pipeline):
 
         types = {}
         if MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING is not None:
-            types.update(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+            types.update(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items())
         if TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING is not None:
-            types.update(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+            types.update(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items())
         if FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING is not None:
-            types.update(FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+            types.update(FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.items())
 
         self.check_model_type(types)
 
@@ -134,10 +134,7 @@ class TextClassificationPipeline(Pipeline):
             return result
 
     def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
-        return_tensors = self.framework
-        if self.framework == "flax":
-            return_tensors = "np"
-        return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
+        return self.tokenizer(inputs, return_tensors="np", **tokenizer_kwargs)
 
     def _forward(self, model_inputs):
         return self.model(**model_inputs)
@@ -156,7 +153,7 @@ class TextClassificationPipeline(Pipeline):
 
         outputs = model_outputs["logits"][0]
         if self.framework == "flax":
-            outputs = outputs.to_py()
+            outputs = outputs
         else:
             outputs = outputs.numpy()
 
