@@ -38,9 +38,11 @@ Cityscapes validation set and shows excellent zero-shot robustness on Cityscapes
 This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/NVlabs/SegFormer>`__.
 
+The figure below illustrates the architecture of SegFormer. Taken from the `original paper
+<https://arxiv.org/abs/2105.15203>`__.
+
 .. image:: https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/segformer_architecture.png
   :width: 600
-  :alt: SegFormer architecture
 
 Tips:
 
@@ -63,13 +65,13 @@ Tips:
   important preprocessing step is that images and segmentation maps are randomly cropped and padded to the same size,
   such as 512x512 or 640x640, after which they are normalized.
 - One additional thing to keep in mind is that one can initialize :class:`~transformers.SegformerFeatureExtractor` with
-  :obj:`reduce_zero_label` set to `True` or `False`. In some datasets (like ADE20k), the 0 index is used in the
-  annotated segmentation maps for background. However, ADE20k doesn't include the "background" class in its 150 labels.
-  Therefore, :obj:`reduce_zero_label` is used to reduce all labels by 1, and to make sure no loss is computed for the
+  :obj:`reduce_labels` set to `True` or `False`. In some datasets (like ADE20k), the 0 index is used in the annotated
+  segmentation maps for background. However, ADE20k doesn't include the "background" class in its 150 labels.
+  Therefore, :obj:`reduce_labels` is used to reduce all labels by 1, and to make sure no loss is computed for the
   background class (i.e. it replaces 0 in the annotated maps by 255, which is the `ignore_index` of the loss function
   used by :class:`~transformers.SegformerForSemanticSegmentation`). However, other datasets use the 0 index as
-  background class and include this class as part of all labels. In that case, :obj:`reduce_zero_label` should be set
-  to `False`, as loss should also be computed for the background class.
+  background class and include this class as part of all labels. In that case, :obj:`reduce_labels` should be set to
+  `False`, as loss should also be computed for the background class.
 - As most models, SegFormer comes in different sizes, the details of which can be found in the table below.
 
 +-------------------+---------------+---------------------+-------------------------+----------------+-----------------------+
