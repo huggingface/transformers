@@ -42,8 +42,9 @@ Tips:
 - QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *bert-base-uncased*), and
   perform Quantization Aware Training/Post Training Quantization.
 
-- An example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for SQUAD task
-  can be found at `transformers/examples/research_projects/qat-qdqbert/ </examples/research_projects/qat-qdqbert/>`_.
+- A complete example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for
+  SQUAD task can be found at `transformers/examples/research_projects/quantization-qdqbert/
+  </examples/research_projects/quantization-qdqbert/>`_.
 
 This model was contributed by `shangz <https://huggingface.co/shangz>`__.
 
@@ -78,8 +79,7 @@ Calibration
 _______________________________________________________________________________________________________________________
 
 Calibration is the terminology of passing data samples to the quantizer and deciding the best scaling factors for
-tensors. After setting up the tensor quantizers, including determing the calibration method, one can use the following
-example to calibrate the model:
+tensors. After setting up the tensor quantizers, one can use the following example to calibrate the model:
 
 .. code-block::
 

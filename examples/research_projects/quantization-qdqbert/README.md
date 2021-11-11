@@ -31,7 +31,7 @@ Required:
 
 Under the directory of `transformers/`, build the docker image:
 ```
-docker build . -f examples/research_projects/qat-qdqbert/Dockerfile -t bert_quantization:latest
+docker build . -f examples/research_projects/quantization-qdqbert/Dockerfile -t bert_quantization:latest
 ```
 
 Run the docker:
@@ -44,7 +44,7 @@ docker run --gpus all --privileged --rm -it --shm-size=1g --ulimit memlock=-1 --
 
 In the container:
 ```
-cd transformers/examples/research_projects/qat-qdqbert/
+cd transformers/examples/research_projects/quantization-qdqbert/
 ```
 
 ## Quantization Aware Training (QAT)
@@ -52,7 +52,7 @@ cd transformers/examples/research_projects/qat-qdqbert/
 Calibrate the pretrained model and finetune with quantization awared:
 
 ```
-python3 run_qat_qa.py \
+python3 run_quant_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
   --max_seq_length 128 \
@@ -64,7 +64,7 @@ python3 run_qat_qa.py \
 ```
 
 ```
-python3 run_qat_qa.py \
+python3 run_quant_qa.py \
   --model_name_or_path calib/bert-base-uncased \
   --dataset_name squad \
   --do_train \
@@ -84,7 +84,7 @@ python3 run_qat_qa.py \
 To export the QAT model finetuned above:
 
 ```
-python3 run_qat_qa.py \
+python3 run_quant_qa.py \
   --model_name_or_path finetuned_int8/bert-base-uncased \
   --output_dir ./ \
   --save_onnx \
@@ -143,7 +143,7 @@ python3 ../../pytorch/question-answering/run_qa.py \
 ### PTQ by calibrating and evaluating the finetuned FP32 model above:
 
 ```
-python3 run_qat_qa.py \
+python3 run_quant_qa.py \
   --model_name_or_path ./finetuned_fp32/bert-base-uncased \
   --dataset_name squad \
   --calibrator percentile \
@@ -159,7 +159,7 @@ python3 run_qat_qa.py \
 ### Export the INT8 PTQ model to ONNX
 
 ```
-python3 run_qat_qa.py \
+python3 run_quant_qa.py \
   --model_name_or_path ./calib/bert-base-uncased \
   --output_dir ./ \
   --save_onnx \

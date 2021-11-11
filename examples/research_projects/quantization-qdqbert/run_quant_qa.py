@@ -30,7 +30,7 @@ from datasets import load_dataset, load_metric
 
 import quant_trainer
 import transformers
-from trainer_qat_qa import QuestionAnsweringTrainer
+from trainer_quant_qa import QuestionAnsweringTrainer
 from transformers import (
     AutoTokenizer,
     DataCollatorWithPadding,
