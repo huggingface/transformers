@@ -190,7 +190,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             params (:obj:`Union[Dict, FrozenDict]`):
                 A ``PyTree`` of model parameters.
             mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
+                A ``PyTree`` with same structure as the ``params`` tree. The leaves should be booleans, :obj:`True` for
                 params you want to cast, and should be :obj:`False` for those you want to skip.
 
         Examples::
@@ -221,7 +221,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             params (:obj:`Union[Dict, FrozenDict]`):
                 A ``PyTree`` of model parameters.
             mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
+                A ``PyTree`` with same structure as the ``params`` tree. The leaves should be booleans, :obj:`True` for
                 params you want to cast, and should be :obj:`False` for those you want to skip
 
         Examples::
@@ -249,7 +249,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             params (:obj:`Union[Dict, FrozenDict]`):
                 A ``PyTree`` of model parameters.
             mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` with same structure as the ``params` tree. The leaves should be booleans, :obj:`True` for
+                A ``PyTree`` with same structure as the ``params`` tree. The leaves should be booleans, :obj:`True` for
                 params you want to cast, and should be :obj:`False` for those you want to skip
 
         Examples::
