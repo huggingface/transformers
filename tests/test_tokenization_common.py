@@ -620,11 +620,7 @@ class TokenizerTesterMixin:
         self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
 
     def test_added_tokens_do_lower_case(self):
-        # TODO(thom) activate fast tokenizer tests once Rust tokenizers accepts white spaces in added tokens.
-        if not self.test_slow_tokenizer:
-            self.skipTest("This test is only for slow tokenizers")
-            return
-        tokenizers = self.get_tokenizers(fast=False, do_lower_case=True)
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if not hasattr(tokenizer, "do_lower_case") or not tokenizer.do_lower_case:
@@ -635,25 +631,29 @@ class TokenizerTesterMixin:
                 text = special_token + " aaaaa bbbbbb low cccccccccdddddddd l " + special_token
                 text2 = special_token + " AAAAA BBBBBB low CCCCCCCCCDDDDDDDD l " + special_token
 
-                toks0 = tokenizer.tokenize(text)  # toks before adding new_toks
+                toks_before_adding = tokenizer.tokenize(text)  # toks before adding new_toks
 
                 new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd", "AAAAA BBBBBB", "CCCCCCCCCDDDDDDDD"]
                 added = tokenizer.add_tokens(new_toks)
-                self.assertEqual(added, 2)
-
-                toks = tokenizer.tokenize(text)
-                toks2 = tokenizer.tokenize(text2)
-
-                self.assertEqual(len(toks), len(toks2))
-                self.assertListEqual(toks, toks2)
                 if not isinstance(tokenizer, PreTrainedTokenizerFast):
-                    # Python tokenizers can have added tokens with spaces inside them
-                    # cf https://github.com/huggingface/tokenizers/issues/302
-                    self.assertNotEqual(len(toks), len(toks0))  # toks0 should be longer
+                    # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
+                    # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
+                    self.assertEqual(added, 2)
+
+                toks_after_adding = tokenizer.tokenize(text)
+                toks_after_adding2 = tokenizer.tokenize(text2)
+
+                self.assertListEqual(toks_after_adding, toks_after_adding2)
+                self.assertNotEqual(
+                    len(toks_after_adding), len(toks_before_adding) # toks_before_adding should be longer
+                )  
 
                 # Check that none of the special tokens are lowercased
                 sequence_with_special_tokens = "A " + " yEs ".join(tokenizer.all_special_tokens) + " B"
-                tokenized_sequence = tokenizer.tokenize(sequence_with_special_tokens)
+                # Convert the tokenized list to str as some special tokens are tokenized like normal tokens
+                # which have a prefix spacee e.g. the mask token of Albert, and cannot match the original
+                # special tokens exactly.
+                tokenized_sequence = "".join(tokenizer.tokenize(sequence_with_special_tokens))
 
                 for special_token in tokenizer.all_special_tokens:
                     self.assertTrue(special_token in tokenized_sequence)
@@ -671,20 +671,22 @@ class TokenizerTesterMixin:
 
                 new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd", "AAAAA BBBBBB", "CCCCCCCCCDDDDDDDD"]
 
-                toks0 = tokenizer.tokenize(text)  # toks before adding new_toks
+                toks_before_adding = tokenizer.tokenize(text)  # toks before adding new_toks
 
                 added = tokenizer.add_tokens(new_toks)
                 self.assertIn(added, [2, 4])
 
-                toks = tokenizer.tokenize(text)
-                toks2 = tokenizer.tokenize(text2)
+                toks_after_adding = tokenizer.tokenize(text)
+                toks_after_adding2 = tokenizer.tokenize(text2)
 
-                self.assertEqual(len(toks), len(toks2))  # Length should still be the same
-                self.assertNotEqual(toks[1], toks2[1])  # But at least the first non-special tokens should differ
+                self.assertEqual(len(toks_after_adding), len(toks_after_adding2))  # Length should still be the same
+                self.assertNotEqual(
+                    toks_after_adding[1], toks_after_adding2[1]
+                )  # But at least the first non-special tokens should differ
                 if not isinstance(tokenizer, PreTrainedTokenizerFast):
                     # Python tokenizers can have added tokens with spaces inside them
                     # cf https://github.com/huggingface/tokenizers/issues/302
-                    self.assertNotEqual(len(toks), len(toks0))  # toks0 should be longer
+                    self.assertNotEqual(len(toks_after_adding), len(toks_before_adding))  # toks0 should be longer
 
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
