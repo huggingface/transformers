@@ -2,13 +2,13 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from ..file_utils import is_torch_available
+from ..file_utils import is_tf_available, is_torch_available
 from ..utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-if is_torch_available():
+if is_tf_available():
     import tensorflow as tf
     from tensorflow import Tensor as TFTensor
 else:
