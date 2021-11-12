@@ -2,7 +2,7 @@ from typing import Dict
 
 import numpy as np
 
-from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..file_utils import add_end_docstrings, is_flax_available, is_tf_available, is_torch_available
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
 
@@ -14,6 +14,8 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
+if is_flax_available():
+    import jax
 
 logger = logging.get_logger(__name__)
 
@@ -52,6 +54,8 @@ class FillMaskPipeline(Pipeline):
             masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
         elif self.framework == "pt":
             masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+        elif self.framework == "flax":
+            masked_index = np.where(input_ids == self.tokenizer.mask_token_id)[0]
         else:
             raise ValueError("Unsupported framework")
         return masked_index
@@ -89,7 +93,7 @@ class FillMaskPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
-        model_outputs["input_ids"] = model_inputs["input_ids"]
+        model_outputs = {"input_ids": model_inputs["input_ids"], **model_outputs}
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5, target_ids=None):
@@ -101,6 +105,7 @@ class FillMaskPipeline(Pipeline):
         result = []
 
         if self.framework == "tf":
+            tokens = input_ids.numpy()
             masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
 
             # Fill mask pipeline supports only one ${mask_token} per sample
@@ -112,7 +117,8 @@ class FillMaskPipeline(Pipeline):
 
             topk = tf.math.top_k(probs, k=top_k)
             values, predictions = topk.values.numpy(), topk.indices.numpy()
-        else:
+        elif self.framework == "pt":
+            tokens = input_ids.numpy()
             masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
             # Fill mask pipeline supports only one ${mask_token} per sample
 
@@ -122,9 +128,17 @@ class FillMaskPipeline(Pipeline):
                 probs = probs[..., target_ids]
 
             values, predictions = probs.topk(top_k)
+        else:
+            tokens = input_ids
+            masked_index = np.where(input_ids == self.tokenizer.mask_token_id)[0]
+            logits = outputs[0, masked_index.item(), :]
+            probs = jax.nn.softmax(logits, axis=0)
+            if target_ids is not None:
+                probs = probs[..., target_ids]
+
+            values, predictions = jax.lax.top_k(probs, top_k)
 
         for v, p in zip(values.tolist(), predictions.tolist()):
-            tokens = input_ids.numpy()
             if target_ids is not None:
                 p = target_ids[p].tolist()
             tokens[masked_index] = p

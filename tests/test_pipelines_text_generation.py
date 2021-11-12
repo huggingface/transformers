@@ -14,7 +14,13 @@
 
 import unittest
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
+from transformers import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    TextGenerationPipeline,
+    pipeline,
+)
 from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
@@ -24,6 +30,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):

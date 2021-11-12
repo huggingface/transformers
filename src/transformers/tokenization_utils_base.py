@@ -660,6 +660,9 @@ class BatchEncoding(UserDict):
 
         # Convert to TensorType
         if not isinstance(tensor_type, TensorType):
+            # "flax" is alias of "jax"
+            if tensor_type == "flax":
+                tensor_type = "jax"
             tensor_type = TensorType(tensor_type)
 
         # Get a function reference for the correct framework

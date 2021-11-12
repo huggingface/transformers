@@ -16,6 +16,7 @@ import unittest
 
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
+    FLAX_MODEL_MAPPING,
     MODEL_MAPPING,
     TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
@@ -31,6 +32,7 @@ from .test_pipelines_common import PipelineTestCaseMeta
 class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_MAPPING
     tf_model_mapping = TF_MODEL_MAPPING
+    flax_model_mapping = FLAX_MODEL_MAPPING
 
     @require_torch
     def test_small_model_pt(self):

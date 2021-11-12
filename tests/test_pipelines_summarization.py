@@ -15,6 +15,7 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     LEDConfig,
@@ -35,6 +36,7 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer)

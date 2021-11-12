@@ -426,6 +426,42 @@ class PipelinePadTest(unittest.TestCase):
             np.allclose(_pad(items, "attention_mask", 0, "right"), np.array([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]]))
         )
 
+    @require_tf
+    def test_pipeline_padding_tf(self):
+        import tensorflow as tf
+
+        items = [
+            {
+                "label": "label1",
+                "input_ids": tf.constant([[1, 23, 24, 2]]),
+                "attention_mask": tf.constant([[0, 1, 1, 0]]),
+            },
+            {
+                "label": "label2",
+                "input_ids": tf.constant([[1, 23, 24, 43, 44, 2]]),
+                "attention_mask": tf.constant([[0, 1, 1, 1, 1, 0]]),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            tf.experimental.numpy.allclose(
+                _pad(items, "input_ids", 10, "right"),
+                tf.constant([[1, 23, 24, 2, 10, 10], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            tf.experimental.numpy.allclose(
+                _pad(items, "input_ids", 10, "left"),
+                tf.constant([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            tf.experimental.numpy.allclose(
+                _pad(items, "attention_mask", 0, "right"), tf.constant([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
+            )
+        )
+
     @require_torch
     def test_pipeline_image_padding(self):
         import torch

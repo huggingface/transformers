@@ -15,6 +15,7 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     LxmertConfig,
@@ -31,6 +32,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         if isinstance(model.config, LxmertConfig):

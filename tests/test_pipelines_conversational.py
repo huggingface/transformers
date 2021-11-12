@@ -15,6 +15,8 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -51,6 +53,13 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         if TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
         else [] + list(TF_MODEL_FOR_CAUSAL_LM_MAPPING.items())
         if TF_MODEL_FOR_CAUSAL_LM_MAPPING
+        else []
+    )
+    flax_model_mapping = dict(
+        list(FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
+        if FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        else [] + list(FLAX_MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        if FLAX_MODEL_FOR_CAUSAL_LM_MAPPING
         else []
     )
 

@@ -14,7 +14,12 @@
 
 import unittest
 
-from transformers import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, PreTrainedTokenizer, is_vision_available
+from transformers import (
+    FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    PreTrainedTokenizer,
+    is_vision_available,
+)
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -43,6 +48,7 @@ else:
 @require_torch
 class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
 

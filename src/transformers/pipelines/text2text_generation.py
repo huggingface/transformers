@@ -148,6 +148,10 @@ class Text2TextGenerationPipeline(Pipeline):
             input_length = model_inputs["input_ids"].shape[-1]
         elif self.framework == "tf":
             input_length = tf.shape(model_inputs["input_ids"])[-1].numpy()
+        elif self.framework == "flax":
+            input_length = model_inputs["input_ids"].shape[-1]
+        else:
+            raise ValueError("Unhandled framework")
 
         generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
         generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
@@ -160,9 +164,13 @@ class Text2TextGenerationPipeline(Pipeline):
         if return_type == ReturnType.TENSORS:
             record = {f"{self.return_name}_token_ids": model_outputs}
         elif return_type == ReturnType.TEXT:
+            if self.framework == "flax":
+                output_ids = model_outputs["output_ids"].sequences[0]
+            else:
+                output_ids = model_outputs["output_ids"][0]
             record = {
                 f"{self.return_name}_text": self.tokenizer.decode(
-                    model_outputs["output_ids"][0],
+                    output_ids,
                     skip_special_tokens=True,
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )

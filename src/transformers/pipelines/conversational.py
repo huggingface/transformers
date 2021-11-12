@@ -1,6 +1,8 @@
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
+
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -261,6 +263,8 @@ class ConversationalPipeline(Pipeline):
             input_ids = torch.LongTensor([input_ids])
         elif self.framework == "tf":
             input_ids = tf.constant([input_ids])
+        else:
+            input_ids = np.array([input_ids])
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
@@ -280,7 +284,12 @@ class ConversationalPipeline(Pipeline):
             start_position = 1
         else:
             start_position = n
-        return {"output_ids": output_ids[:, start_position:], "conversation": conversation}
+
+        if self.framework == "flax":
+            output_ids = output_ids.sequences[:, start_position:].to_py()
+        else:
+            output_ids = output_ids[:, start_position:]
+        return {"output_ids": output_ids, "conversation": conversation}
 
     def postprocess(self, model_outputs, clean_up_tokenization_spaces=True):
         output_ids = model_outputs["output_ids"]

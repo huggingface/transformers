@@ -226,11 +226,16 @@ class TokenClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
         if ignore_labels is None:
             ignore_labels = ["O"]
-        logits = model_outputs["logits"][0].numpy()
+        if self.framework == "flax":
+            logits = model_outputs["logits"][0]
+            special_tokens_mask = model_outputs["special_tokens_mask"][0]
+        else:
+            logits = model_outputs["logits"][0].numpy()
+            special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
         offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
-        special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
 
         maxes = np.max(logits, axis=-1, keepdims=True)
         shifted_exp = np.exp(logits - maxes)
@@ -274,7 +279,10 @@ class TokenClassificationPipeline(Pipeline):
                     if self.framework == "pt":
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
-                    else:
+                    elif self.framework == "flax":
+                        start_ind = int(start_ind)
+                        end_ind = int(end_ind)
+                    elif self.framework == "tf":
                         start_ind = int(start_ind.numpy())
                         end_ind = int(end_ind.numpy())
                 word_ref = sentence[start_ind:end_ind]
