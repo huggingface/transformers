@@ -129,7 +129,7 @@ class FillMaskPipeline(Pipeline):
 
             values, predictions = probs.topk(top_k)
         else:
-            tokens = input_ids
+            tokens = np.copy(input_ids)
             masked_index = np.where(input_ids == self.tokenizer.mask_token_id)[0]
             logits = outputs[0, masked_index.item(), :]
             probs = jax.nn.softmax(logits, axis=0)
