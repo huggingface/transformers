@@ -49,7 +49,6 @@ if is_tf_available():
         TFRobertaModel,
     )
     from transformers.modeling_tf_outputs import TFBaseModelOutput
-    from transformers.modeling_tf_pytorch_utils import load_tf2_model_in_pytorch_model
 
 if is_torch_available():
     import torch
