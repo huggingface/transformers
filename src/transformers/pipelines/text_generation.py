@@ -211,8 +211,12 @@ class TextGenerationPipeline(Pipeline):
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
         if self.framework == "pt" and generated_sequence is not None:
-            generated_sequence = generated_sequence.cpu()
-        generated_sequence = generated_sequence.numpy().tolist()
+            generated_sequence = generated_sequence.cpu().numpy().tolist()
+        elif self.framework == "tf":
+            generated_sequence = generated_sequence.numpy().tolist()
+        elif self.framework == "flax":
+            generated_sequence = generated_sequence.tolist()
+
         if return_type == ReturnType.TENSORS:
             record = {"generated_token_ids": generated_sequence}
         elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
