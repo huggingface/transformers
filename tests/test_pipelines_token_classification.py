@@ -29,6 +29,7 @@ from transformers.pipelines import AggregationStrategy, TokenClassificationArgum
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
+    require_flax,
     require_tf,
     require_torch,
     require_torch_gpu,
@@ -593,6 +594,21 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def test_small_model_tf(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        model_name = "Narsil/small2"
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="flax", model_kwargs={"from_pt": True}
+        )
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),

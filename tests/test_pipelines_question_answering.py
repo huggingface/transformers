@@ -23,7 +23,7 @@ from transformers import (
 )
 from transformers.data.processors.squad import SquadExample
 from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_flax, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -112,6 +112,20 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     def test_small_model_pt(self):
         question_answerer = pipeline(
             "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
+        )
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_flax
+    def test_small_model_flax(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="flax",
+            model_kwargs={"from_pt": True},
         )
         outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."

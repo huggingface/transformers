@@ -29,6 +29,7 @@ from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     require_datasets,
+    require_flax,
     require_tf,
     require_torch,
     require_torchaudio,
@@ -94,6 +95,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_tf
     def test_small_model_tf(self):
         self.skipTest("Tensorflow not supported yet.")
+
+    @require_flax
+    def test_small_model_flax(self):
+        self.skipTest("Flax not supported yet.")
 
     @require_torch
     def test_torch_small_no_tokenizer_files(self):

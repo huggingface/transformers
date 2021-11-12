@@ -23,7 +23,7 @@ from transformers import (
     T5Config,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
@@ -66,6 +66,21 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
     @require_torch
     def test_small_model_pt(self):
         summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt")
+        outputs = summarizer("This is a small test")
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "summary_text": "เข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไป"
+                }
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        summarizer = pipeline(
+            task="summarization", model="sshleifer/tiny-mbart", framework="flax", model_kwargs={"from_tf": True}
+        )
         outputs = summarizer("This is a small test")
         self.assertEqual(
             outputs,

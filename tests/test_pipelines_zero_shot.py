@@ -22,7 +22,7 @@ from transformers import (
     ZeroShotClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_flax, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -173,6 +173,26 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
             framework="tf",
+        )
+        outputs = zero_shot_classifier(
+            "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
+        )
+
+        self.assertEqual(
+            nested_simplify(outputs),
+            {
+                "sequence": "Who are you voting for in 2020?",
+                "labels": ["science", "public health", "politics"],
+                "scores": [0.333, 0.333, 0.333],
+            },
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="flax",
         )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]

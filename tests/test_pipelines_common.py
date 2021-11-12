@@ -241,9 +241,10 @@ class PipelineTestCaseMeta(type):
         def inner(self):
             raise NotImplementedError("Not implemented test")
 
-        # Force these 2 methods to exist
+        # Force these 3 methods to exist
         dct["test_small_model_pt"] = dct.get("test_small_model_pt", inner)
         dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
+        dct["test_small_model_flax"] = dct.get("test_small_model_flax", inner)
 
         return type.__new__(mcs, name, bases, dct)
 

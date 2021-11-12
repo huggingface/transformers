@@ -26,7 +26,7 @@ from transformers import (
     TranslationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -65,6 +65,19 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     @require_tf
     def test_small_model_tf(self):
         translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        outputs = translator("This is a test string", max_length=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "translation_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                }
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="flax")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,

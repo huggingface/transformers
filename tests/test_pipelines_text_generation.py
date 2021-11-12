@@ -21,7 +21,7 @@ from transformers import (
     TextGenerationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -58,6 +58,40 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 [
                     {
                         "generated_text": "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                    }
+                ],
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        text_generator = pipeline(
+            task="text-generation", model="sshleifer/tiny-ctrl", framework="flax", modle_kwargs={"from_pt": True}
+        )
+
+        # Using `do_sample=False` to force deterministic output
+        outputs = text_generator("This is a test", do_sample=False)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                }
+            ],
+        )
+
+        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                    }
+                ],
+                [
+                    {
+                        "generated_text": "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
                     }
                 ],
             ],

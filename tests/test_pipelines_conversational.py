@@ -28,10 +28,11 @@ from transformers import (
     BlenderbotSmallTokenizer,
     Conversation,
     ConversationalPipeline,
+    FlaxAutoModelForCausalLM,
     TFAutoModelForCausalLM,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch, slow, torch_device
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -186,6 +187,15 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
     def test_small_model_tf(self):
         tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
         model = TFAutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
+        conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
+        conversation = Conversation("hello")
+        output = conversation_agent(conversation)
+        self.assertEqual(output, Conversation(past_user_inputs=["hello"], generated_responses=["Hi"]))
+
+    @require_flax
+    def test_small_model_flax(self):
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
+        model = FlaxAutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small", from_pt=True)
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
         conversation = Conversation("hello")
         output = conversation_agent(conversation)

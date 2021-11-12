@@ -22,7 +22,7 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import PipelineException
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_flax, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -77,6 +77,49 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @require_torch
     def test_small_model_pt(self):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", top_k=2, framework="pt")
+
+        outputs = unmasker("My name is <mask>")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is Maul", "score": 2.2e-05, "token": 35676, "token_str": " Maul"},
+                {"sequence": "My name isELS", "score": 2.2e-05, "token": 16416, "token_str": "ELS"},
+            ],
+        )
+
+        outputs = unmasker("The largest city in France is <mask>")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {
+                    "sequence": "The largest city in France is Maul",
+                    "score": 2.2e-05,
+                    "token": 35676,
+                    "token_str": " Maul",
+                },
+                {"sequence": "The largest city in France isELS", "score": 2.2e-05, "token": 16416, "token_str": "ELS"},
+            ],
+        )
+
+        outputs = unmasker("My name is <mask>", targets=[" Patrick", " Clara", " Teven"], top_k=3)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is Patrick", "score": 2.1e-05, "token": 3499, "token_str": " Patrick"},
+                {"sequence": "My name is Te", "score": 2e-05, "token": 2941, "token_str": " Te"},
+                {"sequence": "My name is Clara", "score": 2e-05, "token": 13606, "token_str": " Clara"},
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        unmasker = pipeline(
+            task="fill-mask",
+            model="sshleifer/tiny-distilroberta-base",
+            top_k=2,
+            framework="flax",
+            model_kwargs={"from_pt": True},
+        )
 
         outputs = unmasker("My name is <mask>")
         self.assertEqual(

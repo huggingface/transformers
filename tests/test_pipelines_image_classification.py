@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_datasets,
+    require_flax,
     require_tf,
     require_torch,
     require_vision,
@@ -118,6 +119,46 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def test_small_model_pt(self):
         small_model = "lysandre/tiny-vit-random"
         image_classifier = pipeline("image-classification", model=small_model)
+
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
+                {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
+                {"score": 0.0014, "label": "trench coat"},
+                {"score": 0.0014, "label": "handkerchief, hankie, hanky, hankey"},
+                {"score": 0.0014, "label": "baboon"},
+            ],
+        )
+
+        outputs = image_classifier(
+            [
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+            ],
+            top_k=2,
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
+                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
+                ],
+                [
+                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
+                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
+                ],
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        small_model = "lysandre/tiny-vit-random"
+        image_classifier = pipeline(
+            "image-classification", model=small_model, framework="flax", model_kwargs={"from_tf": True}
+        )
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(
