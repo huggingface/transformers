@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import collections
 import csv
 import importlib
 import json
 import os
 import pickle
 import sys
+import types
 import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
@@ -1035,10 +1037,20 @@ class Pipeline(_ScikitCompat):
     def get_iterator(
         self, inputs, num_workers: int, batch_size: int, preprocess_params, forward_params, postprocess_params
     ):
+        if isinstance(inputs, collections.abc.Sized):
+            dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
+        else:
+            if num_workers > 1:
+                logger.warning(
+                    "For iterable dataset using num_workers>1 is likely to result"
+                    " in errors since everything is iterable, setting `num_workers=1`"
+                    " to guarantee correctness."
+                )
+                num_workers = 1
+            dataset = PipelineIterator(inputs, self.preprocess, preprocess_params)
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
@@ -1074,6 +1086,14 @@ class Pipeline(_ScikitCompat):
             return self.get_iterator(
                 inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
             )
+        elif isinstance(inputs, types.GeneratorType):
+            if self.framework == "pt":
+                return self.get_iterator(
+                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+                )
+            else:
+                # TODO make the get_iterator work also for `tf` (and `flax`).
+                return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
@@ -1085,3 +1105,9 @@ class Pipeline(_ScikitCompat):
         model_outputs = self.forward(model_inputs, **forward_params)
         outputs = self.postprocess(model_outputs, **postprocess_params)
         return outputs
+
+    def iterate(self, inputs, preprocess_params, forward_params, postprocess_params):
+        # This function should become `get_iterator` again, this is a temporary
+        # easy solution.
+        for input_ in inputs:
+            yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)
