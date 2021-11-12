@@ -385,12 +385,18 @@ class TFEncoderDecoderMixin:
 
     def check_equivalence_tf_to_pt(self, config, decoder_config, inputs_dict):
 
-        # The test below will fail, because the weights of `tf_model` get extended.
+        # The test below will fail, because the weights of `tf_model` get extended before saving encoder/decoder.
+        # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
+        #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d
+        #   (the change in `src/transformers/modeling_tf_utils.py`)
+        #   (PR comment: https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245)
         return
 
         # encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         #
         # tf_model = TFEncoderDecoderModel(encoder_decoder_config)
+        # # Make sure model is built
+        # tf_model(**inputs_dict)
         #
         # with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
         #
