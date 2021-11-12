@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_datasets,
+    require_flax,
     require_tf,
     require_timm,
     require_torch,
@@ -97,6 +98,11 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     @require_tf
     @unittest.skip("Image segmentation not implemented in TF")
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Image segmentation not implemented in flax")
+    def test_small_model_flax(self):
         pass
 
     @require_torch
