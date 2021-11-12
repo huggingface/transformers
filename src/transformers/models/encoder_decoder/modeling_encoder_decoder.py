@@ -236,9 +236,8 @@ class EncoderDecoderModel(PreTrainedModel):
         ):
             self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
-        assert (
-            self.encoder.get_output_embeddings() is None
-        ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
+        if self.encoder.get_output_embeddings() is not None:
+            raise ValueError("The encoder {} should not have a LM Head. Please use a model without LM Head")
 
         # tie encoder, decoder weights if config set accordingly
         self.tie_weights()
