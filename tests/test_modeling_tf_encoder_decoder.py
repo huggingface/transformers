@@ -47,6 +47,7 @@ if is_tf_available():
         TFRobertaModel,
     )
     from transformers.modeling_tf_outputs import TFBaseModelOutput
+    from transformers.modeling_tf_pytorch_utils import load_tf2_model_in_pytorch_model
 
 if is_torch_available():
     import torch
@@ -309,6 +310,84 @@ class TFEncoderDecoderMixin:
         )
         self.assertEqual(tuple(generated_output.shape.as_list()), (input_ids.shape[0],) + (decoder_config.max_length,))
 
+    def check_pt_tf_equivalence(self, pt_model, tf_model, inputs_dict):
+
+        pt_model.to(torch_device)
+        pt_model.eval()
+
+        # prepare inputs
+        tf_inputs = inputs_dict
+        pt_inputs = {k: torch.tensor(v.tolist()) for k, v in tf_inputs.items()}
+
+        with torch.no_grad():
+            pt_outputs = pt_model(**pt_inputs).to_tuple()
+
+        tf_outputs = tf_model(**inputs_dict).to_tuple()
+        self.assertEqual(len(tf_outputs), len(pt_outputs), "Output lengths differ between TF and PyTorch")
+        for tf_output, pt_output in zip(tf_outputs, pt_outputs):
+            self.assert_almost_equals(tf_output.numpy(), pt_output.numpy(), 1e-5)
+
+        # PT -> TF
+        with tempfile.TemporaryDirectory() as tmpdirname_encoder, tempfile.TemporaryDirectory() as tmpdirname_decoder:
+
+            pt_model.encoder.save_pretrained("./encoder")
+            pt_model.decoder.save_pretrained("./decoder")
+            tf_model_loaded = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+                tmpdirname_encoder, tmpdirname_decoder, encoder_from_pt=True, decoder_from_pt=True
+            )
+            # This is only for copying some specific attributes of this particular model.
+            tf_model_loaded.config = pt_model.config
+
+        tf_outputs_loaded = tf_model_loaded(**inputs_dict).to_tuple()
+        self.assertEqual(len(tf_outputs_loaded), len(pt_outputs), "Output lengths differ between TF and PyTorch")
+        for tf_output_loaded, pt_output in zip(tf_outputs_loaded, pt_outputs):
+            self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.numpy(), 1e-5)
+
+        # TF -> PT
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tf_model.save_pretrained(tmpdirname)
+            pt_model_loaded = EncoderDecoderModel.from_pretrained(tmpdirname, from_tf=True)
+
+        pt_model_loaded.to(torch_device)
+        pt_model_loaded.eval()
+
+        with torch.no_grad():
+            pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
+
+        self.assertEqual(len(tf_outputs), len(pt_outputs_loaded), "Output lengths differ between TF and PyTorch")
+        for tf_output, pt_output_loaded in zip(tf_outputs, pt_outputs_loaded):
+            self.assert_almost_equals(tf_output.numpy(), pt_output_loaded.numpy(), 1e-5)
+
+    def check_equivalence_pt_to_tf(self, config, decoder_config, inputs_dict):
+
+        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+
+        pt_model = EncoderDecoderModel(encoder_decoder_config)
+
+        # tf_model = load_pytorch_model_in_tf2_model(tf_model, pt_model)
+        with tempfile.TemporaryDirectory() as tmpdirname_encoder, tempfile.TemporaryDirectory() as tmpdirname_decoder:
+
+            pt_model.encoder.save_pretrained("./encoder")
+            pt_model.decoder.save_pretrained("./decoder")
+            tf_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+                tmpdirname_encoder, tmpdirname_decoder, encoder_from_pt=True, decoder_from_pt=True
+            )
+            # This is only for copying some specific attributes of this particular model.
+            tf_model.config = pt_model.config
+
+        self.check_pt_tf_equivalence(pt_model, tf_model, inputs_dict)
+
+    def check_equivalence_tf_to_pt(self, config, decoder_config, inputs_dict):
+
+        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+
+        pt_model = EncoderDecoderModel(encoder_decoder_config)
+        tf_model = TFEncoderDecoderModel(encoder_decoder_config)
+
+        pt_model = load_tf2_model_in_pytorch_model(pt_model, tf_model)
+
+        self.check_pt_tf_equivalence(pt_model, tf_model, inputs_dict)
+
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model(**input_ids_dict)
@@ -340,6 +419,44 @@ class TFEncoderDecoderMixin:
     def test_encoder_decoder_model_generate(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
+
+    def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
+        diff = np.abs((a - b)).max()
+        self.assertLessEqual(diff, tol, f"Difference between torch and tf is {diff} (>= {tol}).")
+
+    @is_pt_tf_cross_test
+    def test_pt_tf_equivalence(self):
+
+        config_inputs_dict = self.prepare_config_and_inputs()
+        config = config_inputs_dict.pop("config")
+        decoder_config = config_inputs_dict.pop("decoder_config")
+
+        inputs_dict = config_inputs_dict
+        # `encoder_hidden_states` is not used in model call/forward
+        del inputs_dict["encoder_hidden_states"]
+
+        # Avoid the case where a sequence has no place to attend (after combined with the causal attention mask)
+        batch_size = inputs_dict["decoder_attention_mask"].shape[0]
+        inputs_dict["decoder_attention_mask"] = np.concatenate(
+            [np.ones(shape=(batch_size, 1)), inputs_dict["decoder_attention_mask"][:, 1:]], axis=1
+        )
+
+        # TF models don't use the `use_cache` option and cache is not returned as a default.
+        # So we disable `use_cache` here for PyTorch model.
+        decoder_config.use_cache = False
+
+        self.assertTrue(decoder_config.cross_attention_hidden_size is None)
+
+        # check without `enc_to_dec_proj` projection
+        self.assertTrue(config.hidden_size == decoder_config.hidden_size)
+        self.check_equivalence_pt_to_tf(config, decoder_config, inputs_dict)
+        self.check_equivalence_tf_to_pt(config, decoder_config, inputs_dict)
+
+        # check `enc_to_dec_proj` work as expected
+        decoder_config.hidden_size = decoder_config.hidden_size * 2
+        self.assertTrue(config.hidden_size != decoder_config.hidden_size)
+        self.check_equivalence_pt_to_tf(config, decoder_config, inputs_dict)
+        self.check_equivalence_tf_to_pt(config, decoder_config, inputs_dict)
 
     @slow
     def test_real_model_save_load_from_pretrained(self):
