@@ -328,12 +328,12 @@ class TFEncoderDecoderMixin:
             self.assert_almost_equals(tf_output.numpy(), pt_output.numpy(), 1e-5)
 
         # PT -> TF
-        with tempfile.TemporaryDirectory() as tmpdirname_encoder, tempfile.TemporaryDirectory() as tmpdirname_decoder:
+        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
 
-            pt_model.encoder.save_pretrained("./encoder")
-            pt_model.decoder.save_pretrained("./decoder")
+            pt_model.encoder.save_pretrained(encoder_tmp_dirname)
+            pt_model.decoder.save_pretrained(decoder_tmp_dirname)
             tf_model_loaded = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-                tmpdirname_encoder, tmpdirname_decoder, encoder_from_pt=True, decoder_from_pt=True
+                encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_pt=True, decoder_from_pt=True
             )
             # This is only for copying some specific attributes of this particular model.
             tf_model_loaded.config = pt_model.config
@@ -365,12 +365,12 @@ class TFEncoderDecoderMixin:
         pt_model = EncoderDecoderModel(encoder_decoder_config)
 
         # tf_model = load_pytorch_model_in_tf2_model(tf_model, pt_model)
-        with tempfile.TemporaryDirectory() as tmpdirname_encoder, tempfile.TemporaryDirectory() as tmpdirname_decoder:
+        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
 
-            pt_model.encoder.save_pretrained("./encoder")
-            pt_model.decoder.save_pretrained("./decoder")
+            pt_model.encoder.save_pretrained(encoder_tmp_dirname)
+            pt_model.decoder.save_pretrained(decoder_tmp_dirname)
             tf_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-                tmpdirname_encoder, tmpdirname_decoder, encoder_from_pt=True, decoder_from_pt=True
+                encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_pt=True, decoder_from_pt=True
             )
             # This is only for copying some specific attributes of this particular model.
             tf_model.config = pt_model.config
