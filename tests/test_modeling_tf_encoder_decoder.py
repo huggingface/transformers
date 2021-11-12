@@ -385,30 +385,36 @@ class TFEncoderDecoderMixin:
 
     def check_equivalence_tf_to_pt(self, config, decoder_config, inputs_dict):
 
-        # The test below will fail, because the weights of `tf_model` get extended before saving encoder/decoder.
-        # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
-        #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d
-        #   (the change in `src/transformers/modeling_tf_utils.py`)
-        #   (PR comment: https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245)
-        return
+        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
 
-        # encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
-        #
-        # tf_model = TFEncoderDecoderModel(encoder_decoder_config)
-        # # Make sure model is built
-        # tf_model(**inputs_dict)
-        #
-        # with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-        #
-        #     tf_model.encoder.save_pretrained(encoder_tmp_dirname)
-        #     tf_model.decoder.save_pretrained(decoder_tmp_dirname)
-        #     pt_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-        #         encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_tf=True, decoder_from_tf=True
-        #     )
-        #     # This is only for copying some specific attributes of this particular model.
-        #     pt_model.config = tf_model.config
-        #
-        # self.check_pt_tf_equivalence(pt_model, tf_model, inputs_dict)
+        # Using `_tf_model`, the test will fail, because the weights of `_tf_model` get extended before saving
+        # the encoder/decoder models.
+        # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
+        #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245
+        #   (the change in `src/transformers/modeling_tf_utils.py`)
+        _tf_model = TFEncoderDecoderModel(encoder_decoder_config)
+        # Make sure model is built
+        _tf_model(**inputs_dict)
+
+        # Using `tf_model` to pass the test.
+        encoder = _tf_model.encoder.__class__(encoder_decoder_config.encoder)
+        decoder = _tf_model.decoder.__class__(encoder_decoder_config.decoder)
+        # Make sure models are built
+        encoder(encoder.dummy_inputs)
+        decoder(decoder.dummy_inputs)
+        tf_model = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
+
+        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+
+            tf_model.encoder.save_pretrained(encoder_tmp_dirname)
+            tf_model.decoder.save_pretrained(decoder_tmp_dirname)
+            pt_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+                encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_tf=True, decoder_from_tf=True
+            )
+            # This is only for copying some specific attributes of this particular model.
+            pt_model.config = tf_model.config
+
+        self.check_pt_tf_equivalence(pt_model, tf_model, inputs_dict)
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -451,20 +457,16 @@ class TFEncoderDecoderMixin:
 
         config_inputs_dict = self.prepare_config_and_inputs()
         # Keep only common arguments
-        config_inputs_dict = {
-            k: v
-            for k, v in config_inputs_dict.items()
-            if k
-            in [
-                "config",
-                "input_ids",
-                "attention_mask",
-                "decoder_config",
-                "decoder_input_ids",
-                "decoder_attention_mask",
-                "encoder_hidden_states",
-            ]
-        }
+        arg_names = [
+            "config",
+            "input_ids",
+            "attention_mask",
+            "decoder_config",
+            "decoder_input_ids",
+            "decoder_attention_mask",
+            "encoder_hidden_states",
+        ]
+        config_inputs_dict = {k: v for k, v in config_inputs_dict.items() if k in arg_names}
 
         config = config_inputs_dict.pop("config")
         decoder_config = config_inputs_dict.pop("decoder_config")
