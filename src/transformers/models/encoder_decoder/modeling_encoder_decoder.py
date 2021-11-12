@@ -18,6 +18,7 @@ import warnings
 from typing import Optional
 
 import torch
+from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
@@ -181,13 +182,23 @@ class EncoderDecoderModel(PreTrainedModel):
         encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[PreTrainedModel] = None,
     ):
-        assert config is not None or (
-            encoder is not None and decoder is not None
-        ), "Either a configuration or an Encoder and a decoder has to be provided"
+        if config is None and (encoder is None or decoder is None):
+            raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
         if config is None:
             config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
-            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+            if not isinstance(config, self.config_class):
+                raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
+                raise ValueError(
+                    f"If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    f"it has to be equal to the encoder's `hidden_size`."
+                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
+                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                )
+
         # initialize with config
         super().__init__(config)
 
@@ -217,6 +228,13 @@ class EncoderDecoderModel(PreTrainedModel):
         # so that the updates to the config will be synced
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
+
+        # encoder outputs might need to be projected to different dimension for decoder
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
         assert (
             self.encoder.get_output_embeddings() is None
@@ -463,6 +481,13 @@ class EncoderDecoderModel(PreTrainedModel):
             )
 
         encoder_hidden_states = encoder_outputs[0]
+
+        # optionally project encoder_hidden_states
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(

@@ -227,8 +227,24 @@ class FlaxEncoderDecoderModule(nn.Module):
         self.encoder = encoder_module(encoder_config, dtype=self.dtype)
         self.decoder = decoder_module(decoder_config, dtype=self.dtype)
 
+        # encoder outputs might need to be projected to different dimension for decoder
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            self.enc_to_dec_proj = nn.Dense(
+                self.decoder.config.hidden_size,
+                kernel_init=jax.nn.initializers.normal(self.decoder.config.initializer_range),
+                dtype=self.dtype,
+            )
+        else:
+            self.enc_to_dec_proj = None
+
     def _get_encoder_module(self):
         return self.encoder
+
+    def _get_projection_module(self):
+        return self.enc_to_dec_proj
 
     def _get_decoder_module(self):
         return self.decoder
@@ -256,11 +272,17 @@ class FlaxEncoderDecoderModule(nn.Module):
             deterministic=deterministic,
         )
 
+        encoder_hidden_states = encoder_outputs[0]
+
+        # optionally project encoder_hidden_states
+        if self.enc_to_dec_proj is not None:
+            encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
+
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             position_ids=decoder_position_ids,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -304,6 +326,15 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
     ):
         if input_shape is None:
             input_shape = ((1, 1), (1, 1))
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
+                raise ValueError(
+                    f"If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    f"it has to be equal to the encoder's `hidden_size`."
+                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
+                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                )
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
@@ -537,12 +568,22 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         else:
             mutable = False
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
+        def _decoder_forward(
+            module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, encoder_hidden_states, **kwargs
+        ):
+
+            projection_module = module._get_projection_module()
             decoder_module = module._get_decoder_module()
+
+            # optionally project encoder_hidden_states
+            if projection_module is not None:
+                encoder_hidden_states = projection_module(encoder_hidden_states)
+
             return decoder_module(
                 decoder_input_ids,
                 decoder_attention_mask,
                 decoder_position_ids,
+                encoder_hidden_states,
                 **kwargs,
             )
 
