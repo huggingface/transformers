@@ -363,6 +363,9 @@ class QuestionAnsweringPipeline(Pipeline):
                         if tensor.dtype == torch.int32:
                             tensor = tensor.long()
                         fw_args[k] = tensor.unsqueeze(0)
+                    elif self.framework == "flax":
+                        tensor = np.array(v)
+                        fw_args[k] = np.expand_dims(tensor, axis=0)
                 else:
                     others[k] = v
             split_features.append({"fw_args": fw_args, "others": others})
@@ -398,7 +401,10 @@ class QuestionAnsweringPipeline(Pipeline):
             undesired_tokens = np.abs(np.array(feature["p_mask"]) - 1)
 
             if feature_["fw_args"].get("attention_mask", None) is not None:
-                undesired_tokens = undesired_tokens & feature_["fw_args"]["attention_mask"].numpy()
+                attention_mask = feature_["fw_args"]["attention_mask"]
+                if self.framework != "flax":
+                    attention_mask = attention_mask.numpy()
+                undesired_tokens = undesired_tokens & attention_mask
 
             # Generate mask
             undesired_tokens_mask = undesired_tokens == 0.0
