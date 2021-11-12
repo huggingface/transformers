@@ -17,7 +17,6 @@
 
 import unittest
 
-from tests.test_modeling_common import floats_tensor
 from transformers import ESMConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
