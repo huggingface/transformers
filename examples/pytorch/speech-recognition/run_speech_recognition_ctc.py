@@ -107,7 +107,7 @@ class ModelArguments:
         metadata={"help": "Length of vector span to mask along the time axis."},
     )
     mask_feature_prob: Optional[float] = field(
-        default=0.05,
+        default=0.0,
         metadata={
             "help": "Probability of each feature vector along the feature axis to be chosen as the start of the vector"
             "span to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature bins will be masked along the time axis."
