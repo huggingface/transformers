@@ -217,7 +217,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         ):
             self.enc_to_dec_proj = tf.keras.layers.Dense(
                 units=self.decoder.config.hidden_size,
-                kernel_initializer=get_initializer(config.initializer_range),
+                kernel_initializer=get_initializer(config.encoder.initializer_range),
                 name="enc_to_dec_proj",
             )
 
@@ -590,13 +590,13 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             output = tuple([x for x in output if x is not None])
             return output
 
-        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        if not isinstance(encoder_outputs, TFBaseModelOutput):
-            encoder_outputs = TFBaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
+        # # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
+        # if not isinstance(encoder_outputs, TFBaseModelOutput):
+        #     encoder_outputs = TFBaseModelOutput(
+        #         last_hidden_state=encoder_outputs[0],
+        #         hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+        #         attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+        #     )
 
         return TFSeq2SeqLMOutput(
             loss=decoder_outputs.loss,
