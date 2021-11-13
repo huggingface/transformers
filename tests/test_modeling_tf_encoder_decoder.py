@@ -326,7 +326,7 @@ class TFEncoderDecoderMixin:
         tf_outputs = tf_model(**inputs_dict).to_tuple()
         self.assertEqual(len(tf_outputs), len(pt_outputs), "Output lengths differ between TF and PyTorch")
         for tf_output, pt_output in zip(tf_outputs, pt_outputs):
-            self.assert_almost_equals(tf_output.numpy(), pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(tf_output.numpy(), pt_output.numpy(), 1e-3)
 
         # PT -> TF
         with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
@@ -342,7 +342,7 @@ class TFEncoderDecoderMixin:
         tf_outputs_loaded = tf_model_loaded(**inputs_dict).to_tuple()
         self.assertEqual(len(tf_outputs_loaded), len(pt_outputs), "Output lengths differ between TF and PyTorch")
         for tf_output_loaded, pt_output in zip(tf_outputs_loaded, pt_outputs):
-            self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.numpy(), 1e-3)
 
         # TF -> PT
         with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
@@ -363,7 +363,7 @@ class TFEncoderDecoderMixin:
 
         self.assertEqual(len(tf_outputs), len(pt_outputs_loaded), "Output lengths differ between TF and PyTorch")
         for tf_output, pt_output_loaded in zip(tf_outputs, pt_outputs_loaded):
-            self.assert_almost_equals(tf_output.numpy(), pt_output_loaded.numpy(), 1e-5)
+            self.assert_almost_equals(tf_output.numpy(), pt_output_loaded.numpy(), 1e-3)
 
     def check_equivalence_pt_to_tf(self, config, decoder_config, inputs_dict):
 
