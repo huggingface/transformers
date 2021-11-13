@@ -272,8 +272,12 @@ class EncoderDecoderModel(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported
-        # for composite models
+        # At the moment fast initialization is not supported for composite models
+        if kwargs.get("_fast_init", False):
+            logger.warning(
+                "Fast initialization is currently not supported for EncoderDecoderModel. "
+                "Falling back to slow initialization..."
+            )
         kwargs["_fast_init"] = False
         return super().from_pretrained(*args, **kwargs)
 
