@@ -383,7 +383,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 )
 
             if "config" not in kwargs_encoder:
-
                 encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
@@ -416,7 +415,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                 )
 
             if "config" not in kwargs_decoder:
-
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
