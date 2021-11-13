@@ -650,7 +650,7 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
-        #  disable cache for now
+        # disable cache for now
         decoder_config.use_cache = False
         return {
             "config": config,
