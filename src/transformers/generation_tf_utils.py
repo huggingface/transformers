@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -604,14 +605,21 @@ class TFGenerationMixin:
             bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
         ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
 
+        # This block corresponds to the following line in `generation_utils`:
+        #   "input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))"
+        # with the following differences:
+        #   1. In PT, `generate()`'s `model_kwargs` can accept `encoder_outputs`, but not the case in TF.
+        #   2. There is no shape checking in PT.
+        # In both PT/TF, if `input_ids` is `None`, we try to create it as it is for a text model.
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
                 "you should either supply a context to complete as `input_ids` input "
                 "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
             )
             input_ids = tf.fill((batch_size, 1), bos_token_id)
-        else:
-            assert len(shape_list(input_ids)) == 2, "Input prompt should be of shape (batch_size, sequence length)."
+        # TODO: remove this block
+        # else:
+        #     assert len(shape_list(input_ids)) == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
         # not allow to duplicate outputs when greedy decoding
         if do_sample is False:
@@ -667,21 +675,35 @@ class TFGenerationMixin:
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
 
-            encoder_outputs = encoder(
-                input_ids,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict_in_generate,
-            )
+            encoder_kwargs = {
+                "attention_mask": attention_mask,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict_in_generate,
+            }
+
+            # vision models don't use `attention_mask`.
+            # PT's generate() also requires a similar change, at the following line
+            #   "if model_kwargs.get("attention_mask", None) is None:"
+            # TODO: change PT's generate() and remove `attention_mask` from `ViTModel`
+            signature = dict(inspect.signature(encoder.call).parameters)
+            if "attention_mask" not in signature:
+                encoder_kwargs.pop("attention_mask")
+
+            encoder_outputs = encoder(input_ids, **encoder_kwargs)
             if return_dict_in_generate:
                 if output_attentions:
                     model_kwargs["encoder_attentions"] = encoder_outputs.attentions
                 if output_hidden_states:
                     model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
+        # Add an extra condition `shape_list(input_ids) == 2`, so this block will treat only text inputs.
+        # (vision inputs might occur when the model is an encoder-decoder model)
+        # In PT generate(), the `input_ids` is reset for decoder at the following line, which is before the expansion:
+        #   "# set input_ids as decoder_input_ids"
+        # TODO: it would be better to have the same approach as in PT's generate()
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
-        if num_return_sequences > 1 or num_beams > 1:
+        if shape_list(input_ids) == 2 and (num_return_sequences > 1 or num_beams > 1):
             input_ids_len = shape_list(input_ids)[-1]
             input_ids = tf.broadcast_to(
                 tf.expand_dims(input_ids, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
