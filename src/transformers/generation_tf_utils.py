@@ -697,13 +697,13 @@ class TFGenerationMixin:
                 if output_hidden_states:
                     model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
-        # Add an extra condition `shape_list(input_ids) == 2`, so this block will treat only text inputs.
+        # Add an extra condition `len(shape_list(input_ids)) == 2`, so this block will treat only text inputs.
         # (vision inputs might occur when the model is an encoder-decoder model)
         # In PT generate(), the `input_ids` is reset for decoder at the following line, which is before the expansion:
         #   "# set input_ids as decoder_input_ids"
         # TODO: it would be better to have the same approach as in PT's generate()
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
-        if shape_list(input_ids) == 2 and (num_return_sequences > 1 or num_beams > 1):
+        if len(shape_list(input_ids)) == 2 and (num_return_sequences > 1 or num_beams > 1):
             input_ids_len = shape_list(input_ids)[-1]
             input_ids = tf.broadcast_to(
                 tf.expand_dims(input_ids, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
