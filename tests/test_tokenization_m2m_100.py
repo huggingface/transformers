@@ -226,7 +226,7 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_tokenizer_translation(self):
-        inputs = self.tokenizer._build_translation_inputs("A test", src_lang="en", tgt_lang="ar")
+        inputs = self.tokenizer._build_translation_inputs("A test", return_tensors="pt", src_lang="en", tgt_lang="ar")
 
         self.assertEqual(
             nested_simplify(inputs),
