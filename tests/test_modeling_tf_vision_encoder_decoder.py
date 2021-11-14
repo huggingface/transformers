@@ -485,6 +485,13 @@ class TFVisionEncoderDecoderMixin:
         # self.check_equivalence_pt_to_tf(config, decoder_config, inputs_dict)
         # self.check_equivalence_tf_to_pt(config, decoder_config, inputs_dict)
 
+        # Let's just check `enc_to_dec_proj` can run for now
+        decoder_config.hidden_size = decoder_config.hidden_size * 2
+        self.assertTrue(config.hidden_size != decoder_config.hidden_size)
+        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        model = TFVisionEncoderDecoderModel(encoder_decoder_config)
+        model(**inputs_dict)
+
     @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
