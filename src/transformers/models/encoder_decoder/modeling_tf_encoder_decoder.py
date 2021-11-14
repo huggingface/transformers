@@ -23,6 +23,7 @@ import tensorflow as tf
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import (
     DUMMY_INPUTS,
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -515,6 +516,14 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
+        # Let the user be responsible for the expected format.
+        if encoder_outputs is not None:
+            if return_dict and not isinstance(encoder_outputs, ModelOutput):
+                raise ValueError(
+                    "If `return_dict=True` and `encoder_outputs` is provided, it should be an instance of "
+                    f"`ModelOutput`. Got an instance {type(encoder_outputs)} for `encoder_outputs`."
+                )
+
         if encoder_outputs is None:
 
             encoder_processing_inputs = {
@@ -598,14 +607,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             output = (loss, logits, past) + decoder_outputs[start_index:] + encoder_outputs
             output = tuple([x for x in output if x is not None])
             return output
-
-        # # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        # if not isinstance(encoder_outputs, TFBaseModelOutput):
-        #     encoder_outputs = TFBaseModelOutput(
-        #         last_hidden_state=encoder_outputs[0],
-        #         hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-        #         attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-        #     )
 
         return TFSeq2SeqLMOutput(
             loss=decoder_outputs.loss,
