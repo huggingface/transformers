@@ -164,10 +164,49 @@ Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 ### Anatomy of Model's Memory
 
 The components on GPU memory are the following:
-- the model weights
-- the forward activations saved for gradient computation
-- the gradients
-- the optimizer state
+1. model weights
+2. optimizer states
+3. gradients
+4. forward activations saved for gradient computation
+5. temporary buffers
+6. functionality-specific memory
+
+A typical model trained in mixed precision with AdamW requires 18 bytes per model parameter plus activation memory.
+
+For inference there are no optimizer states and gradients, so we can subtract those. And thus we end up with 6 bytes per model parameter for mixed precision inference, plus activation memory.
+
+Let's look at the details.
+
+#### Model Weights
+
+- 4 bytes * number of params for fp32 training
+- 6 bytes * number of params for mixed precision training
+
+#### Optimizer States
+
+- 8 bytes * number of params for normal AdamW
+- 2 bytes * number of params for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/facebookresearch/bitsandbytes)
+- 4 bytes * number of params for optimizers like SGD that maintain only one state
+
+#### Gradients
+
+- 4 bytes * number of params for either fp32 or mixed precision training
+
+#### Forward Activations
+
+- size depends on many factors, key ones being sequence length, model depth and batch size.
+
+You have the input and output that is being passed and returned by the forward function, the backward function variables. The forward activations saved for gradient computation.
+
+#### Temporary Memory
+
+Additionally there are all kinds of temporary variables which get released once the calculation is done, but in the moment these could require additional memory and could push to OOM. Therefore when coding it's crucial to think strategically about such temporary variables and to explicitly free those as soon as they are no longer needed.
+
+#### Functionality-specific memory
+
+Then your software could have special memory needs. For example, when generating text using beam search, the software needs to maintain multiple copies of inputs and outputs.
+
+
 
 ### `forward` vs `backward` Execution Speed
 
