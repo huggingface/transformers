@@ -20,8 +20,15 @@ import unittest
 
 import numpy as np
 
-from transformers import is_tf_available, is_torch_available
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_torch, slow, torch_device
+from transformers import is_tf_available, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    is_pt_tf_cross_test,
+    require_tf,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from .test_modeling_tf_common import floats_tensor, ids_tensor
 from .test_modeling_tf_gpt2 import TFGPT2ModelTester
@@ -31,6 +38,10 @@ from .test_modeling_tf_vit import TFViTModelTester
 if is_tf_available():
     from transformers import (
         AutoConfig,
+        AutoFeatureExtractor,
+        AutoTokenizer,
+        TFAutoModel,
+        TFAutoModelForCausalLM,
         TFGPT2LMHeadModel,
         TFVisionEncoderDecoderModel,
         TFViTModel,
@@ -42,6 +53,9 @@ if is_torch_available():
     import torch
 
     from transformers import GPT2LMHeadModel, VisionEncoderDecoderModel, ViTModel
+
+if is_vision_available():
+    from PIL import Image
 
 
 @require_tf
@@ -323,7 +337,7 @@ class TFVisionEncoderDecoderMixin:
                 model_2.config.encoder.image_size,
             ]
         )
-        decoder_input_ids = ids_tensor([13, 1], model_2.config.encoder.vocab_size)
+        decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
 
         outputs = model_2(
             pixel_values=pixel_values,
@@ -349,7 +363,10 @@ class TFVisionEncoderDecoderMixin:
 @require_tf
 class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
+        # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "ydshieh/vit-base-patch16-224-in21k", "gpt2"
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFViTModel(config, name="encoder")
@@ -393,7 +410,10 @@ class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.Te
 @require_tf
 class TFVisionEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
+        # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "ydshieh/vit-base-patch16-224-in21k", "gpt2"
+        )
 
     def get_decoder_config(self):
         config = AutoConfig.from_pretrained("gpt2")
@@ -405,7 +425,8 @@ class TFVisionEncoderDecoderModelTest(unittest.TestCase):
         return TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
     def get_encoder_decoder_models(self):
-        encoder_model = TFViTModel.from_pretrained("google/vit-base-patch16-224-in21k", name="encoder")
+        # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
+        encoder_model = TFViTModel.from_pretrained("ydshieh/vit-base-patch16-224-in21k", name="encoder")
         decoder_model = TFGPT2LMHeadModel.from_pretrained("gpt2", config=self.get_decoder_config(), name="decoder")
         return {"encoder": encoder_model, "decoder": decoder_model}
 
@@ -423,6 +444,12 @@ class TFVisionEncoderDecoderModelTest(unittest.TestCase):
 
         model = self.get_encoderdecoder_model()
         self._check_configuration_tie(model)
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
 
 
 @require_tf
@@ -534,64 +561,67 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
         self.assertAlmostEqual(max_diff, 0.0, places=3)
 
-    # @slow
-    # def test_encoder_decoder_from_pretrained(self):
-    #     load_weight_prefix = "tf_encoder_decoder_model_1"
-    #
-    #     config = self.get_encoder_decoder_config()
-    #     encoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    #     decoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    #
-    #     pixel_values = encoder_tokenizer("who sings does he love me with reba", return_tensors="tf").input_ids
-    #     decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
-    #
-    #     with tempfile.TemporaryDirectory() as tmp_dirname:
-    #
-    #         # Since most of HF's models don't have pretrained cross-attention layers, they are randomly
-    #         # initialized even if we create models using `from_pretrained` method.
-    #         # For the tests, the decoder need to be a model with pretrained cross-attention layers.
-    #         # So we create pretrained models (without `load_weight_prefix`), save them, and later,
-    #         # we load them using `from_pretrained`.
-    #         # (we don't need to do this for encoder, but let's make the code more similar between encoder/decoder)
-    #         encoder = TFAutoModel.from_pretrained("bert-base-uncased", name="encoder")
-    #         # It's necessary to specify `add_cross_attention=True` here.
-    #         decoder = TFAutoModelForCausalLM.from_pretrained(
-    #             "bert-base-uncased", is_decoder=True, add_cross_attention=True, name="decoder"
-    #         )
-    #         pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
-    #         pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")
-    #         encoder.save_pretrained(pretrained_encoder_dir)
-    #         decoder.save_pretrained(pretrained_decoder_dir)
-    #         del encoder
-    #         del decoder
-    #
-    #         enc_dec_model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-    #             pretrained_encoder_dir,
-    #             pretrained_decoder_dir,
-    #         )
-    #         # check that the from pretrained methods work
-    #         enc_dec_model.save_pretrained(tmp_dirname)
-    #         enc_dec_model = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
-    #
-    #         output = enc_dec_model(input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
-    #
-    #         loss_pretrained = output.loss
-    #         del enc_dec_model
-    #
-    #         # Create the model using `__init__` with loaded ``pretrained`` encoder / decoder
-    #         encoder = TFAutoModel.from_pretrained(
-    #             pretrained_encoder_dir, load_weight_prefix=load_weight_prefix, name="encoder"
-    #         )
-    #         decoder = TFAutoModelForCausalLM.from_pretrained(
-    #             pretrained_decoder_dir, load_weight_prefix=load_weight_prefix, name="decoder"
-    #         )
-    #         enc_dec_model = TFVisionEncoderDecoderModel(config=config, encoder=encoder, decoder=decoder)
-    #
-    #     output = enc_dec_model(input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
-    #
-    #     loss_init = output.loss
-    #
-    #     max_diff = np.max(np.abs(loss_pretrained - loss_init))
-    #     expected_diff = 0.0
-    #
-    #     self.assertAlmostEqual(max_diff, expected_diff, places=4)
+    @require_vision
+    @slow
+    def test_encoder_decoder_from_pretrained(self):
+        load_weight_prefix = "tf_vision_encoder_decoder_model_1"
+
+        config = self.get_encoder_decoder_config()
+        feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+        decoder_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+        img = prepare_img()
+        pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values
+        decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+
+            # Since most of HF's models don't have pretrained cross-attention layers, they are randomly
+            # initialized even if we create models using `from_pretrained` method.
+            # For the tests, the decoder need to be a model with pretrained cross-attention layers.
+            # So we create pretrained models (without `load_weight_prefix`), save them, and later,
+            # we load them using `from_pretrained`.
+            # (we don't need to do this for encoder, but let's make the code more similar between encoder/decoder)
+            # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
+            encoder = TFAutoModel.from_pretrained("ydshieh/vit-base-patch16-224-in21k", name="encoder")
+            # It's necessary to specify `add_cross_attention=True` here.
+            decoder = TFAutoModelForCausalLM.from_pretrained(
+                "gpt2", is_decoder=True, add_cross_attention=True, name="decoder"
+            )
+            pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
+            pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")
+            encoder.save_pretrained(pretrained_encoder_dir)
+            decoder.save_pretrained(pretrained_decoder_dir)
+            del encoder
+            del decoder
+
+            enc_dec_model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                pretrained_encoder_dir,
+                pretrained_decoder_dir,
+            )
+            # check that the from pretrained methods work
+            enc_dec_model.save_pretrained(tmp_dirname)
+            enc_dec_model = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
+
+            output = enc_dec_model(pixel_values, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+
+            loss_pretrained = output.loss
+            del enc_dec_model
+
+            # Create the model using `__init__` with loaded ``pretrained`` encoder / decoder
+            encoder = TFAutoModel.from_pretrained(
+                pretrained_encoder_dir, load_weight_prefix=load_weight_prefix, name="encoder"
+            )
+            decoder = TFAutoModelForCausalLM.from_pretrained(
+                pretrained_decoder_dir, load_weight_prefix=load_weight_prefix, name="decoder"
+            )
+            enc_dec_model = TFVisionEncoderDecoderModel(config=config, encoder=encoder, decoder=decoder)
+
+        output = enc_dec_model(pixel_values, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+
+        loss_init = output.loss
+
+        max_diff = np.max(np.abs(loss_pretrained - loss_init))
+        expected_diff = 0.0
+
+        self.assertAlmostEqual(max_diff, expected_diff, places=4)
