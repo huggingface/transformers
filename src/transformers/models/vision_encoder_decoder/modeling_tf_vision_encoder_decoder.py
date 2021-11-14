@@ -156,7 +156,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         decoder: Optional[TFPreTrainedModel] = None,
     ):
         if config is None and (encoder is None or decoder is None):
-            raise ValueError("Either a configuration or an encoder and a decoder has to be provided")
+            raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
         if config is None:
             config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
@@ -166,8 +166,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         if config.decoder.cross_attention_hidden_size is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
-                    f"If `cross_attention_hidden_size` is specified in the decoder's configuration, "
-                    f"it has to be equal to the encoder's `hidden_size`. "
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    "it has to be equal to the encoder's `hidden_size`. "
                     f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
                     f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
                 )
@@ -403,8 +403,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
-                        "Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
-                        "and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
+                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
+                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
                         "cross attention layers."
                     )
                     decoder_config.is_decoder = True
@@ -418,7 +418,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
                     "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
-                    f"`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             kwargs_decoder["name"] = "decoder"
