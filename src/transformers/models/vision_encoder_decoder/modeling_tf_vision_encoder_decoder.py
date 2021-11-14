@@ -22,6 +22,7 @@ import tensorflow as tf
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import (
     DUMMY_INPUTS,
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -273,8 +274,24 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
 
         Example::
 
-            >>> from transformers import TFVisionEncoderDecoderModel
+            >>> from transformers import TFVisionEncoderDecoderModel, ViTFeatureExtractor, GPT2Tokenizer
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> feature_extractor = ViTFeatureExtractor.from_pretrained("ydshieh/vit-gpt2-coco-en")
+            >>> decoder_tokenizer = GPT2Tokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
             >>> model = TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
+
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> img = Image.open(requests.get(url, stream=True).raw)
+            >>> pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values  # Batch size 1
+
+            >>> output_ids = model.generate(pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True).sequences
+
+            >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            >>> preds = [pred.strip() for pred in preds]
+
+            >>> assert preds == ['a cat laying on top of a couch next to another cat']
 
         """
 
@@ -340,8 +357,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         Example::
 
             >>> from transformers import TFVisionEncoderDecoderModel
-            >>> # # initialize a vit-bert from a pretrained ViT and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
-            >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained('google/vit-base-patch16-224-in21k', 'bert-base-uncased')
+            >>> # initialize a vit-bert from a pretrained ViT and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
+            >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            ...     'google/vit-base-patch16-224-in21k', 'bert-base-uncased'
+            ... )
             >>> # saving model after fine-tuning
             >>> model.save_pretrained("./vit-bert")
             >>> # load fine-tuned model
@@ -460,7 +479,36 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import TFVisionEncoderDecoderModel
+            >>> from transformers import AutoFeatureExtractor, AutoTokenizer, TFVisionEncoderDecoderModel
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+            >>> decoder_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+            >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+            >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            ...     'google/vit-base-patch16-224-in21k', 'gpt2'
+            ... )
+
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> img = Image.open(requests.get(url, stream=True).raw)
+
+            >>> # forward
+            >>> pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values  # Batch size 1
+            >>> decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+
+            >>> # training
+            >>> outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+            >>> loss, logits = outputs.loss, outputs.logits
+
+            >>> # save and load from pretrained
+            >>> model.save_pretrained("vit-gpt2")
+            >>> model = TFVisionEncoderDecoderModel.from_pretrained("vit-gpt2")
+
+            >>> # generation
+            >>> generated = model.generate(pixel_values, decoder_start_token_id=model.config.decoder.bos_token_id)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -470,6 +518,14 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+
+        # Let the user be responsible for the expected format.
+        if encoder_outputs is not None:
+            if return_dict and not isinstance(encoder_outputs, ModelOutput):
+                raise ValueError(
+                    "If `return_dict=True` and `encoder_outputs` is provided, it should be an instance of "
+                    f"`ModelOutput`. Got an instance {type(encoder_outputs)} for `encoder_outputs`."
+                )
 
         if encoder_outputs is None:
 
@@ -561,14 +617,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             output = (loss, logits, past) + decoder_outputs[start_index:] + encoder_outputs
             output = tuple([x for x in output if x is not None])
             return output
-
-        # # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        # if not isinstance(encoder_outputs, TFBaseModelOutput):
-        #     encoder_outputs = TFBaseModelOutput(
-        #         last_hidden_state=encoder_outputs[0],
-        #         hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-        #         attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-        #     )
 
         return TFSeq2SeqLMOutput(
             loss=decoder_outputs.loss,
