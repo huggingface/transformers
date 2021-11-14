@@ -454,6 +454,7 @@ class TFEncoderDecoderMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_equivalence(self):
+        # TODO: Once PR #14016 is merged, this test need to be reworked in order to pass it.
 
         config_inputs_dict = self.prepare_config_and_inputs()
         # Keep only common arguments

@@ -198,8 +198,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         if config.decoder.cross_attention_hidden_size is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
-                    f"If `cross_attention_hidden_size` is specified in the decoder's configuration, "
-                    f"it has to be equal to the encoder's `hidden_size`."
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    "it has to be equal to the encoder's `hidden_size`. "
                     f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
                     f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
                 )
@@ -386,9 +386,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model."
-                        "Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
-                        "and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
+                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
+                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
                         "cross attention layers."
                     )
                     decoder_config.is_decoder = True
@@ -398,11 +398,11 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder."
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
-                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config`"
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
                     "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
-                    f"`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
