@@ -170,7 +170,7 @@ With `chunks=1` you end up with the naive MP, which is very inefficient. With a 
 
 While the diagram shows that there is a bubble of "dead" time that can't be parallelized because the last `forward` stage has to wait for `backward` to complete the pipeline, the purpose of finding the best value for `chunks` is to enable a high concurrent GPU utilization across all participating GPUs which translates to minimizing the size of the bubble.
 
-There are 2 groups of solution - the traditional Pipeline API and the more modern solutions that make things much easier for the end user.
+There are 2 groups of solutions - the traditional Pipeline API and the more modern solutions that make things much easier for the end user.
 
 Traditional Pipeline API solutions:
 - PyTorch
@@ -185,7 +185,7 @@ Modern solutions:
 Problems with traditional Pipeline API solutions:
 - have to modify the model quite heavily, because Pipeline requires one to rewrite the normal flow of modules into a `nn.Sequential` sequence of the same, which may require changes to the design of the model.
 - currently the Pipeline API is very restricted. If you had a bunch of python variables being passed in the very first stage of the Pipeline, you will have to find a way around it. Currently, the pipeline interface requires either a single Tensor or a tuple of Tensors as the only input and output. These tensors must have a batch size as the very first dimension, since pipeline is going to chunk the mini batch into micro-batches. Possible improvements are being discussed here https://github.com/pytorch/pytorch/pull/50693
-- Conditional control flow at the level of pipe stages is not possible - e.g., Encoder-Decoder models like T5 require special workaround to handle a conditional encoder stage.
+- Conditional control flow at the level of pipe stages is not possible - e.g., Encoder-Decoder models like T5 require special workarounds to handle a conditional encoder stage.
 - have to arrange each layer so that the output of one model becomes an input to the other model.
 
 We are yet to experiment with Varuna and SageMaker but their papers report that they have overcome the list of problems mentioned above and that they require much smaller changes to the user's model.
