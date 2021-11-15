@@ -50,14 +50,14 @@ from .configuration_imagegpt import ImageGPTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "imagegpt"
+_CHECKPOINT_FOR_DOC = "openai/imagegpt-small"
 _CONFIG_FOR_DOC = "ImageGPTConfig"
 _TOKENIZER_FOR_DOC = "ImageGPTTokenizer"
 
 IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai/imagegpt-small",
-    "openai/imagegpt-small",
-    "openai/imagegpt-small",
+    "openai/imagegpt-medium",
+    "openai/imagegpt-large",
     # See all Image GPT models at https://huggingface.co/models?filter=imagegpt
 ]
 
@@ -486,10 +486,7 @@ class ImageGPTBlock(nn.Module):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        if use_cache:
-            outputs = (hidden_states,) + outputs
-        else:
-            outputs = (hidden_states,) + outputs[1:]
+        outputs = (hidden_states,) + (outputs if use_cache else outputs[1:])
 
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 

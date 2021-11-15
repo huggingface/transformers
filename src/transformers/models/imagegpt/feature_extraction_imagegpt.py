@@ -89,14 +89,11 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         Args:
             image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
                 The image to normalize.
+
+        Returns:
+            :obj:`np.ndarray`: The normalized image.
         """
-        self._ensure_format_supported(image)
-
-        if isinstance(image, Image.Image):
-            image = self.to_numpy_array(image, rescale=False, channel_first=False)
-
-        if is_torch_tensor(image):
-            image = image.numpy()
+        image = self.to_numpy_array(image, rescale=False, channel_first=False)
 
         return image / 127.5 - 1
 

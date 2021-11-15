@@ -213,9 +213,9 @@ Supported models
     Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed.
 38. :doc:`I-BERT <model_doc/ibert>` (from Berkeley) released with the paper `I-BERT: Integer-only BERT Quantization
     <https://arxiv.org/abs/2101.01321>`__ by Sehoon Kim, Amir Gholami, Zhewei Yao, Michael W. Mahoney, Kurt Keutzer.
-39. :doc:`ImageGPT <model_doc/imagegpt>` (from OpenAI) released with the paper `Generative Pretraining from Pixes
-    <https://openai.com/blog/image-gpt/>`__ by Mark Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo Jun, David
-    Luan, Ilya Sutskever.
+39. `ImageGPT <https://huggingface.co/transformers/master/model_doc/imagegpt.html>`__ (from OpenAI) released with the
+    paper `Generative Pretraining from Pixes <https://openai.com/blog/image-gpt/>`__ by Mark Chen, Alec Radford, Rewon
+    Child, Jeffrey Wu, Heewoo Jun, David Luan, Ilya Sutskever.
 40. :doc:`LayoutLM <model_doc/layoutlm>` (from Microsoft Research Asia) released with the paper `LayoutLM: Pre-training
     of Text and Layout for Document Image Understanding <https://arxiv.org/abs/1912.13318>`__ by Yiheng Xu, Minghao Li,
     Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
