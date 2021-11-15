@@ -371,7 +371,7 @@ class TFViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFViTForImageClassification.from_pretrained("google/vit-base-patch16-224", from_pt=True)
+        model = TFViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
