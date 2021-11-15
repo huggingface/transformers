@@ -201,7 +201,7 @@ class Wav2Vec2Config(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        adapter_stride=None,
+        add_adapter=False,
         adapter_kernel_size=None,
         adapter_stride=None,
         **kwargs
@@ -266,3 +266,8 @@ class Wav2Vec2Config(PretrainedConfig):
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
+
+        # adapter
+        self.add_adapter = add_adapter
+        self.adapter_kernel_size = adapter_kernel_size
+        self.adapter_stride = adapter_stride

@@ -188,24 +188,6 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def create_vocab_dict(dict_path):
-    with open(dict_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-        words = [line.split(" ")[0] for line in lines]
-
-    num_words = len(words)
-
-    vocab_dict = {
-        "<s>": 0,
-        "<pad>": 1,
-        "</s>": 2,
-        "<unk>": 3,
-    }
-
-    vocab_dict.update({k: v for k, v in zip(words, range(4, num_words + 4))})
-    return vocab_dict
-
-
 @torch.no_grad()
 def convert_wav2vec2_checkpoint(
     checkpoint_path,
@@ -215,11 +197,19 @@ def convert_wav2vec2_checkpoint(
     decoder_config_path,
     vocab_size,
     num_decoder_layers,
+    add_adapter,
+    adapter_kernel_size,
+    adapter_stride,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    encoder_config = Wav2Vec2Config.from_pretrained(encoder_config_path)
+    # load model
+    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
+    model = model[0].eval()
+
+    # load configs
+    encoder_config = Wav2Vec2Config.from_pretrained(encoder_config_path, add_adapter=True, adapter_stride=adapter_stride, adapter_kernel_size=adapter_kernel_size, use_auth_token=True)
     decoder_config = MBartConfig.from_pretrained(
         decoder_config_path, vocab_size=vocab_size, decoder_layers=num_decoder_layers, do_stable_layer_norm=True
     )
@@ -231,11 +221,6 @@ def convert_wav2vec2_checkpoint(
         do_normalize=True,
         return_attention_mask=True,
     )
-
-    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-        [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
-    )
-    model = model[0].eval()
 
     # set weights for wav2vec2 encoder
     hf_encoder = Wav2Vec2Model(encoder_config)
@@ -259,12 +244,7 @@ def convert_wav2vec2_checkpoint(
     hf_wav2vec.enc_to_dec_proj.weight = nn.Parameter(projection_layer.weight)
     hf_wav2vec.enc_to_dec_proj.bias = nn.Parameter(projection_layer.bias)
 
-    vocab_dict = create_vocab_dict(dict_path)
-
-    with open(os.path.join(pytorch_dump_folder_path, "vocab.json"), "w") as fp:
-        json.dump(vocab_dict, fp)
-
-    tokenizer = MBartTokenizer(os.path.join(pytorch_dump_folder_path, "vocab.json"))
+    tokenizer = MBartTokenizer(dict_path)
     tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     config = hf_wav2vec.config.to_dict()
@@ -287,18 +267,21 @@ if __name__ == "__main__":
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
     parser.add_argument(
         "--encoder_config_path",
-        default="facebook/wav2vec2-large-lv60",
+        default="facebook/wav2vec2-xls-r-2b",
         type=str,
         help="Path to hf encoder wav2vec2 checkpoint config",
     )
     parser.add_argument(
         "--decoder_config_path",
-        default="facebook/s2t-small-mustc-en-fr-st",
+        default="facebook/mbart-large-cc25",
         type=str,
-        help="Path to hf decoder s2t checkpoint config",
+        help="Path to hf decoder checkpoint config",
     )
     parser.add_argument("--vocab_size", default=10224, type=int, help="Vocab size of decoder")
     parser.add_argument("--num_decoder_layers", default=7, type=int, help="Number of decoder layers")
+    parser.add_argument("--add_adapter", default=True, type=bool, help="Number of decoder layers")
+    parser.add_argument("--adapter_stride", default=2, type=int, help="Number of decoder layers")
+    parser.add_argument("--adapter_kernel_size", default=64, type=int, help="Number of decoder layers")
 
     args = parser.parse_args()
     convert_wav2vec2_checkpoint(
@@ -309,4 +292,7 @@ if __name__ == "__main__":
         decoder_config_path=args.decoder_config_path,
         vocab_size=args.vocab_size,
         num_decoder_layers=args.num_decoder_layers,
+        add_adapter=args.add_adapter,
+        adapter_kernel_size=args.adapter_kernel_size,
+        adapter_stride=args.adapter_stride,
     )
