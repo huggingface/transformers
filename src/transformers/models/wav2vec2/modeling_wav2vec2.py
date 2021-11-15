@@ -933,6 +933,63 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
+class Wav2Vec2Adapter(nn.Module):
+    def __init__(config):
+#    def __init__(self, in_dim, out_dim, n_layers=3, kernel_size=3, stride=2, add_layernorm=False):
+        super().__init__()
+#        self.layers = nn.ModuleList(
+#            nn.Conv1d(in_dim if i == 0 else out_dim, out_dim * 2, kernel_size,
+#                      stride=stride, padding=kernel_size // 2)
+#            for i in range(n_layers)
+#        )
+#        self.layernorms = None
+#        if add_layernorm:
+#            self.layernorms = nn.ModuleList(LayerNorm(out_dim)
+#                                            for _ in range(n_layers))
+        self.layers = nn.ModuleList(Wav2Vec2AdapterLayer(config) for _ in range(n_layers))
+        self.stride = stride
+
+    def get_out_seq_lens_tensor(self, in_seq_lens_tensor):
+        out = in_seq_lens_tensor.clone()
+        for _ in self.layers:
+            out = ((out.float() - 1) / self.stride + 1).floor().long()
+        return out
+
+    def forward(self, x, padding_mask):
+        # T x B x C -> B x C x T
+        x = x.transpose(0, 1).transpose(1, 2)
+#        for i, layer in enumerate(self.layers):
+#            x = nn.functional.glu(layer(x), dim=1)
+#            if self.layernorms is not None:
+#                x = self.layernorms[i](x.transpose(1, 2)).transpose(1, 2)
+        # B x C x T -> T x B x C
+#        x = x.transpose(1, 2).transpose(0, 1)
+        for layer in self.layers:
+            x = layer(x)
+#            hidden_states = layer(hidden_states)
+
+        if padding_mask is None:
+            out_padding_mask = None
+        else:
+            out_lengths = self.get_out_seq_lens_tensor((~padding_mask).sum(1))
+            out_padding_mask = lengths_to_padding_mask(out_lengths)
+        return x, out_padding_mask
+
+
+class Wav2Vec2AdapterLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(config.hidden_size, config.hidden_size, config.adapter_kernel_size, stride=config.adapter_stride, padding=config.adapter_kernel_size // 2)
+        self.layer_norm = nn.LayerNorm(hidden_states)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+        hidden_states = self.layer_norm(hidden_states)
+
+        return hidden_states
+
+
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1086,6 +1143,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         else:
             self.encoder = Wav2Vec2Encoder(config)
 
+        if config.add_adapter:
+            self.adapter = Wav2Vec2Adapter(config)
+        else:
+            self.adapter = None
+
         self.init_weights()
 
     def _mask_hidden_states(
@@ -1177,6 +1239,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
+
+        if self.adapter is not None:
+            hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]

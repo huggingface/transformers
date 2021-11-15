@@ -201,6 +201,9 @@ class Wav2Vec2Config(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
+        adapter_stride=None,
+        adapter_kernel_size=None,
+        adapter_stride=None,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
