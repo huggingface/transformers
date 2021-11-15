@@ -44,7 +44,7 @@ class ImageClassificationPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
+            raise ValueError(f"The {self.__class__} is not available in TF.")
 
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)

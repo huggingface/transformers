@@ -1,6 +1,6 @@
 import enum
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
+from transformers import FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
 from ..file_utils import add_end_docstrings
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -42,9 +42,15 @@ class TextGenerationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING
-        )
+        types = {}
+        if MODEL_FOR_CAUSAL_LM_MAPPING is not None:
+            types.update(MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        if TF_MODEL_FOR_CAUSAL_LM_MAPPING is not None:
+            types.update(TF_MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        if FLAX_MODEL_FOR_CAUSAL_LM_MAPPING is not None:
+            types.update(FLAX_MODEL_FOR_CAUSAL_LM_MAPPING.items())
+
+        self.check_model_type(types)
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".

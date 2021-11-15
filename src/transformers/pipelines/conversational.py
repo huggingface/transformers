@@ -265,8 +265,10 @@ class ConversationalPipeline(Pipeline):
             input_ids = torch.LongTensor([input_ids])
         elif self.framework == "tf":
             input_ids = tf.constant([input_ids])
-        else:
+        elif self.framework == "flax":
             input_ids = np.array([input_ids])
+        else:
+            raise NotImplementedError(f"Unsupported framework {self.framework}")
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):

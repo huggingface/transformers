@@ -196,7 +196,8 @@ class FlaxGenerationMixin:
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             max_new_tokens (:obj:`int`, `optional`, defaults to None):
-                The maximum amount of tokens to generate (will override :obj:`max_length` and both cannot be defined at the same time.
+                The maximum amount of tokens to generate (will override :obj:`max_length` and both cannot be defined at
+                the same time.
             do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             temperature (:obj:`float`, `optional`, defaults to 1.0):

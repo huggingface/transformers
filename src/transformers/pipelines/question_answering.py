@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
+from ..file_utils import PaddingStrategy, add_end_docstrings, is_flax_available, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
@@ -27,6 +27,9 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
@@ -135,10 +138,15 @@ class QuestionAnsweringPipeline(Pipeline):
             **kwargs,
         )
 
-        self._args_parser = QuestionAnsweringArgumentHandler()
-        self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
-        )
+        types = {}
+        if MODEL_FOR_QUESTION_ANSWERING_MAPPING is not None:
+            types.update(MODEL_FOR_QUESTION_ANSWERING_MAPPING.items())
+        if TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING is not None:
+            types.update(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items())
+        if FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING is not None:
+            types.update(FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items())
+
+        self.check_model_type(types)
 
     @staticmethod
     def create_sample(
@@ -366,6 +374,8 @@ class QuestionAnsweringPipeline(Pipeline):
                     elif self.framework == "flax":
                         tensor = np.array(v)
                         fw_args[k] = np.expand_dims(tensor, axis=0)
+                    else:
+                        raise NotImplementedError(f"Unsupported framework {self.framework}")
                 else:
                     others[k] = v
             split_features.append({"fw_args": fw_args, "others": others})

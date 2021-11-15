@@ -57,7 +57,7 @@ class FillMaskPipeline(Pipeline):
         elif self.framework == "flax":
             masked_index = np.where(input_ids == self.tokenizer.mask_token_id)[0]
         else:
-            raise ValueError("Unsupported framework")
+            raise ValueError(f"Unsupported framework {self.framework}")
         return masked_index
 
     def _ensure_exactly_one_mask_token(self, input_ids: GenericTensor) -> np.ndarray:
@@ -92,9 +92,6 @@ class FillMaskPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs):
-        import ipdb
-
-        ipdb.set_trace()
         model_outputs = self.model(**model_inputs)
         model_outputs = {"input_ids": model_inputs["input_ids"], **model_outputs}
         return model_outputs
@@ -131,7 +128,7 @@ class FillMaskPipeline(Pipeline):
                 probs = probs[..., target_ids]
 
             values, predictions = probs.topk(top_k)
-        else:
+        elif self.framework == "flax":
             tokens = np.copy(input_ids)
             masked_index = np.where(input_ids == self.tokenizer.mask_token_id)[0]
             logits = outputs[0, masked_index.item(), :]
@@ -140,6 +137,8 @@ class FillMaskPipeline(Pipeline):
                 probs = probs[..., target_ids]
 
             values, predictions = jax.lax.top_k(probs, top_k)
+        else:
+            raise ValueError(f"Unsupported framework {self.framework}")
 
         for v, p in zip(values.tolist(), predictions.tolist()):
             if target_ids is not None:

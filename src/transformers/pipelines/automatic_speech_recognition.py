@@ -104,7 +104,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         self.feature_extractor = feature_extractor
 
         if self.framework == "tf":
-            raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
+            raise ValueError("The AutomaticSpeechRecognitionPipeline is not available in TF.")
 
         self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
 
