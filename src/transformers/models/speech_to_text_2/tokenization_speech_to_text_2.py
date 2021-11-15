@@ -120,7 +120,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         if merges_file is None:
-            logger.info(f"No merges files provided. {self.__class__.__name__} " "can only be used for decoding.")
+            logger.info(f"No merges files provided. {self.__class__.__name__} can only be used for decoding.")
 
             self.bpe_ranks = None
             self.cache = None
@@ -196,7 +196,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
                 "This tokenizer was instantiated without a `merges.txt` file, so"
                 " that it can only be used for decoding, not for encoding."
                 "Make sure to provide `merges.txt` file at instantiation to enable "
-                "enocding."
+                "encoding."
             )
 
         if self.do_lower_case:
