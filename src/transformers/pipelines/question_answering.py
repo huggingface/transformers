@@ -4,8 +4,14 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers import (
+    FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+)
+
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..file_utils import PaddingStrategy, add_end_docstrings, is_flax_available, is_tf_available, is_torch_available
+from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
@@ -21,15 +27,9 @@ if TYPE_CHECKING:
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 if is_torch_available():
     import torch
-
-    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
-
-if is_flax_available():
-    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
