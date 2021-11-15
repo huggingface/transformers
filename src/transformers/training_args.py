@@ -280,7 +280,7 @@ class TrainingArguments:
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
         ignore_data_skip (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
-            stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
+            stage as in the previous training. If set to :obj:`False`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
         sharded_ddp (:obj:`bool`, :obj:`str` or list of :class:`~transformers.trainer_utils.ShardedDDPOption`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
