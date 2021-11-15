@@ -479,6 +479,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+
         if getattr(self.config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()
             # Remove the attribute now that is has been consumed, so it's no saved in the config.
@@ -1401,7 +1402,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model = cls(config, *model_args, **model_kwargs)
         else:
             with no_init_weights(_enable=_fast_init):
+
+                restore_gradient_checkpointing = False
+                if hasattr(config, "gradient_checkpointing") and config.gradient_checkpointing:
+                    restore_gradient_checkpointing = True
+
                 model = cls(config, *model_args, **model_kwargs)
+
+                if restore_gradient_checkpointing:
+                    config.gradient_checkpointing = True
 
         if from_pt:
             # restore default dtype
@@ -1453,6 +1462,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
+
+        if getattr(model.config, "gradient_checkpointing", False):
+            model.gradient_checkpointing_enable()
+            # Remove the attribute now that is has been consumed, so it's no saved in the config.
+            delattr(model.config, "gradient_checkpointing")
 
         if output_loading_info:
             loading_info = {
