@@ -92,6 +92,9 @@ class FillMaskPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs):
+        import ipdb
+
+        ipdb.set_trace()
         model_outputs = self.model(**model_inputs)
         model_outputs = {"input_ids": model_inputs["input_ids"], **model_outputs}
         return model_outputs

@@ -60,7 +60,7 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
             # LED, T5 can handle it.
             # Too long.
             with self.assertRaises(Exception):
-                outputs = summarizer("This " * 1000)
+                outputs = summarizer("This " * 1000, max_length=1000)
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch
