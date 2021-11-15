@@ -324,7 +324,7 @@ class ConfigurationVersioningTest(unittest.TestCase):
             self.assertEqual(new_configuration.hidden_size, 2)
 
             # Will need to be adjusted if we reach v42 and this test is still here.
-            # Should pick the old configuration file as the version of Transformers is < 4.0.0
+            # Should pick the old configuration file as the version of Transformers is < 4.42.0
             shutil.move(os.path.join(tmp_dir, "config.4.0.0.json"), os.path.join(tmp_dir, "config.42.0.0.json"))
             new_configuration = AutoConfig.from_pretrained(tmp_dir)
             self.assertEqual(new_configuration.hidden_size, 768)
