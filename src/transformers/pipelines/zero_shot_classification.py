@@ -233,6 +233,7 @@ class ZeroShotClassificationPipeline(Pipeline):
             else:
                 logits = outputs["logits"].cpu().numpy()
         elif self.framework == "flax":
+            print(outputs)
             if isinstance(outputs, list):
                 logits = np.concatenate([output for output in outputs], axis=0)
             else:

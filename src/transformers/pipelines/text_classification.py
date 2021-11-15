@@ -10,16 +10,11 @@ from transformers import (
 
 from ..file_utils import ExplicitEnum, add_end_docstrings
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
+from .utils import softmax
 
 
 def sigmoid(_outputs):
     return 1.0 / (1.0 + np.exp(-_outputs))
-
-
-def softmax(_outputs):
-    maxes = np.max(_outputs, axis=-1, keepdims=True)
-    shifted_exp = np.exp(_outputs - maxes)
-    return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
 
 class ClassificationFunction(ExplicitEnum):

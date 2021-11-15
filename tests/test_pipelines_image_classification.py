@@ -157,7 +157,7 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def test_small_model_flax(self):
         small_model = "lysandre/tiny-vit-random"
         image_classifier = pipeline(
-            "image-classification", model=small_model, framework="flax", model_kwargs={"from_tf": True}
+            "image-classification", model=small_model, framework="flax", model_kwargs={"from_pt": True}
         )
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")

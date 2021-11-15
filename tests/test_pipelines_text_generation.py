@@ -65,9 +65,9 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
     @require_flax
     def test_small_model_flax(self):
-        text_generator = pipeline(
-            task="text-generation", model="sshleifer/tiny-ctrl", framework="flax", modle_kwargs={"from_pt": True}
-        )
+        # Ctrl is not ported to flax yet, so use a different model
+        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-gpt2", framework="flax")
+        text_generator.model.config.pad_token_id = text_generator.model.config.eos_token_id
 
         # Using `do_sample=False` to force deterministic output
         outputs = text_generator("This is a test", do_sample=False)
@@ -75,7 +75,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             outputs,
             [
                 {
-                    "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                    "generated_text": "This is a test factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors"
                 }
             ],
         )
@@ -86,12 +86,12 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             [
                 [
                     {
-                        "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        "generated_text": "This is a test factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors"
                     }
                 ],
                 [
                     {
-                        "generated_text": "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        "generated_text": "This is a second test stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs"
                     }
                 ],
             ],

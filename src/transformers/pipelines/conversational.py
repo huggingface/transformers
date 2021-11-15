@@ -196,6 +196,8 @@ class ConversationalPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+            # Flax uses this value, not the tokenizer one.
+            self.model.config.pad_token_id = self.model.config.eos_token_id
 
     def _sanitize_parameters(
         self, min_length_for_response=None, minimum_tokens=None, clean_up_tokenization_spaces=None, **generate_kwargs

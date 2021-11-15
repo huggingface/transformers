@@ -121,6 +121,9 @@ class BatchFeature(UserDict):
 
         # Convert to TensorType
         if not isinstance(tensor_type, TensorType):
+            if tensor_type == "flax":
+                # Aliasing
+                tensor_type = "jax"
             tensor_type = TensorType(tensor_type)
 
         # Get a function reference for the correct framework

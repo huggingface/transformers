@@ -8,6 +8,13 @@ from ..utils import logging
 
 logger = logging.get_logger(__name__)
 
+
+def softmax(_outputs):
+    maxes = np.max(_outputs, axis=-1, keepdims=True)
+    shifted_exp = np.exp(_outputs - maxes)
+    return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
+
+
 if is_tf_available():
     import tensorflow as tf
     from tensorflow import Tensor as TFTensor

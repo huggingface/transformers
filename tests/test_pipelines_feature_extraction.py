@@ -60,7 +60,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             task="feature-extraction",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="flax",
-            model_kwargs={"from_tf": True},
+            model_kwargs={"from_pt": True},
         )
         outputs = feature_extractor("This is a test")
         self.assertEqual(

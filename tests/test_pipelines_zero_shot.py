@@ -193,6 +193,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
             framework="flax",
+            model_kwargs={"from_pt": True},
         )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
