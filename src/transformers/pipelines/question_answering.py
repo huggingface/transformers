@@ -147,6 +147,7 @@ class QuestionAnsweringPipeline(Pipeline):
             types.update(FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items())
 
         self.check_model_type(types)
+        self._args_parser = QuestionAnsweringArgumentHandler()
 
     @staticmethod
     def create_sample(
