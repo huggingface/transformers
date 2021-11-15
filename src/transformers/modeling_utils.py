@@ -490,7 +490,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        self._first_forward_called = False
         if self.supports_gradient_checkpointing:
             self._gradient_checkpointing_hook = self.register_forward_pre_hook(gradient_checkpointing_hook)
 
