@@ -330,7 +330,7 @@ class ConfigurationVersioningTest(unittest.TestCase):
             self.assertEqual(new_configuration.hidden_size, 768)
 
     def test_repo_versioning_before(self):
-        # This repo has two configuration files, one for v4.0.0 and above with an added token, one for versions lower.
+        # This repo has two configuration files, one for v5.0.0 and above with an added token, one for versions lower.
         repo = "microsoft/layoutxlm-base"
 
         import transformers as new_transformers
