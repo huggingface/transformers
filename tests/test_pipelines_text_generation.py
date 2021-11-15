@@ -174,7 +174,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         # They already work.
         if tokenizer.model_max_length < 10000:
             # Handling of large generations
-            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
+            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError, TypeError)):
                 text_generator("This is a test" * 500, max_new_tokens=20)
 
             outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)

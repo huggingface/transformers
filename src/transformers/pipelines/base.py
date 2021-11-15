@@ -671,10 +671,10 @@ class Pipeline(_ScikitCompat):
         self.modelcard = modelcard
         self.framework = framework
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
-        if self.framework == "flax":
-            import jax
+        # if self.framework == "flax":
+        #     import jax
 
-            self.model.__call__ = jax.jit(self.model.__call__)
+        #     self.model.__call__ = jax.jit(self.model.__call__)
         self.binary_output = binary_output
 
         # Special handling

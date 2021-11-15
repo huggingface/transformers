@@ -156,6 +156,8 @@ class Text2TextGenerationPipeline(Pipeline):
         generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
         generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
+        if self.framework == "flax" and "forced_bos_token_id" in model_inputs:
+            model_inputs["decoder_start_token_id"] = model_inputs.pop("forced_bos_token_id")
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         return {"output_ids": output_ids}
 

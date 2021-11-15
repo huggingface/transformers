@@ -200,8 +200,14 @@ class TextGenerationPipeline(Pipeline):
     def _forward(self, model_inputs, **generate_kwargs):
         input_ids = model_inputs["input_ids"]
         # Allow empty prompts
-        if input_ids.shape[1] == 0 and self.framework != "flax":
-            input_ids = None
+        if input_ids.shape[1] == 0:
+            if self.framework == "flax":
+                import jax.numpy as jnp
+
+                B = input_ids.shape[0]
+                input_ids = jnp.zeros((B, 2), dtype=jnp.int32)
+            else:
+                input_ids = None
         prompt_text = model_inputs.pop("prompt_text")
         generated_sequence = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
@@ -216,6 +222,8 @@ class TextGenerationPipeline(Pipeline):
             generated_sequence = generated_sequence.numpy().tolist()
         elif self.framework == "flax":
             generated_sequence = generated_sequence.sequences.tolist()
+        else:
+            raise NotImplementedError(f"Framework {self.framework} is not implemented")
 
         if return_type == ReturnType.TENSORS:
             record = {"generated_token_ids": generated_sequence}
