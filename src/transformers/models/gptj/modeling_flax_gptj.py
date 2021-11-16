@@ -539,12 +539,7 @@ class FlaxGPTJModule(nn.Module):
 
         self.wte = nn.Embed(
             self.config.vocab_size,
-            self.embed_dim,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-        )
-        self.wpe = nn.Embed(
-            self.config.max_position_embeddings,
-            self.embed_dim,
+            self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
         self.dropout = nn.Dropout(rate=self.config.embd_pdrop)
@@ -563,10 +558,8 @@ class FlaxGPTJModule(nn.Module):
         return_dict: bool = True,
     ):
         input_embeds = self.wte(input_ids.astype("i4"))
-        position_embeds = self.wpe(position_ids.astype("i4"))
 
-        hidden_states = input_embeds + position_embeds
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.dropout(input_embeds, deterministic=deterministic)
 
         outputs = self.h(
             hidden_states,
