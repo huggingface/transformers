@@ -54,8 +54,11 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         else []
     )
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
+        return conversation_agent, [Conversation("Hi there!")]
+
+    def run_pipeline_test(self, conversation_agent, _):
         # Simple
         outputs = conversation_agent(Conversation("Hi there!"))
         self.assertEqual(outputs, Conversation(past_user_inputs=["Hi there!"], generated_responses=[ANY(str)]))

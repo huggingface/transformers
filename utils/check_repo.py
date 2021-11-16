@@ -42,6 +42,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "SegformerDecodeHead",  # Building part of bigger (tested) model.
     "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoderWrapper",  # Building part of bigger (tested) model.
@@ -72,9 +73,11 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
+    "Speech2Text2DecoderWrapper",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
 ]
 
@@ -97,6 +100,9 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "SegformerDecodeHead",
+    "SegformerForSemanticSegmentation",
+    "BeitForSemanticSegmentation",
     "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
@@ -123,6 +129,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
     "HubertForCTC",
+    "SEWForCTC",
+    "SEWDForCTC",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
@@ -143,6 +151,26 @@ spec = importlib.util.spec_from_file_location(
 transformers = spec.loader.load_module()
 
 
+def check_model_list():
+    """Check the model list inside the transformers library."""
+    # Get the models from the directory structure of `src/transformers/models/`
+    models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
+    _models = []
+    for model in os.listdir(models_dir):
+        model_dir = os.path.join(models_dir, model)
+        if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
+            _models.append(model)
+
+    # Get the models from the directory structure of `src/transformers/models/`
+    models = [model for model in dir(transformers.models) if not model.startswith("__")]
+
+    missing_models = sorted(list(set(_models).difference(models)))
+    if missing_models:
+        raise Exception(
+            f"The following models should be included in {models_dir}/__init__.py: {','.join(missing_models)}."
+        )
+
+
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
 def get_model_modules():
@@ -158,12 +186,16 @@ def get_model_modules():
         "modeling_flax_auto",
         "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
+        "modeling_speech_encoder_decoder",
+        "modeling_flax_vision_encoder_decoder",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
+        "modeling_tf_encoder_decoder",
         "modeling_tf_outputs",
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
         "modeling_tf_transfo_xl_utilities",
+        "modeling_vision_encoder_decoder",
     ]
     modules = []
     for model in dir(transformers.models):
@@ -231,6 +263,7 @@ def get_model_test_files():
         "test_modeling_flax_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
+        "test_modeling_tf_encoder_decoder",
     ]
     test_files = []
     for filename in os.listdir(PATH_TO_TESTS):
@@ -552,6 +585,8 @@ def check_all_objects_are_documented():
 
 def check_repo_quality():
     """Check all models are properly tested and documented."""
+    print("Checking all models are included.")
+    check_model_list()
     print("Checking all models are public.")
     check_models_are_in_init()
     print("Checking all models are properly tested.")

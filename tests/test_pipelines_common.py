@@ -12,16 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import importlib
 import logging
+import random
 import string
 import unittest
 from abc import abstractmethod
 from functools import lru_cache
 from unittest import skipIf
 
-from transformers import FEATURE_EXTRACTOR_MAPPING, TOKENIZER_MAPPING, AutoFeatureExtractor, AutoTokenizer, pipeline
-from transformers.testing_utils import is_pipeline_test, require_torch
+from transformers import (
+    FEATURE_EXTRACTOR_MAPPING,
+    TOKENIZER_MAPPING,
+    AutoFeatureExtractor,
+    AutoTokenizer,
+    IBertConfig,
+    RobertaConfig,
+    TextClassificationPipeline,
+    pipeline,
+)
+from transformers.pipelines import get_task
+from transformers.pipelines.base import _pad
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +86,12 @@ def get_tiny_config_from_class(configuration_class):
 @lru_cache(maxsize=100)
 def get_tiny_tokenizer_from_checkpoint(checkpoint):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+    if tokenizer.vocab_size < 300:
+        # Wav2Vec2ForCTC for instance
+        # ByT5Tokenizer
+        # all are already small enough and have no Fast version that can
+        # be retrained
+        return tokenizer
     logger.info("Training new from iterator ...")
     vocabulary = string.ascii_letters + string.digits + " "
     tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
@@ -87,6 +106,12 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config):
         feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
+
+    # Speech2TextModel specific.
+    if hasattr(tiny_config, "input_feat_per_channel") and feature_extractor:
+        feature_extractor = feature_extractor.__class__(
+            feature_size=tiny_config.input_feat_per_channel, num_mel_bins=tiny_config.input_feat_per_channel
+        )
     return feature_extractor
 
 
@@ -109,16 +134,28 @@ class PipelineTestCaseMeta(type):
             def test(self):
                 if ModelClass.__name__.endswith("ForCausalLM"):
                     tiny_config.is_encoder_decoder = False
+                    if hasattr(tiny_config, "encoder_no_repeat_ngram_size"):
+                        # specific for blenderbot which supports both decoder-only
+                        # encoder/decoder but the test config  only reflects
+                        # encoder/decoder arch
+                        tiny_config.encoder_no_repeat_ngram_size = 0
                 if ModelClass.__name__.endswith("WithLMHead"):
                     tiny_config.is_decoder = True
-                model = ModelClass(tiny_config)
+                try:
+                    model = ModelClass(tiny_config)
+                except ImportError as e:
+                    self.skipTest(
+                        f"Cannot run with {tiny_config} as the model requires a library that isn't installed: {e}"
+                    )
                 if hasattr(model, "eval"):
                     model = model.eval()
                 if tokenizer_class is not None:
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
                         # XLNet actually defines it as -1.
-                        if (
+                        if isinstance(model.config, (RobertaConfig, IBertConfig)):
+                            tokenizer.model_max_length = model.config.max_position_embeddings - 2
+                        elif (
                             hasattr(model.config, "max_position_embeddings")
                             and model.config.max_position_embeddings > 0
                         ):
@@ -131,7 +168,26 @@ class PipelineTestCaseMeta(type):
                 else:
                     tokenizer = None
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
-                self.run_pipeline_test(model, tokenizer, feature_extractor)
+                pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
+                if pipeline is None:
+                    # The test can disable itself, but it should be very marginal
+                    # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
+                    return
+                self.run_pipeline_test(pipeline, examples)
+
+                def run_batch_test(pipeline, examples):
+                    # Need to copy because `Conversation` are stateful
+                    if pipeline.tokenizer is not None and pipeline.tokenizer.pad_token_id is None:
+                        return  # No batching for this and it's OK
+
+                    # 10 examples with batch size 4 means there needs to be a unfinished batch
+                    # which is important for the unbatcher
+                    dataset = [copy.deepcopy(random.choice(examples)) for i in range(10)]
+
+                    for item in pipeline(dataset, batch_size=4):
+                        pass
+
+                run_batch_test(pipeline, examples)
 
             return test
 
@@ -206,3 +262,144 @@ class CommonPipelineTest(unittest.TestCase):
         dataset = MyDataset()
         for output in text_classifier(dataset):
             self.assertEqual(output, {"label": ANY(str), "score": ANY(float)})
+
+    @require_torch
+    def test_check_task_auto_inference(self):
+        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+
+        self.assertIsInstance(pipe, TextClassificationPipeline)
+
+    @require_torch
+    def test_pipeline_override(self):
+        class MyPipeline(TextClassificationPipeline):
+            pass
+
+        text_classifier = pipeline(model="Narsil/tiny-distilbert-sequence-classification", pipeline_class=MyPipeline)
+
+        self.assertIsInstance(text_classifier, MyPipeline)
+
+    def test_check_task(self):
+        task = get_task("gpt2")
+        self.assertEqual(task, "text-generation")
+
+        with self.assertRaises(RuntimeError):
+            # Wrong framework
+            get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
+
+    @require_torch
+    def test_iterator_data(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+        # When using multiple workers on streamable data it should still work
+        # This will force using `num_workers=1` with a warning for now.
+        results = []
+        for out in pipe(data(10), num_workers=2):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+    @require_tf
+    def test_iterator_data_tf(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification", framework="tf")
+        out = pipe("This is a test")
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+
+@is_pipeline_test
+class PipelinePadTest(unittest.TestCase):
+    @require_torch
+    def test_pipeline_padding(self):
+        import torch
+
+        items = [
+            {
+                "label": "label1",
+                "input_ids": torch.LongTensor([[1, 23, 24, 2]]),
+                "attention_mask": torch.LongTensor([[0, 1, 1, 0]]),
+            },
+            {
+                "label": "label2",
+                "input_ids": torch.LongTensor([[1, 23, 24, 43, 44, 2]]),
+                "attention_mask": torch.LongTensor([[0, 1, 1, 1, 1, 0]]),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "input_ids", 10, "right"),
+                torch.LongTensor([[1, 23, 24, 2, 10, 10], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "input_ids", 10, "left"),
+                torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
+            )
+        )
+
+    @require_torch
+    def test_pipeline_image_padding(self):
+        import torch
+
+        items = [
+            {
+                "label": "label1",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
+            {
+                "label": "label2",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "pixel_values", 10, "right"),
+                torch.zeros((2, 3, 10, 10)),
+            )
+        )
+
+    @require_torch
+    def test_pipeline_offset_mapping(self):
+        import torch
+
+        items = [
+            {
+                "offset_mappings": torch.zeros([1, 11, 2], dtype=torch.long),
+            },
+            {
+                "offset_mappings": torch.zeros([1, 4, 2], dtype=torch.long),
+            },
+        ]
+
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "offset_mappings", 0, "right"),
+                torch.zeros((2, 11, 2), dtype=torch.long),
+            ),
+        )

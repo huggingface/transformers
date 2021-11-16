@@ -21,12 +21,19 @@ from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import CONFIG_NAME
+from ...utils import logging
+from .dynamic import get_class_from_dynamic_module
 
+
+logger = logging.get_logger(__name__)
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
+        ("trocr", "TrOCRConfig"),
         ("fnet", "FNetConfig"),
+        ("segformer", "SegformerConfig"),
         ("gptj", "GPTJConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("beit", "BeitConfig"),
@@ -94,6 +101,10 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rag", "RagConfig"),
         ("tapas", "TapasConfig"),
         ("splinter", "SplinterConfig"),
+        ("sew-d", "SEWDConfig"),
+        ("sew", "SEWConfig"),
+        ("unispeech-sat", "UniSpeechSatConfig"),
+        ("unispeech", "UniSpeechConfig"),
     ]
 )
 
@@ -102,6 +113,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         # Add archive maps here
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -160,15 +172,22 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("vision-encoder-decoder", "Vision Encoder decoder"),
+        ("trocr", "TrOCR"),
         ("fnet", "FNet"),
+        ("segformer", "SegFormer"),
         ("gptj", "GPT-J"),
-        ("beit", "BeiT"),
+        ("beit", "BEiT"),
         ("rembert", "RemBERT"),
         ("layoutlmv2", "LayoutLMv2"),
         ("visual_bert", "VisualBert"),
@@ -220,6 +239,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("electra", "ELECTRA"),
         ("encoder-decoder", "Encoder decoder"),
         ("speech-encoder-decoder", "Speech Encoder decoder"),
+        ("vision-encoder-decoder", "Vision Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
         ("deberta-v2", "DeBERTa-v2"),
@@ -235,12 +255,17 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("hubert", "Hubert"),
         ("barthez", "BARThez"),
         ("phobert", "PhoBERT"),
+        ("bartpho", "BARTpho"),
         ("cpm", "CPM"),
         ("bertweet", "Bertweet"),
         ("bert-japanese", "BertJapanese"),
         ("byt5", "ByT5"),
         ("mbart50", "mBART-50"),
         ("splinter", "Splinter"),
+        ("sew-d", "SEW-D"),
+        ("sew", "SEW"),
+        ("unispeech-sat", "UniSpeechSat"),
+        ("unispeech", "UniSpeech"),
     ]
 )
 
@@ -271,9 +296,12 @@ class _LazyConfigMapping(OrderedDict):
 
     def __init__(self, mapping):
         self._mapping = mapping
+        self._extra_content = {}
         self._modules = {}
 
     def __getitem__(self, key):
+        if key in self._extra_content:
+            return self._extra_content[key]
         if key not in self._mapping:
             raise KeyError(key)
         value = self._mapping[key]
@@ -283,19 +311,27 @@ class _LazyConfigMapping(OrderedDict):
         return getattr(self._modules[module_name], value)
 
     def keys(self):
-        return self._mapping.keys()
+        return list(self._mapping.keys()) + list(self._extra_content.keys())
 
     def values(self):
-        return [self[k] for k in self._mapping.keys()]
+        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
 
     def items(self):
-        return [(k, self[k]) for k in self._mapping.keys()]
+        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
 
     def __iter__(self):
-        return iter(self._mapping.keys())
+        return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
 
     def __contains__(self, item):
-        return item in self._mapping
+        return item in self._mapping or item in self._extra_content
+
+    def register(self, key, value):
+        """
+        Register a new configuration in this mapping.
+        """
+        if key in self._mapping.keys():
+            raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+        self._extra_content[key] = value
 
 
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
@@ -492,6 +528,10 @@ class AutoConfig:
                 If :obj:`True`, then this functions returns a :obj:`Tuple(config, unused_kwargs)` where `unused_kwargs`
                 is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
                 the part of ``kwargs`` which has not been used to update ``config`` and is otherwise ignored.
+            trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs(additional keyword arguments, `optional`):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -524,8 +564,28 @@ class AutoConfig:
             {'foo': False}
         """
         kwargs["_from_auto"] = True
+        kwargs["name_or_path"] = pretrained_model_name_or_path
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
         config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if "model_type" in config_dict:
+        if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
+            if not trust_remote_code:
+                raise ValueError(
+                    f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that repo "
+                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
+                    "the option `trust_remote_code=True` to remove this error."
+                )
+            if kwargs.get("revision", None) is None:
+                logger.warn(
+                    "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
+                    "ensure no malicious code has been contributed in a newer revision."
+                )
+            class_ref = config_dict["auto_map"]["AutoConfig"]
+            module_file, class_name = class_ref.split(".")
+            config_class = get_class_from_dynamic_module(
+                pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+            )
+            return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             return config_class.from_dict(config_dict, **kwargs)
         else:
@@ -539,3 +599,20 @@ class AutoConfig:
             f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
             f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )
+
+    @staticmethod
+    def register(model_type, config):
+        """
+        Register a new configuration for this class.
+
+        Args:
+            model_type (:obj:`str`): The model type like "bert" or "gpt".
+            config (:class:`~transformers.PretrainedConfig`): The config to register.
+        """
+        if issubclass(config, PretrainedConfig) and config.model_type != model_type:
+            raise ValueError(
+                "The config you are passing has a `model_type` attribute that is not consistent with the model type "
+                f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
+                "match!"
+            )
+        CONFIG_MAPPING.register(model_type, config)

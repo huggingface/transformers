@@ -24,12 +24,11 @@ import unittest
 from importlib import import_module
 from typing import List, Tuple
 
-from huggingface_hub import HfApi
+from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    ENDPOINT_STAGING,
     PASS,
     USER,
     CaptureLogger,
@@ -50,6 +49,7 @@ if is_tf_available():
 
     from transformers import (
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -59,6 +59,7 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFBertModel,
         TFSharedEmbeddings,
@@ -104,6 +105,7 @@ class TFModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
+    test_mismatched_shapes = True
     test_resize_embeddings = True
     test_head_masking = True
     is_encoder_decoder = False
@@ -125,7 +127,10 @@ class TFModelTesterMixin:
             elif model_class in get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            elif model_class in [
+                *get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                *get_values(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            ]:
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
                 inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
@@ -157,6 +162,20 @@ class TFModelTesterMixin:
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
                 self.assert_outputs_same(after_outputs, outputs)
+
+    def test_save_load_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            new_model = model_class.from_config(model.get_config())
+            _ = new_model(self._prepare_for_class(inputs_dict, model_class))  # Build model
+            new_model.set_weights(model.get_weights())
+            after_outputs = new_model(self._prepare_for_class(inputs_dict, model_class))
+
+            self.assert_outputs_same(after_outputs, outputs)
 
     @tooslow
     def test_graph_mode(self):
@@ -429,7 +448,6 @@ class TFModelTesterMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-
         import torch
 
         import transformers
@@ -459,6 +477,8 @@ class TFModelTesterMixin:
                 if type(key) == bool:
                     pt_inputs_dict[name] = key
                 elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                elif name == "pixel_values":
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
@@ -503,6 +523,8 @@ class TFModelTesterMixin:
                     key = np.array(key, dtype=bool)
                     pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
                 elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                elif name == "pixel_values":
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
@@ -605,7 +627,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if self.is_encoder_decoder:
-                input_ids = {
+                inputs = {
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, max_input),
                         name="decoder_input_ids",
@@ -613,10 +635,22 @@ class TFModelTesterMixin:
                     ),
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
+            # TODO: A better way to handle vision models
+            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification"]:
+                inputs = tf.keras.Input(
+                    batch_shape=(
+                        3,
+                        self.model_tester.num_channels,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
+                    ),
+                    name="pixel_values",
+                    dtype="float32",
+                )
             elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
+                inputs = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
-                input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
+                inputs = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
 
             # Prepare our model
             model = model_class(config)
@@ -626,14 +660,14 @@ class TFModelTesterMixin:
                 model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
 
-            outputs_dict = model(input_ids)
+            outputs_dict = model(inputs)
             hidden_states = outputs_dict[0]
 
             # Add a dense layer on top to test integration with other keras modules
             outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
 
             # Compile extended model
-            extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
+            extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
             extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
     def test_keyword_and_dict_args(self):
@@ -647,6 +681,8 @@ class TFModelTesterMixin:
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             input_ids = inputs_keywords.pop("input_ids", None)
+            if input_ids is None:
+                input_ids = inputs_keywords.pop("pixel_values", None)
             outputs_keywords = model(input_ids, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
             output_keywords = outputs_keywords[0].numpy()
@@ -1236,7 +1272,8 @@ class TFModelTesterMixin:
 
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                input_ids = prepared_for_class.pop("input_ids")
+                input_name = "input_ids" if "input_ids" in prepared_for_class else "pixel_values"
+                input_ids = prepared_for_class.pop(input_name)
 
                 loss = model(input_ids, **prepared_for_class)[0]
                 self.assertEqual(loss.shape, [loss_size])
@@ -1255,7 +1292,7 @@ class TFModelTesterMixin:
                 signature_names = list(signature.keys())
 
                 # Create a dictionary holding the location of the tensors in the tuple
-                tuple_index_mapping = {0: "input_ids"}
+                tuple_index_mapping = {0: input_name}
                 for label_key in label_keys:
                     label_key_index = signature_names.index(label_key)
                     tuple_index_mapping[label_key_index] = label_key
@@ -1312,6 +1349,8 @@ class TFModelTesterMixin:
                 self.assertEqual(sum([tf.reduce_sum(w).numpy() for w in attn_weights]), 0.0)
 
     def test_load_with_mismatched_shapes(self):
+        if not self.test_mismatched_shapes:
+            return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1328,6 +1367,8 @@ class TFModelTesterMixin:
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(ValueError):
                         new_model = TFAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                    with self.assertRaises(ValueError):
+                        new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
                     logger = logging.get_logger("transformers.modeling_tf_utils")
                     with CaptureLogger(logger) as cl:
@@ -1338,6 +1379,20 @@ class TFModelTesterMixin:
 
                     logits = new_model(**inputs).logits
                     self.assertEqual(logits.shape[1], 42)
+
+                    with CaptureLogger(logger) as cl:
+                        new_model_without_prefix = TFAutoModel.from_pretrained(
+                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    # Although Tf models always have a prefix pointing to `MainLayer`,
+                    # we still add this "without prefix" test to keep a consistency between tf and pt tests.
+                    input_ids = ids_tensor((2, 8), 10)
+                    if self.is_encoder_decoder:
+                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                    else:
+                        new_model_without_prefix(input_ids)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
@@ -1391,6 +1446,22 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
 
     return output
+
+
+def floats_tensor(shape, scale=1.0, rng=None, name=None, dtype=None):
+    """Creates a random float32 tensor"""
+    if rng is None:
+        rng = random.Random()
+
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
+
+    values = []
+    for _ in range(total_dims):
+        values.append(rng.random() * scale)
+
+    return tf.reshape(tf.constant(values, dtype=dtype if dtype is not None else tf.float32), shape=shape)
 
 
 @require_tf
@@ -1495,18 +1566,17 @@ class UtilsFunctionsTest(unittest.TestCase):
 class TFModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-tf")
+            delete_repo(token=cls._token, name="test-model-tf")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-tf-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-model-tf-org", organization="valid_org")
         except HTTPError:
             pass
 

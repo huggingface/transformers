@@ -73,8 +73,12 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     model = LukeModel(config=config).eval()
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    assert len(missing_keys) == 1 and missing_keys[0] == "embeddings.position_ids"
-    assert all(key.startswith("entity_predictions") or key.startswith("lm_head") for key in unexpected_keys)
+    if not (len(missing_keys) == 1 and missing_keys[0] == "embeddings.position_ids"):
+        raise ValueError(f"Missing keys {', '.join(missing_keys)}. Expected only missing embeddings.position_ids")
+    if not (all(key.startswith("entity_predictions") or key.startswith("lm_head") for key in unexpected_keys)):
+        raise ValueError(
+            f"Unexpected keys {', '.join([key for key in unexpected_keys if not (key.startswith('entity_predictions') or key.startswith('lm_head'))])}"
+        )
 
     # Check outputs
     tokenizer = LukeTokenizer.from_pretrained(pytorch_dump_folder_path, task="entity_classification")
@@ -95,8 +99,12 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         expected_shape = torch.Size((1, 42, 768))
         expected_slice = torch.tensor([[0.0037, 0.1368, -0.0091], [0.1099, 0.3329, -0.1095], [0.0765, 0.5335, 0.1179]])
 
-    assert outputs.last_hidden_state.shape == expected_shape
-    assert torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+    if not (outputs.last_hidden_state.shape == expected_shape):
+        raise ValueError(
+            f"Outputs.last_hidden_state.shape is {outputs.last_hidden_state.shape}, Expected shape is {expected_shape}"
+        )
+    if not torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4):
+        raise ValueError
 
     # Verify entity hidden states
     if model_size == "large":
@@ -106,8 +114,12 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         expected_shape = torch.Size((1, 1, 768))
         expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]])
 
-    assert outputs.entity_last_hidden_state.shape == expected_shape
-    assert torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+    if not (outputs.entity_last_hidden_state.shape != expected_shape):
+        raise ValueError(
+            f"Outputs.entity_last_hidden_state.shape is {outputs.entity_last_hidden_state.shape}, Expected shape is {expected_shape}"
+        )
+    if not torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4):
+        raise ValueError
 
     # Finally, save our PyTorch model and tokenizer
     print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))

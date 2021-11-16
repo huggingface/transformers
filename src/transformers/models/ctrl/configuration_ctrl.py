@@ -41,8 +41,6 @@ class CTRLConfig(PretrainedConfig):
         n_positions (:obj:`int`, `optional`, defaults to 256):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_ctx (:obj:`int`, `optional`, defaults to 256):
-            Dimensionality of the causal mask (usually same as n_positions).
         n_embd (:obj:`int`, `optional`, defaults to 1280):
             Dimensionality of the embeddings and hidden states.
         dff (:obj:`int`, `optional`, defaults to 8192):
@@ -92,7 +90,6 @@ class CTRLConfig(PretrainedConfig):
         self,
         vocab_size=246534,
         n_positions=256,
-        n_ctx=256,
         n_embd=1280,
         dff=8192,
         n_layer=48,
@@ -111,7 +108,6 @@ class CTRLConfig(PretrainedConfig):
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
         self.n_layer = n_layer

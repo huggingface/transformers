@@ -290,7 +290,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     fx_ready_model_classes = all_model_classes
-    test_sequence_classification_problem_types = True
+    fx_dynamic_ready_model_classes = all_model_classes
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
