@@ -155,6 +155,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return {"output_ids": output_ids}
 
     def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
+        record = {}
         if return_type == ReturnType.TENSORS:
             record = {f"{self.return_name}_token_ids": model_outputs}
         elif return_type == ReturnType.TEXT:
