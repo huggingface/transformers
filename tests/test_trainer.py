@@ -856,7 +856,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(b, b1, delta=1e-8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
-    def test_training_with_resume_from_checkpoint_flase(self):
+    def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
