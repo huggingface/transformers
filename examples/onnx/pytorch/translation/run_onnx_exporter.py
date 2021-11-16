@@ -195,7 +195,7 @@ def main():
     if args.output_file_path:
         output_name = args.output_file_path
     else:
-        output_name = "onnx_model.onnx"
+        output_name = "BART.onnx"
 
     logger.info("Exporting model to ONNX")
     export_and_validate_model(model, tokenizer, output_name, num_beams, max_length)
