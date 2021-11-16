@@ -697,7 +697,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     @classmethod
     def from_config(cls, config, **kwargs):
-        return cls._from_config(PretrainedConfig.from_dict(config, **kwargs))
+        if isinstance(config, PretrainedConfig):
+            return cls._from_config(config, **kwargs)
+        return cls._from_config(cls.config_class.from_dict(config, **kwargs))
 
     @classmethod
     def _from_config(cls, config, **kwargs):

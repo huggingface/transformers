@@ -173,6 +173,8 @@ class TFModelTesterMixin:
             # make sure that returned config is jsonifiable, which is required by keras
             json.dumps(model_config)
             new_model = model_class.from_config(model.get_config())
+            # make sure it also accepts a normal config
+            _ = model_class.from_config(model.config)
             _ = new_model(self._prepare_for_class(inputs_dict, model_class))  # Build model
             new_model.set_weights(model.get_weights())
             after_outputs = new_model(self._prepare_for_class(inputs_dict, model_class))
