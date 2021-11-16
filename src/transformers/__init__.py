@@ -297,9 +297,7 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
-    "models.vision_text_dual_encoder": [
-        "VisionTextDualEncoderConfig",
-    ],
+    "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
@@ -3113,7 +3111,7 @@ if TYPE_CHECKING:
             UniSpeechSatPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
-        from .models.vision_text_dual_encoder import VisionTextDualEncoderModel, VisionTextDualEncoderPreTrainedModel
+        from .models.vision_text_dual_encoder import VisionTextDualEncoderModel
         from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
