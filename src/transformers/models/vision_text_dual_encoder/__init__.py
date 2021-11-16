@@ -35,28 +35,13 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_vision_text_dual_encoder"] = [
         "VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "VisionTextDualEncoderForCausalLM",
-        "VisionTextDualEncoderForMaskedLM",
-        "VisionTextDualEncoderForMultipleChoice",
-        "VisionTextDualEncoderForQuestionAnswering",
-        "VisionTextDualEncoderForSequenceClassification",
-        "VisionTextDualEncoderForTokenClassification",
-        "VisionTextDualEncoderLayer",
         "VisionTextDualEncoderModel",
         "VisionTextDualEncoderPreTrainedModel",
-        "load_tf_weights_in_vision_text_dual_encoder",
     ]
 
 
 if is_flax_available():
     _import_structure["modeling_flax_vision_text_dual_encoder"] = [
-        "FlaxVisionTextDualEncoderForCausalLM",
-        "FlaxVisionTextDualEncoderForMaskedLM",
-        "FlaxVisionTextDualEncoderForMultipleChoice",
-        "FlaxVisionTextDualEncoderForQuestionAnswering",
-        "FlaxVisionTextDualEncoderForSequenceClassification",
-        "FlaxVisionTextDualEncoderForTokenClassification",
-        "FlaxVisionTextDualEncoderLayer",
         "FlaxVisionTextDualEncoderModel",
         "FlaxVisionTextDualEncoderPreTrainedModel",
     ]
@@ -75,27 +60,12 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_vision_text_dual_encoder import (
             VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VisionTextDualEncoderForCausalLM,
-            VisionTextDualEncoderForMaskedLM,
-            VisionTextDualEncoderForMultipleChoice,
-            VisionTextDualEncoderForQuestionAnswering,
-            VisionTextDualEncoderForSequenceClassification,
-            VisionTextDualEncoderForTokenClassification,
-            VisionTextDualEncoderLayer,
             VisionTextDualEncoderModel,
             VisionTextDualEncoderPreTrainedModel,
-            load_tf_weights_in_vision_text_dual_encoder,
         )
 
     if is_flax_available():
         from .modeling_vision_text_dual_encoder import (
-            FlaxVisionTextDualEncoderForCausalLM,
-            FlaxVisionTextDualEncoderForMaskedLM,
-            FlaxVisionTextDualEncoderForMultipleChoice,
-            FlaxVisionTextDualEncoderForQuestionAnswering,
-            FlaxVisionTextDualEncoderForSequenceClassification,
-            FlaxVisionTextDualEncoderForTokenClassification,
-            FlaxVisionTextDualEncoderLayer,
             FlaxVisionTextDualEncoderModel,
             FlaxVisionTextDualEncoderPreTrainedModel,
         )

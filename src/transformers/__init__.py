@@ -300,7 +300,6 @@ _import_structure = {
     "models.vision_text_dual_encoder": [
         "VISION_TEXT_DUAL_ENCODER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VisionTextDualEncoderConfig",
-        "VisionTextDualEncoderTokenizer",
     ],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
@@ -402,7 +401,6 @@ else:
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.fnet"].append("FNetTokenizerFast")
-    _import_structure["models.vision_text_dual_encoder"].append("VisionTextDualEncoderTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -1317,16 +1315,8 @@ if is_torch_available():
     _import_structure["models.vision_text_dual_encoder"].extend(
         [
             "VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VisionTextDualEncoderForCausalLM",
-            "VisionTextDualEncoderForMaskedLM",
-            "VisionTextDualEncoderForMultipleChoice",
-            "VisionTextDualEncoderForQuestionAnswering",
-            "VisionTextDualEncoderForSequenceClassification",
-            "VisionTextDualEncoderForTokenClassification",
-            "VisionTextDualEncoderLayer",
             "VisionTextDualEncoderModel",
             "VisionTextDualEncoderPreTrainedModel",
-            "load_tf_weights_in_vision_text_dual_encoder",
         ]
     )
     _import_structure["models.visual_bert"].extend(
@@ -2038,13 +2028,6 @@ if is_flax_available():
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(
         [
-            "FlaxVisionTextDualEncoderForCausalLM",
-            "FlaxVisionTextDualEncoderForMaskedLM",
-            "FlaxVisionTextDualEncoderForMultipleChoice",
-            "FlaxVisionTextDualEncoderForQuestionAnswering",
-            "FlaxVisionTextDualEncoderForSequenceClassification",
-            "FlaxVisionTextDualEncoderForTokenClassification",
-            "FlaxVisionTextDualEncoderLayer",
             "FlaxVisionTextDualEncoderModel",
             "FlaxVisionTextDualEncoderPreTrainedModel",
         ]
@@ -2292,7 +2275,6 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import (
         VISION_TEXT_DUAL_ENCODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VisionTextDualEncoderConfig,
-        VisionTextDualEncoderTokenizer,
     )
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
@@ -2428,8 +2410,7 @@ if TYPE_CHECKING:
         from .models.roformer import RoFormerTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
-        from .models.t5 import T5TokenizerFast
-        from .models.vision_text_dual_encoder import VisionTextDualEncoderTokenizerFast
+        from .models.t5 import T5TokenizerFastalEncoderTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -3141,16 +3122,8 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import (
             VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VisionTextDualEncoderForCausalLM,
-            VisionTextDualEncoderForMaskedLM,
-            VisionTextDualEncoderForMultipleChoice,
-            VisionTextDualEncoderForQuestionAnswering,
-            VisionTextDualEncoderForSequenceClassification,
-            VisionTextDualEncoderForTokenClassification,
-            VisionTextDualEncoderLayer,
             VisionTextDualEncoderModel,
             VisionTextDualEncoderPreTrainedModel,
-            load_tf_weights_in_vision_text_dual_encoder,
         )
         from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3734,13 +3707,6 @@ if TYPE_CHECKING:
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import (
-            FlaxVisionTextDualEncoderForCausalLM,
-            FlaxVisionTextDualEncoderForMaskedLM,
-            FlaxVisionTextDualEncoderForMultipleChoice,
-            FlaxVisionTextDualEncoderForQuestionAnswering,
-            FlaxVisionTextDualEncoderForSequenceClassification,
-            FlaxVisionTextDualEncoderForTokenClassification,
-            FlaxVisionTextDualEncoderLayer,
             FlaxVisionTextDualEncoderModel,
             FlaxVisionTextDualEncoderPreTrainedModel,
         )

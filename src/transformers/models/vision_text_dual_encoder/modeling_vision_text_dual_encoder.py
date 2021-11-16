@@ -21,7 +21,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -135,7 +134,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 """
 
 
-class VisionTextDualEncoderModule(PreTrainedModel):
+class VisionTextDualEncoderModel(PreTrainedModel):
     def __init__(
         self,
         config: VisionTextDualEncoderConfig,
