@@ -890,7 +890,6 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->UniSpeech, wav2vec2->unispeech
 class UniSpeechPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1045,7 +1044,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         else:
             self.encoder = UniSpeechEncoder(config)
 
-        # End Copy
+        # End copy
         self.init_weights()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
@@ -1140,7 +1139,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-        # End Copy
+        # End copy
 
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
