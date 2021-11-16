@@ -297,6 +297,7 @@ extras["all"] = (
 
 extras["docs_specific"] = deps_list(
     "docutils",
+    "markdown",
     "recommonmark",
     "sphinx",
     "sphinx-markdown-tables",
