@@ -16,8 +16,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow
 
@@ -39,7 +37,7 @@ class ImageGPTFeatureExtractorIntegrationTest(unittest.TestCase):
         feature_extractor = ImageGPTFeatureExtractor.from_pretrained("openai/imagegpt-small")
 
         image = Image.open("data/images/image_test.jpg")
-        
+
         encoding = feature_extractor(image, return_tensors="pt")
 
         self.assertIsInstance(encoding, torch.Tensor)

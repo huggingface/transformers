@@ -176,11 +176,11 @@ class ImageGPTLayerNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.Tensor(hidden_size))
 
-    def forward(self, x):
+    def forward(self, tensor):
         # input is not mean centered
         return (
-            x
-            / torch.sqrt(torch.std(x, axis=-1, unbiased=False, keepdim=True) ** 2 + self.eps)
+            tensor
+            / torch.sqrt(torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps)
             * self.weight.data[..., :]
         )
 
