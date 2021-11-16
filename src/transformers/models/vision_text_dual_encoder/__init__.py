@@ -18,53 +18,36 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_flax_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
     "configuration_vision_text_dual_encoder": [
         "VisionTextDualEncoderConfig",
     ],
-    "tokenization_vision_text_dual_encoder": ["VisionTextDualEncoderTokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_vision_text_dual_encoder_fast"] = ["VisionTextDualEncoderTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_vision_text_dual_encoder"] = [
-        "VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VisionTextDualEncoderModel",
-        "VisionTextDualEncoderPreTrainedModel",
     ]
 
 
 if is_flax_available():
     _import_structure["modeling_flax_vision_text_dual_encoder"] = [
         "FlaxVisionTextDualEncoderModel",
-        "FlaxVisionTextDualEncoderPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
-    from .tokenization_vision_text_dual_encoder import VisionTextDualEncoderTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_vision_text_dual_encoder_fast import VisionTextDualEncoderTokenizerFast
 
     if is_torch_available():
-        from .modeling_vision_text_dual_encoder import (
-            VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VisionTextDualEncoderModel,
-            VisionTextDualEncoderPreTrainedModel,
-        )
+        from .modeling_vision_text_dual_encoder import VisionTextDualEncoderModel
 
     if is_flax_available():
-        from .modeling_vision_text_dual_encoder import (
-            FlaxVisionTextDualEncoderModel,
-            FlaxVisionTextDualEncoderPreTrainedModel,
-        )
+        from .modeling_vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
 
 
 else:

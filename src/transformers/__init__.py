@@ -1315,7 +1315,6 @@ if is_torch_available():
         [
             "VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VisionTextDualEncoderModel",
-            "VisionTextDualEncoderPreTrainedModel",
         ]
     )
     _import_structure["models.visual_bert"].extend(
@@ -2028,7 +2027,6 @@ if is_flax_available():
     _import_structure["models.vision_text_dual_encoder"].extend(
         [
             "FlaxVisionTextDualEncoderModel",
-            "FlaxVisionTextDualEncoderPreTrainedModel",
         ]
     )
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
@@ -3702,10 +3700,7 @@ if TYPE_CHECKING:
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
-        from .models.vision_text_dual_encoder import (
-            FlaxVisionTextDualEncoderModel,
-            FlaxVisionTextDualEncoderPreTrainedModel,
-        )
+        from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
