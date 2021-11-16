@@ -784,7 +784,6 @@ class DetrClassificationHead(nn.Module):
 class DetrPreTrainedModel(PreTrainedModel):
     config_class = DetrConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
