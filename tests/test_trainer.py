@@ -172,6 +172,16 @@ if is_torch_available():
             for i in range(len(self.dataset)):
                 yield self.dataset[i]
 
+    class FiniteIterableDataset(SampleIterableDataset):
+        def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
+            super().__init__(a, b, length, seed, label_names)
+            self.current_sample = 0
+
+        def __iter__(self):
+            while self.current_sample < len(self.dataset):
+                yield self.dataset[self.current_sample]
+                self.current_sample += 1
+
     class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
             super().__init__()
@@ -1057,6 +1067,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
+
+    def test_training_finite_iterable_dataset(self):
+        config = RegressionModelConfig()
+        model = RegressionPreTrainedModel(config)
+
+        batch_size = 1
+        gradient_accumulation_steps = 1
+        num_samples = 10
+
+        available_steps = num_samples // (batch_size * gradient_accumulation_steps)
+
+        data = FiniteIterableDataset(length=num_samples)
+        train_args = TrainingArguments(
+            ".",
+            max_steps=available_steps + 1,  # set a higher number than actually available
+            per_device_train_batch_size=batch_size,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+        )
+        trainer = Trainer(model, train_dataset=data, args=train_args)
+        with self.assertLogs("transformers.trainer", level="WARNING") as logs:
+            trainer.train()
+        self.assertIn(f"stopping training at step {available_steps}!", logs.output[0])
 
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
