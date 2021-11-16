@@ -159,13 +159,16 @@ class Text2TextGenerationPipeline(Pipeline):
         if return_type == ReturnType.TENSORS:
             record = {f"{self.return_name}_token_ids": model_outputs}
         elif return_type == ReturnType.TEXT:
-            record = {
-                f"{self.return_name}_text": self.tokenizer.decode(
-                    model_outputs["output_ids"][0],
-                    skip_special_tokens=True,
-                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                )
-            }
+            record = []
+            for sequence in model_outputs["output_ids"]:
+                item = {
+                    f"{self.return_name}_text": self.tokenizer.decode(
+                        sequence,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
+                }
+                record.append(item)
         return record
 
 
