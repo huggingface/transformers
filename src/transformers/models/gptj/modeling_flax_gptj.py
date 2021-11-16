@@ -149,12 +149,12 @@ class FlaxGPTJAttention(nn.Module):
         dense = partial(
             nn.Dense,
             self.embed_dim,
-            bias=False,
+            use_bias=False,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-        self.q_proj, self.k_proj, self.v_proj = dense(use_bias=False), dense(use_bias=False), dense(use_bias=False)
+        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
         self.out_proj = dense()
 
         self.resid_dropout = nn.Dropout(rate=config.resid_pdrop)
@@ -252,7 +252,7 @@ class FlaxGPTJAttention(nn.Module):
         attention_mask = combine_masks(attention_mask, causal_mask)
 
         dropout_rng = None
-        if not deterministic and self.config.attention_dropout > 0.0:
+        if not deterministic and self.config.attn_pdrop > 0.0:
             dropout_rng = self.make_rng("dropout")
 
         # During fast autoregressive decoding, we feed one position at a time,
@@ -273,7 +273,7 @@ class FlaxGPTJAttention(nn.Module):
             key,
             bias=attention_bias,
             dropout_rng=dropout_rng,
-            dropout_rate=self.config.attention_dropout,
+            dropout_rate=self.config.attn_pdrop,
             deterministic=deterministic,
             dtype=self.dtype,
             precision=None,
@@ -301,7 +301,7 @@ class FlaxGPTJMLP(nn.Module):
         self.fc_out = nn.Dense(embed_dim, dtype=self.dtype, kernel_init=kernel_init)
 
         self.act = ACT2FN[self.config.activation_function]
-        self.dropout = nn.Dropout(rate=self.config.resid_dropout)
+        self.dropout = nn.Dropout(rate=self.config.resid_pdrop)
 
     def __call__(self, hidden_states, deterministic: bool = True):
         hidden_states = self.fc_in(hidden_states)
