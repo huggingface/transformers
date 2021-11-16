@@ -55,6 +55,7 @@ deps = {
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt": "sigopt",
     "librosa": "librosa",
+    "markdown": "markdown!=3.3.5",
     "sphinx-copybutton": "sphinx-copybutton",
     "sphinx-markdown-tables": "sphinx-markdown-tables",
     "sphinx-rtd-theme": "sphinx-rtd-theme==0.4.3",

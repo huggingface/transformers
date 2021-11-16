@@ -144,6 +144,7 @@ _deps = [
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "librosa",
+    "markdown!=3.3.5",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -296,6 +297,7 @@ extras["all"] = (
 
 extras["docs_specific"] = deps_list(
     "docutils",
+    "markdown",
     "recommonmark",
     "sphinx",
     "sphinx-markdown-tables",
