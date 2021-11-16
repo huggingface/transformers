@@ -646,8 +646,8 @@ class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->UniSpeech
 class UniSpeechEncoder(nn.Module):
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->UniSpeech
     def __init__(self, config):
         super().__init__()
         self.config = config
