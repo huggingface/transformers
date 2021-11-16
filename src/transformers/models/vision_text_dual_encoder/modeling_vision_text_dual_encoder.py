@@ -40,10 +40,6 @@ _CHECKPOINT_FOR_DOC = "brand-new-bert-base-cased"
 _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
 _TOKENIZER_FOR_DOC = "VisionTextDualEncoderTokenizer"
 
-VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "brand-new-bert-base-cased",
-    # See all VisionTextDualEncoder models at https://huggingface.co/models?filter=vision_text_dual_encoder
-]
 
 VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING = r"""
     Args:
