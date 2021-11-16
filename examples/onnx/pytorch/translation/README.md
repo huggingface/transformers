@@ -16,7 +16,6 @@ limitations under the License.
 # Bart + Beam Search to ONNX
 
 
-## Usage
 
 This folder contains an example of exporting Bart + Beam Search generation (`BartForConditionalGeneration`) to ONNX.
 
