@@ -47,7 +47,7 @@ PT_DUMMY_PRETRAINED_CLASS = (
     DUMMY_PRETRAINED_CLASS
     + """
     def forward(self, *args, **kwargs):
-        requires_backends(cls, {1})
+        requires_backends(self, {1})
 """
 )
 
@@ -55,7 +55,7 @@ TF_DUMMY_PRETRAINED_CLASS = (
     DUMMY_PRETRAINED_CLASS
     + """
     def call(self, *args, **kwargs):
-        requires_backends(cls, {1})
+        requires_backends(self, {1})
 """
 )
 
@@ -63,7 +63,7 @@ FLAX_DUMMY_PRETRAINED_CLASS = (
     DUMMY_PRETRAINED_CLASS
     + """
     def __call__(self, *args, **kwargs):
-        requires_backends(cls, {1})
+        requires_backends(self, {1})
 """
 )
 
