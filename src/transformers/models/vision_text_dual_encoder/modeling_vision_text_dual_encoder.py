@@ -130,12 +130,23 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 
 
 class VisionTextDualEncoderModel(PreTrainedModel):
+    config_class = VisionTextDualEncoderConfig
+
     def __init__(
         self,
-        config: VisionTextDualEncoderConfig,
+        config: Optional[VisionTextDualEncoderConfig] = None,
         vision_model: Optional[PreTrainedModel] = None,
         text_model: Optional[PreTrainedModel] = None,
     ):
+
+        assert config is not None or (
+            vision_model is not None and text_model is not None
+        ), "Either a configuration or an vision and a text model has to be provided"
+        if config is None:
+            config = VisionTextDualEncoderConfig.from_text_vision_configs(text_model.config, vision_model.config)
+        else:
+            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+
         # initialize with config
         super().__init__(config)
 
