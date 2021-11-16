@@ -2403,7 +2403,7 @@ if TYPE_CHECKING:
         from .models.roformer import RoFormerTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
-        from .models.t5 import T5TokenizerFastalEncoderTokenizerFast
+        from .models.t5 import T5TokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -3114,7 +3114,7 @@ if TYPE_CHECKING:
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import VisionTextDualEncoderModel, VisionTextDualEncoderPreTrainedModel
-        from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
+        from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
             VisualBertForPreTraining,
