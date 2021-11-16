@@ -112,7 +112,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -205,7 +205,7 @@ FROM_PRETRAINED_TF_DOCSTRING = """
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -298,7 +298,7 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -378,7 +378,24 @@ class _BaseAutoModelClass:
 
     @classmethod
     def from_config(cls, config, **kwargs):
-        if type(config) in cls._model_mapping.keys():
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
+        if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
+            if not trust_remote_code:
+                raise ValueError(
+                    "Loading this model requires you to execute the modeling file in that repo "
+                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
+                    "the option `trust_remote_code=True` to remove this error."
+                )
+            if kwargs.get("revision", None) is None:
+                logger.warn(
+                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
+                    "no malicious code has been contributed in a newer revision."
+                )
+            class_ref = config.auto_map[cls.__name__]
+            module_file, class_name = class_ref.split(".")
+            model_class = get_class_from_dynamic_module(config.name_or_path, module_file + ".py", class_name, **kwargs)
+            return model_class._from_config(config, **kwargs)
+        elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class._from_config(config, **kwargs)
 
@@ -394,7 +411,7 @@ class _BaseAutoModelClass:
         kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                pretrained_model_name_or_path, return_unused_kwargs=True, trust_remote_code=trust_remote_code, **kwargs
             )
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
             if not trust_remote_code:
@@ -421,6 +438,25 @@ class _BaseAutoModelClass:
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
         )
+
+    @classmethod
+    def register(cls, config_class, model_class):
+        """
+        Register a new model for this class.
+
+        Args:
+            config_class (:class:`~transformers.PretrainedConfig`):
+                The configuration corresponding to the model to register.
+            model_class (:class:`~transformers.PreTrainedModel`):
+                The model to register.
+        """
+        if hasattr(model_class, "config_class") and model_class.config_class != config_class:
+            raise ValueError(
+                "The model class you are passing has a `config_class` attribute that is not consistent with the "
+                f"config class you passed (model has {model_class.config_class} and you passed {config_class}. Fix "
+                "one of those so they match!"
+            )
+        cls._model_mapping.register(config_class, model_class)
 
 
 def insert_head_doc(docstring, head_doc=""):
@@ -507,9 +543,12 @@ class _LazyAutoMapping(OrderedDict):
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
         self._model_mapping = model_mapping
+        self._extra_content = {}
         self._modules = {}
 
     def __getitem__(self, key):
+        if key in self._extra_content:
+            return self._extra_content[key]
         model_type = self._reverse_config_mapping[key.__name__]
         if model_type not in self._model_mapping:
             raise KeyError(key)
@@ -523,11 +562,12 @@ class _LazyAutoMapping(OrderedDict):
         return getattribute_from_module(self._modules[module_name], attr)
 
     def keys(self):
-        return [
+        mapping_keys = [
             self._load_attr_from_module(key, name)
             for key, name in self._config_mapping.items()
             if key in self._model_mapping.keys()
         ]
+        return mapping_keys + list(self._extra_content.keys())
 
     def get(self, key, default):
         try:
@@ -539,14 +579,15 @@ class _LazyAutoMapping(OrderedDict):
         return bool(self.keys())
 
     def values(self):
-        return [
+        mapping_values = [
             self._load_attr_from_module(key, name)
             for key, name in self._model_mapping.items()
             if key in self._config_mapping.keys()
         ]
+        return mapping_values + list(self._extra_content.values())
 
     def items(self):
-        return [
+        mapping_items = [
             (
                 self._load_attr_from_module(key, self._config_mapping[key]),
                 self._load_attr_from_module(key, self._model_mapping[key]),
@@ -554,12 +595,26 @@ class _LazyAutoMapping(OrderedDict):
             for key in self._model_mapping.keys()
             if key in self._config_mapping.keys()
         ]
+        return mapping_items + list(self._extra_content.items())
 
     def __iter__(self):
-        return iter(self._mapping.keys())
+        return iter(self.keys())
 
     def __contains__(self, item):
+        if item in self._extra_content:
+            return True
         if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
             return False
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping
+
+    def register(self, key, value):
+        """
+        Register a new model in this mapping.
+        """
+        if hasattr(key, "__name__") and key.__name__ in self._reverse_config_mapping:
+            model_type = self._reverse_config_mapping[key.__name__]
+            if model_type in self._model_mapping.keys():
+                raise ValueError(f"'{key}' is already used by a Transformers model.")
+
+        self._extra_content[key] = value

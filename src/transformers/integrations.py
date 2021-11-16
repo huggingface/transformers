@@ -412,9 +412,13 @@ def rewrite_logs(d):
     new_d = {}
     eval_prefix = "eval_"
     eval_prefix_len = len(eval_prefix)
+    test_prefix = "test_"
+    test_prefix_len = len(test_prefix)
     for k, v in d.items():
         if k.startswith(eval_prefix):
             new_d["eval/" + k[eval_prefix_len:]] = v
+        elif k.startswith(test_prefix):
+            new_d["test/" + k[test_prefix_len:]] = v
         else:
             new_d["train/" + k] = v
     return new_d
@@ -432,9 +436,10 @@ class TensorBoardCallback(TrainerCallback):
 
     def __init__(self, tb_writer=None):
         has_tensorboard = is_tensorboard_available()
-        assert (
-            has_tensorboard
-        ), "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+        if not has_tensorboard:
+            raise RuntimeError(
+                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+            )
         if has_tensorboard:
             try:
                 from torch.utils.tensorboard import SummaryWriter  # noqa: F401
@@ -515,7 +520,8 @@ class WandbCallback(TrainerCallback):
 
     def __init__(self):
         has_wandb = is_wandb_available()
-        assert has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
+        if not has_wandb:
+            raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
 
@@ -637,7 +643,8 @@ class CometCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert _has_comet, "CometCallback requires comet-ml to be installed. Run `pip install comet-ml`."
+        if not _has_comet:
+            raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
         self._initialized = False
 
     def setup(self, args, state, model):
@@ -693,9 +700,8 @@ class AzureMLCallback(TrainerCallback):
     """
 
     def __init__(self, azureml_run=None):
-        assert (
-            is_azureml_available()
-        ), "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
+        if not is_azureml_available():
+            raise RuntimeError("AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`.")
         self.azureml_run = azureml_run
 
     def on_init_end(self, args, state, control, **kwargs):
@@ -717,7 +723,8 @@ class MLflowCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert is_mlflow_available(), "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
+        if not is_mlflow_available():
+            raise RuntimeError("MLflowCallback requires mlflow to be installed. Run `pip install mlflow`.")
         import mlflow
 
         self._MAX_PARAM_VAL_LENGTH = mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
@@ -773,9 +780,10 @@ class MLflowCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
+            metrics = {}
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
-                    self._ml_flow.log_metric(k, v, step=state.global_step)
+                    metrics[k] = v
                 else:
                     logger.warning(
                         f"Trainer is attempting to log a value of "
@@ -783,6 +791,7 @@ class MLflowCallback(TrainerCallback):
                         f"MLflow's log_metric() only accepts float and "
                         f"int types so we dropped this attribute."
                     )
+            self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
@@ -803,9 +812,10 @@ class NeptuneCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert (
-            is_neptune_available()
-        ), "NeptuneCallback requires neptune-client to be installed. Run `pip install neptune-client`."
+        if not is_neptune_available():
+            raise ValueError(
+                "NeptuneCallback requires neptune-client to be installed. Run `pip install neptune-client`."
+            )
         import neptune.new as neptune
 
         self._neptune = neptune
@@ -873,9 +883,10 @@ class CodeCarbonCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert (
-            is_codecarbon_available()
-        ), "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+        if not is_codecarbon_available():
+            raise RuntimeError(
+                "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+            )
         import codecarbon
 
         self._codecarbon = codecarbon

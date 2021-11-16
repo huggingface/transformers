@@ -78,6 +78,20 @@ class BeitConfig(PretrainedConfig):
         use_mean_pooling (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
+        out_indices (:obj:`List[int]`, `optional`, defaults to :obj:`[3, 5, 7, 11]`):
+            Indices of the feature maps to use for semantic segmentation.
+        pool_scales (:obj:`Tuple[int]`, `optional`, defaults to :obj:`[1, 2, 3, 6]`):
+            Pooling scales used in Pooling Pyramid Module applied on the last feature map.
+        use_auxiliary_head (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to use an auxiliary head during training.
+        auxiliary_loss_weight (:obj:`float`, `optional`, defaults to 0.4):
+            Weight of the cross-entropy loss of the auxiliary head.
+        auxiliary_channels (:obj:`int`, `optional`, defaults to 256):
+            Number of channels to use in the auxiliary head.
+        auxiliary_num_convs (:obj:`int`, `optional`, defaults to 1):
+            Number of convolutional layers to use in the auxiliary head.
+        auxiliary_concat_input (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to concatenate the output of the auxiliary head with the input before the classification layer.
 
     Example::
 
@@ -117,6 +131,13 @@ class BeitConfig(PretrainedConfig):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
+        out_indices=[3, 5, 7, 11],
+        pool_scales=[1, 2, 3, 6],
+        use_auxiliary_head=True,
+        auxiliary_loss_weight=0.4,
+        auxiliary_channels=256,
+        auxiliary_num_convs=1,
+        auxiliary_concat_input=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -142,3 +163,12 @@ class BeitConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
+        # decode head attributes (semantic segmentation)
+        self.out_indices = out_indices
+        self.pool_scales = pool_scales
+        # auxiliary head attributes (semantic segmentation)
+        self.use_auxiliary_head = use_auxiliary_head
+        self.auxiliary_loss_weight = auxiliary_loss_weight
+        self.auxiliary_channels = auxiliary_channels
+        self.auxiliary_num_convs = auxiliary_num_convs
+        self.auxiliary_concat_input = auxiliary_concat_input

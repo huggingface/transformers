@@ -189,12 +189,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}. "
                     f"Please make sure that the provided `raw_speech` input was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function."
+                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 

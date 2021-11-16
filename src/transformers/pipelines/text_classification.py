@@ -123,7 +123,12 @@ class TextClassificationPipeline(Pipeline):
 
             If ``self.return_all_scores=True``, one such dictionary is returned per label.
         """
-        return super().__call__(*args, **kwargs)
+        result = super().__call__(*args, **kwargs)
+        if isinstance(args[0], str):
+            # This pipeline is odd, and return a list when single item is run
+            return [result]
+        else:
+            return result
 
     def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
@@ -145,10 +150,7 @@ class TextClassificationPipeline(Pipeline):
                 function_to_apply = ClassificationFunction.NONE
 
         outputs = model_outputs["logits"][0]
-        if self.framework == "pt":
-            outputs = outputs.cpu().numpy()
-        else:
-            outputs = outputs.numpy()
+        outputs = outputs.numpy()
 
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)
@@ -163,10 +165,3 @@ class TextClassificationPipeline(Pipeline):
             return [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(scores)]
         else:
             return {"label": self.model.config.id2label[scores.argmax().item()], "score": scores.max().item()}
-
-    def run_multi(self, inputs, preprocess_params, forward_params, postprocess_params):
-        return [self.run_single(item, preprocess_params, forward_params, postprocess_params)[0] for item in inputs]
-
-    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
-        "This pipeline is odd, and return a list when single item is run"
-        return [super().run_single(inputs, preprocess_params, forward_params, postprocess_params)]

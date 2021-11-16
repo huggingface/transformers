@@ -21,7 +21,7 @@ import os
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -135,9 +135,8 @@ def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            if pointer.shape != array.shape:
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -329,7 +328,6 @@ class RemBertSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RemBert
 class RemBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -337,6 +335,7 @@ class RemBertAttention(nn.Module):
         self.output = RemBertSelfOutput(config)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -355,6 +354,7 @@ class RemBertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,
         hidden_states,
@@ -410,7 +410,6 @@ class RemBertOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RemBert
 class RemBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -420,11 +419,13 @@ class RemBertLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = RemBertAttention(config)
         self.intermediate = RemBertIntermediate(config)
         self.output = RemBertOutput(config)
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states,
@@ -455,9 +456,10 @@ class RemBertLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -488,6 +490,7 @@ class RemBertLayer(nn.Module):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
@@ -780,7 +783,7 @@ class RemBertModel(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -932,7 +935,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1174,7 +1177,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1219,14 +1222,26 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
@@ -1258,7 +1273,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1350,7 +1365,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1438,7 +1453,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

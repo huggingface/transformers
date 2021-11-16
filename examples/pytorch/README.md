@@ -40,6 +40,9 @@ Coming soon!
 | [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-generation) | - | n/a | - | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
 | [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/token-classification) | CoNLL NER | ✅ |✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation) | WMT | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/translation.ipynb)
+| [**`speech-recognition`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition) | TIMIT | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/speech_recognition.ipynb)
+| [**`multi-lingual speech-recognition`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition) | Common Voice | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/multi_lingual_speech_recognition.ipynb)
+| [**`audio-classification`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/audio-classification) | SUPERB KS | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/audio_classification.ipynb)
 
 
 ## Running quick tests
@@ -88,7 +91,7 @@ A few notes on this integration:
 ## Distributed training and mixed precision
 
 All the PyTorch scripts mentioned above work out of the box with distributed training and mixed precision, thanks to
-the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on _n_ GPUS,
+the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on _n_ GPUs,
 use the following command:
 
 ```bash
@@ -180,7 +183,7 @@ and reply to the questions asked. Then
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you cam launch training with
+that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
 accelerate launch path_to_script.py --args_to_script
@@ -223,7 +226,7 @@ Advanced configuration is possible by setting environment variables:
 
 | Environment Variable | Value |
 |---|---|
-| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training (`false` by default) |
+| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training) (`false` by default) |
 | WANDB_WATCH | one of `gradients` (default) to log histograms of gradients, `all` to log histograms of both gradients and parameters, or `false` for no histogram logging |
 | WANDB_PROJECT | Organize runs by project |
 
