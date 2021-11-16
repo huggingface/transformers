@@ -80,6 +80,8 @@ class Wav2Vec2ModelTester:
         initializer_range=0.02,
         vocab_size=32,
         do_stable_layer_norm=False,
+        num_adaptor_layers=1,
+        adaptor_stride=2,
         scope=None,
     ):
         self.parent = parent
@@ -105,6 +107,8 @@ class Wav2Vec2ModelTester:
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
+        self.num_adaptor_layers = num_adaptor_layers
+        self.adaptor_stride = adaptor_stride
         self.scope = scope
 
         output_seq_length = self.seq_length
@@ -112,6 +116,8 @@ class Wav2Vec2ModelTester:
             output_seq_length = (output_seq_length - (kernel - 1)) / stride
         self.output_seq_length = int(math.ceil(output_seq_length))
         self.encoder_seq_length = self.output_seq_length
+
+        self.adapter_output_seq_length = (self.output_seq_length - 1) // adaptor_stride + 1
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -142,6 +148,8 @@ class Wav2Vec2ModelTester:
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
+            num_adaptor_layers=self.num_adaptor_layers,
+            adaptor_stride=self.adaptor_stride,
         )
 
     def create_and_check_model(self, config, input_values, attention_mask):
@@ -151,6 +159,27 @@ class Wav2Vec2ModelTester:
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+        )
+
+    def create_and_check_model_with_adaptor(self, config, input_values, attention_mask):
+        config.add_adaptor = True
+        model = Wav2Vec2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
+        )
+
+    def create_and_check_model_with_adaptor_proj_dim(self, config, input_values, attention_mask):
+        config.add_adaptor = True
+        config.output_hidden_size = 8
+        model = Wav2Vec2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size)
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
@@ -325,6 +354,14 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_adaptor(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_adaptor(*config_and_inputs)
+
+    def test_model_with_adaptor_proj_dim(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_adaptor_proj_dim(*config_and_inputs)
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -537,6 +574,14 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_adaptor(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_adaptor(*config_and_inputs)
+
+    def test_model_with_adaptor_proj_dim(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_adaptor_proj_dim(*config_and_inputs)
 
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

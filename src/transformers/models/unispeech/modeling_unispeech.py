@@ -646,8 +646,8 @@ class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->UniSpeech
 class UniSpeechEncoder(nn.Module):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->UniSpeech
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1030,8 +1030,8 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
     "The bare UniSpeech Model transformer outputting raw hidden-states without any specific head on top.",
     UNISPEECH_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
 class UniSpeechModel(UniSpeechPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.__init__ with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
         self.config = config
@@ -1045,8 +1045,10 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         else:
             self.encoder = UniSpeechEncoder(config)
 
+        # End Copy
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
@@ -1100,6 +1102,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.forward
     def forward(
         self,
         input_values,
@@ -1136,6 +1139,8 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
+
+        # End Copy
 
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
