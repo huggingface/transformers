@@ -201,9 +201,11 @@ class Wav2Vec2Config(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        add_adapter=False,
-        adapter_kernel_size=None,
-        adapter_stride=None,
+        add_adaptor=False,
+        adaptor_kernel_size=3,
+        adaptor_stride=2,
+        num_adaptor_layers=3,
+        output_hidden_size=None,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -267,7 +269,9 @@ class Wav2Vec2Config(PretrainedConfig):
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
 
-        # adapter
-        self.add_adapter = add_adapter
-        self.adapter_kernel_size = adapter_kernel_size
-        self.adapter_stride = adapter_stride
+        # adaptor
+        self.add_adaptor = add_adaptor
+        self.adaptor_kernel_size = adaptor_kernel_size
+        self.adaptor_stride = adaptor_stride
+        self.num_adaptor_layers = num_adaptor_layers
+        self.output_hidden_size = output_hidden_size or hidden_size

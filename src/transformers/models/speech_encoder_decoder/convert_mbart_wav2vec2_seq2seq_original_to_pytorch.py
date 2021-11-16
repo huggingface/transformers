@@ -16,17 +16,15 @@
 
 
 import argparse
-import json
-import os
 
 import fairseq
 import torch
 from torch import nn
 
 from transformers import (
+    MBart50Tokenizer,
     MBartConfig,
     MBartForCausalLM,
-    MBartTokenizer,
     SpeechEncoderDecoderConfig,
     SpeechEncoderDecoderModel,
     Wav2Vec2Config,
@@ -100,9 +98,7 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
     fairseq_dict = fairseq_model.state_dict()
 
     feature_extractor = hf_model.feature_extractor
-
-    # if encoder has different dim to decoder -> use proj_weight
-    proj_weight = None
+    adaptor = hf_model.adaptor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -115,8 +111,13 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
                 hf_model.config.feat_extract_norm == "group",
             )
             is_used = True
-        elif name.split(".")[0] == "proj":
-            proj_weight = fairseq_model.proj
+        elif any(x in name for x in ["adaptor", "w2v_encoder.proj.", "w2v_proj_ln."]):
+            load_adaptor(
+                name,
+                value,
+                adaptor,
+                unused_weights,
+            )
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
@@ -141,8 +142,6 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
             unused_weights.append(name)
 
     logger.warning(f"Unused weights: {unused_weights}")
-
-    return proj_weight
 
 
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
@@ -181,6 +180,60 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
         unused_weights.append(full_name)
 
 
+def load_adaptor(full_name, value, adaptor, unused_weights):
+    name = full_name.split("adaptor.")[-1]
+    items = name.split(".")
+
+    if items[1].isdigit():
+        layer_id = int(items[1])
+    else:
+        layer_id = None
+
+    if "adaptor" not in full_name:
+        if "proj_ln" in full_name:
+            # has to be layer norm
+            if "bias" in name:
+                assert (
+                    value.shape == adaptor.proj_layer_norm.bias.data.shape
+                ), f"{full_name} has size {value.shape}, but {adaptor.proj_layer_norm.bias.data.shape} was found."
+                adaptor.proj_layer_norm.bias.data = value
+                logger.info(f"Adapter proj layer norm bias was initialized from {full_name}.")
+            if "weight" in name:
+                assert (
+                    value.shape == adaptor.proj_layer_norm.weight.data.shape
+                ), f"{full_name} has size {value.shape}, but {adaptor.proj_layer_norm.weight.data.shape} was found."
+                adaptor.proj_layer_norm.weight.data = value
+        else:
+            # has to be projection layer
+            if "bias" in name:
+                assert (
+                    value.shape == adaptor.proj.bias.data.shape
+                ), f"{full_name} has size {value.shape}, but {adaptor.proj.bias.data.shape} was found."
+                adaptor.proj.bias.data = value
+                logger.info(f"Adapter proj layer bias was initialized from {full_name}.")
+            if "weight" in name:
+                assert (
+                    value.shape == adaptor.proj.weight.data.shape
+                ), f"{full_name} has size {value.shape}, but {adaptor.proj.weight.data.shape} was found."
+                adaptor.proj.weight.data = value
+                logger.info(f"Adapter proj layer weight was initialized from {full_name}.")
+    elif isinstance(layer_id, int):
+        if "bias" in name:
+            assert (
+                value.shape == adaptor.layers[layer_id].conv.bias.data.shape
+            ), f"{full_name} has size {value.shape}, but {adaptor.layers[layer_id].conv.bias.data.shape} was found."
+            adaptor.layers[layer_id].conv.bias.data = value
+            logger.info(f"Adapter layer {layer_id} bias was initialized from {full_name}.")
+        elif "weight" in name:
+            assert (
+                value.shape == adaptor.layers[layer_id].conv.weight.data.shape
+            ), f"{full_name} has size {value.shape}, but {adaptor.layers[layer_id].conv.weight.data.shape} was found."
+            adaptor.layers[layer_id].conv.weight.data = value
+            logger.info(f"Adapter layer {layer_id} bias was initialized from {full_name}.")
+    else:
+        unused_weights.append(full_name)
+
+
 def make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
     lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
@@ -193,66 +246,69 @@ def convert_wav2vec2_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path,
     dict_path,
+    config_yaml_path,
     encoder_config_path,
     decoder_config_path,
-    vocab_size,
-    num_decoder_layers,
-    add_adapter,
-    adapter_kernel_size,
-    adapter_stride,
+    add_adaptor,
+    adaptor_kernel_size,
+    adaptor_stride,
+    decoder_start_token_id,
+    encoder_output_dim,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
+    # load configs
+    encoder_config = Wav2Vec2Config.from_pretrained(
+        encoder_config_path,
+        add_adaptor=True,
+        adaptor_stride=adaptor_stride,
+        adaptor_kernel_size=adaptor_kernel_size,
+        use_auth_token=True,
+        output_hidden_size=encoder_output_dim,
+    )
+    decoder_config = MBartConfig.from_pretrained(decoder_config_path)
+
     # load model
-    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
+    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+        [checkpoint_path],
+        arg_overrides={
+            "config_yaml": config_yaml_path,
+            "data": "/".join(dict_path.split("/")[:-1]),
+            "w2v_path": checkpoint_path,
+            "load_pretrained_decoder_from": None,
+        },
+    )
     model = model[0].eval()
 
-    # load configs
-    encoder_config = Wav2Vec2Config.from_pretrained(encoder_config_path, add_adapter=True, adapter_stride=adapter_stride, adapter_kernel_size=adapter_kernel_size, use_auth_token=True)
-    decoder_config = MBartConfig.from_pretrained(
-        decoder_config_path, vocab_size=vocab_size, decoder_layers=num_decoder_layers, do_stable_layer_norm=True
-    )
-
-    feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1,
-        sampling_rate=16000,
-        padding_value=0,
-        do_normalize=True,
-        return_attention_mask=True,
-    )
+    # load feature extractor
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, use_auth_token=True)
 
     # set weights for wav2vec2 encoder
     hf_encoder = Wav2Vec2Model(encoder_config)
-    projection_layer = recursively_load_weights_wav2vec2(model.encoder, hf_encoder)
 
+    recursively_load_weights_wav2vec2(model.encoder, hf_encoder)
+
+    # load decoder weights
     hf_decoder = MBartForCausalLM(decoder_config)
     missing_keys, unexpected_keys = hf_decoder.model.decoder.load_state_dict(model.decoder.state_dict(), strict=False)
-
-    # set output linear layer
-    unexpected_keys.remove("embed_out")
-    hf_decoder.lm_head.weight = nn.Parameter(model.decoder.embed_out.detach())
-
-    # layer norm is init to identity matrix so leaving it is fine
     logger.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
     logger.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")
 
     hf_wav2vec = SpeechEncoderDecoderModel(encoder=hf_encoder, decoder=hf_decoder)
     hf_wav2vec.config.tie_word_embeddings = False
 
-    # add projection layer
-    hf_wav2vec.enc_to_dec_proj.weight = nn.Parameter(projection_layer.weight)
-    hf_wav2vec.enc_to_dec_proj.bias = nn.Parameter(projection_layer.bias)
-
-    tokenizer = MBartTokenizer(dict_path)
+    tokenizer = MBart50Tokenizer(dict_path)
     tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     config = hf_wav2vec.config.to_dict()
     config["pad_token_id"] = tokenizer.pad_token_id
     config["bos_token_id"] = tokenizer.bos_token_id
     config["eos_token_id"] = tokenizer.eos_token_id
-    config["tokenizer_class"] = "mbart"
+    config["tokenizer_class"] = "mbart50"
     config["feature_extractor_type"] = "wav2vec2"
+
+    config["decoder_start_token_id"] = decoder_start_token_id
 
     hf_wav2vec.config = SpeechEncoderDecoderConfig.from_dict(config)
 
@@ -265,6 +321,7 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
+    parser.add_argument("--config_yaml_path", default=None, type=str, help="Path to yaml file of fine-tuned model")
     parser.add_argument(
         "--encoder_config_path",
         default="facebook/wav2vec2-xls-r-2b",
@@ -273,26 +330,27 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--decoder_config_path",
-        default="facebook/mbart-large-cc25",
+        default="facebook/mbart-large-50-one-to-many-mmt",
         type=str,
         help="Path to hf decoder checkpoint config",
     )
-    parser.add_argument("--vocab_size", default=10224, type=int, help="Vocab size of decoder")
-    parser.add_argument("--num_decoder_layers", default=7, type=int, help="Number of decoder layers")
-    parser.add_argument("--add_adapter", default=True, type=bool, help="Number of decoder layers")
-    parser.add_argument("--adapter_stride", default=2, type=int, help="Number of decoder layers")
-    parser.add_argument("--adapter_kernel_size", default=64, type=int, help="Number of decoder layers")
+    parser.add_argument("--add_adaptor", default=True, type=bool, help="whethere to add model adaptor layers")
+    parser.add_argument("--adaptor_stride", default=2, type=int, help="stride of adaptor layers")
+    parser.add_argument("--adaptor_kernel_size", default=3, type=int, help="kernel size of adaptor layers")
+    parser.add_argument("--encoder_output_dim", default=1024, type=int, help="encoder output dim")
+    parser.add_argument("--start_token_id", default=250004, type=int, help="`decoder_start_token_id` of model config")
 
     args = parser.parse_args()
     convert_wav2vec2_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
         args.dict_path,
+        args.config_yaml_path,
         encoder_config_path=args.encoder_config_path,
         decoder_config_path=args.decoder_config_path,
-        vocab_size=args.vocab_size,
-        num_decoder_layers=args.num_decoder_layers,
-        add_adapter=args.add_adapter,
-        adapter_kernel_size=args.adapter_kernel_size,
-        adapter_stride=args.adapter_stride,
+        add_adaptor=args.add_adaptor,
+        adaptor_kernel_size=args.adaptor_kernel_size,
+        adaptor_stride=args.adaptor_stride,
+        decoder_start_token_id=args.start_token_id,
+        encoder_output_dim=args.encoder_output_dim,
     )
