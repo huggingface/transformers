@@ -141,7 +141,8 @@ class TrainingArguments:
             the last epoch before stopping training).
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
-            :obj:`num_train_epochs`.
+            :obj:`num_train_epochs`. In case of using a finite iterable dataset the training may stop before reaching
+            the set number of steps when all data is exhausted
         lr_scheduler_type (:obj:`str` or :class:`~transformers.SchedulerType`, `optional`, defaults to :obj:`"linear"`):
             The scheduler type to use. See the documentation of :class:`~transformers.SchedulerType` for all possible
             values.
