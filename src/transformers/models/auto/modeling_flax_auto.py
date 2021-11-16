@@ -28,11 +28,8 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-<<<<<<< HEAD
         ("pegasus", "FlaxPegasusModel"),
-=======
         ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderModel"),
->>>>>>> init vision_text_dual_encoder
         ("distilbert", "FlaxDistilBertModel"),
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),

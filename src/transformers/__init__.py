@@ -3139,7 +3139,6 @@ if TYPE_CHECKING:
             UniSpeechSatPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
-        from .models.visual_bert import (
         from .models.vision_text_dual_encoder import (
             VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisionTextDualEncoderForCausalLM,
