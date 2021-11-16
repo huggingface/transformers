@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from functools import partial
+from math import sin
 from typing import Optional, Tuple
 
 import numpy as np
@@ -110,26 +111,34 @@ GPTJ_INPUTS_DOCSTRING = r"""
 """
 
 
-def fixed_pos_embedding(x, seq_dim=0):
-    dim = x.shape[-1]
+def fixed_pos_embedding(tensor, num_pos):
+    dim = tensor.shape[-1]
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
-    sinusoid_inp = np.einsum("i , j -> i j", np.arange(x.shape[seq_dim]), inv_freq)
+    sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq)
     sinusoid_inp = sinusoid_inp.astype("float32")
-    return np.sin(sinusoid_inp), np.cos(sinusoid_inp)
+    sin, cos = np.sin(sinusoid_inp), np.cos(sinusoid_inp)
+    return jnp.asarray(sin), jnp.asarray(cos)
 
 
-def rotate_every_two(x):
-    x1 = x[:, :, :, ::2]
-    x2 = x[:, :, :, 1::2]
-
-    x = jnp.stack((-x2, x1), axis=-1)
-    x = x.reshape(x.shape[:-2] + (-1,))
-    return x
+def rotate_every_two(tensor):
+    rotate_half_tensor = jnp.stack((tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
+    rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
+    return rotate_half_tensor
 
 
-def apply_rotary_pos_emb(x, sincos):
-    sin, cos = map(lambda t: t[None, :, None, :].repeat(2, 3), sincos)
-    return (x * cos) + (rotate_every_two(x) * sin)
+def apply_rotary_pos_emb(tensor, sincos, past_len):
+    cur_len = tensor.shape[1]
+    sin_pos, cos_pos = sincos
+
+    sin_pos = sin_pos[None, :, None, :]
+    cos_pos = cos_pos[None, :, None, :]
+
+    sin_pos = lax.dynamic_slice(sin_pos, (0, past_len, 0, 0), (1, past_len + cur_len, 1, sin_pos.shape[-1]))
+    cos_pos = lax.dynamic_slice(cos_pos, (0, past_len, 0, 0), (1, past_len + cur_len, 1, cos_pos.shape[-1]))
+
+    sin_pos = sin_pos.repeat(2, 3)
+    cos_pos = cos_pos.repeat(2, 3)
+    return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
 
 
 class FlaxGPTJAttention(nn.Module):
@@ -216,6 +225,12 @@ class FlaxGPTJAttention(nn.Module):
         key = self._split_heads(key)
         value = self._split_heads(value)
 
+        seq_len = query.shape[1]
+        past_len = 0
+        if self.has_variable("cache", "cached_key"):
+            past_len = self.variables["cache"]["cache_index"]
+            seq_len = seq_len + past_len
+
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
             k_pass = key[:, :, :, self.rotary_dim :]
@@ -223,16 +238,16 @@ class FlaxGPTJAttention(nn.Module):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            sincos = fixed_pos_embedding(k_rot, seq_dim=1)
-            k_rot = apply_rotary_pos_emb(k_rot, sincos)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+            sincos = fixed_pos_embedding(k_rot, num_pos=self.config.max_position_embeddings)
+            k_rot = apply_rotary_pos_emb(k_rot, sincos, past_len=past_len)
+            q_rot = apply_rotary_pos_emb(q_rot, sincos, past_len=past_len)
 
             key = jnp.concatenate([k_rot, k_pass], axis=-1)
             query = jnp.concatenate([q_rot, q_pass], axis=-1)
         else:
-            sincos = fixed_pos_embedding(key, seq_dim=1)
-            key = apply_rotary_pos_emb(key, sincos)
-            query = apply_rotary_pos_emb(query, sincos)
+            sincos = fixed_pos_embedding(key, num_pos=self.config.max_position_embeddings)
+            key = apply_rotary_pos_emb(key, sincos, past_len=past_len)
+            query = apply_rotary_pos_emb(query, sincos, past_len=past_len)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
