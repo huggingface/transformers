@@ -72,7 +72,7 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
         }
 
 
-def prepare_segformer_single_inputs():
+def prepare_semantic_single_inputs():
     ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
     image = Image.open(ds[0]["file"])
@@ -81,7 +81,7 @@ def prepare_segformer_single_inputs():
     return image, map
 
 
-def prepare_segformer_batch_inputs():
+def prepare_semantic_batch_inputs():
     ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
     image1 = Image.open(ds[0]["file"])
@@ -213,13 +213,18 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
 
-    def test_call_pil_with_annotations(self):
+    def test_call_segmentation_maps(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # create random PyTorch tensors
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        maps = []
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+            maps.append(torch.zeros(image.shape[-2:]).long())
 
         # Test not batched input
-        image, map = prepare_segformer_single_inputs()
-        encoding = feature_extractor(image, map, return_tensors="pt")
+        encoding = feature_extractor(image_inputs[0], maps[0], return_tensors="pt")
         self.assertEqual(
             encoding["pixel_values"].shape,
             (
@@ -229,7 +234,6 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
                 self.feature_extract_tester.size,
             ),
         )
-
         self.assertEqual(
             encoding["labels"].shape,
             (
@@ -238,10 +242,62 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
                 self.feature_extract_tester.size,
             ),
         )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
 
         # Test batched
-        images, maps = prepare_segformer_batch_inputs()
-        encoding = feature_extractor(images, maps, return_tensors="pt")
+        encoding = feature_extractor(image_inputs, maps, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test not batched input (PIL images)
+        image, segmentation_map = prepare_semantic_single_inputs()
+
+        encoding = feature_extractor(image, segmentation_map, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                1,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test batched input (PIL images)
+        images, segmentation_maps = prepare_semantic_batch_inputs()
+
+        encoding = feature_extractor(images, segmentation_maps, return_tensors="pt")
         self.assertEqual(
             encoding["pixel_values"].shape,
             (
@@ -251,8 +307,6 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
                 self.feature_extract_tester.size,
             ),
         )
-        self.assertEqual(encoding["pixel_values"].dtype, torch.float32)
-
         self.assertEqual(
             encoding["labels"].shape,
             (
@@ -269,7 +323,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
 
-        image, map = prepare_segformer_single_inputs()
+        image, map = prepare_semantic_single_inputs()
         encoding = feature_extractor(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)

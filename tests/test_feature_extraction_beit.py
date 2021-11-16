@@ -233,9 +233,9 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             maps.append(torch.zeros(image.shape[-2:]).long())
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], maps[0], return_tensors="pt").pixel_values
+        encoding = feature_extractor(image_inputs[0], maps[0], return_tensors="pt")
         self.assertEqual(
-            encoded_images.shape,
+            encoding["pixel_values"].shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
@@ -243,11 +243,22 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
                 self.feature_extract_tester.crop_size,
             ),
         )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                1,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs, maps, return_tensors="pt").pixel_values
+        encoding = feature_extractor(image_inputs, maps, return_tensors="pt")
         self.assertEqual(
-            encoded_images.shape,
+            encoding["pixel_values"].shape,
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
@@ -255,13 +266,24 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
                 self.feature_extract_tester.crop_size,
             ),
         )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
 
         # Test not batched input (PIL images)
         image, segmentation_map = prepare_semantic_single_inputs()
 
-        encoded_images = feature_extractor(image, segmentation_map, return_tensors="pt").pixel_values
+        encoding = feature_extractor(image, segmentation_map, return_tensors="pt")
         self.assertEqual(
-            encoded_images.shape,
+            encoding["pixel_values"].shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
@@ -269,13 +291,24 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
                 self.feature_extract_tester.crop_size,
             ),
         )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                1,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
 
         # Test batched input (PIL images)
         images, segmentation_maps = prepare_semantic_batch_inputs()
 
-        encoded_images = feature_extractor(images, segmentation_maps, return_tensors="pt").pixel_values
+        encoding = feature_extractor(images, segmentation_maps, return_tensors="pt")
         self.assertEqual(
-            encoded_images.shape,
+            encoding["pixel_values"].shape,
             (
                 2,
                 self.feature_extract_tester.num_channels,
@@ -283,3 +316,29 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
                 self.feature_extract_tester.crop_size,
             ),
         )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                2,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_reduce_labels(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+
+        image, map = prepare_semantic_single_inputs()
+        encoding = feature_extractor(image, map, return_tensors="pt")
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # ADE20k has 150 classes, so labels should be between 0 and 149
+        feature_extractor.reduce_labels = False
+        encoding = feature_extractor(image, map, return_tensors="pt")
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 149)
