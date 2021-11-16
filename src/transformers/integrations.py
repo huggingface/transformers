@@ -343,13 +343,16 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import wandb
-
+    # add WandbCallback if not already added in trainer callbacks
+    if WandbCallback not in trainer.callback_handler.callbacks:
+        trainer.add_callback(WandbCallback)
+    trainer.args.report_to = 'wandb'
     best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
     sweep_id = kwargs.pop("sweep_id", None)
     project = kwargs.pop("project", None)
     name = kwargs.pop("name", None)
     entity = kwargs.pop("entity", None)
-    metric = kwargs.pop("metric", None) or "objective"
+    metric = kwargs.pop("metric", None)
 
     sweep_config = trainer.hp_space(None)
     sweep_config["metric"]["goal"] = direction
@@ -357,16 +360,17 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
     sweep_config["name"] = name
 
     def _objective():
-        run = wandb.init()
+        
+        run = wandb.run if wandb.run else wandb.init()
         run.config.update({"assignments": {}, "metric": metric})
         config = wandb.config
+        
         trainer.objective = None
         trainer.train(resume_from_checkpoint=None, trial=config)
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
             trainer.objective = trainer.compute_objective(metrics)
-
         best_score = False
         if best_trial["run_id"] is not None:
             if direction == "minimize":

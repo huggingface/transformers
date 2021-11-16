@@ -919,11 +919,10 @@ class Trainer:
                 self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
         elif self.hp_search_backend == HPSearchBackend.WANDB:
-            import wandb
 
-            metrics[wandb.run.config.metric
-            ] = self.objective
-            wandb.log(metrics)
+            import wandb
+            if wandb.run.config.metric not in metrics:
+                logger.warn("The defined metric for W&B sweeps is not found. This might result in unexpected charts")
 
     def _tune_save_checkpoint(self):
         from ray import tune
@@ -2141,15 +2140,12 @@ class Trainer:
         )
 
         self.log(output.metrics)
-
         if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
-
         self._memory_tracker.stop_and_update_metrics(output.metrics)
-
         return output.metrics
 
     def predict(
