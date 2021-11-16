@@ -1030,7 +1030,6 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
     UNISPEECH_START_DOCSTRING,
 )
 class UniSpeechModel(UniSpeechPreTrainedModel):
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.__init__ with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
         self.config = config
@@ -1044,7 +1043,6 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         else:
             self.encoder = UniSpeechEncoder(config)
 
-        # End copy
         self.init_weights()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
@@ -1101,7 +1099,6 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.forward
     def forward(
         self,
         input_values,
@@ -1138,8 +1135,6 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
-
-        # End copy
 
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
