@@ -179,7 +179,8 @@ class Wav2Vec2ModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
