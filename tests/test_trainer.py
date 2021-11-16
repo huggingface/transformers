@@ -1073,17 +1073,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionPreTrainedModel(config)
 
         batch_size = 1
-        gradient_accumulation_steps = 1
         num_samples = 10
 
-        available_steps = num_samples // (batch_size * gradient_accumulation_steps)
+        available_steps = num_samples // batch_size
 
         data = FiniteIterableDataset(length=num_samples)
         train_args = TrainingArguments(
             ".",
             max_steps=available_steps + 1,  # set a higher number than actually available
             per_device_train_batch_size=batch_size,
-            gradient_accumulation_steps=gradient_accumulation_steps,
         )
         trainer = Trainer(model, train_dataset=data, args=train_args)
         with self.assertLogs("transformers.trainer", level="WARNING") as logs:
