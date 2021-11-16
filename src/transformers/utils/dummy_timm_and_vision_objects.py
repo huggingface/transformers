@@ -13,6 +13,9 @@ class DetrForObjectDetection:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["timm", "vision"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(cls, ["timm", "vision"])
+
 
 class DetrForSegmentation:
     def __init__(self, *args, **kwargs):
@@ -20,6 +23,9 @@ class DetrForSegmentation:
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["timm", "vision"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(cls, ["timm", "vision"])
 
 
@@ -31,6 +37,9 @@ class DetrModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["timm", "vision"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(cls, ["timm", "vision"])
+
 
 class DetrPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -38,4 +47,7 @@ class DetrPreTrainedModel:
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["timm", "vision"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(cls, ["timm", "vision"])
