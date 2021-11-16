@@ -23,7 +23,6 @@ from ...file_utils import _LazyModule, is_flax_available, is_tokenizers_availabl
 
 _import_structure = {
     "configuration_vision_text_dual_encoder": [
-        "VISION_TEXT_DUAL_ENCODER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VisionTextDualEncoderConfig",
     ],
     "tokenization_vision_text_dual_encoder": ["VisionTextDualEncoderTokenizer"],
@@ -48,10 +47,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_vision_text_dual_encoder import (
-        VISION_TEXT_DUAL_ENCODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        VisionTextDualEncoderConfig,
-    )
+    from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
     from .tokenization_vision_text_dual_encoder import VisionTextDualEncoderTokenizer
 
     if is_tokenizers_available():
