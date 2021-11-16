@@ -29,8 +29,7 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..auto.modeling_auto import MODEL_MAPPING
-from ..clip.modeling_clip import CLIPOutput, CLIPVisionModel
+from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
 from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
 
 
@@ -144,9 +143,13 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         vision_config = config.vision_config
 
         if vision_model is None:
-            from ..auto.modeling_auto import AutoModel
 
-            vision_model = AutoModel.from_config(config.vision_config)
+            if isinstance(config.vision_config, CLIPVisionConfig):
+                vision_model = CLIPVisionModel(config.vision_config)
+            else:
+                from ..auto.modeling_auto import AutoModel
+
+                vision_model = AutoModel.from_config(config.vision_config)
 
         if text_model is None:
             from ..auto.modeling_auto import AutoModel
@@ -410,14 +413,17 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                 from transformers import AutoConfig
 
                 vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
-                kwargs_vision["config"] = vision_config
 
-            vision_model = AutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+            if vision_config.model_type == "clip":
+                kwargs_vision["config"] = vision_config.vision_config
+                vision_model = CLIPVisionModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+                # TODO: Should we use the pre-trained projection as well ?
+            else:
+                kwargs_vision["config"] = vision_config
+                vision_model = AutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
 
         # instantiate config with corresponding kwargs
         config = VisionTextDualEncoderConfig.from_text_vision_configs(text_model.config, vision_model.config, **kwargs)
-
-        # TODO: handle loading CLIP's vision model
 
         # init model
         return cls(config=config, vision_model=vision_model, text_model=text_model)
