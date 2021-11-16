@@ -22,22 +22,16 @@ from ...file_utils import _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_vision_text_dual_encoder": [
-        "VisionTextDualEncoderConfig",
-    ],
+    "configuration_vision_text_dual_encoder": ["VisionTextDualEncoderConfig"],
 }
 
 
 if is_torch_available():
-    _import_structure["modeling_vision_text_dual_encoder"] = [
-        "VisionTextDualEncoderModel",
-    ]
+    _import_structure["modeling_vision_text_dual_encoder"] = ["VisionTextDualEncoderModel"]
 
 
 if is_flax_available():
-    _import_structure["modeling_flax_vision_text_dual_encoder"] = [
-        "FlaxVisionTextDualEncoderModel",
-    ]
+    _import_structure["modeling_flax_vision_text_dual_encoder"] = ["FlaxVisionTextDualEncoderModel"]
 
 
 if TYPE_CHECKING:
