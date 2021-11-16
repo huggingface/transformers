@@ -1313,7 +1313,6 @@ if is_torch_available():
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
     _import_structure["models.vision_text_dual_encoder"].extend(
         [
-            "VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VisionTextDualEncoderModel",
         ]
     )
@@ -3114,11 +3113,7 @@ if TYPE_CHECKING:
             UniSpeechSatPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
-        from .models.vision_text_dual_encoder import (
-            VISION_TEXT_DUAL_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VisionTextDualEncoderModel,
-            VisionTextDualEncoderPreTrainedModel,
-        )
+        from .models.vision_text_dual_encoder import VisionTextDualEncoderModel, VisionTextDualEncoderPreTrainedModel
         from .models.visual_bert import (  # load_tf_weights_in_visual_bert,
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
