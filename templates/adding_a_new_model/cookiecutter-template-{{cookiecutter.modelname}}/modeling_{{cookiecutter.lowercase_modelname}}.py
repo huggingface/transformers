@@ -2224,8 +2224,8 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def forward(
         self,
@@ -2388,8 +2388,8 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}DecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
