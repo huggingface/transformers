@@ -34,7 +34,7 @@ from transformers import (
 )
 from transformers.pipelines import get_task
 from transformers.pipelines.base import _pad
-from transformers.testing_utils import is_pipeline_test, require_torch
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 
 logger = logging.getLogger(__name__)
@@ -285,6 +285,42 @@ class CommonPipelineTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             # Wrong framework
             get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
+
+    @require_torch
+    def test_iterator_data(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+        # When using multiple workers on streamable data it should still work
+        # This will force using `num_workers=1` with a warning for now.
+        results = []
+        for out in pipe(data(10), num_workers=2):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+    @require_tf
+    def test_iterator_data_tf(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification", framework="tf")
+        out = pipe("This is a test")
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            results.append(out)
+        self.assertEqual(len(results), 10)
 
 
 @is_pipeline_test
