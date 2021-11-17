@@ -1712,7 +1712,7 @@ def get_from_cache(
                         " to False."
                     )
                 else:
-                    raise ValueError(
+                    raise ConnectionError(
                         "Connection error, and we cannot find the requested files in the cached path."
                         " Please try again or make sure your Internet connection is on."
                     )
