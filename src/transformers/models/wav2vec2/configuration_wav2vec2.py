@@ -140,6 +140,17 @@ class Wav2Vec2Config(PretrainedConfig):
             instance of :class:`~transformers.Wav2Vec2ForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
+        add_adapter (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether a convolutional network should be stacked on top of the Wav2Vec2 Encoder. Can be very useful for
+            warm-starting Wav2Vec2 for SpeechEncoderDecoder models.
+        adapter_kernel_size (:obj:`int`, `optional`, defaults to):
+            Kernel size of the convolutional layers in the adapter network.
+        adapter_stride (:obj:`int`, `optional`, defaults to):
+            Stride of the convolutional layers in the adapter network.
+        num_adapter_layers (:obj:`int`, `optional`, defaults to):
+            Number of convolutional layers that should be used in the adapter network.
+        output_hidden_size (:obj:`int`, `optional`):
+            Dimensionality of the encoder output layer. If not defined, this defaults to `hidden-size`.
 
     Example::
 
@@ -201,10 +212,10 @@ class Wav2Vec2Config(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        add_adaptor=False,
-        adaptor_kernel_size=3,
-        adaptor_stride=2,
-        num_adaptor_layers=3,
+        add_adapter=False,
+        adapter_kernel_size=3,
+        adapter_stride=2,
+        num_adapter_layers=3,
         output_hidden_size=None,
         **kwargs
     ):
@@ -269,9 +280,9 @@ class Wav2Vec2Config(PretrainedConfig):
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
 
-        # adaptor
-        self.add_adaptor = add_adaptor
-        self.adaptor_kernel_size = adaptor_kernel_size
-        self.adaptor_stride = adaptor_stride
-        self.num_adaptor_layers = num_adaptor_layers
+        # adapter
+        self.add_adapter = add_adapter
+        self.adapter_kernel_size = adapter_kernel_size
+        self.adapter_stride = adapter_stride
+        self.num_adapter_layers = num_adapter_layers
         self.output_hidden_size = output_hidden_size or hidden_size
