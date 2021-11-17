@@ -49,11 +49,6 @@ def add_arguments(parser):
     group.add_argument("--fuse-qkv", action="store_true", help="use the same scale factor for qkv")
     group.add_argument("--clip-gelu", metavar="N", type=float, help="clip gelu output maximum value to N")
     group.add_argument(
-        "--disable-dropout", action="store_true", help="disable dropout for consistent activation ranges"
-    )
-    group.add_argument("--dropout-prob", metavar="N", type=float, help="over-ride dropout probability to N")
-    group.add_argument("--scale-amax-dropout", action="store_true", help="scale post dropout amax by 1/(1-p)")
-    group.add_argument(
         "--recalibrate-weights",
         action="store_true",
         help="recalibrate weight amaxes by taking the max of the weights."
@@ -109,17 +104,8 @@ def configure_model(model, args, calib=False, eval=False):
         if args.fuse_qkv:
             fuse_qkv(model, args)
 
-        if args.scale_amax_dropout:
-            scale_amax_dropout(model, args, eval=eval)
-
     if args.clip_gelu:
         clip_gelu(model, args.clip_gelu)
-
-    if args.disable_dropout:
-        set_dropout(model, 0)
-
-    if args.dropout_prob is not None:
-        set_dropout(model, args.dropout_prob)
 
     # if args.local_rank in [-1, 0] and not calib:
     print_quant_summary(model)
@@ -200,41 +186,6 @@ def clip_gelu(model, maxval):
             mod._input_quantizer._amax.data.detach().clamp_(max=maxval)
             amax = mod._input_quantizer._amax.data.detach().item()
             logger.info(f"CLIP_GELU: {name:{name_width}} amax: {amax_init:5.2f} -> {amax:5.2f}")
-
-
-def set_dropout(model, p):
-    """Set dropout probability."""
-
-    if p < 0 or p > 1:
-        raise ValueError(f"dropout probability must be 0 <= p <= 1, got {p}")
-
-    for name, mod in model.named_modules():
-        if name.endswith(".dropout"):
-            mod.p = p
-            logger.info(f"SET_DROPOUT: {name:{name_width}} {p}")
-
-
-def scale_amax_dropout(model, args, eval=False):
-    p = args.dropout_prob if args.dropout_prob is not None else 0.1
-    s = (1 - p) if eval else 1 / (1 - p)
-
-    suffixes = [
-        "0.attention.self.query._input_quantizer",
-        "0.attention.self.key._input_quantizer",
-        "0.attention.self.value._input_quantizer",
-        "0.attention.output.add_residual_input_quantizer",
-        "matmul_a_input_quantizer",
-        "add_local_input_quantizer",
-    ]
-
-    phase = "eval" if eval else "train"
-    print(f"Scaling amax after dropout (p={p}) by s={s} for {phase}")
-    for name, mod in model.named_modules():
-        for suffix in suffixes:
-            if name.endswith(suffix):
-                old_amax = mod._amax.item()
-                mod._amax.detach().mul_(s)
-                print(f"SCALE {name:80}: {old_amax: 10.4f} -> {mod._amax.item(): 10.4f}")
 
 
 def expand_amax(model):
