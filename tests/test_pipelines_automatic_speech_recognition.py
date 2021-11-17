@@ -203,3 +203,41 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             data = f.read()
         output = asr(data)
         self.assertEqual(output, {"text": "Un uomo disse all'universo: \"Signore, io esisto."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    @require_datasets
+    def test_xls_r_to_en(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-xls-r-1b-21-to-en",
+            feature_extractor="facebook/wav2vec2-xls-r-1b-21-to-en",
+            framework="pt",
+        )
+
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "A man said to the universe: “Sir, I exist."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    @require_datasets
+    def test_xls_r_from_en(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-xls-r-1b-en-to-15",
+            feature_extractor="facebook/wav2vec2-xls-r-1b-en-to-15",
+            framework="pt",
+        )
+
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "Ein Mann sagte zu dem Universum, Sir, ich bin da."})
