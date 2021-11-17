@@ -892,7 +892,6 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->UniSpeech, wav2vec2->unispeech
 class UniSpeechPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1032,7 +1031,6 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
     "The bare UniSpeech Model transformer outputting raw hidden-states without any specific head on top.",
     UNISPEECH_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
 class UniSpeechModel(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
@@ -1049,6 +1047,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
 
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
