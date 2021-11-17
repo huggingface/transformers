@@ -917,12 +917,7 @@ class Trainer:
 
             if self.control.should_save:
                 self._tune_save_checkpoint()
-            tune.report(objective=self.objective, **metrics)
-        elif self.hp_search_backend == HPSearchBackend.WANDB:
-
-            import wandb
-            if wandb.run.config.metric not in metrics:
-                logger.warn("The defined metric for W&B sweeps is not found. This might result in unexpected charts")
+            tune.report(objective=self.objective, **metrics)       
 
     def _tune_save_checkpoint(self):
         from ray import tune

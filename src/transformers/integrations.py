@@ -352,7 +352,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
     project = kwargs.pop("project", None)
     name = kwargs.pop("name", None)
     entity = kwargs.pop("entity", None)
-    metric = kwargs.pop("metric", None)
+    metric = kwargs.pop("metric", None) or "eval/loss"
 
     sweep_config = trainer.hp_space(None)
     sweep_config["metric"]["goal"] = direction
@@ -366,11 +366,15 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
         config = wandb.config
         
         trainer.objective = None
-        trainer.train(resume_from_checkpoint=None, trial=config)
+        import pdb
+        trainer.train(resume_from_checkpoint=None, trial=vars(config)['_items'])
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
             trainer.objective = trainer.compute_objective(metrics)
+            format_metrics = rewrite_logs(metrics)
+            if metric not in format_metrics:
+                logger.warn("Provided metric not found. This might result in expected sweeps charts. Please check the `metric` parameter")
         best_score = False
         if best_trial["run_id"] is not None:
             if direction == "minimize":
