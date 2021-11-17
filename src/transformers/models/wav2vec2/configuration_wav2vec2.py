@@ -143,14 +143,16 @@ class Wav2Vec2Config(PretrainedConfig):
         add_adapter (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether a convolutional network should be stacked on top of the Wav2Vec2 Encoder. Can be very useful for
             warm-starting Wav2Vec2 for SpeechEncoderDecoder models.
-        adapter_kernel_size (:obj:`int`, `optional`, defaults to):
-            Kernel size of the convolutional layers in the adapter network.
-        adapter_stride (:obj:`int`, `optional`, defaults to):
-            Stride of the convolutional layers in the adapter network.
-        num_adapter_layers (:obj:`int`, `optional`, defaults to):
-            Number of convolutional layers that should be used in the adapter network.
+        adapter_kernel_size (:obj:`int`, `optional`, defaults to 3):
+            Kernel size of the convolutional layers in the adapter network. Only relevant if ``add_adapter is True``.
+        adapter_stride (:obj:`int`, `optional`, defaults to 2):
+            Stride of the convolutional layers in the adapter network. Only relevant if ``add_adapter is True``.
+        num_adapter_layers (:obj:`int`, `optional`, defaults to 3):
+            Number of convolutional layers that should be used in the adapter network. Only relevant if ``add_adapter
+            is True``.
         output_hidden_size (:obj:`int`, `optional`):
-            Dimensionality of the encoder output layer. If not defined, this defaults to `hidden-size`.
+            Dimensionality of the encoder output layer. If not defined, this defaults to `hidden-size`. Only relevant
+            if ``add_adapter is True``.
 
     Example::
 
