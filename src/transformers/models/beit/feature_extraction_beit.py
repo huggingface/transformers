@@ -65,9 +65,9 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         image_std (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         reduce_labels (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to reduce all label values of segmentation maps by 1, and replace the labels which are 0 by
-            255. Usually used for datasets where 0 is used for background, and background itself is not included in all
-            classes of a dataset (e.g. ADE20k).
+            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
+            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
+            background label will be replaced by 255.
     """
 
     model_input_names = ["pixel_values"]
