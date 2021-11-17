@@ -42,7 +42,7 @@ if is_tf_available():
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TFSharedEmbeddings
+        TFSharedEmbeddings,
     )
 
     if _tf_gpu_memory_limit is not None:
