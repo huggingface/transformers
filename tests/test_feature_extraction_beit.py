@@ -17,6 +17,7 @@
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
@@ -49,6 +50,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
+        reduce_labels=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -63,6 +65,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.reduce_labels = reduce_labels
 
     def prepare_feat_extract_dict(self):
         return {
@@ -73,7 +76,28 @@ class BeitFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "reduce_labels": self.reduce_labels,
         }
+
+
+def prepare_semantic_single_inputs():
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+
+    image = Image.open(dataset[0]["file"])
+    map = Image.open(dataset[1]["file"])
+
+    return image, map
+
+
+def prepare_semantic_batch_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+
+    image1 = Image.open(ds[0]["file"])
+    map1 = Image.open(ds[1]["file"])
+    image2 = Image.open(ds[2]["file"])
+    map2 = Image.open(ds[3]["file"])
+
+    return [image1, image2], [map1, map2]
 
 
 @require_torch
@@ -197,3 +221,124 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
                 self.feature_extract_tester.crop_size,
             ),
         )
+
+    def test_call_segmentation_maps(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # create random PyTorch tensors
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        maps = []
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+            maps.append(torch.zeros(image.shape[-2:]).long())
+
+        # Test not batched input
+        encoding = feature_extractor(image_inputs[0], maps[0], return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                1,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test batched
+        encoding = feature_extractor(image_inputs, maps, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test not batched input (PIL images)
+        image, segmentation_map = prepare_semantic_single_inputs()
+
+        encoding = feature_extractor(image, segmentation_map, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                1,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+        # Test batched input (PIL images)
+        images, segmentation_maps = prepare_semantic_batch_inputs()
+
+        encoding = feature_extractor(images, segmentation_maps, return_tensors="pt")
+        self.assertEqual(
+            encoding["pixel_values"].shape,
+            (
+                2,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(
+            encoding["labels"].shape,
+            (
+                2,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+        self.assertEqual(encoding["labels"].dtype, torch.long)
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_reduce_labels(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+
+        # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
+        image, map = prepare_semantic_single_inputs()
+        encoding = feature_extractor(image, map, return_tensors="pt")
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 150)
+
+        feature_extractor.reduce_labels = True
+        encoding = feature_extractor(image, map, return_tensors="pt")
+        self.assertTrue(encoding["labels"].min().item() >= 0)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
