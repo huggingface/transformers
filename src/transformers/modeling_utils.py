@@ -22,9 +22,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
-from packaging import version
 
 import torch
+from packaging import version
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
