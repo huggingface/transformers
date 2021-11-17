@@ -22,6 +22,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from packaging import version
 
 import torch
 from torch import Tensor, device, nn
@@ -420,7 +421,11 @@ def gradient_checkpointing_hook(module, _):
         # Remove the attribute now that is has been consumed, so it's no saved in the config.
         delattr(module.config, "gradient_checkpointing")
     # The hook will remove itself after the first execution
-    module._gradient_checkpointing_hook.remove()
+    # can't work with other forward hooks with torch < 1.10
+    # https://github.com/huggingface/transformers/pull/14408#issuecomment-971004220
+    # so for torch < 1.10 we leave the hook that does nothing
+    if version.parse(torch.__version__) >= version.parse("1.10"):
+        module._gradient_checkpointing_hook.remove()
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
