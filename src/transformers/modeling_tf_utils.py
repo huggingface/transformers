@@ -693,11 +693,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.name_or_path = config.name_or_path
 
     def get_config(self):
-        return self.config
+        return self.config.to_dict()
 
     @classmethod
     def from_config(cls, config, **kwargs):
-        return cls._from_config(config, **kwargs)
+        if isinstance(config, PretrainedConfig):
+            return cls._from_config(config, **kwargs)
+        return cls._from_config(cls.config_class.from_dict(config, **kwargs))
 
     @classmethod
     def _from_config(cls, config, **kwargs):
