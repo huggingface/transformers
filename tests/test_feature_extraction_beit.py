@@ -50,7 +50,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
-        reduce_labels=True,
+        reduce_labels=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,10 +81,10 @@ class BeitFeatureExtractionTester(unittest.TestCase):
 
 
 def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
-    image = Image.open(ds[0]["file"])
-    map = Image.open(ds[1]["file"])
+    image = Image.open(dataset[0]["file"])
+    map = Image.open(dataset[1]["file"])
 
     return image, map
 
@@ -332,13 +332,13 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
 
+        # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
         image, map = prepare_semantic_single_inputs()
         encoding = feature_extractor(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
-        self.assertTrue(encoding["labels"].max().item() <= 255)
+        self.assertTrue(encoding["labels"].max().item() <= 150)
 
-        # ADE20k has 150 classes, so labels should be between 0 and 149
-        feature_extractor.reduce_labels = False
+        feature_extractor.reduce_labels = True
         encoding = feature_extractor(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
-        self.assertTrue(encoding["labels"].max().item() <= 149)
+        self.assertTrue(encoding["labels"].max().item() <= 255)

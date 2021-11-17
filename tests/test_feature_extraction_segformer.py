@@ -47,7 +47,7 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
-        reduce_labels=True,
+        reduce_labels=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -73,21 +73,21 @@ class SegformerFeatureExtractionTester(unittest.TestCase):
 
 
 def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
-    image = Image.open(ds[0]["file"])
-    map = Image.open(ds[1]["file"])
+    image = Image.open(dataset[0]["file"])
+    map = Image.open(dataset[1]["file"])
 
     return image, map
 
 
 def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
-    image1 = Image.open(ds[0]["file"])
-    map1 = Image.open(ds[1]["file"])
-    image2 = Image.open(ds[2]["file"])
-    map2 = Image.open(ds[3]["file"])
+    image1 = Image.open(dataset[0]["file"])
+    map1 = Image.open(dataset[1]["file"])
+    image2 = Image.open(dataset[2]["file"])
+    map2 = Image.open(dataset[3]["file"])
 
     return [image1, image2], [map1, map2]
 
@@ -323,13 +323,13 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
 
+        # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
         image, map = prepare_semantic_single_inputs()
         encoding = feature_extractor(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
-        self.assertTrue(encoding["labels"].max().item() <= 255)
+        self.assertTrue(encoding["labels"].max().item() <= 150)
 
-        # ADE20k has 150 classes, so labels should be between 0 and 149
-        feature_extractor.reduce_labels = False
+        feature_extractor.reduce_labels = True
         encoding = feature_extractor(image, map, return_tensors="pt")
         self.assertTrue(encoding["labels"].min().item() >= 0)
-        self.assertTrue(encoding["labels"].max().item() <= 149)
+        self.assertTrue(encoding["labels"].max().item() <= 255)
