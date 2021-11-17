@@ -41,7 +41,9 @@ from transformers.testing_utils import (
     tooslow,
 )
 from transformers.utils import logging
-from .test_modeling_tf_common import floats_tensor, ids_tensor, _config_zero_init
+
+from .test_modeling_tf_common import _config_zero_init, floats_tensor, ids_tensor
+
 
 if is_tf_available():
     import numpy as np
