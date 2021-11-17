@@ -22,10 +22,9 @@ from importlib import import_module
 from transformers import is_tf_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import tooslow  # noqa: F401
-from transformers.testing_utils import _tf_gpu_memory_limit, require_keras2onnx, require_tf, slow
-from transformers.utils import logging
+from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
 
-from .test_modeling_tf_common import _config_zero_init, ids_tensor
+from .test_modeling_tf_common import ids_tensor
 
 
 if is_tf_available():
@@ -43,6 +42,7 @@ if is_tf_available():
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TFSharedEmbeddings
     )
 
     if _tf_gpu_memory_limit is not None:
