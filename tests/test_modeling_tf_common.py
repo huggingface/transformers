@@ -28,6 +28,7 @@ from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values
+from transformers.testing_utils import tooslow  # noqa: F401
 from transformers.testing_utils import (
     PASS,
     USER,
@@ -38,7 +39,6 @@ from transformers.testing_utils import (
     require_keras2onnx,
     require_tf,
     slow,
-    tooslow,  # noqa: F401
 )
 from transformers.utils import logging
 

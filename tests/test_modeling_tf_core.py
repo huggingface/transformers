@@ -21,15 +21,8 @@ from importlib import import_module
 
 from transformers import is_tf_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    _tf_gpu_memory_limit,
-    is_pt_tf_cross_test,  # noqa: F401
-    is_staging_test,  # noqa: F401
-    require_keras2onnx,
-    require_tf,
-    slow,
-    tooslow,  # noqa: F401
-)
+from transformers.testing_utils import tooslow  # noqa: F401
+from transformers.testing_utils import _tf_gpu_memory_limit, require_keras2onnx, require_tf, slow
 from transformers.utils import logging
 
 from .test_modeling_tf_common import _config_zero_init, ids_tensor
