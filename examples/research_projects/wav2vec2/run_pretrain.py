@@ -114,6 +114,12 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
+    validation_split_percentage: Optional[int] = field(
+        default=1,
+        metadata={
+            "help": "The percentage of the train set used as validation set in case there's no validation split"
+        },
+    )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
@@ -358,6 +364,7 @@ def main():
     config = Wav2Vec2Config.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
+        gradient_checkpointing=training_args.gradient_checkpointing,
     )
 
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":

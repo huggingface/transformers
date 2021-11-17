@@ -346,6 +346,7 @@ def main():
     model = Wav2Vec2ForCTC.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
+        gradient_checkpointing=training_args.gradient_checkpointing,
         vocab_size=len(processor.tokenizer),
     )
 

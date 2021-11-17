@@ -22,7 +22,14 @@ import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import Wav2Vec2Config, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_datasets,
+    require_soundfile,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -71,6 +78,8 @@ class Wav2Vec2ModelTester:
         layer_norm_eps=1e-5,
         hidden_act="gelu",
         initializer_range=0.02,
+        mask_time_prob=0.5,
+        mask_time_length=2,
         vocab_size=32,
         do_stable_layer_norm=False,
         scope=None,
@@ -98,6 +107,8 @@ class Wav2Vec2ModelTester:
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
         self.scope = scope
 
         output_seq_length = self.seq_length
@@ -124,6 +135,8 @@ class Wav2Vec2ModelTester:
             conv_stride=self.conv_stride,
             conv_kernel=self.conv_kernel,
             conv_bias=self.conv_bias,
+            mask_time_prob=self.mask_time_prob,
+            mask_time_length=self.mask_time_length,
             num_conv_pos_embeddings=self.num_conv_pos_embeddings,
             num_conv_pos_embedding_groups=self.num_conv_pos_embedding_groups,
             num_hidden_layers=self.num_hidden_layers,
@@ -131,6 +144,7 @@ class Wav2Vec2ModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             intermediate_size=self.intermediate_size,
             layer_norm_eps=self.layer_norm_eps,
+            do_stable_layer_norm=self.do_stable_layer_norm,
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
@@ -355,6 +369,16 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     # and thus the `get_input_embeddings` fn
     # is not implemented
     def test_model_common_attributes(self):
+        pass
+
+    @is_pt_flax_cross_test
+    # non-robust architecture does not exist in Flax
+    def test_equivalence_flax_to_pt(self):
+        pass
+
+    @is_pt_flax_cross_test
+    # non-robust architecture does not exist in Flax
+    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -900,21 +924,13 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
-
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
         from datasets import load_dataset

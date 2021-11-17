@@ -412,6 +412,17 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
+def gradient_checkpointing_hook(module, _):
+    # Hook to enable backward compatibility for gradient checkpointing. Will be removed once all models have a
+    # proper post_init method.
+    if getattr(module.config, "gradient_checkpointing", False):
+        module.gradient_checkpointing_enable()
+        # Remove the attribute now that is has been consumed, so it's no saved in the config.
+        delattr(module.config, "gradient_checkpointing")
+    # The hook will remove itself after the first execution
+    module._gradient_checkpointing_hook.remove()
+
+
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
     r"""
     Base class for all models.
@@ -479,10 +490,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        if getattr(self.config, "gradient_checkpointing", False):
-            self.gradient_checkpointing_enable()
-            # Remove the attribute now that is has been consumed, so it's no saved in the config.
-            delattr(self.config, "gradient_checkpointing")
+        if self.supports_gradient_checkpointing:
+            self._gradient_checkpointing_hook = self.register_forward_pre_hook(gradient_checkpointing_hook)
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -789,9 +798,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(
-            self.device, dtype=old_embeddings.weight.dtype
-        )
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -862,7 +870,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Build new lm head
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
-        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias).to(self.device)
+        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
+        new_lm_head = new_lm_head.to(self.device, dtype=old_lm_head.weight.dtype)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
@@ -1049,7 +1058,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
-            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
+            for ignore_key in self._keys_to_ignore_on_save:
+                if ignore_key in state_dict.keys():
+                    del state_dict[ignore_key]
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
@@ -1494,13 +1505,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # key re-naming operations are never done on the keys
         # that are loaded, but always on the keys of the newly initialized model
-        remove_prefix = not has_prefix_module and expects_prefix_module
-        add_prefix = has_prefix_module and not expects_prefix_module
+        remove_prefix_from_model = not has_prefix_module and expects_prefix_module
+        add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
-        if remove_prefix:
+        if remove_prefix_from_model:
             expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
-        elif add_prefix:
+        elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
@@ -1512,10 +1523,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if ignore_mismatched_sizes:
             for checkpoint_key in loaded_keys:
                 model_key = checkpoint_key
-                if remove_prefix and checkpoint_key.startswith(prefix):
-                    model_key = ".".join(checkpoint_key.split(".")[1:])
-                elif add_prefix:
+                if remove_prefix_from_model:
+                    # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
                     model_key = f"{prefix}.{checkpoint_key}"
+                elif add_prefix_to_model:
+                    # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                    model_key = ".".join(checkpoint_key.split(".")[1:])
 
                 if (
                     model_key in model_state_dict
@@ -1539,7 +1552,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if _fast_init:
             # retrieve unintialized modules and initialize
             uninitialized_modules = model.retrieve_modules_from_names(
-                missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+                missing_keys, add_prefix=add_prefix_to_model, remove_prefix=remove_prefix_from_model
             )
             for module in uninitialized_modules:
                 model._init_weights(module)

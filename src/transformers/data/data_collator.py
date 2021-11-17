@@ -74,6 +74,11 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
 class DefaultDataCollator(DataCollatorMixin):
     return_tensors: str = "pt"
 
+    def __call__(self, features: List[Dict[str, Any]], return_tensors=None) -> Dict[str, Any]:
+        if return_tensors is None:
+            return_tensors = self.return_tensors
+        return default_data_collator(features, return_tensors)
+
 
 def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import torch
@@ -878,14 +883,14 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         inputs, labels = self.tf_mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
-    def np_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+    def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
             examples = [{"input_ids": e} for e in examples]
 
-        batch_input = _tf_collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+        batch_input = _numpy_collate_batch(input_ids, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
 
         mask_labels = []
         for e in examples:
@@ -948,7 +953,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                 covered_indexes.add(index)
                 masked_lms.append(index)
 
-        assert len(covered_indexes) == len(masked_lms)
+        if len(covered_indexes) != len(masked_lms):
+            raise ValueError("Length of covered_indexes is not equal to length of masked_lms.")
         mask_labels = [1 if i in covered_indexes else 0 for i in range(len(input_tokens))]
         return mask_labels
 
@@ -1003,15 +1009,15 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
             )
-        labels = inputs.clone()
+        labels = tf.identity(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
 
         masked_indices = tf.cast(mask_labels, tf.bool)
 
         special_tokens_mask = [
-            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels
         ]
-        masked_indices = masked_indices & ~tf.convert_to_tensor(special_tokens_mask, dtype=tf.bool)
+        masked_indices = masked_indices & ~tf.cast(special_tokens_mask, dtype=tf.bool)
         if self.tokenizer._pad_token is not None:
             padding_mask = inputs == self.tokenizer.pad_token_id
             masked_indices = masked_indices & ~padding_mask
@@ -1067,9 +1073,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         indices_random = (
             np.random.binomial(1, 0.5, size=labels.shape).astype(np.bool) & masked_indices & ~indices_replaced
         )
-        random_words = np.random.randint(
-            low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
-        )
+        random_words = np.random.randint(low=0, high=len(self.tokenizer), size=labels.shape, dtype=np.int64)
         inputs[indices_random] = random_words[indices_random]
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged

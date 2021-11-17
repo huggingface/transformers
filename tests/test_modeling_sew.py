@@ -22,7 +22,7 @@ import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import SEWConfig, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, tooslow, torch_device
+from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -31,7 +31,13 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import SEWForCTC, SEWModel, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
+    from transformers import (
+        SEWForCTC,
+        SEWForSequenceClassification,
+        SEWModel,
+        Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
+    )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
 
@@ -219,6 +225,54 @@ class SEWModelTester:
 
         loss.backward()
 
+    def check_seq_classifier_loss(self, config, input_values, *args):
+        model = SEWForSequenceClassification(config=config)
+        model.to(torch_device)
+
+        # make sure that dropout is disabled
+        model.eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        unmasked_loss = model(input_values, labels=labels).loss.item()
+
+        self.parent.assertTrue(isinstance(masked_loss, float))
+        self.parent.assertTrue(isinstance(unmasked_loss, float))
+        self.parent.assertTrue(masked_loss != unmasked_loss)
+
+    def check_seq_classifier_training(self, config, input_values, *args):
+        config.ctc_zero_infinity = True
+        model = SEWForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.train()
+
+        # freeze everything but the classification head
+        model.freeze_base_model()
+
+        input_values = input_values[:3]
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+
+        loss = model(input_values, labels=labels).loss
+        self.parent.assertFalse(torch.isinf(loss).item())
+
+        loss.backward()
+
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = SEWForCTC(config)
         model.to(torch_device)
@@ -241,7 +295,7 @@ class SEWModelTester:
 
 @require_torch
 class SEWModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SEWForCTC, SEWModel) if is_torch_available() else ()
+    all_model_classes = (SEWForCTC, SEWModel, SEWForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -328,6 +382,14 @@ class SEWModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
+    def test_seq_classifier_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_seq_classifier_loss(*config_and_inputs)
+
+    def test_seq_classifier_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_seq_classifier_training(*config_and_inputs)
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -407,21 +469,13 @@ class SEWModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def test_inference_pretrained_batched(self):
         model = SEWModel.from_pretrained("asapp/sew-tiny-100k").to(torch_device)
@@ -475,29 +529,26 @@ class SEWModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
         self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
-        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 2)
+        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 5)
 
-    @tooslow
     def test_inference_ctc_batched(self):
-        # TODO: enable this test once the finetuned models are available
-        model = SEWForCTC.from_pretrained("asapp/sew-tiny-100k-ft-100h").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("asapp/sew-tiny-100k-ft-100h", do_lower_case=True)
+        model = SEWForCTC.from_pretrained("asapp/sew-tiny-100k-ft-ls100h").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("asapp/sew-tiny-100k-ft-ls100h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
         inputs = processor(input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
-        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values, attention_mask=attention_mask).logits
+            logits = model(input_values).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
-            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
+            "swet covered brian's body trickling into the tightloine closs hat was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

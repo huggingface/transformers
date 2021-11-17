@@ -525,7 +525,11 @@ class TFHubertWeightNormConv1D(tf.keras.layers.Conv1D):
 
     def build(self, input_shape):
         if not self.built:
+            input_shape = input_shape.as_list()
+            # Conv1D output shapes are checked at build time since TF 2.7, so we need to account for padding
+            input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
+
             self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
             self.weight_v = self.kernel
 
@@ -1222,7 +1226,10 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
         if inputs["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(inputs["attention_mask"], -1))
-            attention_mask = tf.sequence_mask(output_lengths, dtype=hidden_states.dtype)
+
+            attention_mask = tf.sequence_mask(
+                output_lengths, maxlen=shape_list(hidden_states)[1], dtype=hidden_states.dtype
+            )
 
         hidden_states = self.feature_projection(hidden_states, training=inputs["training"])
 

@@ -17,7 +17,9 @@
 
 from typing import Optional
 
+import torch
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -27,6 +29,25 @@ from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
+
+
+# Copied from transformers.models.encoder_decoder.modeling_encoder_decoder.shift_tokens_right
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    if decoder_start_token_id is None:
+        raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
 
 
 logger = logging.get_logger(__name__)
@@ -49,8 +70,8 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
     <https://arxiv.org/abs/2109.10282>`__ it is shown how leveraging large pretrained vision models for optical
     character recognition (OCR) yields a significant performance improvement.
 
-    After such an Vision-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
-    models (see the examples for more information).
+    After such a Vision-Encoder-Text-Decoder model has been trained/fine-tuned, it can be saved/loaded just like any
+    other models (see the examples for more information).
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -73,13 +94,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using a feature extractor (e.g. if you use ViT as the encoder,
             you should use :class:`~transformers.ViTFeatureExtractor`). See
             :meth:`transformers.ViTFeatureExtractor.__call__` for details.
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -92,9 +106,9 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
-            Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            For training, :obj:`decoder_input_ids` are automatically created by the model by shifting the :obj:`labels`
+            to the right, replacing -100 by the :obj:`pad_token_id` and prepending them with the
+            :obj:`decoder_start_token_id`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -109,10 +123,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
@@ -144,8 +154,8 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 class VisionEncoderDecoderModel(PreTrainedModel):
     r"""
     :class:`~transformers.VisionEncoderDecoderModel` is a generic model class that will be instantiated as a
-    transformer architecture with one of the base model classes of the library as encoder and another one as decoder
-    when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
+    transformer architecture with one of the base vision model classes of the library as encoder and another one as
+    decoder when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = VisionEncoderDecoderConfig
@@ -164,6 +174,15 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
+                raise ValueError(
+                    f"If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    f"it has to be equal to the encoder's `hidden_size`."
+                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
+                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                )
 
         # initialize with config
         # make sure input & output embeddings is not tied
@@ -407,9 +426,15 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
             >>> # training
-            >>> pixel_values = processor(image, return_tensors="pt").pixel_values  # Batch size 1
-            >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
-            >>> outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+            >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+            >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
+            >>> model.config.vocab_size = model.config.decoder.vocab_size
+
+            >>> pixel_values = processor(image, return_tensors="pt").pixel_values
+            >>> text = "hello world"
+            >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
+            >>> outputs = model(pixel_values=pixel_values, labels=labels)
+            >>> loss = outputs.loss
 
             >>> # inference (generation)
             >>> generated_ids = model.generate(pixel_values)
@@ -448,6 +473,11 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         # else:
         encoder_attention_mask = None
 
+        if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+            decoder_input_ids = shift_tokens_right(
+                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -455,7 +485,6 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
@@ -464,20 +493,33 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             **kwargs_decoder,
         )
 
+        # Compute loss independent from decoder (as some shift the logits inside them)
+        loss = None
+        if labels is not None:
+            logits = decoder_outputs.logits if return_dict else decoder_outputs[1]
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
+
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            if loss is not None:
+                return (loss,) + decoder_outputs + encoder_outputs
+            else:
+                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
-            loss=decoder_outputs.loss,
+            loss=loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_hidden_states,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def prepare_inputs_for_generation(
         self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs

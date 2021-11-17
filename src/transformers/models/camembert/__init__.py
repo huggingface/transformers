@@ -28,7 +28,7 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
+    "configuration_camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig", "CamembertOnnxConfig"],
 }
 
 if is_sentencepiece_available():
@@ -62,7 +62,7 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+    from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig, CamembertOnnxConfig
 
     if is_sentencepiece_available():
         from .tokenization_camembert import CamembertTokenizer

@@ -16,14 +16,16 @@
 import copy
 import json
 import os
+import shutil
 import tempfile
 import unittest
+import unittest.mock
 
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import BertConfig, GPT2Config, is_torch_available
+from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import ENDPOINT_STAGING, PASS, USER, is_staging_test
+from transformers.testing_utils import PASS, USER, is_staging_test
 
 
 config_common_kwargs = {
@@ -190,22 +192,43 @@ class ConfigTester(object):
         self.check_config_arguments_init()
 
 
+class FakeConfig(PretrainedConfig):
+    def __init__(self, attribute=1, **kwargs):
+        self.attribute = attribute
+        super().__init__(**kwargs)
+
+
+# Make sure this is synchronized with the config above.
+FAKE_CONFIG_CODE = """
+from transformers import PretrainedConfig
+
+class FakeConfig(PretrainedConfig):
+    def __init__(self, attribute=1, **kwargs):
+        self.attribute = attribute
+        super().__init__(**kwargs)
+"""
+
+
 @is_staging_test
 class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-config")
+            delete_repo(token=cls._token, name="test-config")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-config")
         except HTTPError:
             pass
 
@@ -239,6 +262,23 @@ class ConfigPushToHubTester(unittest.TestCase):
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
 
+    def test_push_to_hub_dynamic_config(self):
+        config = FakeConfig(attribute=42)
+        config.auto_map = {"AutoConfig": "configuration.FakeConfig"}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-config", use_auth_token=self._token)
+            config.save_pretrained(tmp_dir)
+            with open(os.path.join(tmp_dir, "configuration.py"), "w") as f:
+                f.write(FAKE_CONFIG_CODE)
+
+            repo.push_to_hub()
+
+        new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
+        # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
+        self.assertEqual(new_config.__class__.__name__, "FakeConfig")
+        self.assertEqual(new_config.attribute, 42)
+
 
 class ConfigTestUtils(unittest.TestCase):
     def test_config_from_string(self):
@@ -268,3 +308,40 @@ class ConfigTestUtils(unittest.TestCase):
                 "The following keys are set with the default values in `test_configuration_common.config_common_kwargs` "
                 f"pick another value for them: {', '.join(keys_with_defaults)}."
             )
+
+
+class ConfigurationVersioningTest(unittest.TestCase):
+    def test_local_versioning(self):
+        configuration = AutoConfig.from_pretrained("bert-base-cased")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            configuration.save_pretrained(tmp_dir)
+            configuration.hidden_size = 2
+            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w"))
+
+            # This should pick the new configuration file as the version of Transformers is > 4.0.0
+            new_configuration = AutoConfig.from_pretrained(tmp_dir)
+            self.assertEqual(new_configuration.hidden_size, 2)
+
+            # Will need to be adjusted if we reach v42 and this test is still here.
+            # Should pick the old configuration file as the version of Transformers is < 4.42.0
+            shutil.move(os.path.join(tmp_dir, "config.4.0.0.json"), os.path.join(tmp_dir, "config.42.0.0.json"))
+            new_configuration = AutoConfig.from_pretrained(tmp_dir)
+            self.assertEqual(new_configuration.hidden_size, 768)
+
+    def test_repo_versioning_before(self):
+        # This repo has two configuration files, one for v5.0.0 and above with an added token, one for versions lower.
+        repo = "microsoft/layoutxlm-base"
+
+        import transformers as new_transformers
+
+        new_transformers.configuration_utils.__version__ = "v5.0.0"
+        new_configuration = new_transformers.models.auto.AutoConfig.from_pretrained(repo)
+        self.assertEqual(new_configuration.tokenizer_class, None)
+
+        # Testing an older version by monkey-patching the version in the module it's used.
+        import transformers as old_transformers
+
+        old_transformers.configuration_utils.__version__ = "v3.0.0"
+        old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
+        self.assertEqual(old_configuration.tokenizer_class, "XLMRobertaTokenizer")

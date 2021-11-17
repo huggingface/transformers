@@ -60,6 +60,18 @@ GPT_NEO_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
+        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
+            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
+            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given ``dtype``.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see
+            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
 """
 
 GPT_NEO_INPUTS_DOCSTRING = r"""
@@ -119,7 +131,7 @@ class FlaxGPTNeoSelfAttention(nn.Module):
             nn.Dense,
             self.embed_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(use_bias=False), dense(use_bias=False), dense(use_bias=False)
@@ -270,7 +282,7 @@ class FlaxGPTNeoMLP(nn.Module):
 
     def setup(self):
         embed_dim = self.config.hidden_size
-        kernel_init = jax.nn.initializers.normal(self.config.initializer_range, self.dtype)
+        kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
         self.c_fc = nn.Dense(self.intermediate_size, dtype=self.dtype, kernel_init=kernel_init)
         self.c_proj = nn.Dense(embed_dim, dtype=self.dtype, kernel_init=kernel_init)
         self.act = ACT2FN[self.config.activation_function]
@@ -505,13 +517,11 @@ class FlaxGPTNeoModule(nn.Module):
             self.config.vocab_size,
             self.embed_dim,
             embedding_init=embedding_init,
-            dtype=self.dtype,
         )
         self.wpe = nn.Embed(
             self.config.max_position_embeddings,
             self.embed_dim,
             embedding_init=embedding_init,
-            dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.embed_dropout)
         self.h = FlaxGPTNeoBlockCollection(self.config, dtype=self.dtype)
@@ -589,7 +599,7 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
             self.config.vocab_size,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
 
     def __call__(

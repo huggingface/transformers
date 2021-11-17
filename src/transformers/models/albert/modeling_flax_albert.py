@@ -105,6 +105,18 @@ ALBERT_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
+        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
+            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
+            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given ``dtype``.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see
+            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
 """
 
 ALBERT_INPUTS_DOCSTRING = r"""
@@ -152,19 +164,16 @@ class FlaxAlbertEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -199,21 +208,21 @@ class FlaxAlbertSelfAttention(nn.Module):
         self.query = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
@@ -278,13 +287,13 @@ class FlaxAlbertLayer(nn.Module):
         self.attention = FlaxAlbertSelfAttention(self.config, dtype=self.dtype)
         self.ffn = nn.Dense(
             self.config.intermediate_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.activation = ACT2FN[self.config.hidden_act]
         self.ffn_output = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.full_layer_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
@@ -314,35 +323,13 @@ class FlaxAlbertLayer(nn.Module):
         return outputs
 
 
-class FlaxAlbertLayers(nn.Module):
-    config: AlbertConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    layer_index: Optional[str] = None
-
-    def setup(self):
-        self.albert_layers = FlaxAlbertLayer(self.config, name=self.layer_index, dtype=self.dtype)
-
-    def __call__(
-        self,
-        hidden_states,
-        attention_mask,
-        deterministic: bool = True,
-        output_attentions: bool = False,
-    ):
-        outputs = self.albert_layers(
-            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
-        )
-        return outputs
-
-
 class FlaxAlbertLayerCollection(nn.Module):
     config: AlbertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxAlbertLayers(self.config, name="albert_layers", layer_index=str(i), dtype=self.dtype)
-            for i in range(self.config.inner_group_num)
+            FlaxAlbertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.inner_group_num)
         ]
 
     def __call__(
@@ -385,7 +372,7 @@ class FlaxAlbertLayerCollections(nn.Module):
     layer_index: Optional[str] = None
 
     def setup(self):
-        self.albert_layer_groups = FlaxAlbertLayerCollection(self.config, name=self.layer_index, dtype=self.dtype)
+        self.albert_layers = FlaxAlbertLayerCollection(self.config, dtype=self.dtype)
 
     def __call__(
         self,
@@ -395,7 +382,7 @@ class FlaxAlbertLayerCollections(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ):
-        outputs = self.albert_layer_groups(
+        outputs = self.albert_layers(
             hidden_states,
             attention_mask,
             deterministic=deterministic,
@@ -405,19 +392,13 @@ class FlaxAlbertLayerCollections(nn.Module):
         return outputs
 
 
-class FlaxAlbertEncoder(nn.Module):
+class FlaxAlbertLayerGroups(nn.Module):
     config: AlbertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.layers_per_group = int(self.config.num_hidden_layers / self.config.num_hidden_groups)
-        self.embedding_hidden_mapping_in = nn.Dense(
-            self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            dtype=self.dtype,
-        )
         self.layers = [
-            FlaxAlbertLayerCollections(self.config, name="albert_layer_groups", layer_index=str(i), dtype=self.dtype)
+            FlaxAlbertLayerCollections(self.config, name=str(i), layer_index=str(i), dtype=self.dtype)
             for i in range(self.config.num_hidden_groups)
         ]
 
@@ -430,7 +411,6 @@ class FlaxAlbertEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_attentions = () if output_attentions else None
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
@@ -456,6 +436,37 @@ class FlaxAlbertEncoder(nn.Module):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return FlaxBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
+class FlaxAlbertEncoder(nn.Module):
+    config: AlbertConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.embedding_hidden_mapping_in = nn.Dense(
+            self.config.hidden_size,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            dtype=self.dtype,
+        )
+        self.albert_layer_groups = FlaxAlbertLayerGroups(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
+        return self.albert_layer_groups(
+            hidden_states,
+            attention_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
 
@@ -594,7 +605,7 @@ class FlaxAlbertModule(nn.Module):
         if self.add_pooling_layer:
             self.pooler = nn.Dense(
                 self.config.hidden_size,
-                kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+                kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
                 dtype=self.dtype,
                 name="pooler",
             )

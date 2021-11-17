@@ -51,6 +51,9 @@ with ExtendSysPath(tests_dir):
 
 set_seed(42)
 
+# default torch.distributed port
+DEFAULT_MASTER_PORT = "10999"
+
 T5_SMALL = "t5-small"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
@@ -59,6 +62,28 @@ GPT2_TINY = "sshleifer/tiny-gpt2"
 def load_json(path):
     with open(path) as f:
         return json.load(f)
+
+
+def get_master_port(real_launcher=False):
+    """
+    When using a single gpu launcher emulation (i.e. not deepspeed or python -m torch.distributed)
+    the issue is that once the port is tied it can't be used anywhere else outside of this process,
+    since torch.dist doesn't free the port until the process exits. Therefore for the sake of being
+    able to run both emulated launcher and normal launcher tests we need 2 distinct ports.
+
+    This function will give the right port in the right context. For real launcher it'll give the
+    base port, for emulated launcher it'll give the base port + 1. In both cases a string is
+    returned.
+
+    Args:
+        `real_launcher`: whether a real launcher is going to be used, or the emulated one
+
+    """
+
+    master_port_base = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
+    if not real_launcher:
+        master_port_base = str(int(master_port_base) + 1)
+    return master_port_base
 
 
 def require_deepspeed_aio(test_case):
@@ -89,7 +114,8 @@ def get_launcher(distributed=False):
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
-    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+    master_port = get_master_port(real_launcher=True)
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
 ZERO2 = "zero2"
@@ -107,8 +133,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def setUp(self):
         super().setUp()
 
+        master_port = get_master_port(real_launcher=False)
         self.dist_env_1_gpu = dict(
-            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+            MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
     def test_init_zero3(self):
@@ -176,8 +203,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
+        master_port = get_master_port(real_launcher=False)
         self.dist_env_1_gpu = dict(
-            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+            MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
         self.ds_config_file = dict(

@@ -26,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
-from huggingface_hub import HfApi, Repository
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import (
     AutoTokenizer,
@@ -171,6 +171,16 @@ if is_torch_available():
         def __iter__(self):
             for i in range(len(self.dataset)):
                 yield self.dataset[i]
+
+    class FiniteIterableDataset(SampleIterableDataset):
+        def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
+            super().__init__(a, b, length, seed, label_names)
+            self.current_sample = 0
+
+        def __iter__(self):
+            while self.current_sample < len(self.dataset):
+                yield self.dataset[self.current_sample]
+                self.current_sample += 1
 
     class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
@@ -490,7 +500,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.predict(eval_dataset)
 
     def test_evaluation_with_keys_to_drop(self):
-        config = GPT2Config(vocab_size=100, n_positions=128, n_ctx=128, n_embd=32, n_layer=3, n_head=4)
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
         eval_dataset = RepeatDataset(x)
@@ -531,7 +541,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(train_output.global_step, 10)
 
     def test_logging_inf_nan_filter(self):
-        config = GPT2Config(vocab_size=100, n_positions=128, n_ctx=128, n_embd=32, n_layer=3, n_head=4)
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
@@ -856,7 +866,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(b, b1, delta=1e-8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
-    def test_training_with_resume_from_checkpoint_flase(self):
+    def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
@@ -1057,6 +1067,26 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
+
+    def test_training_finite_iterable_dataset(self):
+        config = RegressionModelConfig()
+        model = RegressionPreTrainedModel(config)
+
+        batch_size = 1
+        num_samples = 10
+
+        available_steps = num_samples // batch_size
+
+        data = FiniteIterableDataset(length=num_samples)
+        train_args = TrainingArguments(
+            ".",
+            max_steps=available_steps + 1,  # set a higher number than actually available
+            per_device_train_batch_size=batch_size,
+        )
+        trainer = Trainer(model, train_dataset=data, args=train_args)
+        with self.assertLogs("transformers.trainer", level="WARNING") as logs:
+            trainer.train()
+        self.assertIn(f"stopping training at step {available_steps}!", logs.output[0])
 
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
@@ -1307,19 +1337,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step"]:
             try:
-                cls._api.delete_repo(token=cls._token, name=model)
+                delete_repo(token=cls._token, name=model)
             except HTTPError:
                 pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
         except HTTPError:
             pass
 
@@ -1396,6 +1425,10 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             print(commits, len(commits))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
+        num_gpus = max(1, get_gpu_count())
+        if num_gpus > 2:
+            return
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
                 output_dir=os.path.join(tmp_dir, "test-trainer-step"),
@@ -1409,7 +1442,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
-            expected_commits = [f"Training in progress, step {i}" for i in range(20, 0, -5)]
+            total_steps = 20 // num_gpus
+            expected_commits = [f"Training in progress, step {i}" for i in range(total_steps, 0, -5)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
             print(commits, len(commits))
