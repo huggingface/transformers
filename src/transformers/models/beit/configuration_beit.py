@@ -92,6 +92,8 @@ class BeitConfig(PretrainedConfig):
             Number of convolutional layers to use in the auxiliary head.
         auxiliary_concat_input (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to concatenate the output of the auxiliary head with the input before the classification layer.
+        semantic_loss_ignore_index (:obj:`int`, `optional`, defaults to 255):
+            The index that is ignored by the loss function of the semantic segmentation model.
 
     Example::
 
@@ -138,6 +140,7 @@ class BeitConfig(PretrainedConfig):
         auxiliary_channels=256,
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
+        semantic_loss_ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -172,3 +175,4 @@ class BeitConfig(PretrainedConfig):
         self.auxiliary_channels = auxiliary_channels
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
+        self.semantic_loss_ignore_index = semantic_loss_ignore_index

@@ -757,7 +757,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
                 upsampled_logits = nn.functional.interpolate(
                     logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
-                loss_fct = CrossEntropyLoss(ignore_index=255)
+                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
