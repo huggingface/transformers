@@ -59,7 +59,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_inference_init, deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -359,6 +359,7 @@ class Trainer:
         if (
             self.is_model_parallel
             or args.deepspeed
+            or args.deepspeed_inference
             or (args.fp16_full_eval and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
         ):
@@ -1797,7 +1798,12 @@ class Trainer:
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
             kwargs = dict(device=self.args.device)
-            if self.deepspeed and data.dtype != torch.int64:
+            if self.args.deepspeed_inference:
+                print(data.dtype)
+                print(kwargs)
+                return data.to("cuda:0")
+
+            elif self.deepspeed and data.dtype != torch.int64:
                 # NLP models inputs are int64 and those get adjusted to the right dtype of the
                 # embedding. Other models such as wav2vec2's inputs are already float and thus
                 # may need special handling to match the dtypes of the model
@@ -2231,6 +2237,12 @@ class Trainer:
             deepspeed_engine.optimizer.optimizer = None
             deepspeed_engine.lr_scheduler = None
 
+        if self.args.deepspeed_inference:
+            deepspeed_inference_engine = deepspeed_inference_init(self, self.args.deepspeed_inference)
+            self.model = deepspeed_inference_engine.module
+            self.model_wrapped = deepspeed_inference_engine
+            self.deepspeed = deepspeed_inference_engine
+
         model = self._wrap_model(self.model, training=False)
 
         # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
@@ -2391,6 +2403,10 @@ class Trainer:
         Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so
         they can safely be gathered.
         """
+        # XXX: hangs here with 2 gpus if we don't return
+        if self.args.deepspeed_inference:
+            return tensor
+
         if isinstance(tensor, (list, tuple)):
             return type(tensor)(self._pad_across_processes(t, pad_index=pad_index) for t in tensor)
         elif isinstance(tensor, dict):

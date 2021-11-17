@@ -33,6 +33,51 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# XXX: Reza - need the rest of the map
+inference_custom_map = dict(
+    electra=dict(ElectraLayer=("output.dense")),
+    roberta=dict(RobertaLayer=("output.dense")),
+    t5=dict(T5Block=("SelfAttention.o", "EncDecAttention.o", "DenseReluDense.wo")),
+)
+
+# XXX: Reza - need the rest of models that are automated
+inference_auto = [
+    "gpt_neo",
+]
+
+
+def deepspeed_inference_init(trainer, model_arch):
+    """
+    XXX:
+    """
+
+    dep_version_check("deepspeed")
+    import deepspeed
+
+    args = trainer.args
+
+    if model_arch in inference_auto:
+        kwargs = dict(
+            replace_method="auto",
+            replace_with_kernel_inject=True,
+        )
+    elif model_arch in inference_custom_map:
+        kwargs = dict(injection_policy=inference_custom_map[model_arch])
+    else:
+        raise ValueError(
+            f"[Deepspeed Inference] {model_arch} hasn't yet been mapped out, please file an Issue to request support for it"
+        )
+
+    deepspeed_inference_engine = deepspeed.init_inference(
+        trainer.model,
+        mp_size=args.world_size,
+        dtype=torch.float,  # XXX: Reza: how to define other types? ds config file?
+        **kwargs,
+    )
+
+    return deepspeed_inference_engine
+
+
 def is_deepspeed_available():
     return importlib.util.find_spec("deepspeed") is not None
 
