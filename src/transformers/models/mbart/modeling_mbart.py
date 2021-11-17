@@ -699,6 +699,11 @@ class MBartEncoder(MBartPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
+    def _backward_compatibility_gradient_checkpointing(self):
+        # Override to not delete the attribute from the config
+        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
+
     def forward(
         self,
         input_ids=None,

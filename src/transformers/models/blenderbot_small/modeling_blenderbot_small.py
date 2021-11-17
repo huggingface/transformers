@@ -821,8 +821,8 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         self.layers = nn.ModuleList([BlenderbotSmallDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
