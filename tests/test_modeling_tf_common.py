@@ -28,6 +28,7 @@ from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values
+from transformers.testing_utils import tooslow  # noqa: F401
 from transformers.testing_utils import (
     PASS,
     USER,
@@ -38,7 +39,6 @@ from transformers.testing_utils import (
     require_keras2onnx,
     require_tf,
     slow,
-    tooslow,
 )
 from transformers.utils import logging
 
@@ -169,41 +169,17 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-
+            model_config = model.get_config()
+            # make sure that returned config is jsonifiable, which is required by keras
+            json.dumps(model_config)
             new_model = model_class.from_config(model.get_config())
+            # make sure it also accepts a normal config
+            _ = model_class.from_config(model.config)
             _ = new_model(self._prepare_for_class(inputs_dict, model_class))  # Build model
             new_model.set_weights(model.get_weights())
             after_outputs = new_model(self._prepare_for_class(inputs_dict, model_class))
 
             self.assert_outputs_same(after_outputs, outputs)
-
-    @tooslow
-    def test_graph_mode(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-
-            @tf.function
-            def run_in_graph_mode():
-                return model(inputs)
-
-            outputs = run_in_graph_mode()
-            self.assertIsNotNone(outputs)
-
-    @tooslow
-    def test_xla_mode(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-
-            @tf.function(experimental_compile=True)
-            def run_in_graph_mode():
-                return model(inputs)
-
-            outputs = run_in_graph_mode()
-            self.assertIsNotNone(outputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -235,75 +211,6 @@ class TFModelTesterMixin:
             else:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    @tooslow
-    def test_saved_model_creation(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = False
-        config.output_attentions = False
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = False
-
-        model_class = self.all_model_classes[0]
-
-        class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-        model = model_class(config)
-
-        model(class_inputs_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname, saved_model=True)
-            saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-            self.assertTrue(os.path.exists(saved_model_dir))
-
-    @tooslow
-    def test_saved_model_creation_extended(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = True
-
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            num_out = len(model(class_inputs_dict))
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
-                outputs = model(class_inputs_dict)
-
-                if self.is_encoder_decoder:
-                    output_hidden_states = outputs["encoder_hidden_states"]
-                    output_attentions = outputs["encoder_attentions"]
-                else:
-                    output_hidden_states = outputs["hidden_states"]
-                    output_attentions = outputs["attentions"]
-
-                self.assertEqual(len(outputs), num_out)
-
-                expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-                )
-
-                self.assertEqual(len(output_hidden_states), expected_num_layers)
-                self.assertListEqual(
-                    list(output_hidden_states[0].shape[-2:]),
-                    [self.model_tester.seq_length, self.model_tester.hidden_size],
-                )
-
-                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(output_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
 
     def test_onnx_compliancy(self):
         if not self.test_onnx:
@@ -365,21 +272,6 @@ class TFModelTesterMixin:
             onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
 
             onnxruntime.InferenceSession(onnx_model.SerializeToString())
-
-    @tooslow
-    def test_mixed_precision(self):
-        tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            outputs = model(class_inputs_dict)
-
-            self.assertIsNotNone(outputs)
-
-        tf.keras.mixed_precision.experimental.set_policy("float32")
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -547,76 +439,6 @@ class TFModelTesterMixin:
 
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
-
-    @tooslow
-    def test_train_pipeline_custom_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # head_mask and decoder_head_mask has different shapes than other input args
-        if "head_mask" in inputs_dict:
-            del inputs_dict["head_mask"]
-        if "decoder_head_mask" in inputs_dict:
-            del inputs_dict["decoder_head_mask"]
-        if "cross_attn_head_mask" in inputs_dict:
-            del inputs_dict["cross_attn_head_mask"]
-        tf_main_layer_classes = set(
-            module_member
-            for model_class in self.all_model_classes
-            for module in (import_module(model_class.__module__),)
-            for module_member_name in dir(module)
-            if module_member_name.endswith("MainLayer")
-            for module_member in (getattr(module, module_member_name),)
-            if isinstance(module_member, type)
-            and tf.keras.layers.Layer in module_member.__bases__
-            and getattr(module_member, "_keras_serializable", False)
-        )
-
-        for main_layer_class in tf_main_layer_classes:
-            # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
-            if "T5" in main_layer_class.__name__:
-                # Take the same values than in TFT5ModelTester for this shared layer
-                shared = TFSharedEmbeddings(self.model_tester.vocab_size, self.model_tester.hidden_size, name="shared")
-                config.use_cache = False
-                main_layer = main_layer_class(config, embed_tokens=shared)
-            else:
-                main_layer = main_layer_class(config)
-
-            symbolic_inputs = {
-                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
-            }
-
-            if hasattr(self.model_tester, "num_labels"):
-                num_labels = self.model_tester.num_labels
-            else:
-                num_labels = 2
-
-            X = tf.data.Dataset.from_tensor_slices(
-                (inputs_dict, np.ones((self.model_tester.batch_size, self.model_tester.seq_length, num_labels, 1)))
-            ).batch(1)
-
-            hidden_states = main_layer(symbolic_inputs)[0]
-            outputs = tf.keras.layers.Dense(num_labels, activation="softmax", name="outputs")(hidden_states)
-            model = tf.keras.models.Model(inputs=symbolic_inputs, outputs=[outputs])
-
-            model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["binary_accuracy"])
-            model.fit(X, epochs=1)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                filepath = os.path.join(tmpdirname, "keras_model.h5")
-                model.save(filepath)
-                if "T5" in main_layer_class.__name__:
-                    model = tf.keras.models.load_model(
-                        filepath,
-                        custom_objects={
-                            main_layer_class.__name__: main_layer_class,
-                            "TFSharedEmbeddings": TFSharedEmbeddings,
-                        },
-                    )
-                else:
-                    model = tf.keras.models.load_model(
-                        filepath, custom_objects={main_layer_class.__name__: main_layer_class}
-                    )
-                assert isinstance(model, tf.keras.Model)
-                model(inputs_dict)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -988,39 +810,6 @@ class TFModelTesterMixin:
             inputs = self._prepare_for_class(inputs, model_class)
 
             model(inputs)
-
-    @tooslow
-    def test_graph_mode_with_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            inputs = copy.deepcopy(inputs_dict)
-
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
-
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
-            else:
-                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
-
-            inputs = self._prepare_for_class(inputs, model_class)
-
-            @tf.function
-            def run_in_graph_mode():
-                return model(inputs)
-
-            outputs = run_in_graph_mode()
-            self.assertIsNotNone(outputs)
 
     def test_numpy_arrays_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
