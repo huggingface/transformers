@@ -888,7 +888,7 @@ class DebertaModel(DebertaPreTrainedModel):
         self.encoder = DebertaEncoder(config)
         self.z_steps = 0
         self.config = config
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1001,7 +1001,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         self.deberta = DebertaModel(config)
         self.cls = DebertaOnlyMLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1141,7 +1141,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = StableDropout(drop_out)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.deberta.get_input_embeddings()
@@ -1254,7 +1254,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1338,7 +1338,7 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
         self.deberta = DebertaModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

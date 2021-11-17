@@ -657,7 +657,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
         self.layers = nn.ModuleList([BlenderbotSmallEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
-        self.init_weights()
+        self.post_init()
         self.gradient_checkpointing = False
 
     def forward(
@@ -821,7 +821,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         self.layers = nn.ModuleList([BlenderbotSmallDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
+        self.post_init()
         self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
@@ -1081,7 +1081,7 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         self.encoder = BlenderbotSmallEncoder(config, self.shared)
         self.decoder = BlenderbotSmallDecoder(config, self.shared)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.shared
@@ -1208,7 +1208,7 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1379,7 +1379,7 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens

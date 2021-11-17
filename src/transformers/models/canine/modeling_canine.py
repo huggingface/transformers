@@ -1015,7 +1015,7 @@ class CanineModel(CaninePreTrainedModel):
 
         self.pooler = CaninePooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        self.post_init()
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -1273,7 +1273,7 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1369,7 +1369,7 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1461,7 +1461,7 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1548,7 +1548,7 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         self.canine = CanineModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

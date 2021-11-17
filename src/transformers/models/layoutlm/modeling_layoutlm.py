@@ -714,7 +714,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         self.encoder = LayoutLMEncoder(config)
         self.pooler = LayoutLMPooler(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -856,7 +856,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         self.layoutlm = LayoutLMModel(config)
         self.cls = LayoutLMOnlyMLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings
@@ -979,7 +979,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings
@@ -1109,7 +1109,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings

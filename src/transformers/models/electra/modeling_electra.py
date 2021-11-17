@@ -817,7 +817,7 @@ class ElectraModel(ElectraPreTrainedModel):
 
         self.encoder = ElectraEncoder(config)
         self.config = config
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -939,7 +939,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         self.electra = ElectraModel(config)
         self.classifier = ElectraClassificationHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1033,7 +1033,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
         self.electra = ElectraModel(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=ElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1128,7 +1128,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         self.generator_predictions = ElectraGeneratorPredictions(config)
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.generator_lm_head
@@ -1216,7 +1216,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1305,7 +1305,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         self.electra = ElectraModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1406,7 +1406,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(

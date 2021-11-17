@@ -1045,7 +1045,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         else:
             self.encoder = UniSpeechEncoder(config)
 
-        self.init_weights()
+        self.post_init()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
@@ -1165,7 +1165,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         self.ctc_proj = nn.Linear(config.hidden_size, config.num_ctc_classes)
         self.dropout = nn.Dropout(config.final_dropout)
 
-        self.init_weights()
+        self.post_init()
 
     def set_gumbel_temperature(self, temperature: int):
         """
@@ -1337,7 +1337,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
@@ -1445,7 +1445,7 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """

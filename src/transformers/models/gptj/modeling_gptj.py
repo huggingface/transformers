@@ -444,7 +444,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.init_weights()
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False
@@ -680,7 +680,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         super().__init__(config)
         self.transformer = GPTJModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
-        self.init_weights()
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False
@@ -855,7 +855,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         self.transformer = GPTJModel(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False

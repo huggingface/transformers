@@ -1629,7 +1629,7 @@ class LEDEncoder(LEDPreTrainedModel):
         self.layers = nn.ModuleList([LEDEncoderLayer(config, i) for i in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
-        self.init_weights()
+        self.post_init()
         self.gradient_checkpointing = False
 
     def _merge_to_attention_mask(self, attention_mask: torch.Tensor, global_attention_mask: torch.Tensor):
@@ -1904,7 +1904,7 @@ class LEDDecoder(LEDPreTrainedModel):
         self.layers = nn.ModuleList([LEDDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
+        self.post_init()
         self.gradient_checkpointing = False
 
     def forward(
@@ -2156,7 +2156,7 @@ class LEDModel(LEDPreTrainedModel):
         self.encoder = LEDEncoder(config, self.shared)
         self.decoder = LEDDecoder(config, self.shared)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.shared
@@ -2283,7 +2283,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.led.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.led.shared.num_embeddings, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_encoder(self):
         return self.led.get_encoder()

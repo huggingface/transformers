@@ -668,7 +668,7 @@ class MarianEncoder(MarianPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([MarianEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.init_weights()
+        self.post_init()
         self.gradient_checkpointing = False
 
     def forward(
@@ -829,7 +829,7 @@ class MarianDecoder(MarianPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([MarianDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.init_weights()
+        self.post_init()
         self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
@@ -1087,7 +1087,7 @@ class MarianModel(MarianPreTrainedModel):
         self.encoder = MarianEncoder(config, self.shared)
         self.decoder = MarianDecoder(config, self.shared)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.shared
@@ -1220,7 +1220,7 @@ class MarianMTModel(MarianPreTrainedModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1399,7 +1399,7 @@ class MarianForCausalLM(MarianPreTrainedModel):
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens

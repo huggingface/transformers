@@ -598,7 +598,7 @@ class BeitModel(BeitPreTrainedModel):
         )
         self.pooler = BeitPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
@@ -715,7 +715,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -805,7 +805,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -1121,7 +1121,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         self.decode_head = BeitUperHead(config)
         self.auxiliary_head = BeitFCNHead(config) if config.use_auxiliary_head else None
 
-        self.init_weights()
+        self.post_init()
 
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size

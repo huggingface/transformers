@@ -1003,7 +1003,7 @@ class FSMTModel(PretrainedFSMTModel):
         self.encoder = FSMTEncoder(config, encoder_embed_tokens)
         self.decoder = FSMTDecoder(config, decoder_embed_tokens)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

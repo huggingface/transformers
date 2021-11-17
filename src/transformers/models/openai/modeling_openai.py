@@ -414,7 +414,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
 
         self.register_buffer("position_ids", torch.arange(config.n_positions))
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.tokens_embed
@@ -540,7 +540,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         self.transformer = OpenAIGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -629,7 +629,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -750,7 +750,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         self.transformer = OpenAIGPTModel(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

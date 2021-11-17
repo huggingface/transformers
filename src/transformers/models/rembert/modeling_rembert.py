@@ -765,7 +765,7 @@ class RemBertModel(RemBertPreTrainedModel):
 
         self.pooler = RemBertPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -925,7 +925,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
         self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.cls = RemBertOnlyMLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1027,7 +1027,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
         self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.cls = RemBertOnlyMLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1173,7 +1173,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1269,7 +1269,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1361,7 +1361,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1449,7 +1449,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
         self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

@@ -476,7 +476,7 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
 
         self.layers = nn.ModuleList([Speech2Text2DecoderLayer(config) for _ in range(config.decoder_layers)])
 
-        self.init_weights()
+        self.post_init()
         self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
@@ -751,7 +751,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens
