@@ -15,34 +15,24 @@
 
 
 import copy
-import inspect
-import json
 import os
-import random
 import tempfile
-import unittest
 from importlib import import_module
-from typing import List, Tuple
 
-from huggingface_hub import delete_repo, login
-from requests.exceptions import HTTPError
 from transformers import is_tf_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    PASS,
-    USER,
-    CaptureLogger,
     _tf_gpu_memory_limit,
-    is_pt_tf_cross_test,
-    is_staging_test,
+    is_pt_tf_cross_test,  # noqa: F401
+    is_staging_test,  # noqa: F401
     require_keras2onnx,
     require_tf,
     slow,
-    tooslow,
+    tooslow,  # noqa: F401
 )
 from transformers.utils import logging
 
-from .test_modeling_tf_common import _config_zero_init, floats_tensor, ids_tensor
+from .test_modeling_tf_common import _config_zero_init, ids_tensor
 
 
 if is_tf_available():
@@ -60,22 +50,6 @@ if is_tf_available():
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        BertConfig,
-        TFAutoModel,
-        TFAutoModelForSequenceClassification,
-        TFBertModel,
-        TFSharedEmbeddings,
-        tf_top_k_top_p_filtering,
-    )
-    from transformers.generation_tf_utils import (
-        TFBeamSampleDecoderOnlyOutput,
-        TFBeamSampleEncoderDecoderOutput,
-        TFBeamSearchDecoderOnlyOutput,
-        TFBeamSearchEncoderDecoderOutput,
-        TFGreedySearchDecoderOnlyOutput,
-        TFGreedySearchEncoderDecoderOutput,
-        TFSampleDecoderOnlyOutput,
-        TFSampleEncoderDecoderOutput,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -91,14 +65,6 @@ if is_tf_available():
             except RuntimeError as e:
                 # Virtual devices must be set before GPUs have been initialized
                 print(e)
-
-
-def _config_zero_init(config):
-    configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key:
-            setattr(configs_no_init, key, 0.0)
-    return configs_no_init
 
 
 @require_tf

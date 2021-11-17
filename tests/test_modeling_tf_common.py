@@ -38,7 +38,7 @@ from transformers.testing_utils import (
     require_keras2onnx,
     require_tf,
     slow,
-    tooslow,
+    tooslow,  # noqa: F401
 )
 from transformers.utils import logging
 
