@@ -374,7 +374,8 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             trainer.objective = trainer.compute_objective(metrics)
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
-                logger.warn("Provided metric not found. This might result in expected sweeps charts. Please check the `metric` parameter")
+                raise Exception("Provided metric not found. This might result in expected sweeps charts. Please check the `metric` parameter")
+                #logger.warn("Provided metric not found. This might result in expected sweeps charts. Please check the `metric` parameter")
         best_score = False
         if best_trial["run_id"] is not None:
             if direction == "minimize":
