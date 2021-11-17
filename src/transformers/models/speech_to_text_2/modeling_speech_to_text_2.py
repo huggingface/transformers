@@ -476,8 +476,8 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
 
         self.layers = nn.ModuleList([Speech2Text2DecoderLayer(config) for _ in range(config.decoder_layers)])
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens

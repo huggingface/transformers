@@ -696,8 +696,8 @@ class MBartEncoder(MBartPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def forward(
         self,
@@ -862,8 +862,8 @@ class MBartDecoder(MBartPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens

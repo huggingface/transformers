@@ -677,12 +677,12 @@ class GPT2Model(GPT2PreTrainedModel):
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        self.post_init()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -947,11 +947,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         self.transformer = GPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-        self.post_init()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
+        self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -1117,11 +1117,11 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
-        self.post_init()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
+        self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -1330,11 +1330,11 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         self.transformer = GPT2Model(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.post_init()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1461,11 +1461,11 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.post_init()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

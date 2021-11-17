@@ -1266,8 +1266,8 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.word_embeddings
@@ -1411,8 +1411,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.word_embeddings

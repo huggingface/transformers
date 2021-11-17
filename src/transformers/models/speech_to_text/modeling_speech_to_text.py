@@ -723,8 +723,8 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         self.layers = nn.ModuleList([Speech2TextEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def forward(
         self,
@@ -876,8 +876,8 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens

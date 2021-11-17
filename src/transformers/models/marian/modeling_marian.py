@@ -668,8 +668,9 @@ class MarianEncoder(MarianPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([MarianEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.post_init()
+
         self.gradient_checkpointing = False
+        self.post_init()
 
     def forward(
         self,
@@ -829,8 +830,9 @@ class MarianDecoder(MarianPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([MarianDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.post_init()
+
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens

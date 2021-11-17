@@ -658,8 +658,8 @@ class PegasusEncoder(PegasusPreTrainedModel):
         self.layers = nn.ModuleList([PegasusEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
@@ -853,8 +853,8 @@ class PegasusDecoder(PegasusPreTrainedModel):
         self.layers = nn.ModuleList([PegasusDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens

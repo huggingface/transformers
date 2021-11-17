@@ -1001,8 +1001,8 @@ class DetrDecoder(DetrPreTrainedModel):
         # in DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def forward(
         self,

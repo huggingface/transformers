@@ -1629,8 +1629,8 @@ class LEDEncoder(LEDPreTrainedModel):
         self.layers = nn.ModuleList([LEDEncoderLayer(config, i) for i in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def _merge_to_attention_mask(self, attention_mask: torch.Tensor, global_attention_mask: torch.Tensor):
         # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
@@ -1904,8 +1904,8 @@ class LEDDecoder(LEDPreTrainedModel):
         self.layers = nn.ModuleList([LEDDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.post_init()
         self.gradient_checkpointing = False
+        self.post_init()
 
     def forward(
         self,
