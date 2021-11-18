@@ -25,10 +25,12 @@ from ..auto.tokenization_auto import AutoTokenizer
 
 class VisionTextDualEncoderProcessor:
     r"""
-    Constructs a VisionTextDualEncoder processor which wraps a vision feature extractor and a tokenizer into a single processor.
+    Constructs a VisionTextDualEncoder processor which wraps a vision feature extractor and a tokenizer into a single
+    processor.
 
-    :class:`~transformers.VisionTextDualEncoderProcessor` offers all the functionalities of :class:`~transformers.AutoFeatureExtractor`
-    and :class:`~transformers.AutoTokenizer`. See the :meth:`~transformers.VisionTextDualEncoderProcessor.__call__` and
+    :class:`~transformers.VisionTextDualEncoderProcessor` offers all the functionalities of
+    :class:`~transformers.AutoFeatureExtractor` and :class:`~transformers.AutoTokenizer`. See the
+    :meth:`~transformers.VisionTextDualEncoderProcessor.__call__` and
     :meth:`~transformers.VisionTextDualEncoderProcessor.decode` for more information.
 
     Args:
@@ -54,8 +56,9 @@ class VisionTextDualEncoderProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a VisionTextDualEncoder feature extractor object and VisionTextDualEncoder tokenizer object to the directory ``save_directory``, so that it
-        can be re-loaded using the :func:`~transformers.VisionTextDualEncoderProcessor.from_pretrained` class method.
+        Save a VisionTextDualEncoder feature extractor object and VisionTextDualEncoder tokenizer object to the
+        directory ``save_directory``, so that it can be re-loaded using the
+        :func:`~transformers.VisionTextDualEncoderProcessor.from_pretrained` class method.
 
         .. note::
 
@@ -75,7 +78,8 @@ class VisionTextDualEncoderProcessor:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.VisionTextDualEncoderProcessor` from a pretrained VisionTextDualEncoder processor.
+        Instantiate a :class:`~transformers.VisionTextDualEncoderProcessor` from a pretrained VisionTextDualEncoder
+        processor.
 
         .. note::
 
@@ -109,11 +113,11 @@ class VisionTextDualEncoderProcessor:
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the
-        :obj:`text` and :obj:`kwargs` arguments to VisionTextDualEncoderTokenizer's :meth:`~transformers.PreTrainedTokenizer.__call__` if
-        :obj:`text` is not :obj:`None` to encode the text. To prepare the image(s), this method forwards the
-        :obj:`images` and :obj:`kwrags` arguments to AutoFeatureExtractor's
-        :meth:`~transformers.AutoFeatureExtractor.__call__` if :obj:`images` is not :obj:`None`. Please refer to the
-        doctsring of the above two methods for more information.
+        :obj:`text` and :obj:`kwargs` arguments to VisionTextDualEncoderTokenizer's
+        :meth:`~transformers.PreTrainedTokenizer.__call__` if :obj:`text` is not :obj:`None` to encode the text. To
+        prepare the image(s), this method forwards the :obj:`images` and :obj:`kwrags` arguments to
+        AutoFeatureExtractor's :meth:`~transformers.AutoFeatureExtractor.__call__` if :obj:`images` is not :obj:`None`.
+        Please refer to the doctsring of the above two methods for more information.
 
         Args:
             text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
@@ -170,7 +174,8 @@ class VisionTextDualEncoderProcessor:
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to VisionTextDualEncoderTokenizer's :meth:`~transformers.PreTrainedTokenizer.decode`.
-        Please refer to the docstring of this method for more information.
+        This method forwards all its arguments to VisionTextDualEncoderTokenizer's
+        :meth:`~transformers.PreTrainedTokenizer.decode`. Please refer to the docstring of this method for more
+        information.
         """
         return self.tokenizer.decode(*args, **kwargs)

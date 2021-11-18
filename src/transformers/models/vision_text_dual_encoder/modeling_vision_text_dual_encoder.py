@@ -34,16 +34,16 @@ _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
 
 VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
-    as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded via
-    :meth:`~transformers.AutoModel.from_pretrained` function. The projection layers are automatically added
-    to the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
+    as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded
+    via :meth:`~transformers.AutoModel.from_pretrained` function. The projection layers are automatically added to the
+    model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
     In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
-    leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant improvment
-    on new zero-shot vision tasks such as image classification or retrieval.
+    leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant
+    improvment on new zero-shot vision tasks such as image classification or retrieval.
 
-    After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any
-    other models (see the examples for more information).
+    After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
+    models (see the examples for more information).
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -134,9 +134,10 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 
             `What are position IDs? <../glossary.html#position-ids>`_
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
-            using a feature extractor (e.g. if you use ViT as the encoder, you should use :class:`~transformers.ViTFeatureExtractor`).
-            See :meth:`transformers.ViTFeatureExtractor.__call__` for details.
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            a feature extractor (e.g. if you use ViT as the encoder, you should use
+            :class:`~transformers.ViTFeatureExtractor`). See :meth:`transformers.ViTFeatureExtractor.__call__` for
+            details.
         return_loss (:obj:`bool`, `optional`):
             Whether or not to return the contrastive loss.
         output_attentions (:obj:`bool`, `optional`):

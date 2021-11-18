@@ -238,7 +238,7 @@ class VisionTextDualEncoderMixin:
         inputs_dict = self.prepare_config_and_inputs()
         self.check_vision_text_output_attention(**inputs_dict)
 
-    # @slow
+    @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
         model_2.to(torch_device)
