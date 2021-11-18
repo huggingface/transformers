@@ -819,7 +819,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.word_emb
@@ -1021,7 +1022,8 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def tie_weights(self):
         """
@@ -1170,7 +1172,8 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         self.num_labels = config.num_labels
         self.transformer = TransfoXLModel(config)
         self.score = nn.Linear(config.d_embed, self.num_labels, bias=False)
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

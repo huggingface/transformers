@@ -1152,7 +1152,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         self.adapter = Wav2Vec2Adapter(config) if config.add_adapter else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def _mask_hidden_states(
         self,
@@ -1269,7 +1270,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
@@ -1480,7 +1482,8 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         self.dropout = nn.Dropout(config.final_dropout)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Wav2Vec2BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1563,7 +1566,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
@@ -1670,7 +1674,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
