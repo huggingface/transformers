@@ -1335,7 +1335,6 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
-        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
