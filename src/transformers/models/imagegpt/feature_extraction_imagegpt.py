@@ -53,9 +53,8 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        color_clusters_file (:obj:`str`):
-            The path to the file containing the color clusters. The clusters will be loaded as a NumPy array of shape
-            (num_clusters, 3).
+        clusters (:obj:`np.ndarray`):
+            The color clusters to use, as a :obj:`np.ndarray` of shape :obj:`(n_clusters, 3)`.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 32):
@@ -72,11 +71,9 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
     model_input_names = ["pixel_values"]
 
-    def __init__(
-        self, color_clusters_file, do_resize=True, size=32, resample=Image.BILINEAR, do_normalize=True, **kwargs
-    ):
+    def __init__(self, clusters, do_resize=True, size=32, resample=Image.BILINEAR, do_normalize=True, **kwargs):
         super().__init__(**kwargs)
-        self.clusters = np.load(color_clusters_file)
+        self.clusters = clusters
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
