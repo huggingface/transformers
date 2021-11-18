@@ -26,9 +26,9 @@ logger = logging.get_logger(__name__)
 
 class VisionTextDualEncoderConfig(PretrainedConfig):
     r"""
-    :class:`HybridCLIPConfig` is the configuration class to store the configuration of a :class:`~HybridCLIPModel`. It
-    is used to instantiate HybridCLIPModel model according to the specified arguments, defining the text model and
-    vision model configs.
+    :class:`VisionTextDualEncoderConfig` is the configuration class to store the configuration of a
+    :class:`~VisionTextDualEncoderModel`. It is used to instantiate VisionTextDualEncoderModel model according to the
+    specified arguments, defining the text model and vision model configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -47,16 +47,16 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
     Examples::
 
-        >>> from transformers import BertConfig, CLIPConfig, HybridCLIPConfig, FlaxHybridCLIP
+        >>> from transformers import ViTConfig, BertConfig, VisionTextDualEncoderConfig, VisionTextDualEncoderModel
 
-        >>> # Initializing a BERT and CLIP configuration
-        >>> config_vision = CLIPConfig()
+        >>> # Initializing a BERT and ViT configuration
+        >>> config_vision = ViTConfig()
         >>> config_text = BertConfig()
 
-        >>> config = HybridCLIPConfig.from_vision_text_configs(config_vision, config_text, projection_dim=512)
+        >>> config = VisionTextDualEncoderConfig.from_vision_text_configs(config_vision, config_text, projection_dim=512)
 
-        >>> # Initializing a BERT and CLIPVision model
-        >>> model = EncoderDecoderModel(config=config)
+        >>> # Initializing a BERT and ViT model
+        >>> model = VisionTextDualEncoderModel(config=config)
 
         >>> # Accessing the model configuration
         >>> config_vision  = model.config.vision_config
@@ -66,8 +66,8 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         >>> model.save_pretrained('my-model')
 
         >>> # loading model and config from pretrained folder
-        >>> encoder_decoder_config = HybridCLIPConfig.from_pretrained('my-model')
-        >>> model = FlaxHybridCLIP.from_pretrained('my-model', config=encoder_decoder_config)
+        >>> vision_text_config = VisionTextDualEncoderConfig.from_pretrained('vit-bert')
+        >>> model = VisionTextDualEncoderModel.from_pretrained('vit-bert', config=vision_text_config)
     """
 
     model_type = "vision-text-dual-encoder"
@@ -106,11 +106,11 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     @classmethod
     def from_vision_text_configs(cls, vision_config: PretrainedConfig, text_config: PretrainedConfig, **kwargs):
         r"""
-        Instantiate a :class:`HybridCLIPConfig` (or a derived class) from text model configuration and vision model
-        configuration.
+        Instantiate a :class:`VisionTextDualEncoderConfig` (or a derived class) from text model configuration and
+        vision model configuration.
 
         Returns:
-            :class:`HybridCLIPConfig`: An instance of a configuration object
+            :class:`VisionTextDualEncoderConfig`: An instance of a configuration object
         """
 
         return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
