@@ -29,6 +29,7 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
 from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
 
@@ -131,6 +132,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
+    base_model_prefix = "vision_text_dual_encoder"
 
     def __init__(
         self,
@@ -150,29 +152,26 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         # initialize with config
         super().__init__(config)
 
-        text_config = config.text_config
-        vision_config = config.vision_config
-
         if vision_model is None:
-
             if isinstance(config.vision_config, CLIPVisionConfig):
                 vision_model = CLIPVisionModel(config.vision_config)
             else:
-                from ..auto.modeling_auto import AutoModel
-
                 vision_model = AutoModel.from_config(config.vision_config)
 
         if text_model is None:
-            from ..auto.modeling_auto import AutoModel
-
             text_model = AutoModel.from_config(config.text_config)
 
-        self.text_model = text_model
         self.vision_model = vision_model
+        self.text_model = text_model
 
+        # make sure that the individual model's config refers to the shared config
+        # so that the updates to the config will be synced
+        self.vision_model.config = self.config.vision_config
+        self.text_model.config = self.config.text_config
+
+        self.vision_embed_dim = config.vision_config.hidden_size
+        self.text_embed_dim = config.text_config.hidden_size
         self.projection_dim = config.projection_dim
-        self.text_embed_dim = text_config.hidden_size
-        self.vision_embed_dim = vision_config.hidden_size
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)

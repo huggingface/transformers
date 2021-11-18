@@ -15,28 +15,39 @@
 """ Testing suite for the PyTorch VisionTextDualEncoder model. """
 
 
+import collections
 import tempfile
 import unittest
+from unittest.case import SkipTest
 
 import numpy as np
 
-from tests.test_modeling_common import floats_tensor
-from transformers import VisionTextDualEncoderConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_bert import BertModelTester
+from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_vit import ViTModelTester
 
 
 if is_torch_available():
     import torch
 
-    from transformers import VisionTextDualEncoderConfig, VisionTextDualEncoderModel
+    from transformers import BertModel, VisionTextDualEncoderConfig, VisionTextDualEncoderModel, ViTModel
+
+
+# Inspired by
+# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
+# From PyTorch internals
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
 
 
 @require_torch
 class VisionTextDualEncoderMixin:
-    def get_encoder_decoder_model(self, config, decoder_config):
+    def get_vision_text_model(self, config, text_config):
         pass
 
     def prepare_config_and_inputs(self):
@@ -115,7 +126,7 @@ class VisionTextDualEncoderMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = VisionTextDualEncoderModel.from_pretrained(tmpdirname)
+                model = VisionTextDualEncoderModel.from_pretrained(tmpdirname).eval()
                 model.to(torch_device)
 
                 after_output = model(
@@ -150,6 +161,7 @@ class VisionTextDualEncoderMixin:
 
                 model = VisionTextDualEncoderModel.from_text_vision_pretrained(text_tmpdirname, vision_tmpdirname)
                 model.to(torch_device)
+                model.eval()
 
                 after_output = model(
                     input_ids=input_ids,
@@ -159,3 +171,140 @@ class VisionTextDualEncoderMixin:
                 out_2 = after_output[0].cpu().numpy()
                 max_diff = np.amax(np.abs(out_2 - out_1))
                 self.assertLessEqual(max_diff, 1e-5)
+
+    def check_vision_text_output_attention(
+        self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
+    ):
+        vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
+        model = VisionTextDualEncoderModel(vision_model=vision_model, text_model=text_model)
+        model.to(torch_device)
+        model.eval()
+
+        output = model(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_attentions=True
+        )
+
+        vision_attentions = output.vision_model_output.attentions
+        self.assertEqual(len(vision_attentions), vision_config.num_hidden_layers)
+
+        # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(vision_model.config.image_size)
+        patch_size = to_2tuple(vision_model.config.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 1
+        self.assertEqual(vision_attentions[0].shape[-3:], (vision_config.num_attention_heads, seq_len, seq_len))
+
+        text_attentions = output.text_model_output.attentions
+        self.assertEqual(len(text_attentions), text_config.num_hidden_layers)
+
+        self.assertEqual(
+            text_attentions[0].shape[-3:],
+            (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
+        )
+
+    def test_vision_text_dual_encoder_model(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_vision_text_dual_encoder_model(**inputs_dict)
+
+    def test_model_from_pretrained_configs(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_model_from_pretrained_configs(**inputs_dict)
+
+    def test_vision_text_dual_encoder_from_pretrained(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_vision_text_dual_encoder_from_pretrained(**inputs_dict)
+
+    def test_save_load(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_save_load(**inputs_dict)
+
+    @SkipTest
+    def test_save_load_vision_text_model(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_save_load_vision_text_model(**inputs_dict)
+
+    def test_vision_text_output_attention(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_vision_text_output_attention(**inputs_dict)
+
+    @slow
+    def test_real_model_save_load_from_pretrained(self):
+        model_2, inputs = self.get_pretrained_model_and_inputs()
+        model_2.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model_2(**inputs)
+            out_2 = outputs[0].cpu().numpy()
+
+            with tempfile.TemporaryDirectory() as tmp_dirname:
+                model_2.save_pretrained(tmp_dirname)
+                model_1 = VisionTextDualEncoderModel.from_pretrained(tmp_dirname)
+                model_1.to(torch_device)
+
+                after_outputs = model_1(**inputs)
+                out_1 = after_outputs[0].cpu().numpy()
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
+
+
+@require_torch
+class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    def get_pretrained_model_and_inputs(self):
+        model = VisionTextDualEncoderModel.from_text_vision_pretrained(
+            "hf-internal-testing/tiny-bert", "hf-internal-testing/tiny-random-vit"
+        )
+        batch_size = 13
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                model.vision_model.config.num_channels,
+                model.vision_model.config.image_size,
+                model.vision_model.config.image_size,
+            ]
+        )
+        input_ids = ids_tensor([batch_size, 4], model.text_model.config.vocab_size)
+        attention_mask = random_attention_mask([batch_size, 4])
+        inputs = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        return model, inputs
+
+    def get_vision_text_model(self, vision_config, text_config):
+        vision_model = ViTModel(vision_config).eval()
+        text_model = BertModel(text_config).eval()
+        return vision_model, text_model
+
+    def prepare_config_and_inputs(self):
+        vit_model_tester = ViTModelTester(self)
+        bert_model_tester = BertModelTester(self)
+        vision_config_and_inputs = vit_model_tester.prepare_config_and_inputs()
+        text_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
+
+        vision_config, pixel_values, _ = vision_config_and_inputs
+
+        (
+            text_config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = text_config_and_inputs
+
+        # make sure that cross attention layers are added
+        return {
+            "text_config": text_config,
+            "vision_config": vision_config,
+            "pixel_values": pixel_values,
+            "attention_mask": input_mask,
+            "text_config": text_config,
+            "input_ids": input_ids,
+            "text_token_type_ids": token_type_ids,
+            "text_sequence_labels": sequence_labels,
+            "text_token_labels": token_labels,
+            "text_choice_labels": choice_labels,
+        }

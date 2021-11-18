@@ -69,7 +69,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         >>> model = FlaxHybridCLIP.from_pretrained('my-model', config=encoder_decoder_config)
     """
 
-    model_type = "hybrid-clip"
+    model_type = "vision-text-dual-encoder"
     is_composition = True
 
     def __init__(self, projection_dim=512, logit_scale_init_value=2.6592, **kwargs):
