@@ -222,14 +222,6 @@ class ModelTesterMixin:
 
             config.gradient_checkpointing = True
             model = model_class(config)
-            # Model does not have gradient checkpointing activated yet, it will be done at the first forward.
-            self.assertFalse(model.is_gradient_checkpointing)
-
-            model.to(torch_device)
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            _ = model(**inputs)
-
-            # Model has gradient checkpointing activated after the first forward.
             self.assertTrue(model.is_gradient_checkpointing)
 
     def test_gradient_checkpointing_enable_disable(self):
