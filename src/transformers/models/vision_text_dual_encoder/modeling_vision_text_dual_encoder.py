@@ -268,6 +268,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         return image_features
 
+    @add_start_docstrings_to_model_forward(VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CLIPOutput, config_class=VisionTextDualEncoderConfig)
     def forward(
         self,
         input_ids=None,

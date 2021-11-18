@@ -23,6 +23,7 @@ from ...file_utils import _LazyModule, is_flax_available, is_torch_available
 
 _import_structure = {
     "configuration_vision_text_dual_encoder": ["VisionTextDualEncoderConfig"],
+    "processing_vision_text_dual_encoder": ["VisionTextDualEncoderProcessor"],
 }
 
 
@@ -36,6 +37,7 @@ if is_flax_available():
 
 if TYPE_CHECKING:
     from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
+    from .processing_visiotn_text_dual_encoder import VisionTextDualEncoderProcessor
 
     if is_torch_available():
         from .modeling_vision_text_dual_encoder import VisionTextDualEncoderModel
