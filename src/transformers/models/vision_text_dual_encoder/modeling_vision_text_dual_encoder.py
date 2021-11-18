@@ -129,6 +129,17 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss
+def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
+    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+
+
+# Copied from transformers.models.clip.modeling_clip.clip_loss
+def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
+    caption_loss = contrastive_loss(similarity)
+    image_loss = contrastive_loss(similarity.T)
+    return (caption_loss + image_loss) / 2.0
+
 
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
@@ -263,6 +274,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         pixel_values=None,
         attention_mask=None,
         position_ids=None,
+        return_loss=None,
         token_type_ids=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -302,10 +314,16 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.T
 
+        loss = None
+        if return_loss:
+            loss = clip_loss(logits_per_text)
+
         if not return_dict:
-            return (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return ((loss,) + output) if loss is not None else output
 
         return CLIPOutput(
+            loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
