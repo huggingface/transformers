@@ -340,6 +340,7 @@ class BeamSearchScorer(BeamScorer):
             decoded.fill_(pad_token_id)
 
         # fill with hypotheses and eos_token_id if the latter fits in
+        import ipdb; ipdb.set_trace()
         for i, hypo in enumerate(best):
             decoded[i, : sent_lengths[i]] = hypo
             if sent_lengths[i] < max_length:
