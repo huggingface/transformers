@@ -18,15 +18,9 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..auto.modeling_auto import AutoModel
@@ -37,6 +31,34 @@ from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
+
+VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
+    This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
+    as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded via
+    :meth:`~transformers.AutoModel.from_pretrained` function. The projection layers are automatically added
+    to the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
+
+    In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how 
+    leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant improvment 
+    on new zero-shot vision tasks such as image classification or retrieval.
+
+    After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any
+    other models (see the examples for more information).
+
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.VisionEncoderDecoderConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
+"""
 
 
 VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING = r"""
@@ -139,6 +161,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+@add_start_docstrings(VISION_TEXT_DUAL_ENCODER_START_DOCSTRING)
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
