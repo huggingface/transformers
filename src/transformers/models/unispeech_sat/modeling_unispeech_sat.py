@@ -1046,7 +1046,8 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         else:
             self.encoder = UniSpeechSatEncoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
@@ -1171,7 +1172,8 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         if self.config.do_stable_layer_norm:
             self.layer_norm_for_extract.requires_grad = False
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_gumbel_temperature(self, temperature: int):
         """
@@ -1328,7 +1330,8 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
@@ -1436,7 +1439,8 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
