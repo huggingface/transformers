@@ -71,8 +71,9 @@ Tips:
 | iGPT-XL           | 60                   | 3072            | not specified       | 6.8 billion  |
 +-------------------+----------------------+-----------------+---------------------+--------------+
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__, based on `this issue <https://github.com/openai/image-gpt/issues/7>`__. 
-The original code can be found `here <https://github.com/openai/image-gpt>`__.
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__, based on `this issue
+<https://github.com/openai/image-gpt/issues/7>`__. The original code can be found `here
+<https://github.com/openai/image-gpt>`__.
 
 ImageGPTConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
