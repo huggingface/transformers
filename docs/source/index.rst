@@ -663,6 +663,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/pegasus
     model_doc/phobert
     model_doc/prophetnet
+    model_doc/qdqbert
     model_doc/rag
     model_doc/reformer
     model_doc/rembert
