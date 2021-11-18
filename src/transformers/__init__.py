@@ -221,6 +221,7 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
+    "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -478,6 +479,7 @@ if is_vision_available():
     _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
@@ -941,6 +943,16 @@ if is_torch_available():
             "IBertForTokenClassification",
             "IBertModel",
             "IBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.imagegpt"].extend(
+        [
+            "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ImageGPTForCausalLM",
+            "ImageGPTForImageClassification",
+            "ImageGPTModel",
+            "ImageGPTPreTrainedModel",
+            "load_tf_weights_in_imagegpt",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -2150,6 +2162,7 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2369,6 +2382,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
         from .models.segformer import SegformerFeatureExtractor
@@ -2755,6 +2769,14 @@ if TYPE_CHECKING:
             IBertForTokenClassification,
             IBertModel,
             IBertPreTrainedModel,
+        )
+        from .models.imagegpt import (
+            IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ImageGPTForCausalLM,
+            ImageGPTForImageClassification,
+            ImageGPTModel,
+            ImageGPTPreTrainedModel,
+            load_tf_weights_in_imagegpt,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
