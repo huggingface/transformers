@@ -436,4 +436,14 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         config = VisionTextDualEncoderConfig.from_text_vision_configs(text_model.config, vision_model.config, **kwargs)
 
         # init model
-        return cls(config=config, vision_model=vision_model, text_model=text_model)
+        model = cls(config=config, vision_model=vision_model, text_model=text_model)
+
+        # the projection layers are always newly initialized when loading the model
+        # using pre-trained vision and text model.
+        logger.warning(
+            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight', 'logit_scale']` "
+            "are newly initialized. You should probably TRAIN this model on a down-stream task "
+            "to be able to use it for predictions and inference."
+        )
+
+        return model
