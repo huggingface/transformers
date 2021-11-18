@@ -73,7 +73,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
     def __init__(self, clusters, do_resize=True, size=32, resample=Image.BILINEAR, do_normalize=True, **kwargs):
         super().__init__(**kwargs)
-        self.clusters = clusters
+        self.clusters = np.asarray(clusters)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
