@@ -392,15 +392,26 @@ class GenerationMixin:
         return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
-        self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
+        self,
+        input_ids: torch.Tensor,
+        pad_token_id: int,
+        eos_token_id: int,
+        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.LongTensor:
+
+        # First if `inputs_embeds` are given, but on `attention_mask` assume that full attention_mask is used
+        if inputs_embeds is not None:
+            return torch.ones((inputs_embeds.shape[0], inputs_embeds.shape[1]), dtype=torch.long)
+
+        # Otherwise, use `input_ids`
         is_pad_token_in_inputs_ids = (pad_token_id is not None) and (pad_token_id in input_ids)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
         if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
             return input_ids.ne(pad_token_id).long()
-        return input_ids.new_ones(input_ids.shape, dtype=torch.long)
+        else:
+            return input_ids.new_ones(input_ids.shape, dtype=torch.long)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, input_ids: torch.LongTensor, model_kwargs
@@ -421,9 +432,7 @@ class GenerationMixin:
     ) -> torch.LongTensor:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
 
-        decoder_input_ids = (
-            torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * decoder_start_token_id
-        )
+        decoder_input_ids = torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * decoder_start_token_id
         return decoder_input_ids
 
     def _get_pad_token_id(self, pad_token_id: int = None, eos_token_id: int = None) -> int:
@@ -891,8 +900,9 @@ class GenerationMixin:
 
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
+            inputs_embeds = model_kwargs.get("inputs_embeds", None)
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                input_ids, pad_token_id, eos_token_id
+                input_ids, pad_token_id, eos_token_id, inputs_embeds
             )
 
         # special case if pad_token_id is not defined
@@ -939,7 +949,9 @@ class GenerationMixin:
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
 
-        if input_ids.shape[-1] >= max_length:
+        # define inputs_length
+        inputs_length = input_ids.shape[-1] if input_ids is not None else model_kwargs["inputs_embeds"].shape[1]
+        if inputs_length >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
                 f"Input length of {input_ids_string} is {input_ids.shape[-1]}, but ``max_length`` is set to {max_length}. "
