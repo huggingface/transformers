@@ -44,10 +44,12 @@ Tips:
   have tied input- and output embeddings.
 - As the time- and memory requirements of the attention mechanism of Transformers scales quadratically in the sequence
   length, the authors pre-trained ImageGPT on smaller input resolutions, such as 32x32 and 64x64. However, feeding a
-  sequence of 32x32x3 tokens for example into a Transformer is still prohibitively large. Therefore, the authors
-  applied k-means clustering to the (R,G,B) pixel values with k=512, such that the model only "knows" 512 different
-  pixel values. Therefore, the vocabulary size of ImageGPT is 512, + 1 for a special "start of sentence" (SOS) token,
-  used at the beginning of every sequence.
+  sequence of 32x32x3=3072 tokens from 0..255 into a Transformer is still prohibitively large. Therefore, the authors
+  applied k-means clustering to the (R,G,B) pixel values with k=512. This way, we only have a 32*32 = 1024-long
+  sequence, but now of integers in the range 0..511. So we are shrinking the sequence length at the cost of a bigger
+  embedding matrix. In other words, the vocabulary size of ImageGPT is 512, + 1 for a special "start of sentence" (SOS)
+  token, used at the beginning of every sequence. One can use :class:`~transformers.ImageGPTFeatureExtractor` to
+  prepare images for the model.
 - Despite being pre-trained entirely unsupervised (i.e. without the use of any labels), ImageGPT produces fairly
   performant image features useful for downstream tasks, such as image classification. The authors showed that the
   features in the middle of the network are the most performant, and can be used as-is to train a linear model (such as

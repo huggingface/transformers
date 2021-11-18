@@ -945,11 +945,14 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ImageGPTForCausalLM
+            >>> from transformers import ImageGPTFeatureExtractor, ImageGPTForCausalLM
             >>> import torch
+            >>> import matplotlib.pyplot as plt
+            >>> import numpy as np
 
-            >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            >>> feature_extractor = ImageGPTFeatureExtractor.from_pretrained('openai/imagegpt-small')
             >>> model = ImageGPTForCausalLM.from_pretrained('openai/imagegpt-small')
+            >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             >>> model.to(device)
 
             >>> # unconditional generation of 8 images
@@ -957,6 +960,17 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
             >>> context = torch.full((batch_size, 1), model.config.vocab_size - 1) #initialize with SOS token
             >>> context = torch.tensor(context).to(device)
             >>> output = model.generate(input_ids=context, max_length=model.config.n_positions + 1, temperature=1.0, do_sample=True, top_k=40)
+
+            >>> clusters = feature_extractor.clusters
+            >>> n_px = feature_extractor.size
+
+            >>> samples = output[:,1:].cpu().detach().numpy()
+            >>> samples_img = [np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [n_px, n_px, 3]).astype(np.uint8) for s in samples] # convert color cluster tokens back to pixels
+            >>> f, axes = plt.subplots(1, batch_size, dpi=300)
+
+            >>> for img, ax in zip(samples_img, axes):
+            ...    ax.axis('off')
+            ...    ax.imshow(img)
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1061,9 +1075,19 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ImageGPTForImageClassification
+            >>> from transformers import ImageGPTFeatureExtractor, ImageGPTForImageClassification
+            >>> from PIL import Image
+            >>> import requests
 
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = ImageGPTFeatureExtractor.from_pretrained('openai/imagegpt-small')
             >>> model = ImageGPTForImageClassification.from_pretrained('openai/imagegpt-small')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1083,6 +1107,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         hidden_states = transformer_outputs[0]
         # average-pool the hidden states along the sequence dimension
         pooled_hidden_states = hidden_states.mean(dim=1)
+        # project from (batch_size, hidden_size) to (batch_size, num_labels)
         logits = self.score(pooled_hidden_states)
 
         loss = None
