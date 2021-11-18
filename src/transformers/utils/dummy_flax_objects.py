@@ -1256,6 +1256,15 @@ class FlaxVisionEncoderDecoderModel:
         requires_backends(self, ["flax"])
 
 
+class FlaxVisionTextDualEncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+
 class FlaxViTForImageClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])

@@ -16,24 +16,29 @@ VisionTextDualEncoder
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The VisionTextDualEncoder model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT
-AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The :class:`transformers.VisionTextDualEncoderModel` can be used to initialize a vision-text dual encoder model with
+any pretrained vision autoencoding model as the vision encoder (*e.g.* :doc:`ViT <vit>`, :doc:`BEiT <beit>`, :doc:`DeiT
+<deit>`) and any pretrained text model as the text encoder (*e.g.* :doc:`RoBERTa <roberta>`, :doc:`BERT <bert>`). This
+model adds two projection layers to project the vision and text embeddings to an embedding space with identical
+dimentions. The projection layers are randomly initialized so the model should be fine-tuned on a downstream task. This
+model can be used to align the vision-text embeddings using CLIP like contrastive image-text training and then can be
+used for zero-shot vision tasks such image-classification or retrieval.
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
-HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
+In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
+leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant
+improvment on new zero-shot vision tasks such as image classification or retrieval.
 
 VisionTextDualEncoderConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.VisionTextDualEncoderConfig
+    :members:
+
+
+VisionTextDualEncoderProcessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.VisionTextDualEncoderProcessor
     :members:
 
 
@@ -48,4 +53,4 @@ FlaxVisionTextDualEncoderModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.FlaxVisionTextDualEncoderModel
-    :members: call
+    :members: __call__
