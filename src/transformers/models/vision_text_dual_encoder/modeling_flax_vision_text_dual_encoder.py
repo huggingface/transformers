@@ -33,9 +33,35 @@ from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "brand-new-bert-base-cased"
 _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
-_TOKENIZER_FOR_DOC = "VisionTextDualEncoderTokenizer"
+
+VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
+    This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
+    as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded via
+    :meth:`~transformers.AutoModel.from_pretrained` function. The projection layers are automatically added
+    to the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
+
+    In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how 
+    leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant improvment 
+    on new zero-shot vision tasks such as image classification or retrieval.
+
+    After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any
+    other models (see the examples for more information).
+
+    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
+    pruning heads etc.)
+
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.VisionEncoderDecoderConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
+"""
 
 VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
 
@@ -60,6 +86,7 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
 """
+
 VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
@@ -90,7 +117,6 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]``.
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-
 """
 
 
@@ -99,32 +125,35 @@ class FlaxVisionTextDualEncoderModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        text_config = self.config.text_config
         vision_config = self.config.vision_config
+        text_config = self.config.text_config
 
-        self.projection_dim = self.config.projection_dim
-        self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
+        self.text_embed_dim = text_config.hidden_size
+        self.projection_dim = self.config.projection_dim
 
-        text_module = FLAX_MODEL_MAPPING[self.config.text_config.__class__].module_class
         vision_module = FLAX_MODEL_MAPPING.get(self.config.vision_config.__class__, FlaxCLIPVisionModel).module_class
+        text_module = FLAX_MODEL_MAPPING[self.config.text_config.__class__].module_class
 
-        self.text_model = text_module(text_config, dtype=self.dtype)
         self.vision_model = vision_module(vision_config, dtype=self.dtype)
+        self.text_model = text_module(text_config, dtype=self.dtype)
 
         self.visual_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
         self.text_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
-        self.logit_scale = self.param("logit_scale", jax.nn.initializers.ones, [])
+
+        self.logit_scale = self.param(
+            "logit_scale", lambda _, shape: jnp.ones(shape) * self.config.logit_scale_init_value, []
+        )
 
     def __call__(
         self,
@@ -187,7 +216,7 @@ class FlaxVisionTextDualEncoderModule(nn.Module):
         )
 
 
-class FlaxVisionTextDualEncoder(FlaxPreTrainedModel):
+class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     module_class = FlaxVisionTextDualEncoderModule
 
@@ -238,6 +267,8 @@ class FlaxVisionTextDualEncoder(FlaxPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -365,10 +396,10 @@ class FlaxVisionTextDualEncoder(FlaxPreTrainedModel):
         )
 
     @classmethod
-    def from_text_vision_pretrained(
+    def from_vision_text_pretrained(
         cls,
-        text_model_name_or_path: str = None,
         vision_model_name_or_path: str = None,
+        text_model_name_or_path: str = None,
         *model_args,
         **kwargs,
     ) -> FlaxPreTrainedModel:
@@ -425,21 +456,44 @@ class FlaxVisionTextDualEncoder(FlaxPreTrainedModel):
             >>> model = FlaxHybridCLIP.from_pretrained("./bert-clip")
         """
 
-        kwargs_text = {
-            argument[len("text_") :]: value for argument, value in kwargs.items() if argument.startswith("text_")
-        }
-
         kwargs_vision = {
             argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
         }
 
+        kwargs_text = {
+            argument[len("text_") :]: value for argument, value in kwargs.items() if argument.startswith("text_")
+        }
+
         # remove text, vision kwargs from kwargs
-        for key in kwargs_text.keys():
-            del kwargs["text_" + key]
         for key in kwargs_vision.keys():
             del kwargs["vision_" + key]
+        for key in kwargs_text.keys():
+            del kwargs["text_" + key]
 
         # Load and initialize the text and vision model
+        vision_model = kwargs_vision.pop("model", None)
+        if vision_model is None:
+            assert (
+                vision_model_name_or_path is not None
+            ), "If `model` is not defined as an argument, a `vision_model_name_or_path` has to be defined"
+            from transformers import FlaxAutoModel
+
+            if "config" not in kwargs_vision:
+                from transformers import AutoConfig
+
+                vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
+
+            if vision_config.model_type == "clip":
+                from transformers import FlaxCLIPVisionModel
+
+                kwargs_vision["config"] = vision_config.vision_config
+                vision_model = FlaxCLIPVisionModel.from_pretrained(
+                    vision_model_name_or_path, *model_args, **kwargs_vision
+                )
+            else:
+                kwargs_vision["config"] = vision_config
+                vision_model = FlaxAutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+
         text_model = kwargs_text.pop("model", None)
         if text_model is None:
             assert (
@@ -455,34 +509,28 @@ class FlaxVisionTextDualEncoder(FlaxPreTrainedModel):
 
             text_model = FlaxAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
 
-        vision_model = kwargs_vision.pop("model", None)
-        if vision_model is None:
-            assert (
-                vision_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `vision_model_name_or_path` has to be defined"
-            from transformers import FlaxAutoModel
-
-            if "config" not in kwargs_vision:
-                from transformers import AutoConfig
-
-                vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
-                kwargs_vision["config"] = vision_config
-
-            vision_model = FlaxAutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
-
         # instantiate config with corresponding kwargs
         dtype = kwargs.pop("dtype", jnp.float32)
-        config = VisionTextDualEncoderConfig.from_text_vision_configs(text_model.config, vision_model.config, **kwargs)
+        config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config, **kwargs)
 
         # init model
         model = cls(config, *model_args, dtype=dtype, **kwargs)
 
-        if vision_config.model_type == "clip":
-            model.params["vision_model"]["vision_model"] = vision_model.params["vision_model"]
-            model.params["visual_projection"]["kernel"] = vision_model.params["visual_projection"]["kernel"]
-        else:
-            model.params["vision_model"] = vision_model.params
+        # if vision_config.model_type == "clip":
+        # model.params["vision_model"]["vision_model"] = vision_model.params["vision_model"]
+        # model.params["visual_projection"]["kernel"] = vision_model.params["visual_projection"]["kernel"]
+        # else:
+        # model.params["vision_model"] = vision_model.params
 
+        model.params["vision_model"] = vision_model.params
         model.params["text_model"] = text_model.params
+
+        # the projection layers are always newly initialized when loading the model
+        # using pre-trained vision and text model.
+        logger.warning(
+            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight', 'logit_scale']` "
+            "are newly initialized. You should probably TRAIN this model on a down-stream task "
+            "to be able to use it for predictions and inference."
+        )
 
         return model
