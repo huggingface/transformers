@@ -120,7 +120,7 @@ class FNetEmbeddings(nn.Module):
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
+                torch.zeros(self.position_ids.size(), dtype=torch.long),
                 persistent=False,
             )
 
