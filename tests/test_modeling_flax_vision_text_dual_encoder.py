@@ -12,169 +12,289 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" Testing suite for the PyTorch VisionTextDualEncoder model. """
 
 
+import collections
+import tempfile
 import unittest
+from unittest.case import SkipTest
 
-from transformers import VisionTextDualEncoderConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+import numpy as np
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
+from transformers import is_flax_available, is_torch_available
+from transformers.testing_utils import require_flax, require_torch, slow
+
+from .test_modeling_flax_bert import FlaxBertModelTester
+from .test_modeling_flax_clip import FlaxCLIPVisionModelTester
+from .test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_flax_roberta import FlaxRobertaModelTester
+from .test_modeling_flax_vit import FlaxViTModelTester
 
 
 if is_flax_available():
-    import numpy as np
+    import torch
 
-    from transformers import FlaxVisionTextDualEncoderModel
+    from transformers import (
+        FlaxBertModel,
+        FlaxCLIPVisionModel,
+        FlaxRobertaModel,
+        FlaxVisionTextDualEncoderModel,
+        FlaxViTModel,
+        VisionTextDualEncoderConfig,
+    )
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
+    )
 
 
-class FlaxVisionTextDualEncoderModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_input_mask = True
-        self.use_token_type_ids = True
-        self.use_labels = True
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.intermediate_size = 37
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 16
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 3
-        self.num_choices = 4
-        self.scope = None
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = VisionTextDualEncoderConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            initializer_range=self.initializer_range,
-            return_dict=True,
-        )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = FlaxVisionTextDualEncoderModel(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-
-        inputs = [input_ids, input_mask]
-
-        result = model(*inputs)
-
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+# Inspired by
+# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
+# From PyTorch internals
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
 
 
 @require_flax
-class FlaxVisionTextDualEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
+class VisionTextDualEncoderMixin:
+    def get_vision_text_model(self, config, text_config):
+        pass
 
-    all_model_classes = (FlaxVisionTextDualEncoderModel,) if is_flax_available() else ()
+    def prepare_config_and_inputs(self):
+        pass
 
-    test_head_masking = False
-    test_onnx = False
+    def get_pretrained_model_and_inputs(self):
+        pass
 
-    def setUp(self):
-        self.model_tester = FlaxVisionTextDualEncoderModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VisionTextDualEncoderConfig, hidden_size=37)
+    def check_model_from_pretrained_configs(
+        self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
+    ):
+        config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_config, text_config)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
+        model = FlaxVisionTextDualEncoderModel(config)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        output = model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+        )
 
-    @slow
-    def test_model_from_pretrained(self):
-        model = FlaxVisionTextDualEncoderModel.from_pretrained("brand-new-bert-base-cased")
-        self.assertIsNotNone(model)
+        self.assertEqual(output["text_embeds"].shape, (input_ids.shape[0], config.projection_dim))
+        self.assertEqual(output["image_embeds"].shape, (pixel_values.shape[0], config.projection_dim))
+
+    def check_vision_text_dual_encoder_from_pretrained(
+        self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
+    ):
+
+        vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
+        kwargs = {"vision_model": vision_model, "text_model": text_model}
+        model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(**kwargs)
+
+        output = model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+        )
+
+        self.assertEqual(output["text_embeds"].shape, (input_ids.shape[0], model.config.projection_dim))
+        self.assertEqual(output["image_embeds"].shape, (pixel_values.shape[0], model.config.projection_dim))
+
+    def check_save_load(self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs):
+        vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
+        kwargs = {"vision_model": vision_model, "text_model": text_model}
+        model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(**kwargs)
+
+        with torch.no_grad():
+            output = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+            )
+            out_1 = output[0]
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = FlaxVisionTextDualEncoderModel.from_pretrained(tmpdirname)
+
+                after_output = model(
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    attention_mask=attention_mask,
+                )
+                out_2 = after_output[0]
+                max_diff = np.amax(np.abs(out_2 - out_1))
+                self.assertLessEqual(max_diff, 1e-5)
+
+    def check_vision_text_output_attention(
+        self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
+    ):
+        vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
+        kwargs = {"vision_model": vision_model, "text_model": text_model}
+        model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(**kwargs)
+
+        output = model(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_attentions=True
+        )
+
+        vision_attentions = output.vision_model_output.attentions
+        self.assertEqual(len(vision_attentions), vision_config.num_hidden_layers)
+
+        # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(vision_model.config.image_size)
+        patch_size = to_2tuple(vision_model.config.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 1
+        self.assertEqual(vision_attentions[0].shape[-3:], (vision_config.num_attention_heads, seq_len, seq_len))
+
+        text_attentions = output.text_model_output.attentions
+        self.assertEqual(len(text_attentions), text_config.num_hidden_layers)
+
+        self.assertEqual(
+            text_attentions[0].shape[-3:],
+            (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
+        )
+
+    def test_model_from_pretrained_configs(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_model_from_pretrained_configs(**inputs_dict)
+
+    def test_vision_text_dual_encoder_from_pretrained(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_vision_text_dual_encoder_from_pretrained(**inputs_dict)
+
+    def test_save_load(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_save_load(**inputs_dict)
+
+    def test_vision_text_output_attention(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        self.check_vision_text_output_attention(**inputs_dict)
+
+    # @slow
+    def test_real_model_save_load_from_pretrained(self):
+        model_2, inputs = self.get_pretrained_model_and_inputs()
+
+        outputs = model_2(**inputs)
+        out_2 = outputs[0]
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            model_2.save_pretrained(tmp_dirname)
+            model_1 = FlaxVisionTextDualEncoderModel.from_pretrained(tmp_dirname)
+
+            after_outputs = model_1(**inputs)
+            out_1 = after_outputs[0]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
 
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if _assert_tensors_equal(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
+@require_flax
+class FlaxViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    def get_pretrained_model_and_inputs(self):
+        model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
+            "hf-internal-testing/tiny-random-vit",
+            "hf-internal-testing/tiny-bert",
+            vision_from_pt=True,
+            text_from_pt=True,
+        )
+        batch_size = 13
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                model.config.vision_config.num_channels,
+                model.config.vision_config.image_size,
+                model.config.vision_config.image_size,
+            ]
+        )
+        input_ids = ids_tensor([batch_size, 4], model.config.text_config.vocab_size)
+        attention_mask = random_attention_mask([batch_size, 4])
+        inputs = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        return model, inputs
+
+    def get_vision_text_model(self, vision_config, text_config):
+        vision_model = FlaxViTModel(vision_config)
+        text_model = FlaxBertModel(text_config)
+        return vision_model, text_model
+
+    def prepare_config_and_inputs(self):
+        vit_model_tester = FlaxViTModelTester(self)
+        bert_model_tester = FlaxBertModelTester(self)
+        vision_config_and_inputs = vit_model_tester.prepare_config_and_inputs()
+        text_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
+
+        vision_config, pixel_values = vision_config_and_inputs
+
+        text_config, input_ids, token_type_ids, attention_mask = text_config_and_inputs
+
+        # make sure that cross attention layers are added
+        return {
+            "text_config": text_config,
+            "vision_config": vision_config,
+            "pixel_values": pixel_values,
+            "attention_mask": attention_mask,
+            "text_config": text_config,
+            "input_ids": input_ids,
+            "text_token_type_ids": token_type_ids,
+        }
+
+
+@require_torch
+class FlaxCLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    def get_pretrained_model_and_inputs(self):
+        model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
+            "hf-internal-testing/tiny-random-clip",
+            "hf-internal-testing/tiny-bert",
+            vision_from_pt=True,
+            text_from_pt=True,
+        )
+        batch_size = 13
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                model.config.vision_config.num_channels,
+                model.config.vision_config.image_size,
+                model.config.vision_config.image_size,
+            ]
+        )
+        input_ids = ids_tensor([batch_size, 4], model.config.text_config.vocab_size)
+        attention_mask = random_attention_mask([batch_size, 4])
+        inputs = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        return model, inputs
+
+    def get_vision_text_model(self, vision_config, text_config):
+        vision_model = FlaxCLIPVisionModel(vision_config)
+        text_model = FlaxBertModel(text_config)
+        return vision_model, text_model
+
+    def prepare_config_and_inputs(self):
+        clip_model_tester = FlaxCLIPVisionModelTester(self)
+        bert_model_tester = FlaxBertModelTester(self)
+        vision_config_and_inputs = clip_model_tester.prepare_config_and_inputs()
+        text_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
+
+        vision_config, pixel_values = vision_config_and_inputs
+
+        text_config, input_ids, token_type_ids, attention_mask = text_config_and_inputs
+
+        # make sure that cross attention layers are added
+        return {
+            "text_config": text_config,
+            "vision_config": vision_config,
+            "pixel_values": pixel_values,
+            "attention_mask": attention_mask,
+            "text_config": text_config,
+            "input_ids": input_ids,
+            "text_token_type_ids": token_type_ids,
+        }
