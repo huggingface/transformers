@@ -657,6 +657,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -822,6 +823,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1083,6 +1085,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         self.encoder = BlenderbotEncoder(config, self.shared)
         self.decoder = BlenderbotDecoder(config, self.shared)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @classmethod
@@ -1220,6 +1223,7 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @classmethod
@@ -1404,6 +1408,7 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):

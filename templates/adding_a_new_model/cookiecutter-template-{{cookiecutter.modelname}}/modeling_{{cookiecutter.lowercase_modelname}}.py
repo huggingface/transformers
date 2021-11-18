@@ -777,6 +777,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
         self.embeddings = {{cookiecutter.camelcase_modelname}}Embeddings(config)
         self.encoder = {{cookiecutter.camelcase_modelname}}Encoder(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -943,6 +944,7 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
         self.cls = {{cookiecutter.camelcase_modelname}}OnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1046,6 +1048,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
         self.cls = {{cookiecutter.camelcase_modelname}}OnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1217,6 +1220,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
         self.classifier = {{cookiecutter.camelcase_modelname}}ClassificationHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1309,6 +1313,7 @@ class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camel
         self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
@@ -1399,6 +1404,7 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1486,6 +1492,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2225,6 +2232,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -2389,6 +2397,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -2640,6 +2649,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
         self.encoder = {{cookiecutter.camelcase_modelname}}Encoder(config, self.shared)
         self.decoder = {{cookiecutter.camelcase_modelname}}Decoder(config, self.shared)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -2755,6 +2765,7 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_encoder(self):
@@ -3170,6 +3181,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):

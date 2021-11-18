@@ -282,6 +282,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         self.embeddings = BertGenerationEmbeddings(config)
         self.encoder = BertEncoder(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -456,6 +457,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         self.bert = BertGenerationEncoder(config)
         self.lm_head = BertGenerationOnlyLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):

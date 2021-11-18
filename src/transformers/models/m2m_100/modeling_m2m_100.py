@@ -706,6 +706,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -871,6 +872,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -1113,6 +1115,7 @@ class M2M100Model(M2M100PreTrainedModel):
         self.encoder = M2M100Encoder(config, self.shared)
         self.decoder = M2M100Decoder(config, self.shared)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1232,6 +1235,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         self.model = M2M100Model(config)
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_encoder(self):

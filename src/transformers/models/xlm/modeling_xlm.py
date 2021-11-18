@@ -469,6 +469,7 @@ class XLMModel(XLMPreTrainedModel):
                 if self.attentions[int(layer)].n_heads == config.n_heads:
                     self.prune_heads({int(layer): list(map(int, heads))})
 
+        # Initialize weights and apply final processing
         self.post_init()
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
@@ -687,6 +688,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -785,6 +787,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.sequence_summary = SequenceSummary(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -885,6 +888,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -989,6 +993,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.qa_outputs = SQuADHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1108,6 +1113,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         self.dropout = nn.Dropout(config.dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1201,6 +1207,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.num_labels, 1)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))

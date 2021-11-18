@@ -1953,6 +1953,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             )
             self.set_attention_type("original_full")
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -2262,6 +2263,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config, add_pooling_layer=True)
         self.cls = BigBirdPreTrainingHeads(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -2370,6 +2372,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config)
         self.cls = BigBirdOnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -2472,6 +2475,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config)
         self.cls = BigBirdOnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -2642,6 +2646,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config)
         self.classifier = BigBirdClassificationHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2737,6 +2742,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
@@ -2834,6 +2840,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2942,6 +2949,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config, add_pooling_layer=add_pooling_layer)
         self.qa_classifier = BigBirdForQuestionAnsweringHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

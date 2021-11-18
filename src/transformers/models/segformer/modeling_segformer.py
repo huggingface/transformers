@@ -467,6 +467,7 @@ class SegformerModel(SegformerPreTrainedModel):
         # hierarchical Transformer encoder
         self.encoder = SegformerEncoder(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def _prune_heads(self, heads_to_prune):
@@ -541,6 +542,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         # Classifier head
         self.classifier = nn.Linear(config.hidden_sizes[-1], config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -696,6 +698,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         self.segformer = SegformerModel(config)
         self.decode_head = SegformerDecodeHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

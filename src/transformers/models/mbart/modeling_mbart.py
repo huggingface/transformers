@@ -697,6 +697,7 @@ class MBartEncoder(MBartPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def _backward_compatibility_gradient_checkpointing(self):
@@ -868,6 +869,7 @@ class MBartDecoder(MBartPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1128,6 +1130,7 @@ class MBartModel(MBartPreTrainedModel):
         self.encoder = MBartEncoder(config, self.shared)
         self.decoder = MBartDecoder(config, self.shared)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1248,6 +1251,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_encoder(self):
@@ -1669,6 +1673,7 @@ class MBartForCausalLM(MBartPreTrainedModel):
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):

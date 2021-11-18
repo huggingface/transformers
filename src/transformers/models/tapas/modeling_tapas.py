@@ -877,6 +877,7 @@ class TapasModel(TapasPreTrainedModel):
 
         self.pooler = TapasPooler(config) if add_pooling_layer else None
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1016,6 +1017,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         self.tapas = TapasModel(config, add_pooling_layer=False)
         self.cls = TapasOnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1146,6 +1148,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         if config.num_aggregation_labels > 0:
             self.aggregation_classifier = nn.Linear(config.hidden_size, config.num_aggregation_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1464,6 +1467,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

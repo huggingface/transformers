@@ -450,6 +450,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
@@ -686,6 +687,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
@@ -861,6 +863,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

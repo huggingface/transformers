@@ -891,6 +891,7 @@ class LxmertModel(LxmertPreTrainedModel):
         self.embeddings = LxmertEmbeddings(config)
         self.encoder = LxmertEncoder(config)
         self.pooler = LxmertPooler(config)
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1048,6 +1049,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             self.answer_head = LxmertVisualAnswerHead(config, self.num_qa_labels)
 
         # Weight initialization
+        # Initialize weights and apply final processing
         self.post_init()
 
         # Loss functions
@@ -1303,6 +1305,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         self.answer_head = LxmertVisualAnswerHead(config, self.num_qa_labels)
 
         # Weight initialization
+        # Initialize weights and apply final processing
         self.post_init()
 
         # Loss function

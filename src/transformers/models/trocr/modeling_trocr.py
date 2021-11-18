@@ -504,6 +504,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         self.layers = nn.ModuleList([TrOCRDecoderLayer(config) for _ in range(config.decoder_layers)])
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -784,6 +785,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
 
         self.output_projection = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):

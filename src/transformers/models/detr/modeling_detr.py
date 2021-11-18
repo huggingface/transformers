@@ -894,6 +894,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
         # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -1002,6 +1003,7 @@ class DetrDecoder(DetrPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -1179,6 +1181,7 @@ class DetrModel(DetrPreTrainedModel):
         self.encoder = DetrEncoder(config)
         self.decoder = DetrDecoder(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_encoder(self):
@@ -1333,6 +1336,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
@@ -1494,6 +1498,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
         )
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)

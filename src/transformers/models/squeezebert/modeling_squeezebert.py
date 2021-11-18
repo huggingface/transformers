@@ -553,6 +553,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         self.encoder = SqueezeBertEncoder(config)
         self.pooler = SqueezeBertPooler(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -654,6 +655,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
         self.transformer = SqueezeBertModel(config)
         self.cls = SqueezeBertOnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -739,6 +741,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -836,6 +839,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
@@ -930,6 +934,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1017,6 +1022,7 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
         self.transformer = SqueezeBertModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

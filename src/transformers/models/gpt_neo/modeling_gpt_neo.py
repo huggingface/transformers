@@ -487,6 +487,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -675,6 +676,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
         self.transformer = GPTNeoModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -823,6 +825,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         self.transformer = GPTNeoModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)

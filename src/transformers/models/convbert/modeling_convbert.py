@@ -775,6 +775,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
 
         self.encoder = ConvBertEncoder(config)
         self.config = config
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -886,6 +887,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         self.generator_predictions = ConvBertGeneratorPredictions(config)
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -995,6 +997,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         self.convbert = ConvBertModel(config)
         self.classifier = ConvBertClassificationHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1090,6 +1093,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
@@ -1187,6 +1191,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1274,6 +1279,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         self.convbert = ConvBertModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

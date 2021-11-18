@@ -817,6 +817,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
 
         self.encoder = RoFormerEncoder(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -973,6 +974,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         self.roformer = RoFormerModel(config)
         self.cls = RoFormerOnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1073,6 +1075,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
         self.roformer = RoFormerModel(config)
         self.cls = RoFormerOnlyMLMHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1238,6 +1241,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
         self.roformer = RoFormerModel(config)
         self.classifier = RoFormerClassificationHead(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1330,6 +1334,8 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
+        # Initialize weights and apply final processing
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
@@ -1422,6 +1428,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1509,6 +1516,7 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
         self.roformer = RoFormerModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

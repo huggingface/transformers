@@ -701,6 +701,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if self.bypass_transformer:
             self.additional_layer = VisualBertLayer(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -877,6 +878,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         self.visual_bert = VisualBertModel(config)
         self.cls = VisualBertPreTrainingHeads(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1021,6 +1023,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, 1)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
@@ -1170,6 +1173,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, config.num_labels)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1292,6 +1296,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, config.num_labels)  # 2
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1448,6 +1453,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         self.cls = VisualBertPreTrainingHeads(config)
         self.attention = VisualBertRegionToPhraseAttention(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

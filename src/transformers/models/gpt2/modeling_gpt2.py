@@ -682,6 +682,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
@@ -951,6 +952,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
@@ -1121,6 +1123,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
@@ -1334,6 +1337,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
@@ -1465,6 +1469,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)

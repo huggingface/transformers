@@ -619,6 +619,7 @@ class SplinterModel(SplinterPreTrainedModel):
         self.embeddings = SplinterEmbeddings(config)
         self.encoder = SplinterEncoder(config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -834,6 +835,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         self.splinter_qass = QuestionAwareSpanSelectionHead(config)
         self.question_token_id = config.question_token_id
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SPLINTER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
