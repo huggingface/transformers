@@ -26,14 +26,25 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
+from .test_modeling_clip import CLIPVisionModelTester
 from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_deit import DeiTModelTester
+from .test_modeling_roberta import RobertaModelTester
 from .test_modeling_vit import ViTModelTester
 
 
 if is_torch_available():
     import torch
 
-    from transformers import BertModel, VisionTextDualEncoderConfig, VisionTextDualEncoderModel, ViTModel
+    from transformers import (
+        BertModel,
+        CLIPVisionModel,
+        DeiTModel,
+        RobertaModel,
+        VisionTextDualEncoderConfig,
+        VisionTextDualEncoderModel,
+        ViTModel,
+    )
 
 
 # Inspired by
@@ -227,7 +238,7 @@ class VisionTextDualEncoderMixin:
         inputs_dict = self.prepare_config_and_inputs()
         self.check_vision_text_output_attention(**inputs_dict)
 
-    @slow
+    # @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
         model_2.to(torch_device)
@@ -284,6 +295,162 @@ class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
         text_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
 
         vision_config, pixel_values, _ = vision_config_and_inputs
+
+        (
+            text_config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = text_config_and_inputs
+
+        # make sure that cross attention layers are added
+        return {
+            "text_config": text_config,
+            "vision_config": vision_config,
+            "pixel_values": pixel_values,
+            "attention_mask": input_mask,
+            "text_config": text_config,
+            "input_ids": input_ids,
+            "text_token_type_ids": token_type_ids,
+            "text_sequence_labels": sequence_labels,
+            "text_token_labels": token_labels,
+            "text_choice_labels": choice_labels,
+        }
+
+
+@require_torch
+class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    def get_pretrained_model_and_inputs(self):
+        model = VisionTextDualEncoderModel.from_text_vision_pretrained(
+            "hf-internal-testing/tiny-random-roberta", "hf-internal-testing/tiny-random-deit"
+        )
+        batch_size = 13
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                model.vision_model.config.num_channels,
+                model.vision_model.config.image_size,
+                model.vision_model.config.image_size,
+            ]
+        )
+        input_ids = ids_tensor([batch_size, 4], model.text_model.config.vocab_size)
+        attention_mask = random_attention_mask([batch_size, 4])
+        inputs = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        return model, inputs
+
+    def check_vision_text_output_attention(
+        self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
+    ):
+        vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
+        model = VisionTextDualEncoderModel(vision_model=vision_model, text_model=text_model)
+        model.to(torch_device)
+        model.eval()
+
+        output = model(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_attentions=True
+        )
+
+        vision_attentions = output.vision_model_output.attentions
+        self.assertEqual(len(vision_attentions), vision_config.num_hidden_layers)
+
+        # in DEiT, the seq_len equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
+        image_size = to_2tuple(vision_model.config.image_size)
+        patch_size = to_2tuple(vision_model.config.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        seq_len = num_patches + 2
+        self.assertEqual(vision_attentions[0].shape[-3:], (vision_config.num_attention_heads, seq_len, seq_len))
+
+        text_attentions = output.text_model_output.attentions
+        self.assertEqual(len(text_attentions), text_config.num_hidden_layers)
+
+        self.assertEqual(
+            text_attentions[0].shape[-3:],
+            (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
+        )
+
+    def get_vision_text_model(self, vision_config, text_config):
+        vision_model = DeiTModel(vision_config).eval()
+        text_model = RobertaModel(text_config).eval()
+        return vision_model, text_model
+
+    def prepare_config_and_inputs(self):
+        vit_model_tester = DeiTModelTester(self)
+        bert_model_tester = RobertaModelTester(self)
+        vision_config_and_inputs = vit_model_tester.prepare_config_and_inputs()
+        text_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
+
+        vision_config, pixel_values, _ = vision_config_and_inputs
+
+        (
+            text_config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = text_config_and_inputs
+
+        # make sure that cross attention layers are added
+        return {
+            "text_config": text_config,
+            "vision_config": vision_config,
+            "pixel_values": pixel_values,
+            "attention_mask": input_mask,
+            "text_config": text_config,
+            "input_ids": input_ids,
+            "text_token_type_ids": token_type_ids,
+            "text_sequence_labels": sequence_labels,
+            "text_token_labels": token_labels,
+            "text_choice_labels": choice_labels,
+        }
+
+
+@require_torch
+class CLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    def get_pretrained_model_and_inputs(self):
+        model = VisionTextDualEncoderModel.from_text_vision_pretrained(
+            "hf-internal-testing/tiny-bert", "hf-internal-testing/tiny-random-clip"
+        )
+        batch_size = 13
+        pixel_values = floats_tensor(
+            [
+                batch_size,
+                model.vision_model.config.num_channels,
+                model.vision_model.config.image_size,
+                model.vision_model.config.image_size,
+            ]
+        )
+        input_ids = ids_tensor([batch_size, 4], model.text_model.config.vocab_size)
+        attention_mask = random_attention_mask([batch_size, 4])
+        inputs = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        return model, inputs
+
+    def get_vision_text_model(self, vision_config, text_config):
+        vision_model = CLIPVisionModel(vision_config).eval()
+        text_model = BertModel(text_config).eval()
+        return vision_model, text_model
+
+    def prepare_config_and_inputs(self):
+        clip_model_tester = CLIPVisionModelTester(self)
+        bert_model_tester = BertModelTester(self)
+        vision_config_and_inputs = clip_model_tester.prepare_config_and_inputs()
+        text_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
+
+        vision_config, pixel_values = vision_config_and_inputs
 
         (
             text_config,

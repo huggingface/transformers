@@ -287,10 +287,10 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             return_dict=return_dict,
         )
 
-        image_embeds = vision_outputs[1]
+        image_embeds = vision_outputs[1]  # pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs[1]  # pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
