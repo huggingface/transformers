@@ -632,13 +632,12 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.h = nn.ModuleList([ImageGPTBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = ImageGPTLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.wte
@@ -890,12 +889,11 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
         self.transformer = ImageGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size - 1, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head
