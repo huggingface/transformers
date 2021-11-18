@@ -38,8 +38,8 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     :meth:`~transformers.AutoModel.from_pretrained` function. The projection layers are automatically added
     to the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
-    In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how 
-    leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant improvment 
+    In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
+    leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant improvment
     on new zero-shot vision tasks such as image classification or retrieval.
 
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any
@@ -134,9 +134,9 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 
             `What are position IDs? <../glossary.html#position-ids>`_
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
-            details.
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
+            using a feature extractor (e.g. if you use ViT as the encoder, you should use :class:`~transformers.ViTFeatureExtractor`).
+            See :meth:`transformers.ViTFeatureExtractor.__call__` for details.
         return_loss (:obj:`bool`, `optional`):
             Whether or not to return the contrastive loss.
         output_attentions (:obj:`bool`, `optional`):
@@ -148,6 +148,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
+
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
