@@ -430,8 +430,8 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> model.config.pad_token_id = tokenizer.pad_token_id
             >>> model.config.vocab_size = model.config.decoder.vocab_size
 
-            >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt").input_ids
-            >>> labels = tokenizer("Salut, mon chien est mignon", return_tensors="pt").input_ids
+            >>> input_ids = tokenizer("This is a really long text", return_tensors="pt").input_ids
+            >>> labels = tokenizer("This is the corresponding summary", return_tensors="pt").input_ids
             >>> outputs = model(input_ids=input_ids, labels=input_ids)
             >>> loss, logits = outputs.loss, outputs.logits
 
@@ -440,7 +440,7 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
 
             >>> # generation
-            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+            >>> generated = model.generate(input_ids)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
