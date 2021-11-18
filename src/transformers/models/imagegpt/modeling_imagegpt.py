@@ -632,7 +632,8 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.h = nn.ModuleList([ImageGPTBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = ImageGPTLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False
@@ -889,7 +890,8 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
         self.transformer = ImageGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size - 1, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False
@@ -1059,7 +1061,8 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         self.transformer = ImageGPTModel(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)

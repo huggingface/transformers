@@ -2648,6 +2648,9 @@ class ImageGPTForCausalLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class ImageGPTForImageClassification:
     def __init__(self, *args, **kwargs):
@@ -2662,6 +2665,9 @@ class ImageGPTModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class ImageGPTPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -2670,6 +2676,9 @@ class ImageGPTPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 def load_tf_weights_in_imagegpt(*args, **kwargs):
