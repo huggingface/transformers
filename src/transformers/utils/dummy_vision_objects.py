@@ -36,6 +36,11 @@ class DetrFeatureExtractor:
         requires_backends(self, ["vision"])
 
 
+class ImageGPTFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class LayoutLMv2FeatureExtractor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

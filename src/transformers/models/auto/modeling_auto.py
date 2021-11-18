@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("imagegpt", "ImageGPTModel"),
         ("fnet", "FNetModel"),
         ("segformer", "SegformerModel"),
         ("gptj", "GPTJModel"),
@@ -145,6 +146,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+        ("imagegpt", "ImageGPTForCausalLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForMaskedLM"),
@@ -195,6 +197,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("imagegpt", "ImageGPTForCausalLM"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("rembert", "RemBertForCausalLM"),
