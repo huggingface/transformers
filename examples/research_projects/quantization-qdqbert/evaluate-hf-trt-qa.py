@@ -26,7 +26,7 @@ from absl import logging as absl_logging
 from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader
 
-import pycuda.autoinit
+import pycuda.autoinit  # noqa: F401
 import pycuda.driver as cuda
 import tensorrt as trt
 import transformers
