@@ -517,12 +517,6 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         # init model
         model = cls(config, *model_args, dtype=dtype, **kwargs)
 
-        # if vision_config.model_type == "clip":
-        # model.params["vision_model"]["vision_model"] = vision_model.params["vision_model"]
-        # model.params["visual_projection"]["kernel"] = vision_model.params["visual_projection"]["kernel"]
-        # else:
-        # model.params["vision_model"] = vision_model.params
-
         model.params["vision_model"] = vision_model.params
         model.params["text_model"] = text_model.params
 

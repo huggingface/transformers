@@ -18,7 +18,6 @@
 import collections
 import tempfile
 import unittest
-from unittest.case import SkipTest
 
 import numpy as np
 
@@ -149,40 +148,6 @@ class VisionTextDualEncoderMixin:
                 max_diff = np.amax(np.abs(out_2 - out_1))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    def check_save_load_vision_text_model(
-        self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
-    ):
-
-        vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
-        model = VisionTextDualEncoderModel(vision_model=vision_model, text_model=text_model)
-        model.to(torch_device)
-        model.eval()
-
-        with torch.no_grad():
-            output = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_mask,
-            )
-            out_1 = output[0].cpu().numpy()
-
-            with tempfile.TemporaryDirectory() as vision_tmpdirname, tempfile.TemporaryDirectory() as text_tmpdirname:
-                vision_model.save_pretrained(vision_tmpdirname)
-                text_model.save_pretrained(text_tmpdirname)
-
-                model = VisionTextDualEncoderModel.from_vision_text_pretrained(vision_tmpdirname, text_tmpdirname)
-                model.to(torch_device)
-                model.eval()
-
-                after_output = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    attention_mask=attention_mask,
-                )
-                out_2 = after_output[0].cpu().numpy()
-                max_diff = np.amax(np.abs(out_2 - out_1))
-                self.assertLessEqual(max_diff, 1e-5)
-
     def check_vision_text_output_attention(
         self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
     ):
@@ -228,11 +193,6 @@ class VisionTextDualEncoderMixin:
     def test_save_load(self):
         inputs_dict = self.prepare_config_and_inputs()
         self.check_save_load(**inputs_dict)
-
-    @SkipTest
-    def test_save_load_vision_text_model(self):
-        inputs_dict = self.prepare_config_and_inputs()
-        self.check_save_load_vision_text_model(**inputs_dict)
 
     def test_vision_text_output_attention(self):
         inputs_dict = self.prepare_config_and_inputs()
