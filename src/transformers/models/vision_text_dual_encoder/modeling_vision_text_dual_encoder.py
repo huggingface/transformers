@@ -36,9 +36,7 @@ from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "brand-new-bert-base-cased"
 _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
-_TOKENIZER_FOR_DOC = "VisionTextDualEncoderTokenizer"
 
 
 VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING = r"""
@@ -156,7 +154,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             vision_model is not None and text_model is not None
         ), "Either a configuration or an vision and a text model has to be provided"
         if config is None:
-            config = VisionTextDualEncoderConfig.from_text_vision_configs(text_model.config, vision_model.config)
+            config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config)
         else:
             assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
 
@@ -205,10 +203,10 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import CLIPTokenizer, CLIPModel
+            >>> from transformers import VisionTextDualEncoderModel, BertTokenizer
 
-            >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+            >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "bert-base-uncased")
+            >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
             >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
             >>> text_features = model.get_text_features(**inputs)
@@ -244,15 +242,15 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
             >>> from PIL import Image
             >>> import requests
-            >>> from transformers import CLIPProcessor, CLIPModel
+            >>> from transformers import VisionTextDualEncoderModel, ViTFeatureExtractor
 
-            >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+            >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "bert-base-uncased")
+            >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
 
             >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(images=image, return_tensors="pt")
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
             >>> image_features = model.get_image_features(**inputs)
         """
@@ -269,7 +267,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         return image_features
 
     @add_start_docstrings_to_model_forward(VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLIPOutput, config_class=VisionTextDualEncoderConfig)
+    @replace_return_docstrings(output_type=CLIPOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -282,6 +280,37 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from PIL import Image
+            >>> import requests
+            >>> from transformers import VisionTextDualEncoderModel, VisionTextDualEncoderProcessor, ViTFeatureExtractor, BertTokenizer
+
+            >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+            >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+            >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+            >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "bert-base-uncased")
+
+            >>> # contrastive training
+            >>> urls = ["http://images.cocodataset.org/val2017/000000039769.jpg", "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg]
+            >>> images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+            >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True)
+            >>> outputs = model(input_ids=inputs.input_ids, attention_mask=inputs.attention_mask, pixel_values=inputs.pixel_values, return_loss=True)
+            >>> loss, logits_per_image = outputs.loss, outputs.logits_per_imag # this is the image-text similarity score
+
+            >>> # save and load from pretrained
+            >>> model.save_pretrained("vit-bert")
+            >>> model = VisionTextDualEncoderModel.from_pretrained("vit-bert")
+
+            >>> # inference
+            >>> outputs = model(**inputs)
+            >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
+            >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
+
+        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         vision_outputs = self.vision_model(
@@ -342,17 +371,17 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         return super().from_pretrained(*args, **kwargs)
 
     @classmethod
-    def from_text_vision_pretrained(
+    def from_vision_text_pretrained(
         cls,
-        text_model_name_or_path: str = None,
         vision_model_name_or_path: str = None,
+        text_model_name_or_path: str = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
         """
         Params:
-            text_model_name_or_path (:obj: `str`, `optional`):
-                Information necessary to initiate the text model. Can be either:
+            vision_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                Information necessary to initiate the vision model. Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
@@ -364,8 +393,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                       argument. This loading path is slower than converting the PyTorch checkpoint in a Flax model
                       using the provided conversion scripts and loading the Flax model afterwards.
 
-            vision_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
-                Information necessary to initiate the vision model. Can be either:
+            text_model_name_or_path (:obj: `str`, `optional`):
+                Information necessary to initiate the text model. Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
@@ -392,46 +421,29 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         Example::
 
-            >>> from transformers import FlaxHybridCLIP
-            >>> # initialize a model from pretrained BERT and CLIP models. Note that the projection layers will be randomly initialized.
-            >>> # If using CLIP's vision model the vision projection layer will be initialized using pre-trained weights
-            >>> model = FlaxHybridCLIP.from_text_vision_pretrained('bert-base-uncased', 'openai/clip-vit-base-patch32')
+            >>> from transformers import VisionTextDualEncoderModel
+            >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
+            >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained('bert-base-uncased', 'google/vit-base-patch16-224')
             >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./bert-clip")
+            >>> model.save_pretrained("./vit-bert")
             >>> # load fine-tuned model
-            >>> model = FlaxHybridCLIP.from_pretrained("./bert-clip")
+            >>> model = VisionTextDualEncoderModel.from_pretrained("./vit-bert")
         """
+        kwargs_vision = {
+            argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
+        }
 
         kwargs_text = {
             argument[len("text_") :]: value for argument, value in kwargs.items() if argument.startswith("text_")
         }
 
-        kwargs_vision = {
-            argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
-        }
-
-        # remove text, vision kwargs from kwargs
-        for key in kwargs_text.keys():
-            del kwargs["text_" + key]
+        # remove vision, text kwargs from kwargs
         for key in kwargs_vision.keys():
             del kwargs["vision_" + key]
+        for key in kwargs_text.keys():
+            del kwargs["text_" + key]
 
-        # Load and initialize the text and vision model
-        text_model = kwargs_text.pop("model", None)
-        if text_model is None:
-            assert (
-                text_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `text_model_name_or_path` has to be defined"
-            from transformers import AutoModel
-
-            if "config" not in kwargs_text:
-                from transformers import AutoConfig
-
-                text_config = AutoConfig.from_pretrained(text_model_name_or_path)
-                kwargs_text["config"] = text_config
-
-            text_model = AutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
-
+        # Load and initialize the vision and text model
         vision_model = kwargs_vision.pop("model", None)
         if vision_model is None:
             assert (
@@ -452,8 +464,23 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                 kwargs_vision["config"] = vision_config
                 vision_model = AutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
 
+        text_model = kwargs_text.pop("model", None)
+        if text_model is None:
+            assert (
+                text_model_name_or_path is not None
+            ), "If `model` is not defined as an argument, a `text_model_name_or_path` has to be defined"
+            from transformers import AutoModel
+
+            if "config" not in kwargs_text:
+                from transformers import AutoConfig
+
+                text_config = AutoConfig.from_pretrained(text_model_name_or_path)
+                kwargs_text["config"] = text_config
+
+            text_model = AutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
+
         # instantiate config with corresponding kwargs
-        config = VisionTextDualEncoderConfig.from_text_vision_configs(text_model.config, vision_model.config, **kwargs)
+        config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config, **kwargs)
 
         # init model
         model = cls(config=config, vision_model=vision_model, text_model=text_model)

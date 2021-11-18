@@ -21,19 +21,17 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_vision_available
-from transformers.models.bert.tokenization_bert import (
-    VOCAB_FILES_NAMES,
-    BertTokenizer,
-)
 from transformers import BertTokenizerFast
+from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_vision_available
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES, BertTokenizer
 from transformers.testing_utils import require_tokenizers, require_vision
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor, VisionTextDualEncoderProcessor
+    from transformers import VisionTextDualEncoderProcessor, ViTFeatureExtractor
+
 
 @require_tokenizers
 @require_vision
@@ -109,7 +107,9 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, ViTFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = VisionTextDualEncoderProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = VisionTextDualEncoderProcessor(
+            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")

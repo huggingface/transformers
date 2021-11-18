@@ -18,6 +18,7 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -49,17 +50,17 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         >>> from transformers import BertConfig, CLIPConfig, HybridCLIPConfig, FlaxHybridCLIP
 
         >>> # Initializing a BERT and CLIP configuration
-        >>> config_text = BertConfig()
         >>> config_vision = CLIPConfig()
+        >>> config_text = BertConfig()
 
-        >>> config = HybridCLIPConfig.from_text_vision_configs(config_text, config_vision, projection_dim=512)
+        >>> config = HybridCLIPConfig.from_vision_text_configs(config_vision, config_text, projection_dim=512)
 
         >>> # Initializing a BERT and CLIPVision model
         >>> model = EncoderDecoderModel(config=config)
 
         >>> # Accessing the model configuration
-        >>> config_text = model.config.text_config
         >>> config_vision  = model.config.vision_config
+        >>> config_text = model.config.text_config
 
         >>> # Saving the model, including its configuration
         >>> model.save_pretrained('my-model')
@@ -75,21 +76,17 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     def __init__(self, projection_dim=512, logit_scale_init_value=2.6592, **kwargs):
         super().__init__(**kwargs)
 
-        if "text_config" not in kwargs:
-            raise ValueError("`text_config` can not be `None`.")
-
         if "vision_config" not in kwargs:
             raise ValueError("`vision_config` can not be `None`.")
 
-        text_config = kwargs.pop("text_config")
+        if "text_config" not in kwargs:
+            raise ValueError("`text_config` can not be `None`.")
+
         vision_config = kwargs.pop("vision_config")
+        text_config = kwargs.pop("text_config")
 
-        text_model_type = text_config.pop("model_type")
         vision_model_type = vision_config.pop("model_type")
-
-        from transformers import AutoConfig
-
-        self.text_config = AutoConfig.for_model(text_model_type, **text_config)
+        text_model_type = text_config.pop("model_type")
 
         if vision_model_type == "clip":
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config).vision_config
@@ -100,12 +97,14 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         else:
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
 
+        self.text_config = AutoConfig.for_model(text_model_type, **text_config)
+
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: PretrainedConfig, vision_config: PretrainedConfig, **kwargs):
+    def from_vision_text_configs(cls, vision_config: PretrainedConfig, text_config: PretrainedConfig, **kwargs):
         r"""
         Instantiate a :class:`HybridCLIPConfig` (or a derived class) from text model configuration and vision model
         configuration.
@@ -114,7 +113,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
             :class:`HybridCLIPConfig`: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
@@ -125,7 +124,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
             :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
         output["vision_config"] = self.vision_config.to_dict()
+        output["text_config"] = self.text_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

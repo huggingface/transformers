@@ -70,7 +70,7 @@ class VisionTextDualEncoderMixin:
     def check_model_from_pretrained_configs(
         self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
     ):
-        config = VisionTextDualEncoderConfig.from_text_vision_configs(text_config, vision_config)
+        config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_config, text_config)
 
         model = VisionTextDualEncoderModel(config)
         model.to(torch_device)
@@ -108,7 +108,7 @@ class VisionTextDualEncoderMixin:
 
         vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
         kwargs = {"vision_model": vision_model, "text_model": text_model}
-        model = VisionTextDualEncoderModel.from_text_vision_pretrained(**kwargs)
+        model = VisionTextDualEncoderModel.from_vision_text_pretrained(**kwargs)
         model.to(torch_device)
         model.eval()
 
@@ -170,7 +170,7 @@ class VisionTextDualEncoderMixin:
                 vision_model.save_pretrained(vision_tmpdirname)
                 text_model.save_pretrained(text_tmpdirname)
 
-                model = VisionTextDualEncoderModel.from_text_vision_pretrained(text_tmpdirname, vision_tmpdirname)
+                model = VisionTextDualEncoderModel.from_vision_text_pretrained(vision_tmpdirname, text_tmpdirname)
                 model.to(torch_device)
                 model.eval()
 
@@ -261,8 +261,8 @@ class VisionTextDualEncoderMixin:
 @require_torch
 class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
-        model = VisionTextDualEncoderModel.from_text_vision_pretrained(
-            "hf-internal-testing/tiny-bert", "hf-internal-testing/tiny-random-vit"
+        model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+            "hf-internal-testing/tiny-random-vit", "hf-internal-testing/tiny-bert"
         )
         batch_size = 13
         pixel_values = floats_tensor(
@@ -324,8 +324,8 @@ class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
 @require_torch
 class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
-        model = VisionTextDualEncoderModel.from_text_vision_pretrained(
-            "hf-internal-testing/tiny-random-roberta", "hf-internal-testing/tiny-random-deit"
+        model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+            "hf-internal-testing/tiny-random-deit", "hf-internal-testing/tiny-random-roberta"
         )
         batch_size = 13
         pixel_values = floats_tensor(
@@ -417,8 +417,8 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
 @require_torch
 class CLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
-        model = VisionTextDualEncoderModel.from_text_vision_pretrained(
-            "hf-internal-testing/tiny-bert", "hf-internal-testing/tiny-random-clip"
+        model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+            "hf-internal-testing/tiny-random-clip", "hf-internal-testing/tiny-bert"
         )
         batch_size = 13
         pixel_values = floats_tensor(

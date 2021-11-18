@@ -15,10 +15,10 @@
 """
 Processor class for VisionTextDualEncoder
 """
+from ...feature_extraction_utils import FeatureExtractionMixin
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...tokenization_utils_base import BatchEncoding
-from ...feature_extraction_utils import FeatureExtractionMixin 
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ..auto.feature_extraction_auto import AutoFeatureExtractor
 from ..auto.tokenization_auto import AutoTokenizer
 
@@ -40,11 +40,13 @@ class VisionTextDualEncoderProcessor:
 
     def __init__(self, feature_extractor, tokenizer):
         if not isinstance(feature_extractor, FeatureExtractionMixin):
-                raise ValueError(
-                    f"`feature_extractor` has to be of type {FeatureExtractionMixin.__class__}, but is {type(feature_extractor)}"
-                )
+            raise ValueError(
+                f"`feature_extractor` has to be of type {FeatureExtractionMixin.__class__}, but is {type(feature_extractor)}"
+            )
         if not isinstance(tokenizer, (PreTrainedTokenizer, PreTrainedTokenizerFast)):
-            raise ValueError(f"`tokenizer` has to be of type PreTrainedTokenizer or PreTrainedTokenizerFast, but is {type(tokenizer)}")
+            raise ValueError(
+                f"`tokenizer` has to be of type PreTrainedTokenizer or PreTrainedTokenizerFast, but is {type(tokenizer)}"
+            )
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
