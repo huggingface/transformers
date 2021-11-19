@@ -75,7 +75,7 @@ class GetFromCacheTests(unittest.TestCase):
         # as the error raised is the same
         # `ConnectionError`
         url = "https://bogus"
-        with self.assertRaisesRegex(ValueError, "Connection error"):
+        with self.assertRaisesRegex(ConnectionError, "Connection error"):
             _ = get_from_cache(url)
 
     def test_file_not_found(self):
