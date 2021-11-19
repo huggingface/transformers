@@ -17,6 +17,8 @@
 import inspect
 import unittest
 
+import pytest
+
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -1714,12 +1716,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sequences.shape, (1, 5))
 
     def test_decoder_generate_with_inputs_embeds(self):
-        article = """Let's generate"""
+        article = """I need input_ids to generate"""
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=5).to(torch_device)
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
         inputs_embeds = model.get_input_embeddings()(input_ids)
 
-        output_sequences = model.generate(inputs_embeds=inputs_embeds)
-
-        self.assertEqual(output_sequences.shape, (1, 5))
+        # cannot generate from `inputs_embeds` for decoder only
+        with pytest.raises(ValueError):
+            model.generate(inputs_embeds=inputs_embeds)
