@@ -589,11 +589,13 @@ class ModelTesterMixin:
                     traced_model = torch.jit.trace(
                         model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
                     )
-                elif 'bbox' in inputs and 'image' in inputs: # LayoutLMv2 requires additional inputs
+                elif "bbox" in inputs and "image" in inputs:  # LayoutLMv2 requires additional inputs
                     input_ids = inputs["input_ids"]
                     bbox = inputs["bbox"]
                     image = inputs["image"].tensor
-                    traced_model = torch.jit.trace(model, (input_ids, bbox, image), check_trace=False) # when traced model is checked, an error is produced due to name mangling
+                    traced_model = torch.jit.trace(
+                        model, (input_ids, bbox, image), check_trace=False
+                    )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     input_ids = inputs["input_ids"]
                     traced_model = torch.jit.trace(model, input_ids)
