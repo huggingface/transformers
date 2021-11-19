@@ -14,7 +14,6 @@
 # limitations under the License.
 
 from functools import partial
-from math import sin
 from typing import Optional, Tuple
 
 import numpy as np
@@ -115,7 +114,7 @@ def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
     sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
     sin, cos = np.sin(sinusoid_inp), np.cos(sinusoid_inp)
-    
+
     sentinel = dim // 2 + dim % 2
     out = np.zeros((num_pos, dim))
     out[:, 0:sentinel] = sin
