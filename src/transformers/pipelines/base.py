@@ -747,9 +747,14 @@ if is_torch_available():
             else:
                 loader_batched = {}
                 for k, element in self._loader_batch_data.items():
-                    if k == "past_key_values":
-                        continue
-                    if isinstance(element[self._loader_batch_index], torch.Tensor):
+                    if k in {"hidden_states", "past_key_values", "attentions"} and isinstance(element, tuple):
+                        if isinstance(element[0], torch.Tensor):
+                            loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                        elif isinstance(element[0], np.ndarray):
+                            loader_batched[k] = tuple(
+                                np.expand_dims(el[self._loader_batch_index], 0) for el in element
+                            )
+                    elif isinstance(element[self._loader_batch_index], torch.Tensor):
                         loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
                     elif isinstance(element[self._loader_batch_index], np.ndarray):
                         loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
