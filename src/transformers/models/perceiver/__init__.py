@@ -50,7 +50,6 @@ if is_torch_available():
         "PerceiverOneHotPreprocessor",
         "PerceiverPreTrainedModel",
         "PerceiverProjectionPostprocessor",
-        "PerceiverTextPostprocessor",
         "PerceiverTextPreprocessor",
     ]
 
@@ -84,7 +83,6 @@ if TYPE_CHECKING:
             PerceiverOneHotPreprocessor,
             PerceiverPreTrainedModel,
             PerceiverProjectionPostprocessor,
-            PerceiverTextPostprocessor,
             PerceiverTextPreprocessor,
         )
 

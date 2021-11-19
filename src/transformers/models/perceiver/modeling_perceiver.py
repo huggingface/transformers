@@ -1064,7 +1064,10 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         )
 
 
-# @add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+# @add_start_docstrings(
+#     """Example use of Perceiver for image classification.""",
+#     PERCEIVER_START_DOCSTRING,
+# )
 class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

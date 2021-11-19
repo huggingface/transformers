@@ -3848,11 +3848,6 @@ class PerceiverProjectionPostprocessor:
         requires_backends(self, ["torch"])
 
 
-class PerceiverTextPostprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PerceiverTextPreprocessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
