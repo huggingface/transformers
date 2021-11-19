@@ -17,7 +17,7 @@ import os
 import unittest
 
 from transformers import RobertaJapaneseTokenizer
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, custom_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -27,6 +27,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 
 @require_sentencepiece
 @require_tokenizers
+@custom_tokenizers
 class JapaneseRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = RobertaJapaneseTokenizer
