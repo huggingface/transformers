@@ -701,7 +701,8 @@ class VisualBertModel(VisualBertPreTrainedModel):
         if self.bypass_transformer:
             self.additional_layer = VisualBertLayer(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -877,7 +878,8 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         self.visual_bert = VisualBertModel(config)
         self.cls = VisualBertPreTrainingHeads(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1021,7 +1023,8 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(
         VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
@@ -1170,7 +1173,8 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -1292,7 +1296,8 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.cls = nn.Linear(config.hidden_size, config.num_labels)  # 2
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -1448,7 +1453,8 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         self.cls = VisualBertPreTrainingHeads(config)
         self.attention = VisualBertRegionToPhraseAttention(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
