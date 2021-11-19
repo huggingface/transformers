@@ -800,7 +800,6 @@ jobs:
                       - v0.4-code_quality-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install isort GitPython
             - run: pip install .[all,quality]
             - save_cache:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
@@ -827,7 +826,6 @@ jobs:
                       - v0.4-repository_consistency-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install isort GitPython
             - run: pip install .[all,quality]
             - save_cache:
                   key: v0.4-repository_consistency-{{ checksum "setup.py" }}
