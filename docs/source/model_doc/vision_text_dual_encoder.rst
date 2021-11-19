@@ -25,8 +25,8 @@ model can be used to align the vision-text embeddings using CLIP like contrastiv
 used for zero-shot vision tasks such image-classification or retrieval.
 
 In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
-leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant
-improvment on new zero-shot vision tasks such as image classification or retrieval.
+leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment on
+new zero-shot vision tasks such as image classification or retrieval.
 
 VisionTextDualEncoderConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

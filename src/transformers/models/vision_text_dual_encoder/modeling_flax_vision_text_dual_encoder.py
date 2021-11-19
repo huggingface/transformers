@@ -41,8 +41,8 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
     In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
-    leveraging pre-trained (locked/frozen) image and text model yields for contrastive learning yields significant
-    improvment on new zero-shot vision tasks such as image classification or retrieval.
+    leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
+    on new zero-shot vision tasks such as image classification or retrieval.
 
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
     models (see the examples for more information).
