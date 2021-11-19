@@ -754,6 +754,7 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install ."[docs]"
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
             - save_cache:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
