@@ -17,8 +17,6 @@
 import inspect
 import unittest
 
-import pytest
-
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -1713,6 +1711,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         output_sequences = model.generate(inputs_embeds=inputs_embeds)
 
+        # make sure model generated correctly until `max_length`
         self.assertEqual(output_sequences.shape, (1, 5))
 
     def test_decoder_generate_with_inputs_embeds(self):
@@ -1723,5 +1722,5 @@ class GenerationIntegrationTests(unittest.TestCase):
         inputs_embeds = model.get_input_embeddings()(input_ids)
 
         # cannot generate from `inputs_embeds` for decoder only
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             model.generate(inputs_embeds=inputs_embeds)

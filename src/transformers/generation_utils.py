@@ -399,7 +399,7 @@ class GenerationMixin:
         inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.LongTensor:
 
-        # First if `inputs_embeds` are given, but on `attention_mask` assume that full attention_mask is used
+        # First if `inputs_embeds` are given, but no `attention_mask` assume that full attention_mask is used
         if inputs_embeds is not None:
             return torch.ones((inputs_embeds.shape[0], inputs_embeds.shape[1]), dtype=torch.long)
 
