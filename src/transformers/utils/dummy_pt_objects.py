@@ -4857,6 +4857,9 @@ class VisionTextDualEncoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
