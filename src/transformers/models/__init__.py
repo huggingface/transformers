@@ -57,6 +57,7 @@ from . import (
     herbert,
     hubert,
     ibert,
+    imagegpt,
     layoutlm,
     layoutlmv2,
     layoutxlm,

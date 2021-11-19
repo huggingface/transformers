@@ -1,10 +1,10 @@
 // These two things need to be updated at each release for the version selector.
 // Last stable version
-const stableVersion = "v4.12.2"
+const stableVersion = "v4.12.5"
 // Dictionary doc folder to label. The last stable version should have an empty key.
 const versionMapping = {
     "master": "master",
-    "": "v4.12.0/v4.12.1/v4.12.2 (stable)",
+    "": "v4.12.0/v4.12.1/v4.12.2/v4.12.4/v4.12.5 (stable)",
     "v4.11.3": "v4.11.0/v4.11.1/v4.11.2/v4.11.3",
     "v4.10.1": "v4.10.0/v4.10.1",
     "v4.9.2": "v4.9.0/v4.9.1/v4.9.2",
