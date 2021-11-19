@@ -112,26 +112,25 @@ class VisionTextDualEncoderMixin:
         kwargs = {"vision_model": vision_model, "text_model": text_model}
         model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(**kwargs)
 
-        with torch.no_grad():
-            output = model(
+        output = model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+        )
+        out_1 = output[0]
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = FlaxVisionTextDualEncoderModel.from_pretrained(tmpdirname)
+
+            after_output = model(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
             )
-            out_1 = output[0]
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = FlaxVisionTextDualEncoderModel.from_pretrained(tmpdirname)
-
-                after_output = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    attention_mask=attention_mask,
-                )
-                out_2 = after_output[0]
-                max_diff = np.amax(np.abs(out_2 - out_1))
-                self.assertLessEqual(max_diff, 1e-3)
+            out_2 = after_output[0]
+            max_diff = np.amax(np.abs(out_2 - out_1))
+            self.assertLessEqual(max_diff, 1e-3)
 
     def check_vision_text_output_attention(
         self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
