@@ -20,27 +20,43 @@ class KerasMetricCallback(Callback):
     """
     Callback to prompt metrics.
     
-    
     Args:
         metric_fn: Metric function provided by the user. 
-        val_data: Validation data to be used to evaluate the model at
+        val_dataset: Validation data to be used to evaluate the model at
         the end of the epoch. 
         metric_name: Name of the metric calculated in metric_fn.
+        batch_size: Batch size. 
     """
-    def __init__(self, metric_fn: Callable, val_data: tensorflow.data.Dataset, metric_name: Optional[str]):
+    def __init__(self, metric_fn: Callable, val_dataset: tf.data.Dataset, batch_size: int, metric_name: Optional[str]):
         super().__init__()
         self.model = model
         self.metric_fn = metric_fn
-        self.val_data = val_data
+        self.batch_size = batch_size
+        self.val_dataset = val_dataset
         self.metric_name = metric_name
 
     def on_epoch_end(self, epoch, logs=None):
+        
+        if isinstance(self.val_dataset, (tf.Tensor, np.ndarray, dict)):
+            self.val_dataset = tf.data.Dataset.from_tensor_slices(self.val_dataset)
+            self.val_dataset = self.val_dataset.batch(batch_size, drop_remainder=False)
+        elif isinstance(self.val_dataset, tf.data.Dataset):
+            pass
+        
+        predictions = []
+        for batch in self.val_dataset:
+            pred = self.model.predict(batch)["logits"]
+            pred = np.argmax(pred, axis=1)
+            for element in pred:
+              predictions.append(element)
 
-        metric_value = self.metric_fn(val_data)
+        metric_value = metric_fn(np.asarray(predictions), np.asarray(encoded_dataset["validation"]["label"]))
+
         if metric_name is not None:
-            print(f"{self.metric_name} for epoch {self.epoch} is {metric_value}")
+            print(f"{self.metric_name} for epoch {epoch} is {metric_value}")
         else:
-            print(f"At epoch {self.epoch}: {metric_value}")
+            print(f"At epoch {epoch}: {metric_value}")
+
 
 class PushToHubCallback(Callback):
     """
