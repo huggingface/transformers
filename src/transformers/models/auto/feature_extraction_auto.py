@@ -81,9 +81,9 @@ class AutoFeatureExtractor:
         r"""
         Instantiate one of the feature extractor classes of the library from a pretrained model vocabulary.
 
-        The feature extractor class to instantiate is selected based on the :obj:`model_type` property of the config object
-        (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+        The feature extractor class to instantiate is selected based on the :obj:`model_type` property of the config
+        object (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when
+        it's missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
 
         List options
 

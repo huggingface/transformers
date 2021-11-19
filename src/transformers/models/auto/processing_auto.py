@@ -12,9 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" AutoFeatureExtractor class. """
+""" AutoProcessor class. """
 import importlib
-import os
 from collections import OrderedDict
 
 # Build the list of all feature extractors
@@ -60,8 +59,8 @@ def processor_class_from_name(class_name: str):
 
 class AutoProcessor:
     r"""
-    This is a generic processor class that will be instantiated as one of the processor classes of the
-    library when created with the :meth:`AutoProcessor.from_pretrained` class method.
+    This is a generic processor class that will be instantiated as one of the processor classes of the library when
+    created with the :meth:`AutoProcessor.from_pretrained` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -90,8 +89,8 @@ class AutoProcessor:
                 - a string, the `model id` of a pretrained feature_extractor hosted inside a model repo on
                   huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
                   namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a processor files saved using the
-                  :obj:`save_pretrained()` method, e.g., ``./my_model_directory/``.
+                - a path to a `directory` containing a processor files saved using the :obj:`save_pretrained()` method,
+                  e.g., ``./my_model_directory/``.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
                 standard cache should not be used.
@@ -144,7 +143,7 @@ class AutoProcessor:
         if "processor_class" in config_dict:
             processor_class = processor_class_from_name(config_dict["processor_class"])
             return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        
+
         # Otherwise, load config, if it can be loaded.
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -154,7 +153,7 @@ class AutoProcessor:
         if getattr(config_dict, "processor_class", None) is not None:
             processor_class = config.processor_class
             return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        
+
         model_type = config_class_to_model_type(type(config).__name__)
         if model_type is not None:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
