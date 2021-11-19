@@ -3732,6 +3732,46 @@ class PegasusPreTrainedModel:
 PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class PerceiverAudioPostprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverAudioPreprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverBasicDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverClassificationDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverClassificationPostprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverForImageClassificationConvProcessing:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverForImageClassificationFourier:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PerceiverForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3740,41 +3780,23 @@ class PerceiverForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
-class PerceiverForMultipleChoice:
+
+class PerceiverForMultimodalAutoencoding:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-
-class PerceiverForQuestionAnswering:
+class PerceiverForOpticalFlow:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-
-class PerceiverForSequenceClassification:
+class PerceiverImagePreprocessor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class PerceiverForTokenClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
 
 class PerceiverLayer:
@@ -3790,6 +3812,24 @@ class PerceiverModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverMultimodalPostprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverMultimodalPreprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverOneHotPreprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class PerceiverPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -3798,6 +3838,24 @@ class PerceiverPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverProjectionPostprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverTextPostprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverTextPreprocessor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None

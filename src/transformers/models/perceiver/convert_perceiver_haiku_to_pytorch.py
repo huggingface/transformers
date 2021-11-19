@@ -45,6 +45,8 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 # We will verify our results on an image of a dog
+
+
 def prepare_img():
     url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
@@ -55,8 +57,7 @@ def rename_keys(state_dict, task):
     for name in list(state_dict):
         param = state_dict.pop(name)
 
-        ## PREPROCESSORS ##
-
+        # PREPROCESSORS
         # rename text preprocessor embeddings (for MLM model)
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         if name.startswith("trainable_position_encoding/pos_embs"):
@@ -113,8 +114,7 @@ def rename_keys(state_dict, task):
         name = name.replace("multimodal_preprocessor/label_mask_token/pos_embs", "input_preprocessor.mask.label")
         name = name.replace("multimodal_preprocessor/label_padding/pos_embs", "input_preprocessor.padding.label")
 
-        ## DECODERS ##
-
+        # DECODERS
         # rename prefix of decoders
         # multimodal autoencoding model
         name = name.replace(
@@ -154,7 +154,7 @@ def rename_keys(state_dict, task):
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
 
-        ## POSTPROCESSORS
+        # POSTPROCESSORS
         name = name.replace(
             "projection_postprocessor/linear/b", "output_postprocessor.modalities.image.classifier.bias"
         )
@@ -170,7 +170,7 @@ def rename_keys(state_dict, task):
         name = name.replace("audio_postprocessor/linear/b", "output_postprocessor.modalities.audio.classifier.bias")
         name = name.replace("audio_postprocessor/linear/w", "output_postprocessor.modalities.audio.classifier.weight")
 
-        ## PERCEIVER MODEL ##
+        # PERCEIVER MODEL
 
         # rename latent embeddings
         name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")

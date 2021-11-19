@@ -751,7 +751,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         self.encoder = PerceiverEncoder(config)
         self.decoder = decoder
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.latents
@@ -919,7 +920,8 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
         self.embedding_decoder = PerceiverEmbeddingDecoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1007,7 +1009,8 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             ),
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -1085,7 +1088,8 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             ),
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -1164,7 +1168,8 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             ),
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -1258,7 +1263,8 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
             ),
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -1432,7 +1438,8 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             output_postprocessor=output_postprocessor,
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -1923,7 +1930,6 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         def embed(modality, x):
             x = torch.reshape(x, [x.shape[0], np.prod(x.shape[1:-1]), x.shape[-1]])
             pos = self.padding[modality]
-            batch_size = x.shape[0]
             pos = torch.broadcast_to(pos, [x.shape[0], x.shape[1], self.num_query_channels - x.shape[2]])
             return torch.cat([x, pos], dim=2)
 
@@ -1939,9 +1945,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         return decoder_outputs
 
 
-## Below: IO pre- and post-processor classes for Perceiver.
-
-
+# Below: IO pre- and post-processor classes for Perceiver.
 def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_block_size: int = 1) -> torch.Tensor:
     """Space to depth transform, using einops."""
     try:

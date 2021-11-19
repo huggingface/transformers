@@ -251,7 +251,14 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
-        ("perceiver", ("PerceiverForImageClassification", "PerceiverForImageClassificationFourier", "PerceiverForImageClassificationConvProcessing")),
+        (
+            "perceiver",
+            (
+                "PerceiverForImageClassification",
+                "PerceiverForImageClassificationFourier",
+                "PerceiverForImageClassificationConvProcessing",
+            ),
+        ),
     ]
 )
 
