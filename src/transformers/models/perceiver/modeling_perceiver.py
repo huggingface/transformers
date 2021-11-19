@@ -34,6 +34,7 @@ from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import (
@@ -238,12 +239,6 @@ class PerceiverSelfAttention(nn.Module):
         inputs_mask=None,
         output_attentions=False,
     ):
-        # if inputs is not None:
-        #     print("First few elements of queries before layernorm:", hidden_states[0,:3,:3])
-        #     print("Sum of queries before layernorm:", hidden_states.sum())
-        #     print("First few elements of keys + values before layernorm:", inputs[0,:3,:3])
-        #     print("Sum of keys + values before layernorm:", inputs.sum())
-
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -254,10 +249,6 @@ class PerceiverSelfAttention(nn.Module):
         is_cross_attention = inputs is not None
         queries = self.query(hidden_states)
 
-        # if is_cross_attention:
-        #     print("First few elements of queries after layernorm:", hidden_states[0, :3, :3])
-        #     print("First few elements of keys + values after layernorm:", inputs[0, :3, :3])
-
         if is_cross_attention:
             keys = self.key(inputs)
             values = self.value(inputs)
@@ -265,11 +256,6 @@ class PerceiverSelfAttention(nn.Module):
         else:
             keys = self.key(hidden_states)
             values = self.value(hidden_states)
-
-        # if is_cross_attention:
-        #     print("First few elements of queries:", queries[0, :3, :3])
-        #     print("First few elements of keys:", keys[0, :3, :3])
-        #     print("First few elements of values:", values[0, :3, :3])
 
         # Reshape channels for multi-head attention.
         # We reshape from (batch_size, time, channels) to (batch_size, num_heads, time, channels per head)
@@ -280,34 +266,18 @@ class PerceiverSelfAttention(nn.Module):
         # Take the dot product between the queries and keys to get the raw attention scores.
         attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
 
-        # print("Shape of attention scores:", attention_scores.shape)
-        # print("First few elements of attention scores:", attention_scores[0, :3, :3, :3])
-
         batch_size, num_heads, seq_len, q_head_dim = queries.shape
         _, _, _, v_head_dim = values.shape
         hiddens = self.num_heads * v_head_dim
 
         attention_scores = attention_scores / math.sqrt(q_head_dim)
 
-        # print("Shape of attention scores:", attention_scores.shape)
-        # print("First few elements of attention scores after scaling:", attention_scores[0, :3, :3, :3])
-
-        # if is_cross_attention:
-        #     print("Inputs mask:", inputs_mask)
-        #     print("Shape of attention mask:", attention_mask.shape)
-        #     print("Sum of attention mask:", attention_mask.sum())
-
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in PerceiverModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        # print("Attention scores after applying mask:", attention_scores[0, :3, :3, :3])
-        # print("Sum of attention scores after applying mask:", attention_scores.sum())
-
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # print("Attention probs after softmax:", attention_probs[0, :3, :3, :3])
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -322,8 +292,6 @@ class PerceiverSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (hiddens,)
         context_layer = context_layer.view(*new_context_layer_shape)
-
-        # print("Result:", context_layer[0, :3, :3])
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -430,15 +398,11 @@ class PerceiverAttention(nn.Module):
         # Output projection
         attention_output = self.output(self_outputs[0])
 
-        # print("Result after conv1d:", attention_output[0, :3, :3])
-
         # Optionally include a residual to the original queries.
         # Consider omitting the residual if the semantics of query and output
         # are different, e.g. if queries are positions and outputs are pixels.
         if self.use_query_residual:
             attention_output = attention_output + hidden_states
-
-        # print("Result after query residual:", attention_output[0, :3, :3])
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -519,16 +483,12 @@ class PerceiverLayer(nn.Module):
 
         layer_output = layer_output + attention_output  # residual connection
 
-        # print("Output after MLP:", layer_output[0, :3, :3])
-
         outputs = (layer_output,) + outputs
 
         return outputs
 
     def feed_forward_chunk(self, attention_output):
         layer_output = self.layernorm(attention_output)
-
-        # print("Output after layernorm before MLP:", layer_output[0, :3, :3])
 
         layer_output = self.mlp(layer_output)
 
@@ -600,12 +560,6 @@ class PerceiverEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
 
-        # print("Shape of latents before cross-attention:", hidden_states.shape)
-        # print("First few elements of latents:", hidden_states[0, :3, :3])
-
-        # print("Shape of inputs before cross-attention:", inputs.shape)
-        # print("First few elements of inputs:", inputs[0,:3,:3])
-
         # Apply the cross-attention between the latents (hidden_states) and inputs:
         layer_outputs = self.cross_attention(
             hidden_states,
@@ -623,8 +577,6 @@ class PerceiverEncoder(nn.Module):
         # Apply the block of self-attention layers more than once:
         for _ in range(self.config.num_blocks):
             for i, layer_module in enumerate(self.self_attends):
-                # print(f"Block {i} -----------------------------------------------")
-                # print(f"Hidden states before block {i}:", hidden_states[0, :3, :3])
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -710,8 +662,8 @@ PERCEIVER_START_DOCSTRING = r"""
 
 PERCEIVER_INPUTS_DOCSTRING = r"""
     Args:
-        inputs
-            ...
+        inputs (:obj:`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
@@ -797,9 +749,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
             modality_sizes = None
             inputs_without_pos = None
 
-        # print("Shape of inputs before going into perceiver:", inputs.shape)
-        # print("First elements of inputs:", inputs[0,:3,:3])
-
         if inputs.size()[-1] != self.config.d_model:
             raise ValueError(
                 f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
@@ -838,15 +787,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        print("Shape of encoder outputs:", sequence_output.shape)
-        # print("Encoder outputs:", sequence_output[0, :3, :3])
-
         logits = None
         if self.decoder:
-            # REPLACE THE FOLLOWING 3 LINES by the following if-else statement (no need for output_shape):
-            # _, output_modality_sizes = self.decoder.output_shape(inputs)
-            # output_modality_sizes = output_modality_sizes or modality_sizes
-            # print("Output modality sizes:", output_modality_sizes)
             if subsampled_output_points is not None:
                 output_modality_sizes = {
                     "audio": subsampled_output_points["audio"].shape[0],
@@ -874,8 +816,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
                     )
                 else:
                     encoder_outputs = encoder_outputs + decoder_outputs.cross_attentions
-
-            # print("Shape of decoder outputs:", logits.shape)
 
             if self.output_postprocessor:
                 logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
@@ -980,7 +920,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
-# @add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
 class PerceiverForImageClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1012,13 +952,8 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #     processor_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1029,6 +964,33 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         labels=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassification
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver')
+            >>> model = PerceiverForImageClassification.from_pretrained('deepmind/vision-perceiver')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1064,10 +1026,10 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         )
 
 
-# @add_start_docstrings(
-#     """Example use of Perceiver for image classification.""",
-#     PERCEIVER_START_DOCSTRING,
-# )
+@add_start_docstrings(
+    """Example use of Perceiver for image classification, with Fourier position embeddings. """,
+    PERCEIVER_START_DOCSTRING,
+)
 class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1094,13 +1056,8 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #     processor_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1111,6 +1068,33 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         labels=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationFourier
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-fourier')
+            >>> model = PerceiverForImageClassificationFourier.from_pretrained('deepmind/vision-perceiver-fourier')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1146,7 +1130,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         )
 
 
-# @add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
 class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1174,13 +1158,8 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #     processor_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1191,6 +1170,33 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         labels=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationConvProcessing
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-conv')
+            >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained('deepmind/vision-perceiver-conv')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1226,7 +1232,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         )
 
 
-# @add_start_docstrings("""Example use of Perceiver for optical flow. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings("""Example use of Perceiver for optical flow. """, PERCEIVER_START_DOCSTRING)
 class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1269,13 +1275,8 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #     processor_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1286,6 +1287,25 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         labels=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import PerceiverForOpticalFlow
+            >>> import torch
+
+            >>> model = PerceiverForOpticalFlow.from_pretrained('deepmind/optical-flow-perceiver')
+
+            >>> patches = torch.randn(1, 2, 27, 368, 496)
+            >>> outputs = model(inputs=patches)
+            >>> logits = outputs.logits
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1315,18 +1335,12 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         )
 
 
-# @add_start_docstrings("""Example use of Perceiver for multimodal autoencoding. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings("""Example use of Perceiver for multimodal autoencoding. """, PERCEIVER_START_DOCSTRING)
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         n_audio_samples = config.num_frames * config.audio_samples_per_frame
-
-        # subsampled_index_dims = {
-        #     "audio": subsampling["audio"].shape[0],
-        #     "image": subsampling["image"].shape[0],
-        #     "label": 1,
-        # }
 
         input_preprocessor = PerceiverMultimodalPreprocessor(
             min_padding_size=4,
@@ -1384,7 +1398,6 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
-            # subsampled_index_dims=subsampled_index_dims,
             # Modality specific decoders are used ONLY to generate queries.
             # All modalties are decoded together using a unified decoder.
             modalities={
@@ -1392,9 +1405,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     config,
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
-                    # subsampled_index_dims=subsampling["audio"],
                     output_index_dims=(n_audio_samples // config.samples_per_patch,),
-                    # num_z_channels=1024,
                     output_num_channels=512,
                     use_query_residual=False,
                     position_encoding_only=True,
@@ -1411,7 +1422,6 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     config,
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
-                    # num_z_channels=1024,
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="trainable",
@@ -1444,13 +1454,8 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #     processor_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1462,6 +1467,28 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         labels=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import PerceiverForMultimodalAutoencoding
+            >>> import torch
+
+            >>> images = torch.randn((1, 16, 3, 224, 224))
+            >>> audio = torch.randn((1, 30720, 1))
+            >>> inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
+
+            >>> model = PerceiverForMultimodalAutoencoding.from_pretrained('deepmind/multimodal-perceiver')
+
+            >>> outputs = model(inputs=inputs)
+            >>> logits = outputs.logits
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1699,12 +1726,6 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         # key, value: B x N x K; query: B x M x K
         # Attention maps -> B x N x M
         # Output -> B x M x K
-        # print("Shape of query before decoder cross attention:", query.shape)
-        # print("First elements of query before decoder cross attention:", query[0,:3,:3])
-
-        # print("Shape of z before decoder cross attention:", z.shape)
-        # print("First elements of z before decoder cross attention:", z[0,:3,:3])
-
         cross_attentions = () if output_attentions else None
 
         layer_outputs = self.decoding_cross_attention(
@@ -1719,9 +1740,6 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
 
         if output_attentions:
             cross_attentions = cross_attentions + (layer_outputs[1],)
-
-        # print("Shape of output after decoder cross attention:", output.shape)
-        # print("First elements of output after decoder cross attention:", output[0,:3,:3])
 
         logits = self.final_layer(output)
 
@@ -1817,7 +1835,6 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
 
     @property
     def num_query_channels(self) -> int:
-        # print("Num query channels of image modality:", self.decoder.num_query_channels)
         return self.decoder.num_query_channels
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
@@ -1905,7 +1922,6 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
 
     def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None, subsampled_points=None):
         # Partition the flat inputs among the different modalities
-        print("Shape of inputs before restructure:", inputs.shape)
         inputs = restructure(modality_sizes, inputs)
 
         # Obtain modality-specific decoders' queries
@@ -1913,7 +1929,6 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
 
         decoder_queries = dict()
         for modality, decoder in self.modalities.items():
-            print("Creating query for modality:", modality)
             # Get input_without_pos for this modality if it exists.
             input_without_pos = None
             if inputs_without_pos is not None:
@@ -1924,8 +1939,6 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
                 inputs_without_pos=input_without_pos,
                 subsampled_points=subsampled_points.get(modality, None),
             )
-            print("Shape of query:", query.shape)
-            # print("First elements of query:", query[0,:3,:3])
             decoder_queries[modality] = query
 
         # Pad all queries with trainable position encodings to make them have the same channels
@@ -2314,17 +2327,7 @@ class PerceiverAudioPostprocessor(nn.Module):
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
 
-        # print("Inputs before audio postprocessor:", inputs[0,:3,:3])
-        # print("Sum of elements of inputs:", inputs.sum())
-
-        # print("First elements of classifier weights:", self.classifier.weight[:3,:3])
-
         logits = self.classifier(inputs)
-
-        # print("Shape of logits after postprocessing:", logits.shape)
-
-        # print("Outputs after audio postprocessor:", logits[0,:3,:3])
-
         return torch.reshape(logits, [inputs.shape[0], -1])
 
 
@@ -2712,8 +2715,6 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
                 output_padded = (1 - mask) * output_padded + mask * mask_token
 
             padded[modality] = output_padded
-            print(f"Modality size of modality {modality}:", output_padded.shape[1])
-            # print("Shape of output_padded:", output_padded.shape)
             modality_sizes[modality] = output_padded.shape[1]
 
         # Apply a predictable ordering to the modalities
