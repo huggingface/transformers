@@ -131,7 +131,7 @@ class VisionTextDualEncoderMixin:
                 )
                 out_2 = after_output[0]
                 max_diff = np.amax(np.abs(out_2 - out_1))
-                self.assertLessEqual(max_diff, 1e-5)
+                self.assertLessEqual(max_diff, 1e-3)
 
     def check_vision_text_output_attention(
         self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
