@@ -20,7 +20,7 @@ import numpy as np
 
 import transformers
 from transformers import GPT2Tokenizer, GPTJConfig, is_flax_available, is_torch_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, tooslow
 
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
@@ -195,7 +195,7 @@ class FlaxGPTJModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
                 model_class_name, config, input_ids, attention_mask
             )
 
-    @slow
+    @tooslow
     def test_batch_generation(self):
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="<|endoftext|>", padding_side="left")
         inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
@@ -318,7 +318,7 @@ class FlaxGPTJModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
                     self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
 
-    @slow
+    @tooslow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("EleutherAI/gptj-6B")
