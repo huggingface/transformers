@@ -23,6 +23,7 @@ from torch import nn
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
 from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
@@ -175,13 +176,14 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         text_model: Optional[PreTrainedModel] = None,
     ):
 
-        assert config is not None or (
-            vision_model is not None and text_model is not None
-        ), "Either a configuration or an vision and a text model has to be provided"
+        if config is None or (vision_model is None or text_model is None):
+            raise ValueError("Either a configuration or an vision and a text model has to be provided")
+
         if config is None:
             config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config)
         else:
-            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+            if not isinstance(config, self.config_class):
+                raise ValueError(f"config: {config} has to be of type {self.config_class}")
 
         # initialize with config
         super().__init__(config)
@@ -471,14 +473,12 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         # Load and initialize the vision and text model
         vision_model = kwargs_vision.pop("model", None)
         if vision_model is None:
-            assert (
-                vision_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `vision_model_name_or_path` has to be defined"
-            from transformers import AutoModel
+            if vision_model_name_or_path is None:
+                raise ValueError(
+                    "If `vision_model` is not defined as an argument, a `vision_model_name_or_path` has to be defined"
+                )
 
             if "config" not in kwargs_vision:
-                from transformers import AutoConfig
-
                 vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
 
             if vision_config.model_type == "clip":
@@ -491,14 +491,12 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         text_model = kwargs_text.pop("model", None)
         if text_model is None:
-            assert (
-                text_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `text_model_name_or_path` has to be defined"
-            from transformers import AutoModel
+            if text_model_name_or_path is None:
+                raise ValueError(
+                    "If `text_model` is not defined as an argument, a `text_model_name_or_path` has to be defined"
+                )
 
             if "config" not in kwargs_text:
-                from transformers import AutoConfig
-
                 text_config = AutoConfig.from_pretrained(text_model_name_or_path)
                 kwargs_text["config"] = text_config
 

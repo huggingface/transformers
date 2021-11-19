@@ -25,7 +25,8 @@ from flax.core.frozen_dict import FrozenDict
 from ...file_utils import add_start_docstrings
 from ...modeling_flax_utils import FlaxPreTrainedModel, append_replace_return_docstrings, overwrite_call_docstring
 from ...utils import logging
-from ..auto.modeling_flax_auto import FLAX_MODEL_MAPPING
+from ..auto.configuration_auto import AutoConfig
+from ..auto.modeling_flax_auto import FLAX_MODEL_MAPPING, FlaxAutoModel
 from ..clip.modeling_flax_clip import FlaxCLIPOutput, FlaxCLIPVisionModel
 from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
 
@@ -37,8 +38,8 @@ _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
 VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
     as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded
-    via :meth:`~transformers.AutoModel.from_pretrained` function. The projection layers are automatically added to the
-    model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
+    via :meth:`~transformers.FlaxAutoModel.from_pretrained` function. The projection layers are automatically added to
+    the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
     In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
     leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
@@ -474,19 +475,15 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         # Load and initialize the text and vision model
         vision_model = kwargs_vision.pop("model", None)
         if vision_model is None:
-            assert (
-                vision_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `vision_model_name_or_path` has to be defined"
-            from transformers import FlaxAutoModel
+            if vision_model_name_or_path is None:
+                raise ValueError(
+                    "If `vision_model` is not defined as an argument, a `vision_model_name_or_path` has to be defined"
+                )
 
             if "config" not in kwargs_vision:
-                from transformers import AutoConfig
-
                 vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
 
             if vision_config.model_type == "clip":
-                from transformers import FlaxCLIPVisionModel
-
                 kwargs_vision["config"] = vision_config.vision_config
                 vision_model = FlaxCLIPVisionModel.from_pretrained(
                     vision_model_name_or_path, *model_args, **kwargs_vision
@@ -497,14 +494,12 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
 
         text_model = kwargs_text.pop("model", None)
         if text_model is None:
-            assert (
-                text_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `text_model_name_or_path` has to be defined"
-            from transformers import FlaxAutoModel
+            if text_model_name_or_path is None:
+                raise ValueError(
+                    "If `text_model` is not defined as an argument, a `text_model_name_or_path` has to be defined"
+                )
 
             if "config" not in kwargs_text:
-                from transformers import AutoConfig
-
                 text_config = AutoConfig.from_pretrained(text_model_name_or_path)
                 kwargs_text["config"] = text_config
 
