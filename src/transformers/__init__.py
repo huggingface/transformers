@@ -2127,9 +2127,11 @@ if TYPE_CHECKING:
         CONFIG_MAPPING,
         FEATURE_EXTRACTOR_MAPPING,
         MODEL_NAMES_MAPPING,
+        PROCESSOR_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
         AutoFeatureExtractor,
+        AutoProcessor,
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
