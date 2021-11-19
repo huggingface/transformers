@@ -1,5 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+    Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -19,7 +19,7 @@ Overview
 The :class:`transformers.VisionTextDualEncoderModel` can be used to initialize a vision-text dual encoder model with
 any pretrained vision autoencoding model as the vision encoder (*e.g.* :doc:`ViT <vit>`, :doc:`BEiT <beit>`, :doc:`DeiT
 <deit>`) and any pretrained text model as the text encoder (*e.g.* :doc:`RoBERTa <roberta>`, :doc:`BERT <bert>`). This
-model adds two projection layers to project the vision and text embeddings to an embedding space with identical
+Two projection layers are added on top of both the vision and text encoder to project the output embeddings to a shared latent space.
 dimentions. The projection layers are randomly initialized so the model should be fine-tuned on a downstream task. This
 model can be used to align the vision-text embeddings using CLIP like contrastive image-text training and then can be
 used for zero-shot vision tasks such image-classification or retrieval.
