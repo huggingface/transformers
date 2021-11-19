@@ -79,6 +79,7 @@ from . import (
     pegasus,
     phobert,
     prophetnet,
+    qdqbert,
     rag,
     reformer,
     rembert,
