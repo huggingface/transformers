@@ -16,11 +16,10 @@
 
 import copy
 
-
-from ..clip.configuration_clip import CLIPVisionConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
+from ..clip.configuration_clip import CLIPVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -102,7 +101,6 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
 
     @classmethod
     def from_vision_text_configs(cls, vision_config: PretrainedConfig, text_config: PretrainedConfig, **kwargs):
