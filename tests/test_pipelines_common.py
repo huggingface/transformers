@@ -297,7 +297,7 @@ class CommonPipelineTest(unittest.TestCase):
 
         results = []
         for out in pipe(data(10)):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
 
@@ -305,7 +305,7 @@ class CommonPipelineTest(unittest.TestCase):
         # This will force using `num_workers=1` with a warning for now.
         results = []
         for out in pipe(data(10), num_workers=2):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
 
@@ -319,7 +319,7 @@ class CommonPipelineTest(unittest.TestCase):
         out = pipe("This is a test")
         results = []
         for out in pipe(data(10)):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
 
