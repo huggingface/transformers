@@ -111,10 +111,10 @@ GPTJ_INPUTS_DOCSTRING = r"""
 """
 
 
-def fixed_pos_embedding(tensor, num_pos):
+def fixed_pos_embedding(tensor, seq_dim=1):
     dim = tensor.shape[-1]
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
-    sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq)
+    sinusoid_inp = np.einsum("i , j -> i j", np.arange(tensor.shape[seq_dim]), inv_freq)
     sinusoid_inp = sinusoid_inp.astype("float32")
     sin, cos = np.sin(sinusoid_inp), np.cos(sinusoid_inp)
     return jnp.asarray(sin), jnp.asarray(cos)
@@ -126,18 +126,13 @@ def rotate_every_two(tensor):
     return rotate_half_tensor
 
 
-def apply_rotary_pos_emb(tensor, sincos, past_len):
+def apply_rotary_pos_emb(tensor, sincos):
     cur_len = tensor.shape[1]
     sin_pos, cos_pos = sincos
 
-    sin_pos = sin_pos[None, :, None, :]
-    cos_pos = cos_pos[None, :, None, :]
+    sin_pos = sin_pos[None, -cur_len:, None, :].repeat(2, 3)
+    cos_pos = cos_pos[None, -cur_len:, None, :].repeat(2, 3)
 
-    sin_pos = lax.dynamic_slice(sin_pos, (0, past_len, 0, 0), (1, past_len + cur_len, 1, sin_pos.shape[-1]))
-    cos_pos = lax.dynamic_slice(cos_pos, (0, past_len, 0, 0), (1, past_len + cur_len, 1, cos_pos.shape[-1]))
-
-    sin_pos = sin_pos.repeat(2, 3)
-    cos_pos = cos_pos.repeat(2, 3)
     return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
 
 
