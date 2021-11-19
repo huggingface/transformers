@@ -237,6 +237,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("beit", "BeitForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
+        ("imagegpt", "ImageGPTForImageClassification"),
     ]
 )
 
