@@ -21,8 +21,17 @@ import unittest
 
 import numpy as np
 
-from transformers import is_flax_available, is_torch_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_torch, slow, torch_device
+import requests
+from transformers import AutoTokenizer
+from transformers.file_utils import is_flax_available, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_flax,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from .test_modeling_flax_bert import FlaxBertModelTester
 from .test_modeling_flax_clip import FlaxCLIPVisionModelTester
@@ -37,6 +46,7 @@ if is_flax_available():
         FlaxVisionTextDualEncoderModel,
         FlaxViTModel,
         VisionTextDualEncoderConfig,
+        VisionTextDualEncoderProcessor,
     )
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
@@ -48,6 +58,11 @@ if is_torch_available():
     import torch
 
     from transformers import VisionTextDualEncoderModel
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import CLIPFeatureExtractor
 
 
 # Inspired by
@@ -379,3 +394,39 @@ class FlaxCLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase)
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
         }
+
+
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    im = Image.open(requests.get(url, stream=True).raw)
+    return im
+
+
+@require_flax
+@require_vision
+class FlaxVisionTextDualEncoderIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model = FlaxVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1)
+
+        feature_extractor = CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32")
+        tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-italian-xxl-uncased")
+        processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+
+        image = prepare_img()
+        inputs = processor(
+            text=["una foto di un gatto", "una foto di un cane"], images=image, padding=True, return_tensors="np"
+        )
+
+        outputs = model(**inputs)
+
+        # verify the logits
+        self.assertEqual(outputs.logits_per_image.shape, (inputs.pixel_values.shape[0], inputs.input_ids.shape[0]))
+        self.assertEqual(
+            outputs.logits_per_text.shape,
+            (inputs.input_ids.shape[0], inputs.pixel_values.shape[0]),
+        )
+
+        expected_logits = np.array([[1.2284727, 0.3104122]])
+
+        self.assertTrue(np.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
