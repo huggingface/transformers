@@ -33,7 +33,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
     @require_torch
     def test_small_model_pt(self):
         text_classifier = pipeline(
-            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
         )
 
         outputs = text_classifier("This is great !")
@@ -42,7 +42,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
     @require_tf
     def test_small_model_tf(self):
         text_classifier = pipeline(
-            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="tf"
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
         )
 
         outputs = text_classifier("This is great !")

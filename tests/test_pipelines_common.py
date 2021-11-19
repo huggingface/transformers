@@ -258,7 +258,7 @@ class CommonPipelineTest(unittest.TestCase):
                 return self.data[i]
 
         text_classifier = pipeline(
-            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
         )
         dataset = MyDataset()
         for output in text_classifier(dataset):
@@ -266,7 +266,7 @@ class CommonPipelineTest(unittest.TestCase):
 
     @require_torch
     def test_check_task_auto_inference(self):
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
 
         self.assertIsInstance(pipe, TextClassificationPipeline)
 
@@ -275,7 +275,7 @@ class CommonPipelineTest(unittest.TestCase):
         class MyPipeline(TextClassificationPipeline):
             pass
 
-        text_classifier = pipeline(model="Narsil/tiny-distilbert-sequence-classification", pipeline_class=MyPipeline)
+        text_classifier = pipeline(model="hf-internal-testing/tiny-random-distilbert", pipeline_class=MyPipeline)
 
         self.assertIsInstance(text_classifier, MyPipeline)
 
@@ -293,7 +293,7 @@ class CommonPipelineTest(unittest.TestCase):
             for _ in range(n):
                 yield "This is a test"
 
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
 
         results = []
         for out in pipe(data(10)):
@@ -315,7 +315,7 @@ class CommonPipelineTest(unittest.TestCase):
             for _ in range(n):
                 yield "This is a test"
 
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification", framework="tf")
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
         out = pipe("This is a test")
         results = []
         for out in pipe(data(10)):
@@ -326,9 +326,9 @@ class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_unbatch_attentions_hidden_states(self):
         model = DistilBertForSequenceClassification.from_pretrained(
-            "Narsil/tiny-distilbert-sequence-classification", output_hidden_states=True, output_attentions=True
+            "hf-internal-testing/tiny-random-distilbert", output_hidden_states=True, output_attentions=True
         )
-        tokenizer = AutoTokenizer.from_pretrained("Narsil/tiny-distilbert-sequence-classification")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-distilbert")
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
 
         # Used to throw an error because `hidden_states` are a tuple of tensors
