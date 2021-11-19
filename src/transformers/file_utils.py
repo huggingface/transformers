@@ -196,6 +196,14 @@ except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
 
 
+_pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
+try:
+    _pytorch_quantization_version = importlib_metadata.version("pytorch_quantization")
+    logger.debug(f"Successfully imported pytorch-quantization version {_pytorch_quantization_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pytorch_quantization_available = False
+
+
 _soundfile_available = importlib.util.find_spec("soundfile") is not None
 try:
     _soundfile_version = importlib_metadata.version("soundfile")
@@ -431,6 +439,10 @@ def is_scatter_available():
     return _scatter_available
 
 
+def is_pytorch_quantization_available():
+    return _pytorch_quantization_available
+
+
 def is_pandas_available():
     return importlib.util.find_spec("pandas") is not None
 
@@ -610,6 +622,12 @@ SCATTER_IMPORT_ERROR = """
 explained here: https://github.com/rusty1s/pytorch_scatter.
 """
 
+# docstyle-ignore
+PYTORCH_QUANTIZATION_IMPORT_ERROR = """
+{0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
+`pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
+"""
+
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -661,6 +679,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
