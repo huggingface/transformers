@@ -392,15 +392,26 @@ class GenerationMixin:
         return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
-        self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
+        self,
+        input_ids: torch.Tensor,
+        pad_token_id: int,
+        eos_token_id: int,
+        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.LongTensor:
+
+        # First if `inputs_embeds` are given, but no `attention_mask` assume that full attention_mask is used
+        if inputs_embeds is not None:
+            return torch.ones((inputs_embeds.shape[0], inputs_embeds.shape[1]), dtype=torch.long)
+
+        # Otherwise, use `input_ids`
         is_pad_token_in_inputs_ids = (pad_token_id is not None) and (pad_token_id in input_ids)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
         if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
             return input_ids.ne(pad_token_id).long()
-        return input_ids.new_ones(input_ids.shape, dtype=torch.long)
+        else:
+            return input_ids.new_ones(input_ids.shape, dtype=torch.long)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, input_ids: torch.LongTensor, model_kwargs
@@ -417,12 +428,11 @@ class GenerationMixin:
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
-        self, input_ids: torch.LongTensor, decoder_start_token_id: int = None, bos_token_id: int = None
+        self, batch_size: int, decoder_start_token_id: int = None, bos_token_id: int = None
     ) -> torch.LongTensor:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-        decoder_input_ids = (
-            torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device) * decoder_start_token_id
-        )
+
+        decoder_input_ids = torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * decoder_start_token_id
         return decoder_input_ids
 
     def _get_pad_token_id(self, pad_token_id: int = None, eos_token_id: int = None) -> int:
@@ -890,8 +900,9 @@ class GenerationMixin:
 
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
+            inputs_embeds = model_kwargs.get("inputs_embeds", None)
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                input_ids, pad_token_id, eos_token_id
+                input_ids, pad_token_id, eos_token_id, inputs_embeds
             )
 
         # special case if pad_token_id is not defined
@@ -910,12 +921,17 @@ class GenerationMixin:
             if "decoder_input_ids" in model_kwargs:
                 input_ids = model_kwargs.pop("decoder_input_ids")
             else:
+                # if word embeddings are provided directly, infere the batch size from it
+                batch_size = input_ids.shape[0] if input_ids is not None else model_kwargs["inputs_embeds"].shape[0]
                 input_ids = self._prepare_decoder_input_ids_for_generation(
-                    input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
+                    batch_size, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
                 )
 
             if "encoder_outputs" not in model_kwargs or not isinstance(model_kwargs["encoder_outputs"], ModelOutput):
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
+        else:
+            if "inputs_embeds" in model_kwargs and input_ids is None:
+                raise ValueError("For decoder-only generation, one must pass `input_ids`.")
 
         # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
         if max_length is None and max_new_tokens is not None:
