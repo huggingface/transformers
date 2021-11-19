@@ -111,13 +111,17 @@ GPTJ_INPUTS_DOCSTRING = r"""
 """
 
 
-def fixed_pos_embedding(tensor, seq_dim=1):
-    dim = tensor.shape[-1]
+def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
-    sinusoid_inp = np.einsum("i , j -> i j", np.arange(tensor.shape[seq_dim]), inv_freq)
-    sinusoid_inp = sinusoid_inp.astype("float32")
+    sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
     sin, cos = np.sin(sinusoid_inp), np.cos(sinusoid_inp)
-    return jnp.asarray(sin), jnp.asarray(cos)
+    
+    sentinel = dim // 2 + dim % 2
+    out = np.zeros((num_pos, dim))
+    out[:, 0:sentinel] = sin
+    out[:, sentinel:] = cos
+
+    return jnp.array(out)
 
 
 def rotate_every_two(tensor):
@@ -127,12 +131,9 @@ def rotate_every_two(tensor):
 
 
 def apply_rotary_pos_emb(tensor, sincos):
-    cur_len = tensor.shape[1]
     sin_pos, cos_pos = sincos
-
-    sin_pos = sin_pos[None, -cur_len:, None, :].repeat(2, 3)
-    cos_pos = cos_pos[None, -cur_len:, None, :].repeat(2, 3)
-
+    sin_pos = sin_pos[:, :, None, :].repeat(2, 3)
+    cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
     return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
 
 
@@ -164,6 +165,9 @@ class FlaxGPTJAttention(nn.Module):
         self.resid_dropout = nn.Dropout(rate=config.resid_pdrop)
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
+
+        pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.embed_positions = create_sinusoidal_positions(config.max_position_embeddings, pos_embd_dim)
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
@@ -206,7 +210,8 @@ class FlaxGPTJAttention(nn.Module):
     def __call__(
         self,
         hidden_states,
-        attention_mask=None,
+        attention_mask,
+        position_ids,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -220,12 +225,8 @@ class FlaxGPTJAttention(nn.Module):
         key = self._split_heads(key)
         value = self._split_heads(value)
 
-        seq_len = query.shape[1]
-        past_len = 0
-        if self.has_variable("cache", "cached_key"):
-            past_len = self.variables["cache"]["cache_index"]
-            seq_len = seq_len + past_len
-
+        sincos = jnp.take(self.embed_positions, position_ids, axis=0)
+        sincos = jnp.split(sincos, 2, axis=-1)
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
             k_pass = key[:, :, :, self.rotary_dim :]
@@ -233,16 +234,14 @@ class FlaxGPTJAttention(nn.Module):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            sincos = fixed_pos_embedding(k_rot, num_pos=self.config.max_position_embeddings)
-            k_rot = apply_rotary_pos_emb(k_rot, sincos, past_len=past_len)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos, past_len=past_len)
+            k_rot = apply_rotary_pos_emb(k_rot, sincos)
+            q_rot = apply_rotary_pos_emb(q_rot, sincos)
 
             key = jnp.concatenate([k_rot, k_pass], axis=-1)
             query = jnp.concatenate([q_rot, q_pass], axis=-1)
         else:
-            sincos = fixed_pos_embedding(key, num_pos=self.config.max_position_embeddings)
-            key = apply_rotary_pos_emb(key, sincos, past_len=past_len)
-            query = apply_rotary_pos_emb(query, sincos, past_len=past_len)
+            key = apply_rotary_pos_emb(key, sincos)
+            query = apply_rotary_pos_emb(query, sincos)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
@@ -338,6 +337,7 @@ class FlaxGPTJBlock(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        position_ids=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -347,6 +347,7 @@ class FlaxGPTJBlock(nn.Module):
         attn_outputs = self.attn(
             hidden_states,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -509,6 +510,7 @@ class FlaxGPTJBlockCollection(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        position_ids=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -525,6 +527,7 @@ class FlaxGPTJBlockCollection(nn.Module):
             layer_outputs = block(
                 hidden_states,
                 attention_mask,
+                position_ids=position_ids,
                 deterministic=deterministic,
                 init_cache=init_cache,
                 output_attentions=output_attentions,
@@ -574,6 +577,7 @@ class FlaxGPTJModule(nn.Module):
         outputs = self.h(
             hidden_states,
             attention_mask,
+            position_ids=position_ids,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
