@@ -16,6 +16,8 @@
 
 import copy
 
+
+from ..clip.configuration_clip import CLIPVisionConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
@@ -91,7 +93,6 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         if vision_model_type == "clip":
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config).vision_config
         elif vision_model_type == "clip_vision_model":
-            from transformers import CLIPVisionConfig
 
             self.vision_config = CLIPVisionConfig(**vision_config)
         else:
