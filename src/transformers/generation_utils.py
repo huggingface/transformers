@@ -952,7 +952,6 @@ class GenerationMixin:
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
 
-        # define input length
         if input_ids.shape[-1] >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
