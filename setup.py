@@ -280,7 +280,7 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8", "gitpython")
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
 
 extras["all"] = (
     extras["tf"]
