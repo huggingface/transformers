@@ -75,7 +75,7 @@ class EvalPrediction(NamedTuple):
     """
 
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: np.ndarray
+    label_ids: Union[np.ndarray, Tuple[np.ndarray]]
 
 
 class EvalLoopOutput(NamedTuple):
