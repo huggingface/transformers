@@ -23,8 +23,10 @@ https://huggingface.co/models?filter=masked-lm
 # You can also adapt this script on your own mlm task. Pointers for this are left as comments.
 
 import argparse
+import functools
 import logging
 import math
+import operator
 import os
 import random
 from pathlib import Path
@@ -406,7 +408,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+            concatenated_examples = {k: functools.reduce(operator.iconcat, examples[k], []) for k in examples.keys()}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.

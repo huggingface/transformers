@@ -18,7 +18,9 @@ Fine-tuning the library models for multiple choice.
 """
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
+import functools
 import logging
+import operator
 import os
 import sys
 from dataclasses import dataclass, field
@@ -185,7 +187,7 @@ class DataCollatorForMultipleChoice:
         flattened_features = [
             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
         ]
-        flattened_features = sum(flattened_features, [])
+        flattened_features = functools.reduce(operator.iconcat, flattened_features, [])
 
         batch = self.tokenizer.pad(
             flattened_features,
@@ -333,8 +335,8 @@ def main():
         ]
 
         # Flatten out
-        first_sentences = sum(first_sentences, [])
-        second_sentences = sum(second_sentences, [])
+        first_sentences = functools.reduce(operator.iconcat, first_sentences, [])
+        second_sentences = functools.reduce(operator.iconcat, second_sentences, [])
 
         # Tokenize
         tokenized_examples = tokenizer(

@@ -19,8 +19,10 @@ Fine-tuning a 🤗 Transformers model on multiple choice relying on the accelera
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
 import argparse
+import functools
 import logging
 import math
+import operator
 import os
 import random
 from dataclasses import dataclass
@@ -224,7 +226,7 @@ class DataCollatorForMultipleChoice:
         flattened_features = [
             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
         ]
-        flattened_features = sum(flattened_features, [])
+        flattened_features = functools.reduce(operator.iconcat, flattened_features, [])
 
         batch = self.tokenizer.pad(
             flattened_features,
@@ -365,8 +367,8 @@ def main():
         labels = examples[label_column_name]
 
         # Flatten out
-        first_sentences = sum(first_sentences, [])
-        second_sentences = sum(second_sentences, [])
+        first_sentences = functools.reduce(operator.iconcat, first_sentences, [])
+        second_sentences = functools.reduce(operator.iconcat, second_sentences, [])
 
         # Tokenize
         tokenized_examples = tokenizer(

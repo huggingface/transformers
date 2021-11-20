@@ -21,6 +21,7 @@ import functools
 import importlib.util
 import io
 import json
+import operator
 import os
 import re
 import shutil
@@ -2129,7 +2130,9 @@ class _LazyModule(ModuleType):
             for value in values:
                 self._class_to_module[value] = key
         # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
+        self.__all__ = list(import_structure.keys()) + functools.reduce(
+            operator.iconcat, import_structure.values(), []
+        )
         self.__file__ = module_file
         self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]

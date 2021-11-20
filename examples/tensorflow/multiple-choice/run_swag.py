@@ -18,7 +18,9 @@ Fine-tuning the library models for multiple choice.
 """
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
+import functools
 import logging
+import operator
 import os
 import sys
 from dataclasses import dataclass, field
@@ -342,8 +344,8 @@ def main():
         ]
 
         # Flatten out
-        first_sentences = sum(first_sentences, [])
-        second_sentences = sum(second_sentences, [])
+        first_sentences = functools.reduce(operator.iconcat, first_sentences, [])
+        second_sentences = functools.reduce(operator.iconcat, second_sentences, [])
 
         # Tokenize
         tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True, max_length=max_seq_length)
