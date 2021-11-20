@@ -52,7 +52,7 @@ _CONFIG_FOR_DOC = "PLBartConfig"
 _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 
 
-PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [ # TODO: Check if this is the place for fine-tuned ckpts as well.
+PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [  # TODO: Check if this is the place for fine-tuned ckpts as well.
     "uclanlp/plbart-base",
     "uclanlp/plbart-c-cpp-defect-detection",
     "uclanlp/plbart-cs-java",
@@ -109,10 +109,11 @@ PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [ # TODO: Check if this is the place for 
     # See all PLBART models at https://huggingface.co/models?filter=plbart
 ]
 
+
 # Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
-    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that PLBart does not
+    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
     have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
     prev_output_tokens = input_ids.clone()
@@ -229,7 +230,8 @@ class PLBartAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -315,7 +317,10 @@ class PLBartAttention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -617,7 +622,8 @@ PLBART_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
+            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
+            :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -632,7 +638,8 @@ PLBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
+            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
+            :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -763,7 +770,8 @@ class PLBartEncoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
+                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
+                :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -959,7 +967,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
+                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
+                :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -1274,7 +1283,8 @@ class PLBartModel(PLBartPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The PLBART Model with a language modeling head. Can be used for code-to-text, text-to-code and code-to-code.", PLBART_START_DOCSTRING
+    "The PLBART Model with a language modeling head. Can be used for code-to-text, text-to-code and code-to-code.",
+    PLBART_START_DOCSTRING,
 )
 class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     base_model_prefix = "model"
@@ -1440,7 +1450,8 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
 
 @add_start_docstrings(
     """
-    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for code classification.
+    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for code
+    classification.
     """,
     PLBART_START_DOCSTRING,
 )
@@ -1565,8 +1576,8 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
 
 @add_start_docstrings(
     """
-    PLBART Model with a span classification head on top for extractive question-answering tasks (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    PLBART Model with a span classification head on top for extractive question-answering tasks (a linear layer on top
+    of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     PLBART_START_DOCSTRING,
 )
@@ -1754,7 +1765,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
+                Indices can be obtained using :class:`~transformers.PLBartTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -1824,8 +1835,8 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
 
             >>> from transformers import PLBartTokenizer, PLBartForCausalLM
 
-            >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
-            >>> model = PLBartForCausalLM.from_pretrained('uclanlp/plbart-base', add_cross_attention=False)
+            >>> tokenizer = PLBartTokenizer.from_pretrained('facebook/bart-large')
+            >>> model = PLBartForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

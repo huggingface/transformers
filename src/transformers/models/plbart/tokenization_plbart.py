@@ -83,12 +83,12 @@ class PLBartTokenizer(XLMRobertaTokenizer):
     Examples::
 
         >>> from transformers import PLBartTokenizer
-        >>> tokenizer = PLBartTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
-        >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
-        >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
+        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-python-en_XX', src_lang="python", tgt_lang="en_XX")
+        >>> example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
+        >>> expected_translation_english = "Returns the maximum value of a b c."
+        >>> inputs = tokenizer(example_python_phrase, return_tensors="pt)
         >>> with tokenizer.as_target_tokenizer():
-        ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+        ...     labels = tokenizer(expected_translation_english, return_tensors="pt")
         >>> inputs["labels"] = labels["input_ids"]
     """
 

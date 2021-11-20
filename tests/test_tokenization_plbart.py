@@ -28,8 +28,8 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 if is_torch_available():
     from transformers.models.plbart.modeling_plbart import shift_tokens_right
 
-EN_CODE = 250004
-RO_CODE = 250020
+EN_CODE = 50003
+PYTHON_CODE = 50002
 
 
 @require_sentencepiece
@@ -126,54 +126,81 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_torch
 @require_sentencepiece
 @require_tokenizers
-class PLBartEnroIntegrationTest(unittest.TestCase):
-    checkpoint_name = "uclanlp/plbart-cs-java"
+class PLBartPythonEnIntegrationTest(unittest.TestCase):
+    checkpoint_name = "uclanlp/plbart-python-en_XX"
     src_text = [
-        " UN Chief Says There Is No Military Solution in Syria",
-        """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
+        "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])",
+        "def sum(a,b,c):NEW_LINE_INDENTreturn sum([a,b,c])",
     ]
     tgt_text = [
-        "Şeful ONU declară că nu există o soluţie militară în Siria",
-        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.',
+        "Returns the maximum value of a b c.",
+        "Sums the values of a b c.",
     ]
-    expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
+    expected_src_tokens = [
+        134,
+        5452,
+        33460,
+        33441,
+        33463,
+        33465,
+        33463,
+        33449,
+        988,
+        20,
+        33456,
+        19,
+        33456,
+        771,
+        39,
+        4258,
+        889,
+        3318,
+        33441,
+        33463,
+        33465,
+        33463,
+        33449,
+        2471,
+        2,
+        PYTHON_CODE,
+    ]
 
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: PLBartTokenizer = PLBartTokenizer.from_pretrained(
-            cls.checkpoint_name, src_lang="en_XX", tgt_lang="ro_RO"
+            cls.checkpoint_name, src_lang="python", tgt_lang="en_XX"
         )
         cls.pad_token_id = 1
         return cls
 
     def check_language_codes(self):
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ar_AR"], 250001)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["en_EN"], 250004)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ro_RO"], 250020)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["java"], 50001)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["python"], 50002)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["en_XX"], 50003)
 
-    def test_enro_tokenizer_batch_encode_plus(self):
+    def test_python_en_tokenizer_batch_encode_plus(self):
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
 
-    def test_enro_tokenizer_decode_ignores_language_codes(self):
-        self.assertIn(RO_CODE, self.tokenizer.all_special_ids)
-        generated_ids = [RO_CODE, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2]
+    def test_python_en_tokenizer_decode_ignores_language_codes(self):
+        self.assertIn(PYTHON_CODE, self.tokenizer.all_special_ids)
+        generated_ids = [EN_CODE, 9037, 33442, 57, 752, 153, 14, 56, 18, 9, 2]
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
-        self.assertEqual(result, expected_romanian)
+        expected_english = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        self.assertEqual(result, expected_english)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
-    def test_enro_tokenizer_truncation(self):
-        src_text = ["this is gunna be a long sentence " * 20]
+    def test_python_en_tokenizer_truncation(self):
+        src_text = ["def sum(a,b,c):NEW_LINE_INDENTreturn sum([a,b,c])" * 20]
         assert isinstance(src_text[0], str)
         desired_max_length = 10
         ids = self.tokenizer(src_text, max_length=desired_max_length, truncation=True).input_ids[0]
         self.assertEqual(ids[-2], 2)
-        self.assertEqual(ids[-1], EN_CODE)
+        self.assertEqual(ids[-1], PYTHON_CODE)
         self.assertEqual(len(ids), desired_max_length)
 
     def test_mask_token(self):
-        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "ar_AR"]), [250026, 250001])
+        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "java"]), [50004, 50001])
 
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
@@ -191,13 +218,13 @@ class PLBartEnroIntegrationTest(unittest.TestCase):
         batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id).tolist()
 
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
-        assert batch.input_ids[1][-2:] == [2, EN_CODE]
-        assert batch.decoder_input_ids[1][0] == RO_CODE
+        assert batch.input_ids[1][-2:] == [2, PYTHON_CODE]
+        assert batch.decoder_input_ids[1][0] == EN_CODE
         assert batch.decoder_input_ids[1][-1] == 2
-        assert labels[1][-2:].tolist() == [2, RO_CODE]
+        assert labels[1][-2:].tolist() == [2, EN_CODE]
 
     @require_torch
-    def test_enro_tokenizer_prepare_batch(self):
+    def test_python_en_tokenizer_prepare_batch(self):
         batch = self.tokenizer(
             self.src_text, padding=True, truncation=True, max_length=len(self.expected_src_tokens), return_tensors="pt"
         )
@@ -214,14 +241,14 @@ class PLBartEnroIntegrationTest(unittest.TestCase):
 
         self.assertIsInstance(batch, BatchEncoding)
 
-        self.assertEqual((2, 14), batch.input_ids.shape)
-        self.assertEqual((2, 14), batch.attention_mask.shape)
+        self.assertEqual((2, 26), batch.input_ids.shape)
+        self.assertEqual((2, 26), batch.attention_mask.shape)
         result = batch.input_ids.tolist()[0]
         self.assertListEqual(self.expected_src_tokens, result)
         self.assertEqual(2, batch.decoder_input_ids[0, -1])  # EOS
         # Test that special tokens are reset
         self.assertEqual(self.tokenizer.prefix_tokens, [])
-        self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, EN_CODE])
+        self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, PYTHON_CODE])
 
     def test_seq2seq_max_length(self):
         batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
@@ -236,16 +263,16 @@ class PLBartEnroIntegrationTest(unittest.TestCase):
     @require_torch
     def test_tokenizer_translation(self):
         inputs = self.tokenizer._build_translation_inputs(
-            "A test", return_tensors="pt", src_lang="en_XX", tgt_lang="ar_AR"
+            "A test", return_tensors="pt", src_lang="en_XX", tgt_lang="java"
         )
 
         self.assertEqual(
             nested_simplify(inputs),
             {
                 # A, test, EOS, en_XX
-                "input_ids": [[62, 3034, 2, 250004]],
+                "input_ids": [[150, 242, 2, 50003]],
                 "attention_mask": [[1, 1, 1, 1]],
-                # ar_AR
-                "forced_bos_token_id": 250001,
+                # java
+                "forced_bos_token_id": 50001,
             },
         )

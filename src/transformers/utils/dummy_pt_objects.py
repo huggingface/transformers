@@ -2391,6 +2391,9 @@ class MobileBertForQuestionAnswering(metaclass=DummyObject):
 
 class MobileBertForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2398,6 +2401,9 @@ class MobileBertForSequenceClassification(metaclass=DummyObject):
 
 class MobileBertForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2405,6 +2411,9 @@ class MobileBertForTokenClassification(metaclass=DummyObject):
 
 class MobileBertLayer(metaclass=DummyObject):
     _backends = ["torch"]
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2412,6 +2421,9 @@ class MobileBertLayer(metaclass=DummyObject):
 
 class MobileBertModel(metaclass=DummyObject):
     _backends = ["torch"]
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2419,6 +2431,9 @@ class MobileBertModel(metaclass=DummyObject):
 
 class MobileBertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2426,6 +2441,9 @@ class MobileBertPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_backends(load_tf_weights_in_mobilebert, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
