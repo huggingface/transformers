@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, UCLA NLP, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -52,12 +52,64 @@ _CONFIG_FOR_DOC = "PLBartConfig"
 _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 
 
-PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [ # TODO: Check if this is the place for fine-tuned ckpts as well.
     "uclanlp/plbart-base",
+    "uclanlp/plbart-c-cpp-defect-detection",
+    "uclanlp/plbart-cs-java",
+    "uclanlp/plbart-en_XX-java",
+    "uclanlp/plbart-go-en_XX",
+    "uclanlp/plbart-java-clone-detection",
+    "uclanlp/plbart-java-cs",
+    "uclanlp/plbart-java-en_XX",
+    "uclanlp/plbart-javascript-en_XX",
+    "uclanlp/plbart-multi_task-all",
+    "uclanlp/plbart-multi_task-compiled",
+    "uclanlp/plbart-multi_task-dynamic",
+    "uclanlp/plbart-multi_task-go",
+    "uclanlp/plbart-multi_task-interpreted",
+    "uclanlp/plbart-multi_task-java",
+    "uclanlp/plbart-multi_task-js",
+    "uclanlp/plbart-multi_task-php",
+    "uclanlp/plbart-multi_task-python",
+    "uclanlp/plbart-multi_task-ruby",
+    "uclanlp/plbart-multi_task-static",
+    "uclanlp/plbart-multi_task-strong",
+    "uclanlp/plbart-multi_task-weak",
+    "uclanlp/plbart-php-en_XX",
+    "uclanlp/plbart-python-en_XX",
+    "uclanlp/plbart-refine-java-medium",
+    "uclanlp/plbart-refine-java-small",
+    "uclanlp/plbart-ruby-en_XX",
+    "uclanlp/plbart-single_task-all-generation",
+    "uclanlp/plbart-single_task-all-summarization",
+    "uclanlp/plbart-single_task-compiled-generation",
+    "uclanlp/plbart-single_task-compiled-summarization",
+    "uclanlp/plbart-single_task-dynamic-generation",
+    "uclanlp/plbart-single_task-dynamic-summarization",
+    "uclanlp/plbart-single_task-en_go",
+    "uclanlp/plbart-single_task-en_java",
+    "uclanlp/plbart-single_task-en_js",
+    "uclanlp/plbart-single_task-en_php",
+    "uclanlp/plbart-single_task-en_python",
+    "uclanlp/plbart-single_task-en_ruby",
+    "uclanlp/plbart-single_task-go_en",
+    "uclanlp/plbart-single_task-interpreted-generation",
+    "uclanlp/plbart-single_task-interpreted-summarization",
+    "uclanlp/plbart-single_task-java_en",
+    "uclanlp/plbart-single_task-js_en",
+    "uclanlp/plbart-single_task-php_en",
+    "uclanlp/plbart-single_task-python_en",
+    "uclanlp/plbart-single_task-ruby_en",
+    "uclanlp/plbart-single_task-static-generation",
+    "uclanlp/plbart-single_task-static-summarization",
+    "uclanlp/plbart-single_task-strong-generation",
+    "uclanlp/plbart-single_task-strong-summarization",
+    "uclanlp/plbart-single_task-weak-generation",
+    "uclanlp/plbart-single_task-weak-summarization",
     # See all PLBART models at https://huggingface.co/models?filter=plbart
 ]
 
-
+# Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
     Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that PLBart does not
@@ -527,26 +579,26 @@ PLBART_START_DOCSTRING = r"""
 """
 
 PLBART_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Token in-filling example::
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration, PLBartConfig
 
         >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
-        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
+        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base', src_lang='java', tgt_lang='java')
 
-        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        >>> METHOD_TO_FILL = "public static main (String args[0]) { data=Date(); System.out. String.format("Current Date : % tc", ));}"
+        >>> inputs = tokenizer([METHOD_TO_FILL], max_length=1024, return_tensors='pt')
 
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+        >>> # Generate Filled Code
+        >>> generated_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in generated_ids])
 
-    Mask filling example::
+    Mask-filling example::
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration
         >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base')
-        >>> # de_DE is the language symbol id <LID> for German
-        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
+        >>> # en_XX is the language symbol id <LID> for English
+        >>> TXT = "</s> Is 0 the <mask> Fibonacci <mask> ? </s> en_XX"
 
         >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
         >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='pt')['input_ids']
@@ -565,7 +617,7 @@ PLBART_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.PLBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -580,14 +632,14 @@ PLBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.PLBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
 
             PLBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
-            varies according to source and target language, *e.g.* 25004 for `en_XX`, and 25003 for `de_DE`. If
+            varies according to source and target language, *e.g.* 50003 for `en_XX`, and 50001 for `java`. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
@@ -711,7 +763,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -907,7 +959,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -1222,7 +1274,7 @@ class PLBartModel(PLBartPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The PLBART Model with a language modeling head. Can be used for summarization.", PLBART_START_DOCSTRING
+    "The PLBART Model with a language modeling head. Can be used for code-to-text, text-to-code and code-to-code.", PLBART_START_DOCSTRING
 )
 class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     base_model_prefix = "model"
@@ -1354,7 +1406,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs  # TODO: Check if this is needed. It is unused?
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
@@ -1388,8 +1440,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
 
 @add_start_docstrings(
     """
-    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
-    tasks.
+    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for code classification.
     """,
     PLBART_START_DOCSTRING,
 )
@@ -1514,7 +1565,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
 
 @add_start_docstrings(
     """
-    PLBART Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    PLBART Model with a span classification head on top for extractive question-answering tasks (a linear
     layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     PLBART_START_DOCSTRING,
@@ -1703,7 +1754,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 

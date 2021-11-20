@@ -350,7 +350,6 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
         "public int maximum(int a, int b, int c){return Math.Max(",
         "public int Product(int a, int b, int c){return a * b *",
     ]
-    expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
 
     @slow
     def test_java_cs_generate_one(self):
