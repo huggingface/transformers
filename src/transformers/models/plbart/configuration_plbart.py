@@ -108,7 +108,7 @@ class PLBartConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50005,
+        vocab_size=50005, # TODO: Check if vocab size includes the language codes?
         max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=3072,
