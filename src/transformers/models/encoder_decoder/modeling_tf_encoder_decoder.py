@@ -28,7 +28,7 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, input_processing
+from ...modeling_tf_utils import TFPreTrainedModel, input_processing, shape_list
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
@@ -101,6 +101,10 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Provide for sequence to sequence training to the decoder. Indices can be obtained using
             :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
             :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            For training, :obj:`decoder_input_ids` are automatically created by the model by shifting the :obj:`labels`
+            to the right, replacing -100 by the :obj:`pad_token_id` and prepending them with the
+            :obj:`decoder_start_token_id`.
         decoder_attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -147,6 +151,25 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             - Without a prefix which will be input as ``**encoder_kwargs`` for the encoder forward function.
             - With a `decoder_` prefix which will be input as ``**decoder_kwargs`` for the decoder forward function.
 """
+def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
+    decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
+    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+    shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids = tf.where(
+        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+    )
+
+    if tf.executing_eagerly():
+        # "Verify that `labels` has only positive values and -100"
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
+
+        # Make sure the assertion op is called by wrapping the result in an identity no-op
+        with tf.control_dependencies([assert_gte0]):
+            shifted_input_ids = tf.identity(shifted_input_ids)
+
+    return shifted_input_ids
 
 
 @add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
@@ -484,6 +507,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+
+        if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+            decoder_input_ids = shift_tokens_right(
+                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
 
         if encoder_outputs is None:
 
