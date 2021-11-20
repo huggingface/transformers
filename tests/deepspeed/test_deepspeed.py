@@ -669,11 +669,10 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_basic_distributed(self, stage):
         self.run_and_check(stage=stage, distributed=True)
 
-    @parameterized.expand(stages)
-    def test_do_eval_no_train(self, stage):
-        # we should not fail if train is skipped
+    def test_do_eval_no_train(self):
+        # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
-            stage=stage,
+            stage=ZERO3,
             eval_steps=1,
             distributed=False,
             do_train=False,
