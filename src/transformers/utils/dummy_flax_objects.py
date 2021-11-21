@@ -477,6 +477,13 @@ class FlaxBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBertForPreTraining:
     def __init__(self, *args, **kwargs):
