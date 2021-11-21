@@ -33,6 +33,13 @@ class QDQBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["pytorch_quantization", "torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["pytorch_quantization", "torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
+
 
 class QDQBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):

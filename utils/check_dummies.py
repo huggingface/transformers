@@ -131,6 +131,7 @@ def create_dummy_object(name, backend_name):
         "ForConditionalGeneration",
         "ForMaskedLM",
         "ForMultipleChoice",
+        "ForNextSentencePrediction",
         "ForObjectDetection",
         "ForQuestionAnswering",
         "ForSegmentation",
