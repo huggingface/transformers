@@ -56,6 +56,13 @@ class TextDatasetForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class BeamScorer:
     def __init__(self, *args, **kwargs):
@@ -781,6 +788,13 @@ class BertForMultipleChoice:
 
 class BertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -2106,6 +2120,13 @@ class FNetForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class FNetForPreTraining:
     def __init__(self, *args, **kwargs):
@@ -3254,6 +3275,13 @@ class MegatronBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class MegatronBertForPreTraining:
     def __init__(self, *args, **kwargs):
@@ -3371,6 +3399,13 @@ class MobileBertForMultipleChoice:
 
 class MobileBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
