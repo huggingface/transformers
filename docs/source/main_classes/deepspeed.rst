@@ -1656,7 +1656,7 @@ Otherwise you just need to pass the usual :class:`~transformers.TrainingArgument
 
     deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds_config.json
 
-The only important thing is that you need to use ZeRO-3 configuration, since ZeRO-2 provides no benefit whatsoever for
+The only important thing is that you need to use a ZeRO-3 configuration, since ZeRO-2 provides no benefit whatsoever for
 the inference as only ZeRO-3 performs sharding of parameters, whereas ZeRO-1 shards gradients and optimizer states.
 
 Here is an example of running ``run_translation.py`` under DeepSpeed deploying all available GPUs:
