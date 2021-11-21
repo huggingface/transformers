@@ -114,7 +114,7 @@ class PretrainedConfig(PushToHubMixin):
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
 
-        Parameters for sequence generation
+        > Parameters for sequence generation
 
         max_length (`int`, _optional_, defaults to 20):
             Maximum length that will be used by default in the `generate` method of the model.
@@ -176,7 +176,7 @@ class PretrainedConfig(PushToHubMixin):
             Whether to remove possible _nan_ and _inf_ outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
 
-        Parameters for fine-tuning tasks
+        > Parameters for fine-tuning tasks
 
         architectures (`List[str]`, _optional_): Model architectures that can be used with the model pretrained weights.
         finetuning_task (`str`, _optional_):
@@ -193,7 +193,7 @@ class PretrainedConfig(PushToHubMixin):
             Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
             `"single_label_classification"` or `"multi_label_classification"`.
 
-        Parameters linked to the tokenizer
+        > Parameters linked to the tokenizer
 
         tokenizer_class (`str`, _optional_):
             The name of the associated tokenizer class to use (if none is set, will use the tokenizer associated to the
@@ -207,7 +207,7 @@ class PretrainedConfig(PushToHubMixin):
             If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
         sep_token_id (`int`, _optional_): The id of the _separation_ token.
 
-        PyTorch specific parameters
+        > PyTorch specific parameters
 
         torchscript (`bool`, _optional_, defaults to `False`):
             Whether or not the model should be used with Torchscript.
@@ -225,7 +225,7 @@ class PretrainedConfig(PushToHubMixin):
             This attribute is currently not being used during model loading time, but this may change in the future
             versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
 
-        TensorFlow specific parameters
+        > TensorFlow specific parameters
 
         use_bfloat16 (`bool`, _optional_, defaults to `False`):
             Whether or not the model should use BFloat16 scalars (only used by some TensorFlow models).
