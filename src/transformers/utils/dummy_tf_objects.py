@@ -452,6 +452,13 @@ class TFBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBertForPreTraining:
     def __init__(self, *args, **kwargs):
@@ -1772,6 +1779,13 @@ class TFMobileBertForMultipleChoice:
 
 class TFMobileBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
 
