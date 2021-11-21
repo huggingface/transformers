@@ -167,15 +167,7 @@ class ExamplesTests(TestCasePlus):
             --model_type gpt2
             --tokenizer_name gpt2
             --train_file ./tests/fixtures/sample_text.txt
-            --validation_file ./tests/fixtures/sample_text.txt
-            --do_train
-            --do_eval
-            --block_size 128
-            --per_device_train_batch_size 5
-            --per_device_eval_batch_size 5
-            --num_train_epochs 2
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --config_overrides n_embd=10,n_head=2
             """.split()
 
