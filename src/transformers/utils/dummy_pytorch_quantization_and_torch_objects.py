@@ -13,6 +13,9 @@ class QDQBertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
+
 
 class QDQBertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -21,6 +24,9 @@ class QDQBertForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
 
 
 class QDQBertForNextSentencePrediction:
@@ -36,6 +42,9 @@ class QDQBertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
+
 
 class QDQBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -45,6 +54,9 @@ class QDQBertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
+
 
 class QDQBertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -53,6 +65,9 @@ class QDQBertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
 
 
 class QDQBertLayer:
@@ -68,6 +83,9 @@ class QDQBertLMHeadModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
+
 
 class QDQBertModel:
     def __init__(self, *args, **kwargs):
@@ -77,6 +95,9 @@ class QDQBertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
+
 
 class QDQBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -85,6 +106,9 @@ class QDQBertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["pytorch_quantization", "torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["pytorch_quantization", "torch"])
 
 
 def load_tf_weights_in_qdqbert(*args, **kwargs):
