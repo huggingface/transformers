@@ -112,6 +112,11 @@ class HfDeepSpeedConfig:
         return config.get(ds_key, default)
 
     def del_config_sub_tree(self, ds_key_long, must_exist=False):
+        """
+        Deletes a sub-section of the config file if it's found.
+
+        Unless ``must_exist`` is :obj:`True` the section doesn't have to exist.
+        """
         config = self.config
 
         # find the config node of interest if it exists
@@ -121,7 +126,7 @@ class HfDeepSpeedConfig:
             config = config.get(node)
             if config is None:
                 if must_exist:
-                    raise ValueError(f"Can't find {ds_key_long} entry in the config")
+                    raise ValueError(f"Can't find {ds_key_long} entry in the config: {self.config}")
                 else:
                     return
 
@@ -299,6 +304,9 @@ def deepspeed_config():
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps):
+    """
+    A convenience wrapper that deals with optimizer and lr scheduler configuration.
+    """
     config = hf_deepspeed_config.config
 
     # Optimizer + Scheduler

@@ -50,11 +50,13 @@ What is integrated:
 
 Training:
 
-1. full ZeRO protocol with ZeRO-Infinity
+1. DeepSpeed ZeRO training supports the full ZeRO stages 1, 2 and 3 with ZeRO-Infinity (CPU and NVME offload).
 
 Inference:
 
-1. DeepSpeed ZeRO Inference - same as Training but doesn't require Optimizer
+1. DeepSpeed ZeRO Inference supports ZeRO stage 3 with ZeRO-Infinity. It uses the same ZeRO protocol as training, but
+   it doesn't use an optimizer and a lr scheduler and only stage 3 is relevant. For more details see:
+   :ref:`deepspeed-zero-inference`.
 
 There is also DeepSpeed Inference - this is a totally different technology which uses Tensor Parallelism instead of
 ZeRO (coming soon).
@@ -1643,7 +1645,7 @@ larger multi-dimensional shape, this means that the parameter is partitioned and
 .. _deepspeed-zero-inference:
 
 
-Inference
+ZeRO Inference
 =======================================================================================================================
 
 ZeRO Inference uses the same config as ZeRO-3 Training. You just don't need the optimizer and scheduler sections. In
@@ -1656,8 +1658,8 @@ Otherwise you just need to pass the usual :class:`~transformers.TrainingArgument
 
     deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds_config.json
 
-The only important thing is that you need to use a ZeRO-3 configuration, since ZeRO-2 provides no benefit whatsoever for
-the inference as only ZeRO-3 performs sharding of parameters, whereas ZeRO-1 shards gradients and optimizer states.
+The only important thing is that you need to use a ZeRO-3 configuration, since ZeRO-2 provides no benefit whatsoever
+for the inference as only ZeRO-3 performs sharding of parameters, whereas ZeRO-1 shards gradients and optimizer states.
 
 Here is an example of running ``run_translation.py`` under DeepSpeed deploying all available GPUs:
 
