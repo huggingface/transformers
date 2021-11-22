@@ -138,6 +138,9 @@ def nested_numpify(tensors):
         return type(tensors)(nested_numpify(t) for t in tensors)
     t = tensors.cpu()
     if t.dtype == torch.bfloat16:
+        # As of Numpy 1.21.4, NumPy does not support bfloat16 (see
+        # https://github.com/numpy/numpy/blob/a47ecdea856986cd60eabbd53265c2ca5916ad5d/doc/source/user/basics.types.rst ).
+        # Until Numpy adds bfloat16, we must convert float32.
         t = t.to(torch.float32)
     return t.numpy()
 
