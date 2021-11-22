@@ -12,15 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" AutoFeatureExtractor class. """
+""" AutoProcessor class. """
 import importlib
-import os
 from collections import OrderedDict
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME
+from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_list_of_files
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -29,29 +28,28 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES, AutoFeatureExtractor
+from .tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
 
 
-FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
+PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
-        ("beit", "BeitFeatureExtractor"),
-        ("detr", "DetrFeatureExtractor"),
-        ("deit", "DeiTFeatureExtractor"),
-        ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("speech_to_text", "Speech2TextFeatureExtractor"),
-        ("vit", "ViTFeatureExtractor"),
-        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
-        ("detr", "DetrFeatureExtractor"),
-        ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
-        ("clip", "CLIPFeatureExtractor"),
+        ("clip", "CLIPProcessor"),
+        ("layoutlmv2", "LayoutLMv2Processor"),
+        ("layoutxlm", "LayoutXLMProcessor"),
+        ("speech_to_text", "Speech2TextProcessor"),
+        ("speech_to_text_2", "Speech2Text2Processor"),
+        ("trocr", "TrOCRProcessor"),
+        ("wav2vec2", "Wav2Vec2Processor"),
     ]
 )
 
-FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
+PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, PROCESSOR_MAPPING_NAMES)
 
 
-def feature_extractor_class_from_name(class_name: str):
-    for module_name, extractors in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
-        if class_name in extractors:
+def processor_class_from_name(class_name: str):
+    for module_name, processors in PROCESSOR_MAPPING_NAMES.items():
+        if class_name in processors:
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
@@ -61,31 +59,33 @@ def feature_extractor_class_from_name(class_name: str):
     return None
 
 
-class AutoFeatureExtractor:
+class AutoProcessor:
     r"""
-    This is a generic feature extractor class that will be instantiated as one of the feature extractor classes of the
-    library when created with the :meth:`AutoFeatureExtractor.from_pretrained` class method.
+    This is a generic processor class that will be instantiated as one of the processor classes of the library when
+    created with the :meth:`AutoProcessor.from_pretrained` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
 
     def __init__(self):
         raise EnvironmentError(
-            "AutoFeatureExtractor is designed to be instantiated "
-            "using the `AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path)` method."
+            "AutoProcessor is designed to be instantiated "
+            "using the `AutoProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )
 
     @classmethod
-    @replace_list_option_in_docstrings(FEATURE_EXTRACTOR_MAPPING_NAMES)
+    @replace_list_option_in_docstrings(PROCESSOR_MAPPING_NAMES)
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate one of the feature extractor classes of the library from a pretrained model vocabulary.
+        Instantiate one of the processor classes of the library from a pretrained model vocabulary.
 
-        The feature extractor class to instantiate is selected based on the :obj:`model_type` property of the config
-        object (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when
-        it's missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+        The processor class to instantiate is selected based on the :obj:`model_type` property of the config object
+        (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible):
 
         List options
+
+        For other types of models, this class will return the appropriate tokenizer (if available) or feature
+        extractor.
 
         Params:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -94,11 +94,8 @@ class AutoFeatureExtractor:
                 - a string, the `model id` of a pretrained feature_extractor hosted inside a model repo on
                   huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
                   namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a feature extractor file saved using the
-                  :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` method, e.g.,
-                  ``./my_model_directory/``.
-                - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/preprocessor_config.json``.
+                - a path to a `directory` containing a processor files saved using the :obj:`save_pretrained()` method,
+                  e.g., ``./my_model_directory/``.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
                 standard cache should not be used.
@@ -114,7 +111,7 @@ class AutoFeatureExtractor:
             use_auth_token (:obj:`str` or `bool`, `optional`):
                 The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
                 generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            revision (:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
@@ -134,45 +131,59 @@ class AutoFeatureExtractor:
 
         Examples::
 
-            >>> from transformers import AutoFeatureExtractor
+            >>> from transformers import AutoProcessor
 
-            >>> # Download feature extractor from huggingface.co and cache.
-            >>> feature_extractor = AutoFeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')
+            >>> # Download processor from huggingface.co and cache.
+            >>> processor = AutoProcessor.from_pretrained('facebook/wav2vec2-base-960h')
 
-            >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using `save_pretrained('./test/saved_model/')`)
-            >>> feature_extractor = AutoFeatureExtractor.from_pretrained('./test/saved_model/')
+            >>> # If processor files are in a directory (e.g. processor was saved using `save_pretrained('./test/saved_model/')`)
+            >>> processor = AutoProcessor.from_pretrained('./test/saved_model/')
 
         """
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
-        is_feature_extraction_file = os.path.isfile(pretrained_model_name_or_path)
-        is_directory = os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
-            os.path.join(pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME)
-        )
+        # First, let's see if we have a preprocessor config.
+        # get_list_of_files only takes three of the kwargs we have, so we filter them.
+        get_list_of_files_kwargs = {
+            key: kwargs[key] for key in ["revision", "use_auth_token", "local_files_only"] if key in kwargs
+        }
+        model_files = get_list_of_files(pretrained_model_name_or_path, **get_list_of_files_kwargs)
+        if FEATURE_EXTRACTOR_NAME in model_files:
+            config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+            if "processor_class" in config_dict:
+                processor_class = processor_class_from_name(config_dict["processor_class"])
+                return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        has_local_config = (
-            os.path.exists(os.path.join(pretrained_model_name_or_path, CONFIG_NAME)) if is_directory else False
-        )
-
-        # load config, if it can be loaded
-        if not is_feature_extraction_file and (has_local_config or not is_directory):
-            if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        kwargs["_from_auto"] = True
-        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        # Otherwise, load config, if it can be loaded.
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         model_type = config_class_to_model_type(type(config).__name__)
 
-        if "feature_extractor_type" in config_dict:
-            feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extractor_type"])
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
-        elif model_type is not None:
-            return FEATURE_EXTRACTOR_MAPPING[type(config)].from_dict(config_dict, **kwargs)
+        if getattr(config, "processor_class", None) is not None:
+            processor_class = config.processor_class
+            return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
+        model_type = config_class_to_model_type(type(config).__name__)
+        if model_type is not None and model_type in PROCESSOR_MAPPING_NAMES:
+            return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        # At this stage there doesn't seem to be a `Processor` class available for this model, so let's try a tokenizer
+        if model_type in TOKENIZER_MAPPING_NAMES:
+            return AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        # At this stage there doesn't seem to be a `Processor` class available for this model, so let's try a tokenizer
+        if model_type in FEATURE_EXTRACTOR_MAPPING_NAMES:
+            return AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        all_model_types = set(
+            PROCESSOR_MAPPING_NAMES.keys() + TOKENIZER_MAPPING_NAMES.keys() + FEATURE_EXTRACTOR_MAPPING_NAMES.keys()
+        )
+        all_model_types = list(all_model_types)
+        all_model_types.sort()
         raise ValueError(
-            f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a `feature_extractor_type` key in "
+            f"Unrecognized processor in {pretrained_model_name_or_path}. Should have a `processor_type` key in "
             f"its {FEATURE_EXTRACTOR_NAME}, or one of the following `model_type` keys in its {CONFIG_NAME}: "
-            f"{', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
+            f"{', '.join(all_model_types)}"
         )
