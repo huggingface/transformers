@@ -232,7 +232,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
                     if col >= 0 and row >= 0 and segment_id == 1:
                         coords_to_probs[(col, row)].append(p)
 
-            prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
+                prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
 
             logits_batch = tf.concat(tuple(all_logits), 0)
 
