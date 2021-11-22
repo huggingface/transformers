@@ -1768,7 +1768,7 @@ class Trainer:
         if backend == HPSearchBackend.SIGOPT and not is_sigopt_available():
             raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install sigopt`.")
         if backend == HPSearchBackend.WANDB and not is_wandb_available():
-            raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install wandb`.")
+            raise RuntimeError("You picked the wandb backend, but it is not installed. Use `pip install wandb`.")
         self.hp_search_backend = backend
         if self.model_init is None:
             raise RuntimeError(
