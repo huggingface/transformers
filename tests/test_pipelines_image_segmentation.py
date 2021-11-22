@@ -55,10 +55,13 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
-        return image_segmenter, [
-            "./tests/fixtures/tests_samples/COCO/000000039769.png",
-            "./tests/fixtures/tests_samples/COCO/000000039769.png",
-        ]
+        return (
+            image_segmenter,
+            [
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ],
+        )
 
     def run_pipeline_test(self, image_segmenter, examples):
         outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)

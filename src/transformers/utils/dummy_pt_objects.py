@@ -1022,7 +1022,10 @@ class CharacterBertForMaskedLM:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -1031,12 +1034,22 @@ class CharacterBertForMultipleChoice:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
 class CharacterBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -1050,7 +1063,10 @@ class CharacterBertForQuestionAnswering:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -1059,7 +1075,10 @@ class CharacterBertForSequenceClassification:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -1068,7 +1087,22 @@ class CharacterBertForTokenClassification:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CharacterBertLMHeadModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -1077,7 +1111,22 @@ class CharacterBertModel:
         requires_backends(self, ["torch"])
 
     @classmethod
-    def from_pretrained(self, *args, **kwargs):
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CharacterBertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 

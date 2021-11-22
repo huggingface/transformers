@@ -72,6 +72,7 @@ CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
 ]
 
+
 # NOTE: the following class is taken from:
 # https://github.com/allenai/allennlp/blob/main/allennlp/modules/highway.py
 class Highway(torch.nn.Module):
@@ -287,7 +288,7 @@ class CharacterBertEmbeddings(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->CharacterBert
 class CharacterBertSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -304,7 +305,9 @@ class CharacterBertSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
@@ -428,9 +431,9 @@ class CharacterBertSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->CharacterBert
 class CharacterBertAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = CharacterBertSelfAttention(config)
+        self.self = CharacterBertSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = CharacterBertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -517,8 +520,9 @@ class CharacterBertLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = CharacterBertAttention(config)
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            self.crossattention = CharacterBertAttention(config, position_embedding_type="absolute")
         self.intermediate = CharacterBertIntermediate(config)
         self.output = CharacterBertOutput(config)
 
@@ -552,9 +556,10 @@ class CharacterBertLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -597,6 +602,7 @@ class CharacterBertEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([CharacterBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -623,12 +629,11 @@ class CharacterBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -963,7 +968,7 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
         )
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1388,7 +1393,7 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
         )
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1590,7 +1595,7 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
         )
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1678,7 +1683,7 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
         )
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1774,7 +1779,7 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
         )
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1867,7 +1872,7 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
         )
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
