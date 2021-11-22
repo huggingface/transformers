@@ -21,7 +21,6 @@ https://huggingface.co/models?filter=causal-lm
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
-
 import logging
 import math
 import os

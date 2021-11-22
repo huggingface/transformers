@@ -18,7 +18,6 @@ Fine-tuning the library models for multiple choice.
 """
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
-
 import logging
 import os
 import sys
