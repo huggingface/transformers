@@ -2685,9 +2685,12 @@ if TYPE_CHECKING:
             CharacterBertForQuestionAnswering,
             CharacterBertForSequenceClassification,
             CharacterBertForTokenClassification,
+            CharacterBertLayer,
             CharacterBertLMHeadModel,
             CharacterBertModel,
             CharacterBertPreTrainedModel,
+            CharacterCnn,
+            load_tf_weights_in_character_bert,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
