@@ -512,7 +512,9 @@ class TrainingArguments:
 
     bfloat16: bool = field(
         default=False,
-        metadata={"help": "Whether to use bfloat16 (16 bits) instead of float32 (32 bits). Requires hardware support."},
+        metadata={
+            "help": "Whether to use bfloat16 (16 bits) instead of float32 (32 bits). Requires hardware support."
+        },
     )
     fp16: bool = field(
         default=False,
@@ -767,9 +769,7 @@ class TrainingArguments:
 
         if (self.fp16 or self.fp16_full_eval or self.fp16_opt_level or self.fp16_backend) and self.bfloat16:
             # This check should be modified once AMP supports bfloat16.
-            raise ValueError(
-                "bfloat16 cannot be used together with AMP, APEX, or FP16."
-            )
+            raise ValueError("bfloat16 cannot be used together with AMP, APEX, or FP16.")
 
         if self.report_to is None:
             logger.info(
