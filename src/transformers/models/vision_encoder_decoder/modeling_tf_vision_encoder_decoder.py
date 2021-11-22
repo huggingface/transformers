@@ -541,8 +541,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             }
 
             # Add arguments to encoder from `kwargs_encoder`
-            for k, v in kwargs_encoder.items():
-                encoder_processing_inputs[k] = v
+            encoder_processing_inputs.update(kwargs_encoder)
             kwargs_encoder = {}
 
             encoder_inputs = input_processing(**encoder_processing_inputs)
@@ -593,8 +592,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         }
 
         # Add arguments to decoder from `kwargs_decoder`
-        for k, v in kwargs_decoder.items():
-            decoder_processing_inputs[k] = v
+        decoder_processing_inputs.update(kwargs_decoder)
         kwargs_decoder = {}
 
         decoder_inputs = input_processing(**decoder_processing_inputs)
@@ -653,13 +651,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             cross_attentions=cross_attns,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past,
-        use_cache=None,
-        **kwargs,
-    ):
+    def prepare_inputs_for_generation(self, decoder_input_ids, past, use_cache=None, **kwargs):
         if past is None or len(past) not in {1, 2}:
             raise ValueError(f"past has to be an iterable of length 1,2 got {past}")
 

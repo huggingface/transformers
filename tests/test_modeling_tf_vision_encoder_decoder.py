@@ -225,7 +225,7 @@ class TFVisionEncoderDecoderMixin:
         )
 
         # Make sure `loss` exist
-        assert "loss" in outputs_encoder_decoder
+        self.assertIn("loss", outputs_encoder_decoder)
 
         batch_size, seq_len = decoder_input_ids.shape
         expected_shape = (batch_size, seq_len - 1, decoder_config.vocab_size)
@@ -516,10 +516,7 @@ class TFVisionEncoderDecoderMixin:
             model_2.save_pretrained(tmp_dirname)
             model_1 = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-            after_outputs = model_1(
-                pixel_values=pixel_values,
-                decoder_input_ids=decoder_input_ids,
-            )
+            after_outputs = model_1(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
             out_1 = np.array(after_outputs[0])
             out_1[np.isnan(out_1)] = 0
             max_diff = np.amax(np.abs(out_1 - out_2))
