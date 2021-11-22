@@ -67,7 +67,7 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
         import datasets
 
-        dataset = datasets.load_dataset("Narsil/image_dummy", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         # Accepts URL + PIL.Image + lists
         outputs = image_classifier(
