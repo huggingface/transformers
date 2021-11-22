@@ -17,7 +17,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, T5Config, is_tf_available
+from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, T5Config, TapasConfig, is_tf_available
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
@@ -31,11 +31,6 @@ from .test_modeling_bert import BertModelTester
 
 if is_tf_available():
     from transformers import (
-        AutoConfig,
-        BertConfig,
-        GPT2Config,
-        T5Config,
-        TapasConfig,
         TFAutoModel,
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
