@@ -344,8 +344,13 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import wandb
     # add WandbCallback if not already added in trainer callbacks
-    if WandbCallback not in trainer.callback_handler.callbacks:
-        trainer.add_callback(WandbCallback)
+    reporting_to_wandb = False
+    for callback in trainer.callback_handler.callbacks:
+        if isinstance(callback, WandbCallback):
+            reporting_to_wandb = True
+            break
+    if not reporting_to_wandb:
+        trainer.add_callback(WandbCallback())
     trainer.args.report_to = 'wandb'
     best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
     sweep_id = kwargs.pop("sweep_id", None)
