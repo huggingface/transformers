@@ -19,7 +19,7 @@ from collections import OrderedDict
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_list_of_files
+from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -28,8 +28,6 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
-from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES, AutoFeatureExtractor
-from .tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
 
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
@@ -83,9 +81,6 @@ class AutoProcessor:
         (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible):
 
         List options
-
-        For other types of models, this class will return the appropriate tokenizer (if available) or feature
-        extractor.
 
         Params:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -143,17 +138,11 @@ class AutoProcessor:
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
-        # First, let's see if we have a preprocessor config.
-        # get_list_of_files only takes three of the kwargs we have, so we filter them.
-        get_list_of_files_kwargs = {
-            key: kwargs[key] for key in ["revision", "use_auth_token", "local_files_only"] if key in kwargs
-        }
-        model_files = get_list_of_files(pretrained_model_name_or_path, **get_list_of_files_kwargs)
-        if FEATURE_EXTRACTOR_NAME in model_files:
-            config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
-            if "processor_class" in config_dict:
-                processor_class = processor_class_from_name(config_dict["processor_class"])
-                return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        # First, look for a processor_type in the preprocessor_config
+        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        if "processor_class" in config_dict:
+            processor_class = processor_class_from_name(config_dict["processor_class"])
+            return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         # Otherwise, load config, if it can be loaded.
         if not isinstance(config, PretrainedConfig):
@@ -161,29 +150,16 @@ class AutoProcessor:
 
         model_type = config_class_to_model_type(type(config).__name__)
 
-        if getattr(config, "processor_class", None) is not None:
+        if getattr(config_dict, "processor_class", None) is not None:
             processor_class = config.processor_class
             return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         model_type = config_class_to_model_type(type(config).__name__)
-        if model_type is not None and model_type in PROCESSOR_MAPPING_NAMES:
+        if model_type is not None:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        # At this stage there doesn't seem to be a `Processor` class available for this model, so let's try a tokenizer
-        if model_type in TOKENIZER_MAPPING_NAMES:
-            return AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # At this stage there doesn't seem to be a `Processor` class available for this model, so let's try a tokenizer
-        if model_type in FEATURE_EXTRACTOR_MAPPING_NAMES:
-            return AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        all_model_types = set(
-            PROCESSOR_MAPPING_NAMES.keys() + TOKENIZER_MAPPING_NAMES.keys() + FEATURE_EXTRACTOR_MAPPING_NAMES.keys()
-        )
-        all_model_types = list(all_model_types)
-        all_model_types.sort()
         raise ValueError(
             f"Unrecognized processor in {pretrained_model_name_or_path}. Should have a `processor_type` key in "
             f"its {FEATURE_EXTRACTOR_NAME}, or one of the following `model_type` keys in its {CONFIG_NAME}: "
-            f"{', '.join(all_model_types)}"
+            f"{', '.join(c for c in PROCESSOR_MAPPING_NAMES.keys())}"
         )
