@@ -1061,6 +1061,103 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
+class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
+    def __init__(self, config: TapasConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        self.temperature = config.temperature
+        # cell selection heads
+        with tf.name_scope("output"):
+            self.output_weights = self.add_weight(
+                name="output_weights",
+                shape=(config.hidden_size,),
+                dtype=tf.float32,
+                trainable=True,
+                initializer=tf.zeros_initializer()
+                if config.init_cell_selection_weights_to_zero
+                else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+            )
+            self.output_bias = self.add_weight(
+                name="output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
+            )
+
+    def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
+        """
+        Computes logits per token
+
+        Args:
+            sequence_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+                Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the
+                model.
+
+        Returns:
+            logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`): Logits per token.
+        """
+        logits = (tf.einsum("bsj,j->bs", sequence_output, self.output_weights) + self.output_bias) / self.temperature
+        return logits
+
+
+class TFTapasComputeColumnLogits(tf.keras.layers.Layer):
+    def __init__(self, config: TapasConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        with tf.name_scope("column_output"):
+            self.column_output_weights = self.add_weight(
+                name="column_output_weights",
+                shape=[config.hidden_size],
+                dtype=tf.float32,
+                trainable=True,
+                initializer=tf.zeros_initializer()
+                if config.init_cell_selection_weights_to_zero
+                else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+            )
+            self.column_output_bias = self.add_weight(
+                name="column_output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
+            )
+
+    def call(self, sequence_output, cell_index, cell_mask, allow_empty_column_selection) -> tf.Tensor:
+        """
+        Computes the column logits.
+
+        Args:
+            sequence_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+                Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the
+                model.
+            cell_index (:obj:`ProductIndexMap`):
+                Index that groups tokens into cells.
+            cell_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, max_num_rows * max_num_cols)`):
+                Mask for cells that exist in the table (i.e. that are not padding).
+            allow_empty_column_selection (:obj:`bool`):
+                Whether to allow not to select any column
+
+        Returns:
+            column_logits (:obj:`tf.Tensor`of shape :obj:`(batch_size, max_num_cols)`): Tensor containing the column
+            logits for every example in the batch.
+        """
+
+        # First, compute the token logits (batch_size, seq_len) - without temperature
+        token_logits = tf.einsum("bsj,j->bs", sequence_output, self.column_output_weights) + self.column_output_bias
+
+        # Next, average the logits per cell (batch_size, max_num_cols*max_num_rows)
+        cell_logits, cell_logits_index = reduce_mean(token_logits, cell_index)
+
+        # Finally, average the logits per column (batch_size, max_num_cols)
+        column_index = cell_index.project_inner(cell_logits_index)
+        column_logits, out_index = reduce_sum(cell_logits * cell_mask, column_index)
+
+        cell_count, _ = reduce_sum(cell_mask, column_index)
+        column_logits /= cell_count + EPSILON_ZERO_DIVISION
+
+        # Mask columns that do not appear in the example.
+        is_padding = tf.logical_and(cell_count < 0.5, tf.not_equal(out_index.indices, 0))
+        column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(is_padding, tf.float32)
+
+        if not allow_empty_column_selection:
+            column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(tf.equal(out_index.indices, 0), tf.float32)
+
+        return column_logits
+
+
 @add_start_docstrings(
     """
     Tapas Model with a cell selection head and optional aggregation head on top for question-answering tasks on tables
@@ -1079,31 +1176,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         # dropout
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-        # cell selection heads
-        self.output_weights = self.add_weight(
-            name="output_weights",
-            shape=[config.hidden_size],
-            dtype=tf.float32,
-            trainable=True,
-            initializer=tf.zeros_initializer()
-            if config.init_cell_selection_weights_to_zero
-            else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
-        )
-        self.output_bias = self.add_weight(
-            name="output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
-        )
-        self.column_output_weights = self.add_weight(
-            name="column_output_weights",
-            shape=[config.hidden_size],
-            dtype=tf.float32,
-            trainable=True,
-            initializer=tf.zeros_initializer()
-            if config.init_cell_selection_weights_to_zero
-            else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
-        )
-        self.column_output_bias = self.add_weight(
-            name="column_output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
-        )
+        self.compute_token_logits = TFTapasComputeTokenLogits(config, name="compute_token_logits")
+
+        self.compute_column_logits = TFTapasComputeColumnLogits(config, name="compute_column_logits")
 
         if config.num_aggregation_labels > 0:
             self.aggregation_classifier = tf.keras.layers.Dense(
@@ -1283,18 +1358,13 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         cell_mask, _ = reduce_mean(input_mask_float, cell_index)
 
         # Compute logits per token. These are used to select individual cells.
-        logits = compute_token_logits(sequence_output, self.config.temperature, self.output_weights, self.output_bias)
+        logits = self.compute_token_logits(sequence_output)
 
         # Compute logits per column. These are used to select a column.
         column_logits = None
         if self.config.select_one_column:
-            column_logits = compute_column_logits(
-                sequence_output,
-                self.column_output_weights,
-                self.column_output_bias,
-                cell_index,
-                cell_mask,
-                self.config.allow_empty_column_selection,
+            column_logits = self.compute_column_logits(
+                sequence_output, cell_index, cell_mask, self.config.allow_empty_column_selection
             )
 
         # Aggregate logits.
@@ -1826,54 +1896,6 @@ def reduce_min(values, index, name="segmented_reduce_min"):
     return _segment_reduce(values, index, tf.math.unsorted_segment_min, name)
 
 
-def compute_column_logits(
-    sequence_output, column_output_weights, column_output_bias, cell_index, cell_mask, allow_empty_column_selection
-):
-    """
-    Computes the column logits.
-
-    Args:
-        sequence_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the model.
-        column_output_weights (:obj:`tf.Tensor` of shape :obj:`(hidden_size)`):
-            Weights of the linear layer for column selection.
-        column_output_bias (:obj:`tf.Tensor` of shape :obj:`()`):
-            Bias of the linear layer for column selection.
-        cell_index (:obj:`ProductIndexMap`):
-            Index that groups tokens into cells.
-        cell_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, max_num_rows * max_num_cols)`):
-            Mask for cells that exist in the table (i.e. that are not padding).
-        allow_empty_column_selection (:obj:`bool`):
-            Whether to allow not to select any column
-
-    Returns:
-        column_logits (:obj:`tf.Tensor`of shape :obj:`(batch_size, max_num_cols)`): Tensor containing the column logits
-        for every example in the batch.
-    """
-
-    # First, compute the token logits (batch_size, seq_len) - without temperature
-    token_logits = tf.einsum("bsj,j->bs", sequence_output, column_output_weights) + column_output_bias
-
-    # Next, average the logits per cell (batch_size, max_num_cols*max_num_rows)
-    cell_logits, cell_logits_index = reduce_mean(token_logits, cell_index)
-
-    # Finally, average the logits per column (batch_size, max_num_cols)
-    column_index = cell_index.project_inner(cell_logits_index)
-    column_logits, out_index = reduce_sum(cell_logits * cell_mask, column_index)
-
-    cell_count, _ = reduce_sum(cell_mask, column_index)
-    column_logits /= cell_count + EPSILON_ZERO_DIVISION
-
-    # Mask columns that do not appear in the example.
-    is_padding = tf.logical_and(cell_count < 0.5, tf.not_equal(out_index.indices, 0))
-    column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(is_padding, tf.float32)
-
-    if not allow_empty_column_selection:
-        column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(tf.equal(out_index.indices, 0), tf.float32)
-
-    return column_logits
-
-
 def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell_index, col_index, cell_mask):
     """
     Computes the loss for cell selection constrained to a single column. The loss is a hierarchical log-likelihood. The
@@ -1945,28 +1967,6 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
     logits = gather(logits_per_cell, cell_index)
 
     return selection_loss_per_example, logits
-
-
-def compute_token_logits(sequence_output, temperature, output_weights, output_bias):
-    """
-    Computes logits per token
-
-    Args:
-        sequence_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the model.
-        temperature (:obj:`float`):
-            Temperature for the Bernoulli distribution.
-        output_weights (:obj:`tf.Tensor` of shape :obj:`(hidden_size,)`):
-            Weights of the linear layer for cell selection.
-        output_bias (:obj:`tf.Tensor` of shape :obj:`()`):
-            Bias of the linear layer for cell selection
-
-    Returns:
-        logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`): Logits per token.
-    """
-    logits = (tf.einsum("bsj,j->bs", sequence_output, output_weights) + output_bias) / temperature
-
-    return logits
 
 
 def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, labels, aggregation_classifier):
