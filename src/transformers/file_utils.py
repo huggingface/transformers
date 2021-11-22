@@ -35,6 +35,7 @@ from dataclasses import fields
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
+from itertools import chain
 from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, ContextManager, Dict, List, Optional, Tuple, Union
@@ -2129,7 +2130,7 @@ class _LazyModule(ModuleType):
             for value in values:
                 self._class_to_module[value] = key
         # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
+        self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
         self.__file__ = module_file
         self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]

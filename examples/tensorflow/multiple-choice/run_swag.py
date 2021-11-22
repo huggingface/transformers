@@ -22,6 +22,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
+from itertools import chain
 from pathlib import Path
 from typing import Optional
 
@@ -342,8 +343,8 @@ def main():
         ]
 
         # Flatten out
-        first_sentences = sum(first_sentences, [])
-        second_sentences = sum(second_sentences, [])
+        first_sentences = list(chain(*first_sentences))
+        second_sentences = list(chain(*second_sentences))
 
         # Tokenize
         tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True, max_length=max_seq_length)
