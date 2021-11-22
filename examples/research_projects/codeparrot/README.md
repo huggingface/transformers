@@ -1,7 +1,7 @@
 # CodeParrot 🦜
 
 ## What is this about?
-This is an open-source effort to train and evaluate code generation models. Codeparrot is a GPT-2 model trained from scratch on Python code. 
+This is an open-source effort to train and evaluate code generation models. CodeParrot 🦜 is a GPT-2 model trained from scratch on Python code. 
 
 ## Installation
 ```bash
@@ -25,10 +25,10 @@ The script to process the full dataset can be found in `scripts/preprocessing.py
 ## Training
 The models are randomly initialized and trained from scratch. The initialization script can be found at `scripts/initialize.py`. The main training script is built with 🤗 Accelerate to scale across a wide range of platforms and infrastructure scales.
 
-We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on 16xA100 (40GB) machine which takes 1 day and 1 week, respectively. The training script can be found in `scripts/codeparrot_training.py`.
+We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively. The training script can be found in `scripts/codeparrot_training.py`.
 
 ## Evaluation
-We evaluate the model on OpenAI's _HumanEval_ benchmark. The evaluation script can be found in `scripts/human_eval.py`
+The validation loss can be calculate with the `scripts/validation_loss.py` script. In addition we evaluate the model on OpenAI's _HumanEval_ benchmark. The evaluation script can be found in `scripts/human_eval.py`. The results as well as reference values are shown in the following table:
 
 | Model | pass@1 | pass@10 | pass@100|
 |-------|--------|---------|---------|
