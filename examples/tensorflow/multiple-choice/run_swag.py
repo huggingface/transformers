@@ -343,8 +343,8 @@ def main():
         ]
 
         # Flatten out
-        first_sentences = chain(*first_sentences)
-        second_sentences = chain(*second_sentences)
+        first_sentences = list(chain(*first_sentences))
+        second_sentences = list(chain(*second_sentences))
 
         # Tokenize
         tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True, max_length=max_seq_length)

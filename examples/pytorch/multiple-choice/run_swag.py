@@ -187,7 +187,7 @@ class DataCollatorForMultipleChoice:
         flattened_features = [
             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
         ]
-        flattened_features = chain(*flattened_features)
+        flattened_features = list(chain(*flattened_features))
 
         batch = self.tokenizer.pad(
             flattened_features,
@@ -335,8 +335,8 @@ def main():
         ]
 
         # Flatten out
-        first_sentences = chain(*first_sentences)
-        second_sentences = chain(*second_sentences)
+        first_sentences = list(chain(*first_sentences))
+        second_sentences = list(chain(*second_sentences))
 
         # Tokenize
         tokenized_examples = tokenizer(
