@@ -22,6 +22,7 @@ import importlib.util
 import io
 import json
 import os
+import pickle
 import re
 import shutil
 import subprocess
@@ -2200,6 +2201,8 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         organization: Optional[str] = None,
         private: Optional[bool] = None,
+        checkpoint: Optional[bool] = False,
+        epoch: Optional[int] = -1,
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
@@ -2225,6 +2228,10 @@ class PushToHubMixin:
                 Organization in which you want to push your {object} (you must be a member of this organization).
             private (:obj:`bool`, `optional`):
                 Whether or not the repository created should be private (requires a paying subscription).
+            checkpoint (:obj:`bool`, `optional`):
+                Whether to save a checkpoint (including epoch number and optimizer state) or not.
+            epoch (:obj:`int`, `optional`):
+                The current epoch number. Only used when saving checkpoints.
             use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
                 The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
                 generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
@@ -2274,7 +2281,11 @@ class PushToHubMixin:
             use_auth_token=use_auth_token,
         )
         # Save the files in the cloned repo
+        if checkpoint:
+            checkpoint_dir = os.path.join(repo_path_or_name, "checkpoint")
+            self.save_checkpoint(checkpoint_dir, epoch)
         self.save_pretrained(repo_path_or_name)
+
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
@@ -2283,6 +2294,19 @@ class PushToHubMixin:
             shutil.rmtree(repo_path_or_name)
 
         return url
+
+    def save_checkpoint(self, checkpoint_dir, epoch):
+        if not os.path.isdir(checkpoint_dir):
+            os.mkdir(checkpoint_dir)
+        # We avoid tf.train.checkpoint or saving weights in TF format, even though that includes optimizer
+        # state for us, because it requires special handling for objects like custom losses, which we use
+        # internally and which users are likely to use too
+        weights_path = os.path.join(checkpoint_dir, "weights.h5")
+        self.save_weights(weights_path)
+        extra_data = {"epoch": epoch, "optimizer_state": self.optimizer.get_weights()}
+        extra_data_path = os.path.join(checkpoint_dir, "extra_data.pickle")
+        with open(extra_data_path, "wb") as f:
+            pickle.dump(extra_data, f)
 
     @staticmethod
     def _get_repo_url_from_name(
