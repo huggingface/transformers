@@ -1451,6 +1451,11 @@ class CharacterBertForTokenClassification:
         requires_backends(self, ["torch"])
 
 
+class CharacterBertLayer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CharacterBertLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -1485,6 +1490,15 @@ class CharacterBertPreTrainedModel:
 
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+class CharacterCnn:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_character_bert(*args, **kwargs):
+    requires_backends(load_tf_weights_in_character_bert, ["torch"])
 
 
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
