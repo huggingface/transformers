@@ -554,10 +554,10 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("helboukkouri/character-bert")
-        CLS = [CharacterMapper.beginning_of_word_character + 1, 257, CharacterMapper.end_of_word_character + 1,] + [
+        CLS = [CharacterMapper.beginning_of_word_character + 1, 257, CharacterMapper.end_of_word_character + 1] + [
             CharacterMapper.padding_character + 1
         ] * (tokenizer.max_word_length - 3)
-        SEP = [CharacterMapper.beginning_of_word_character + 1, 258, CharacterMapper.end_of_word_character + 1,] + [
+        SEP = [CharacterMapper.beginning_of_word_character + 1, 258, CharacterMapper.end_of_word_character + 1] + [
             CharacterMapper.padding_character + 1
         ] * (tokenizer.max_word_length - 3)
 

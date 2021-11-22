@@ -42,6 +42,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rembert", "RemBertConfig"),
         ("visual_bert", "VisualBertConfig"),
         ("canine", "CanineConfig"),
+        ("character_bert", "CharacterBertConfig"),
         ("roformer", "RoFormerConfig"),
         ("clip", "CLIPConfig"),
         ("bigbird_pegasus", "BigBirdPegasusConfig"),
@@ -112,8 +113,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
-        ("visual_bert", VisualBertConfig),
         # Add archive maps here
+        ("visual_bert", "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -201,6 +202,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("canine", "Canine"),
         ("roformer", "RoFormer"),
         ("clip", "CLIP"),
+        ("character_bert", "CharacterBert"),
         ("bigbird_pegasus", "BigBirdPegasus"),
         ("deit", "DeiT"),
         ("luke", "LUKE"),

@@ -787,7 +787,9 @@ if is_torch_available():
             "CharacterBertForQuestionAnswering",
             "CharacterBertForSequenceClassification",
             "CharacterBertForTokenClassification",
+            "CharacterBertLMHeadModel",
             "CharacterBertModel",
+            "CharacterBertPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -2683,7 +2685,9 @@ if TYPE_CHECKING:
             CharacterBertForQuestionAnswering,
             CharacterBertForSequenceClassification,
             CharacterBertForTokenClassification,
+            CharacterBertLMHeadModel,
             CharacterBertModel,
+            CharacterBertPreTrainedModel,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
