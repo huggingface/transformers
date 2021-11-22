@@ -33,20 +33,20 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
     @require_torch
     def test_small_model_pt(self):
         text_classifier = pipeline(
-            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
         )
 
         outputs = text_classifier("This is great !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
     @require_tf
     def test_small_model_tf(self):
         text_classifier = pipeline(
-            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="tf"
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
         )
 
         outputs = text_classifier("This is great !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_1", "score": 0.502}])
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
     @slow
     @require_torch
