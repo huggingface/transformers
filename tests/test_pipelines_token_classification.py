@@ -589,7 +589,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_tf
     def test_small_model_tf(self):
-        model_name = "hf-internal-testing/tiny-random-bert"
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
@@ -602,7 +602,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_no_offset_tokenizer(self):
-        model_name = "hf-internal-testing/tiny-random-bert"
+        model_name = "hf-internal-testing/tiny-bert"
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert", use_fast=False)
         token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
         outputs = token_classifier("This is a test !")
@@ -616,7 +616,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_small_model_pt(self):
-        model_name = "hf-internal-testing/tiny-random-bert"
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
