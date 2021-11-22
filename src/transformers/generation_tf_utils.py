@@ -617,9 +617,6 @@ class TFGenerationMixin:
                 "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
             )
             input_ids = tf.fill((batch_size, 1), bos_token_id)
-        # TODO: remove this block
-        # else:
-        #     assert len(shape_list(input_ids)) == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
         # not allow to duplicate outputs when greedy decoding
         if do_sample is False:
@@ -683,9 +680,6 @@ class TFGenerationMixin:
             }
 
             # vision models don't use `attention_mask`.
-            # PT's generate() also requires a similar change, at the following line
-            #   "if model_kwargs.get("attention_mask", None) is None:"
-            # TODO: change PT's generate() and remove `attention_mask` from `ViTModel`
             signature = dict(inspect.signature(encoder.call).parameters)
             if "attention_mask" not in signature:
                 encoder_kwargs.pop("attention_mask")
@@ -697,11 +691,8 @@ class TFGenerationMixin:
                 if output_hidden_states:
                     model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
-        # Add an extra condition `len(shape_list(input_ids)) == 2`, so this block will treat only text inputs.
+        # The condition `len(shape_list(input_ids)) == 2` is to make this block treats only text inputs.
         # (vision inputs might occur when the model is an encoder-decoder model)
-        # In PT generate(), the `input_ids` is reset for decoder at the following line, which is before the expansion:
-        #   "# set input_ids as decoder_input_ids"
-        # TODO: it would be better to have the same approach as in PT's generate()
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if len(shape_list(input_ids)) == 2 and (num_return_sequences > 1 or num_beams > 1):
             input_ids_len = shape_list(input_ids)[-1]
