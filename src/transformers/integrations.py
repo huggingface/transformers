@@ -367,6 +367,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
     def _objective():
         
         run = wandb.run if wandb.run else wandb.init()
+        trainer.state.trial_name = run.name
         run.config.update({"assignments": {}, "metric": metric})
         config = wandb.config
         
@@ -606,6 +607,7 @@ class WandbCallback(TrainerCallback):
         if hp_search:
             self._wandb.finish()
             self._initialized = False
+            args.run_name = None
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
 
