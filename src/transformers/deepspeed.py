@@ -111,6 +111,29 @@ class HfDeepSpeedConfig:
             return default
         return config.get(ds_key, default)
 
+    def del_config_sub_tree(self, ds_key_long, must_exist=False):
+        """
+        Deletes a sub-section of the config file if it's found.
+
+        Unless ``must_exist`` is :obj:`True` the section doesn't have to exist.
+        """
+        config = self.config
+
+        # find the config node of interest if it exists
+        nodes = ds_key_long.split(".")
+        for node in nodes:
+            parent_config = config
+            config = config.get(node)
+            if config is None:
+                if must_exist:
+                    raise ValueError(f"Can't find {ds_key_long} entry in the config: {self.config}")
+                else:
+                    return
+
+        # if found remove it
+        if parent_config is not None:
+            parent_config.pop(node)
+
     def is_true(self, ds_key_long):
         """
         Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
@@ -280,30 +303,10 @@ def deepspeed_config():
         return None
 
 
-def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
+def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps):
     """
-    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
-
-    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
-
-    Args:
-        trainer: Trainer object
-        num_training_steps: per single gpu
-        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
-
-    Returns: model, optimizer, lr_scheduler
-
+    A convenience wrapper that deals with optimizer and lr scheduler configuration.
     """
-    import deepspeed
-    from deepspeed.utils import logger as ds_logger
-
-    model = trainer.model
-    args = trainer.args
-
-    hf_deepspeed_config = args.hf_deepspeed_config
-    hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
-
-    # resume config update - some bits like `model` and `num_training_steps` only become available during train
     config = hf_deepspeed_config.config
 
     # Optimizer + Scheduler
@@ -351,13 +354,54 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         else:
             lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
-    # keep for quick debug:
-    # from pprint import pprint; pprint(config)
+    return optimizer, lr_scheduler
 
-    # set the Deepspeed log level consistent with the trainer
+
+def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
+    """
+    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
+
+    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
+
+    Args:
+        trainer: Trainer object
+        num_training_steps: per single gpu
+        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
+        inference: launch in inference mode (no optimizer and no lr scheduler)
+
+    Returns: model, optimizer, lr_scheduler
+
+    """
+    import deepspeed
+    from deepspeed.utils import logger as ds_logger
+
+    model = trainer.model
+    args = trainer.args
+
+    # resume config update - some bits like `model` and `num_training_steps` only become available during train
+    hf_deepspeed_config = args.hf_deepspeed_config
+    hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
+    config = hf_deepspeed_config.config
+
+    # set the Deepspeed log level consistent with the Trainer
     ds_logger.setLevel(args.get_process_log_level())
 
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    if inference:
+        # only Z3 makes sense for the inference
+        if not hf_deepspeed_config.is_zero3():
+            raise ValueError("ZeRO inference only makes sense with ZeRO Stage 3 - please adjust your config")
+
+        # in case the training config is re-used for inference
+        hf_deepspeed_config.del_config_sub_tree("optimizer")
+        hf_deepspeed_config.del_config_sub_tree("lr_scheduler")
+        optimizer, lr_scheduler = None, None
+        model_parameters = None
+    else:
+        optimizer, lr_scheduler = deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps)
+        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+
+    # keep for quick debug:
+    # from pprint import pprint; pprint(config)
 
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
         model=model,
