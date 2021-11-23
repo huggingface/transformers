@@ -46,6 +46,20 @@ won't be possible on a single GPU.
    parts of DeepSpeed like ``zero.Init`` for ZeRO stage 3 and higher. To tap into this feature read the docs on
    :ref:`deepspeed-non-trainer-integration`.
 
+What is integrated:
+
+Training:
+
+1. DeepSpeed ZeRO training supports the full ZeRO stages 1, 2 and 3 with ZeRO-Infinity (CPU and NVME offload).
+
+Inference:
+
+1. DeepSpeed ZeRO Inference supports ZeRO stage 3 with ZeRO-Infinity. It uses the same ZeRO protocol as training, but
+   it doesn't use an optimizer and a lr scheduler and only stage 3 is relevant. For more details see:
+   :ref:`deepspeed-zero-inference`.
+
+There is also DeepSpeed Inference - this is a totally different technology which uses Tensor Parallelism instead of
+ZeRO (coming soon).
 
 
 
@@ -1627,6 +1641,47 @@ stress on ``tensor([1.])``, or if you get an error where it says the parameter i
 larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
 
 
+
+.. _deepspeed-zero-inference:
+
+
+ZeRO Inference
+=======================================================================================================================
+
+ZeRO Inference uses the same config as ZeRO-3 Training. You just don't need the optimizer and scheduler sections. In
+fact you can leave these in the config file if you want to share the same one with the training. They will just be
+ignored.
+
+Otherwise you just need to pass the usual :class:`~transformers.TrainingArguments` arguments. For example:
+
+.. code-block:: bash
+
+    deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds_config.json
+
+The only important thing is that you need to use a ZeRO-3 configuration, since ZeRO-2 provides no benefit whatsoever
+for the inference as only ZeRO-3 performs sharding of parameters, whereas ZeRO-1 shards gradients and optimizer states.
+
+Here is an example of running ``run_translation.py`` under DeepSpeed deploying all available GPUs:
+
+.. code-block:: bash
+
+    deepspeed examples/pytorch/translation/run_translation.py \
+    --deepspeed tests/deepspeed/ds_config_zero3.json \
+    --model_name_or_path t5-small --output_dir output_dir \
+    --do_eval --max_eval_samples 50 --warmup_steps 50  \
+    --max_source_length 128 --val_max_target_length 128 \
+    --overwrite_output_dir --per_device_eval_batch_size 4 \
+    --predict_with_generate --dataset_config "ro-en" --fp16 \
+    --source_lang en --target_lang ro --dataset_name wmt16 \
+    --source_prefix "translate English to Romanian: "
+
+Since for inference there is no need for additional large memory used by the optimizer states and the gradients you
+should be able to fit much larger batches and/or sequence length onto the same hardware.
+
+
+Additionally DeepSpeed is currently developing a related product called Deepspeed-Inference which has no relationship
+to the ZeRO technology, but instead uses tensor parallelism to scale models that can't fit onto a single GPU. This is a
+work in progress and we will provide the integration once that product is complete.
 
 
 Filing Issues
