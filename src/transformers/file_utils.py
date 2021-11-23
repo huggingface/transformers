@@ -2323,7 +2323,7 @@ class PushToHubMixin:
         self.load_weights(weights_file)
         with open(extra_data_file, "rb") as f:
             extra_data = pickle.load(f)
-        self.optimizer.load_weights(extra_data["optimizer_state"])
+        self.optimizer.set_weights(extra_data["optimizer_state"])
         return {"epoch": extra_data["epoch"]}
 
     @staticmethod
