@@ -948,6 +948,7 @@ if is_torch_available():
             "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTJForCausalLM",
             "GPTJForSequenceClassification",
+            "GPTJForQuestionAnswering",
             "GPTJModel",
             "GPTJPreTrainedModel",
         ]
@@ -2799,6 +2800,7 @@ if TYPE_CHECKING:
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
             GPTJForSequenceClassification,
+            GPTJForQuestionAnswering,
             GPTJModel,
             GPTJPreTrainedModel,
         )

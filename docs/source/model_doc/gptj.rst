@@ -119,3 +119,10 @@ GPTJForSequenceClassification
 
 .. autoclass:: transformers.GPTJForSequenceClassification
     :members: forward
+
+
+GPTJForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.GPTJForQuestionAnswering
+    :members: forward
