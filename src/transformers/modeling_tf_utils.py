@@ -769,8 +769,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def load_repo_checkpoint(self, repo_path_or_name, organization=None):
         """
-        Loads a saved checkpoint (model weights and optimizer state) from a repo. Returns the current
-        epoch count when the checkpoint was made.
+        Loads a saved checkpoint (model weights and optimizer state) from a repo. Returns the current epoch count when
+        the checkpoint was made.
 
         Args:
             repo_path_or_name (:obj:`str`):
@@ -778,6 +778,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 the repository will have the name of that local folder).
             organization (:obj:`str`, `optional`):
                 Organization whose account the checkpoint is stored in.
+
         Returns:
             :obj:`dict`: A dictionary of extra metadata from the checkpoint, most commonly an "epoch" count.
         """
