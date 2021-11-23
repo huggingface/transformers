@@ -2200,8 +2200,6 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         organization: Optional[str] = None,
         private: Optional[bool] = None,
-        checkpoint: Optional[bool] = False,
-        epoch: Optional[int] = -1,
         use_auth_token: Optional[Union[bool, str]] = None,
     ) -> str:
         """
@@ -2227,10 +2225,6 @@ class PushToHubMixin:
                 Organization in which you want to push your {object} (you must be a member of this organization).
             private (:obj:`bool`, `optional`):
                 Whether or not the repository created should be private (requires a paying subscription).
-            checkpoint (:obj:`bool`, `optional`):
-                Whether to save a checkpoint (including epoch number and optimizer state) or not.
-            epoch (:obj:`int`, `optional`):
-                The current epoch number. Only used when saving checkpoints.
             use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
                 The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
                 generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
@@ -2281,7 +2275,6 @@ class PushToHubMixin:
         )
         # Save the files in the cloned repo
         self.save_pretrained(repo_path_or_name)
-
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
