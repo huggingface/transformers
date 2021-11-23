@@ -32,8 +32,8 @@ if is_torch_available():
         GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         GPTJForCausalLM,
-        GPTJForSequenceClassification,
         GPTJForQuestionAnswering,
+        GPTJForSequenceClassification,
         GPTJModel,
     )
 

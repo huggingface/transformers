@@ -2799,8 +2799,8 @@ if TYPE_CHECKING:
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
-            GPTJForSequenceClassification,
             GPTJForQuestionAnswering,
+            GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
         )

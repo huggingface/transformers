@@ -42,8 +42,8 @@ if TYPE_CHECKING:
         from .modeling_gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
-            GPTJForSequenceClassification,
             GPTJForQuestionAnswering,
+            GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
         )
