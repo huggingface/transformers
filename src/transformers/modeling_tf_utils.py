@@ -18,9 +18,9 @@
 import functools
 import inspect
 import os
+import pickle
 import re
 import warnings
-import pickle
 from typing import Dict, List, Optional, Union
 
 import h5py
