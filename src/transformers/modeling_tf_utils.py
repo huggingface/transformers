@@ -768,12 +768,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             pickle.dump(extra_data, f)
 
     def load_repo_checkpoint(self, repo_path_or_name, organization=None):
+        """
+        Loads a saved checkpoint (model weights and optimizer state) from a repo. Returns the current
+        epoch count when the checkpoint was made.
+
+        Args:
+            repo_path_or_name (:obj:`str`):
+                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
+                the repository will have the name of that local folder).
+            organization (:obj:`str`, `optional`):
+                Organization whose account the checkpoint is stored in.
+        Returns:
+            :obj:`dict`: A dictionary of extra metadata from the checkpoint, most commonly an "epoch" count.
+        """
         if getattr(self, "optimizer", None) is None:
             raise RuntimeError(
                 "Checkpoint loading failed as no optimizer is attached to the model. "
                 "This is most likely caused by the model not being compiled."
             )
+        # First, clone the repo. Don't worry, it won't actually create a remote repo if it doesn't exist!
         repo = self._create_or_get_repo(repo_path_or_name, organization)
+
+        # Now make sure the repo actually has a checkpoint in it. If the repo doesn't exist it will be empty
+        # and the checks will fail here.
         checkpoint_dir = os.path.join(repo.local_dir, "checkpoint")
         weights_file = os.path.join(checkpoint_dir, "weights.h5")
         if not os.path.isfile(weights_file):
@@ -781,10 +798,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         extra_data_file = os.path.join(checkpoint_dir, "extra_data.pickle")
         if not os.path.isfile(extra_data_file):
             raise FileNotFoundError(f"Could not find checkpoint file extra_data.pickle in repo {repo_path_or_name}!")
+
+        # Assuming the repo is real and we got a checkpoint, load the weights and the optimizer state into the model.
+        # The optimizer state includes the iteration count, so learning rate schedules should resume as normal too.
         self.load_weights(weights_file)
         with open(extra_data_file, "rb") as f:
             extra_data = pickle.load(f)
         self.optimizer.set_weights(extra_data["optimizer_state"])
+
+        # Finally, return the epoch number from the checkpoint. This isn't a property of the model, so we can't
+        # set it directly, but the user can pass it to fit().
         return {"epoch": extra_data["epoch"]}
 
     def compile(
