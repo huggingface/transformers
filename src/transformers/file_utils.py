@@ -2281,9 +2281,6 @@ class PushToHubMixin:
             use_auth_token=use_auth_token,
         )
         # Save the files in the cloned repo
-        if checkpoint:
-            checkpoint_dir = os.path.join(repo_path_or_name, "checkpoint")
-            self._save_checkpoint(checkpoint_dir, epoch)
         self.save_pretrained(repo_path_or_name)
 
         # Commit and push!
@@ -2294,39 +2291,6 @@ class PushToHubMixin:
             shutil.rmtree(repo_path_or_name)
 
         return url
-
-    def _save_checkpoint(self, checkpoint_dir, epoch):
-        if not os.path.isdir(checkpoint_dir):
-            os.mkdir(checkpoint_dir)
-        # We avoid tf.train.checkpoint or saving weights in TF format, even though that includes optimizer
-        # state for us, because it requires special handling for objects like custom losses, which we use
-        # internally and which users are likely to use too
-        weights_path = os.path.join(checkpoint_dir, "weights.h5")
-        self.save_weights(weights_path)
-        extra_data = {"epoch": epoch, "optimizer_state": self.optimizer.get_weights()}
-        extra_data_path = os.path.join(checkpoint_dir, "extra_data.pickle")
-        with open(extra_data_path, "wb") as f:
-            pickle.dump(extra_data, f)
-
-    def load_repo_checkpoint(self, repo_path_or_name, organization=None):
-        if getattr(self, "optimizer", None) is None:
-            raise RuntimeError(
-                "Checkpoint loading failed as no optimizer is attached to the model. "
-                "This is most likely caused by the model not being compiled."
-            )
-        repo = self._create_or_get_repo(repo_path_or_name, organization)
-        checkpoint_dir = os.path.join(repo.local_dir, "checkpoint")
-        weights_file = os.path.join(checkpoint_dir, "weights.h5")
-        if not os.path.isfile(weights_file):
-            raise FileNotFoundError(f"Could not find checkpoint file weights.h5 in repo {repo_path_or_name}!")
-        extra_data_file = os.path.join(checkpoint_dir, "extra_data.pickle")
-        if not os.path.isfile(extra_data_file):
-            raise FileNotFoundError(f"Could not find checkpoint file extra_data.pickle in repo {repo_path_or_name}!")
-        self.load_weights(weights_file)
-        with open(extra_data_file, "rb") as f:
-            extra_data = pickle.load(f)
-        self.optimizer.set_weights(extra_data["optimizer_state"])
-        return {"epoch": extra_data["epoch"]}
 
     @staticmethod
     def _get_repo_url_from_name(
