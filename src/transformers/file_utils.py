@@ -2310,8 +2310,10 @@ class PushToHubMixin:
 
     def load_repo_checkpoint(self, repo_path_or_name, organization=None):
         if getattr(self, "optimizer", None) is None:
-            raise RuntimeError("Checkpoint loading failed as no optimizer is attached to the model. "
-                               "This is most likely caused by the model not being compiled.")
+            raise RuntimeError(
+                "Checkpoint loading failed as no optimizer is attached to the model. "
+                "This is most likely caused by the model not being compiled."
+            )
         repo = self._create_or_get_repo(repo_path_or_name, organization)
         checkpoint_dir = os.path.join(repo.local_dir, "checkpoint")
         weights_file = os.path.join(checkpoint_dir, "weights.h5")
