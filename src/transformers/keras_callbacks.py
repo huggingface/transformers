@@ -24,7 +24,7 @@ class PushToHubCallback(Callback):
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
-        checkpoint: Optional[bool] = False,
+        checkpoint: bool = False,
     ):
         """
         output_dir (:obj:`str`):
