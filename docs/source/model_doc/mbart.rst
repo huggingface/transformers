@@ -49,11 +49,11 @@ inside the context manager :meth:`~transformers.MBartTokenizer.as_target_tokeniz
 
     >>> from transformers import MBartForConditionalGeneration, MBartTokenizer
 
-    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
+    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX", tgt_lang="ro_RO")
     >>> example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
 
-    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt", src_lang="en_XX", tgt_lang="ro_RO")
+    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
 

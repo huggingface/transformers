@@ -187,9 +187,23 @@ def get_module_dependencies(module_fname):
     return dependencies
 
 
+def get_test_dependencies(test_fname):
+    """
+    Get the dependencies of a test file.
+    """
+    with open(os.path.join(PATH_TO_TRANFORMERS, test_fname), "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Tests only have relative imports for other test files
+    relative_imports = re.findall(r"from\s+\.(\S+)\s+import\s+([^\n]+)\n", content)
+    relative_imports = [test for test, imp in relative_imports if "# tests_ignore" not in imp]
+    return [os.path.join("tests", f"{test}.py") for test in relative_imports]
+
+
 def create_reverse_dependency_map():
     """
-    Create the dependency map from module filename to the list of modules that depend on it (even recursively).
+    Create the dependency map from module/test filename to the list of modules/tests that depend on it (even
+    recursively).
     """
     modules = [
         str(f.relative_to(PATH_TO_TRANFORMERS))
@@ -198,11 +212,17 @@ def create_reverse_dependency_map():
     # We grab all the dependencies of each module.
     direct_deps = {m: get_module_dependencies(m) for m in modules}
 
+    # We add all the dependencies of each test file
+    tests = [str(f.relative_to(PATH_TO_TRANFORMERS)) for f in (Path(PATH_TO_TRANFORMERS) / "tests").glob("**/*.py")]
+    direct_deps.update({t: get_test_dependencies(t) for t in tests})
+
+    all_files = modules + tests
+
     # This recurses the dependencies
     something_changed = True
     while something_changed:
         something_changed = False
-        for m in modules:
+        for m in all_files:
             for d in direct_deps[m]:
                 for dep in direct_deps[d]:
                     if dep not in direct_deps[m]:
@@ -211,7 +231,7 @@ def create_reverse_dependency_map():
 
     # Finally we can build the reverse map.
     reverse_map = collections.defaultdict(list)
-    for m in modules:
+    for m in all_files:
         if m.endswith("__init__.py"):
             reverse_map[m].extend(direct_deps[m])
         for d in direct_deps[m]:
@@ -232,7 +252,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
     "modelcard.py": "test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
-    "modeling_tf_utils.py": "test_modeling_tf_common.py",
+    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_modeling_tf_core.py"],
     "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
     "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
     "models/auto/modeling_flax_auto.py": "test_flax_auto.py",
@@ -244,7 +264,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "models/blenderbot_small/tokenization_blenderbot_small.py": "test_tokenization_small_blenderbot.py",
     "models/blenderbot_small/tokenization_blenderbot_small_fast.py": "test_tokenization_small_blenderbot.py",
     "models/gpt2/modeling_gpt2.py": ["test_modeling_gpt2.py", "test_modeling_megatron_gpt2.py"],
-    "pipelines/base.py": "test_pipelines_common.py",
+    "pipelines/base.py": "test_pipelines_*.py",
     "pipelines/text2text_generation.py": [
         "test_pipelines_text2text_generation.py",
         "test_pipelines_summarization.py",
@@ -261,6 +281,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "test_trainer_distributed.py",
         "test_trainer_tpu.py",
     ],
+    "train_pt_utils.py": "test_trainer_utils.py",
     "utils/versions.py": "test_versions_utils.py",
 }
 
@@ -316,6 +337,7 @@ def module_to_test_file(module_fname):
 # launched separately.
 EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/test_doc_samples.py",  # Doc tests
+    "tests/test_pipelines_common.py",  # Actually checked by the pipeline based file
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
@@ -397,26 +419,35 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     # Grab the corresponding test files:
-    test_files_to_run = []
-    for f in impacted_files:
-        # Modified test files are always added
-        if f.startswith("tests/"):
-            test_files_to_run.append(f)
-        else:
-            new_tests = module_to_test_file(f)
-            if new_tests is not None:
-                if isinstance(new_tests, str):
-                    test_files_to_run.append(new_tests)
-                else:
-                    test_files_to_run.extend(new_tests)
+    if "setup.py" in impacted_files:
+        test_files_to_run = ["tests"]
+    else:
+        # Grab the corresponding test files:
+        test_files_to_run = []
+        for f in impacted_files:
+            # Modified test files are always added
+            if f.startswith("tests/"):
+                test_files_to_run.append(f)
+            # Example files are tested separately
+            elif f.startswith("examples/pytorch"):
+                test_files_to_run.append("examples/pytorch/test_examples.py")
+            else:
+                new_tests = module_to_test_file(f)
+                if new_tests is not None:
+                    if isinstance(new_tests, str):
+                        test_files_to_run.append(new_tests)
+                    else:
+                        test_files_to_run.extend(new_tests)
 
-    # Remove duplicates
-    test_files_to_run = sorted(list(set(test_files_to_run)))
-    # Make sure we did not end up with a test file that was removed
-    test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
-    if filters is not None:
-        for filter in filters:
-            test_files_to_run = [f for f in test_files_to_run if f.startswith(filter)]
+        # Remove duplicates
+        test_files_to_run = sorted(list(set(test_files_to_run)))
+        # Make sure we did not end up with a test file that was removed
+        test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
+        if filters is not None:
+            filtered_files = []
+            for filter in filters:
+                filtered_files.extend([f for f in test_files_to_run if f.startswith(filter)])
+            test_files_to_run = filtered_files
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
@@ -438,7 +469,11 @@ if __name__ == "__main__":
         help="To fetch the tests between the current commit and the last commit",
     )
     parser.add_argument(
-        "--filters", type=str, nargs="*", help="Only keep the test files matching one of those filters."
+        "--filters",
+        type=str,
+        nargs="*",
+        default=["tests"],
+        help="Only keep the test files matching one of those filters.",
     )
     args = parser.parse_args()
     if args.sanity_check:

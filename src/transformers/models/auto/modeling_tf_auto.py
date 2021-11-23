@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("deberta-v2", "TFDebertaV2Model"),
         ("deberta", "TFDebertaModel"),
         ("rembert", "TFRemBertModel"),
         ("roformer", "TFRoFormerModel"),
@@ -63,6 +64,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("pegasus", "TFPegasusModel"),
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
+        ("vit", "TFViTModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
         ("hubert", "TFHubertModel"),
     ]
@@ -132,6 +134,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("rembert", "TFRemBertForCausalLM"),
         ("roformer", "TFRoFormerForCausalLM"),
+        ("roberta", "TFRobertaForCausalLM"),
         ("bert", "TFBertLMHeadModel"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
@@ -142,9 +145,17 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Image-classsification
+        ("vit", "TFViTForImageClassification"),
+    ]
+)
+
 TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("deberta-v2", "TFDebertaV2ForMaskedLM"),
         ("deberta", "TFDebertaForMaskedLM"),
         ("rembert", "TFRemBertForMaskedLM"),
         ("roformer", "TFRoFormerForMaskedLM"),
@@ -179,12 +190,14 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "TFBlenderbotForConditionalGeneration"),
         ("blenderbot-small", "TFBlenderbotSmallForConditionalGeneration"),
         ("bart", "TFBartForConditionalGeneration"),
+        ("encoder-decoder", "TFEncoderDecoderModel"),
     ]
 )
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("deberta-v2", "TFDebertaV2ForSequenceClassification"),
         ("deberta", "TFDebertaForSequenceClassification"),
         ("rembert", "TFRemBertForSequenceClassification"),
         ("roformer", "TFRoFormerForSequenceClassification"),
@@ -214,6 +227,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("deberta-v2", "TFDebertaV2ForQuestionAnswering"),
         ("deberta", "TFDebertaForQuestionAnswering"),
         ("rembert", "TFRemBertForQuestionAnswering"),
         ("roformer", "TFRoFormerForQuestionAnswering"),
@@ -238,6 +252,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("deberta-v2", "TFDebertaV2ForTokenClassification"),
         ("deberta", "TFDebertaForTokenClassification"),
         ("rembert", "TFRemBertForTokenClassification"),
         ("roformer", "TFRoFormerForTokenClassification"),
@@ -295,6 +310,9 @@ TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES
 TF_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 TF_MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES)
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
+)
 TF_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
@@ -343,6 +361,13 @@ class TFAutoModelForCausalLM(_BaseAutoModelClass):
 
 
 TFAutoModelForCausalLM = auto_class_update(TFAutoModelForCausalLM, head_doc="causal language modeling")
+
+
+class TFAutoModelForImageClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+
+
+AutoModelForImageClassification = auto_class_update(TFAutoModelForImageClassification, head_doc="image classification")
 
 
 class TFAutoModelForMaskedLM(_BaseAutoModelClass):

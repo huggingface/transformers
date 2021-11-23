@@ -228,7 +228,7 @@ Everything you always wanted to know about padding and truncation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We have seen the commands that will work for most cases (pad your batch to the length of the maximum sentence and
-truncate to the maximum length the mode can accept). However, the API supports more strategies if you need them. The
+truncate to the maximum length the model can accept). However, the API supports more strategies if you need them. The
 three arguments you need to know for this are :obj:`padding`, :obj:`truncation` and :obj:`max_length`.
 
 - :obj:`padding` controls the padding. It can be a boolean or a string which should be:
@@ -243,15 +243,16 @@ three arguments you need to know for this are :obj:`padding`, :obj:`truncation` 
 
 - :obj:`truncation` controls the truncation. It can be a boolean or a string which should be:
 
-    - :obj:`True` or :obj:`'only_first'` truncate to a maximum length specified by the :obj:`max_length` argument or
+    - :obj:`True` or :obj:`'longest_first'` truncate to a maximum length specified by the :obj:`max_length` argument or
       the maximum length accepted by the model if no :obj:`max_length` is provided (``max_length=None``). This will
-      only truncate the first sentence of a pair if a pair of sequence (or a batch of pairs of sequences) is provided.
+      truncate token by token, removing a token from the longest sequence in the pair until the proper length is
+      reached.
     - :obj:`'only_second'` truncate to a maximum length specified by the :obj:`max_length` argument or the maximum
       length accepted by the model if no :obj:`max_length` is provided (``max_length=None``). This will only truncate
       the second sentence of a pair if a pair of sequence (or a batch of pairs of sequences) is provided.
-    - :obj:`'longest_first'` truncate to a maximum length specified by the :obj:`max_length` argument or the maximum
-      length accepted by the model if no :obj:`max_length` is provided (``max_length=None``). This will truncate token
-      by token, removing a token from the longest sequence in the pair until the proper length is reached.
+    - :obj:`'only_first'` truncate to a maximum length specified by the :obj:`max_length` argument or the maximum
+      length accepted by the model if no :obj:`max_length` is provided (``max_length=None``). This will only truncate
+      the first sentence of a pair if a pair of sequence (or a batch of pairs of sequences) is provided.
     - :obj:`False` or :obj:`'do_not_truncate'` to not truncate the sequences. As we have seen before, this is the
       default behavior.
 

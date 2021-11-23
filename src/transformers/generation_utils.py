@@ -42,7 +42,6 @@ from .generation_logits_process import (
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
-    MaxNewTokensCriteria,
     MaxTimeCriteria,
     StoppingCriteriaList,
     validate_stopping_criteria,
@@ -393,15 +392,26 @@ class GenerationMixin:
         return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
-        self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
+        self,
+        input_ids: torch.Tensor,
+        pad_token_id: int,
+        eos_token_id: int,
+        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.LongTensor:
+
+        # First if `inputs_embeds` are given, but no `attention_mask` assume that full attention_mask is used
+        if inputs_embeds is not None:
+            return torch.ones((inputs_embeds.shape[0], inputs_embeds.shape[1]), dtype=torch.long)
+
+        # Otherwise, use `input_ids`
         is_pad_token_in_inputs_ids = (pad_token_id is not None) and (pad_token_id in input_ids)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
         if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
             return input_ids.ne(pad_token_id).long()
-        return input_ids.new_ones(input_ids.shape, dtype=torch.long)
+        else:
+            return input_ids.new_ones(input_ids.shape, dtype=torch.long)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, input_ids: torch.LongTensor, model_kwargs
@@ -418,12 +428,11 @@ class GenerationMixin:
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
-        self, input_ids: torch.LongTensor, decoder_start_token_id: int = None, bos_token_id: int = None
+        self, batch_size: int, decoder_start_token_id: int = None, bos_token_id: int = None
     ) -> torch.LongTensor:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-        decoder_input_ids = (
-            torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device) * decoder_start_token_id
-        )
+
+        decoder_input_ids = torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * decoder_start_token_id
         return decoder_input_ids
 
     def _get_pad_token_id(self, pad_token_id: int = None, eos_token_id: int = None) -> int:
@@ -480,7 +489,8 @@ class GenerationMixin:
             model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
 
         if is_encoder_decoder:
-            assert encoder_outputs is not None
+            if encoder_outputs is None:
+                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
                 0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
             )
@@ -628,16 +638,12 @@ class GenerationMixin:
             processors.append(InfNanRemoveLogitsProcessor())
         return processors
 
-    def _get_stopping_criteria(
-        self, max_length: Optional[int], max_time: Optional[float], max_new_tokens: Optional[int], start_length: int
-    ) -> StoppingCriteriaList:
+    def _get_stopping_criteria(self, max_length: Optional[int], max_time: Optional[float]) -> StoppingCriteriaList:
         stopping_criteria = StoppingCriteriaList()
         if max_length is not None:
             stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
             stopping_criteria.append(MaxTimeCriteria(max_time=max_time))
-        if max_new_tokens is not None:
-            stopping_criteria.append(MaxNewTokensCriteria(start_length=start_length, max_new_tokens=max_new_tokens))
         return stopping_criteria
 
     @torch.no_grad()
@@ -853,11 +859,11 @@ class GenerationMixin:
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, repetition_penalty=1.2)
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
 
-            >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+            >>> tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=False)
             >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
             >>> input_context = "My cute dog"
             >>> # get tokens of words that should not be generated
-            >>> bad_words_ids = [tokenizer(bad_word, add_prefix_space=True).input_ids for bad_word in ["idiot", "stupid", "shut up"]]
+            >>> bad_words_ids = tokenizer(["idiot", "stupid", "shut up"], add_prefix_space=True).input_ids
             >>> # encode input context
             >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
             >>> # generate sequences without allowing bad_words to be generated
@@ -865,17 +871,6 @@ class GenerationMixin:
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
 
-        # set init values
-        if max_length is None and max_new_tokens is None:
-            # Both are None, default
-            max_length = self.config.max_length
-        elif max_length is not None and max_new_tokens is not None:
-            # Both are set, this is odd, raise a warning
-            warnings.warn(
-                "Both `max_length` and `max_new_tokens` have been set but they serve the same purpose.", UserWarning
-            )
-
-        max_length = max_length if max_length is not None else self.config.max_length
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
         do_sample = do_sample if do_sample is not None else self.config.do_sample
@@ -905,8 +900,9 @@ class GenerationMixin:
 
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
+            inputs_embeds = model_kwargs.get("inputs_embeds", None)
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                input_ids, pad_token_id, eos_token_id
+                input_ids, pad_token_id, eos_token_id, inputs_embeds
             )
 
         # special case if pad_token_id is not defined
@@ -925,17 +921,41 @@ class GenerationMixin:
             if "decoder_input_ids" in model_kwargs:
                 input_ids = model_kwargs.pop("decoder_input_ids")
             else:
+                # if word embeddings are provided directly, infere the batch size from it
+                batch_size = input_ids.shape[0] if input_ids is not None else model_kwargs["inputs_embeds"].shape[0]
                 input_ids = self._prepare_decoder_input_ids_for_generation(
-                    input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
+                    batch_size, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
                 )
 
             if "encoder_outputs" not in model_kwargs or not isinstance(model_kwargs["encoder_outputs"], ModelOutput):
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
+        else:
+            if "inputs_embeds" in model_kwargs and input_ids is None:
+                raise ValueError("For decoder-only generation, one must pass `input_ids`.")
+
+        # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
+        if max_length is None and max_new_tokens is not None:
+            max_length = (
+                max_new_tokens + input_ids.shape[-1]
+                if input_ids is not None
+                else max_length + model_kwargs["inputs_embeds"].shape[1]
+            )
+        elif max_length is not None and max_new_tokens is not None:
+            # Both are set, this is odd, raise a warning
+            warnings.warn(
+                "Both `max_length` and `max_new_tokens` have been set "
+                f"but they serve the same purpose. `max_length` {max_length} "
+                f"will take priority over `max_new_tokens` {max_new_tokens}.",
+                UserWarning,
+            )
+
+        # default to config if still None
+        max_length = max_length if max_length is not None else self.config.max_length
 
         if input_ids.shape[-1] >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
-                f"Input length of {input_ids_string} is {input_ids.shape[-1]}, but ``max_length`` is set to {max_length}."
+                f"Input length of {input_ids_string} is {input_ids.shape[-1]}, but ``max_length`` is set to {max_length}. "
                 "This can lead to unexpected behavior. You should consider increasing ``config.max_length`` or ``max_length``."
             )
 
@@ -974,10 +994,7 @@ class GenerationMixin:
             remove_invalid_values=remove_invalid_values,
         )
 
-        cur_len = input_ids.shape[-1]
-        stopping_criteria = self._get_stopping_criteria(
-            max_length=max_length, max_time=max_time, max_new_tokens=max_new_tokens, start_length=cur_len
-        )
+        stopping_criteria = self._get_stopping_criteria(max_length=max_length, max_time=max_time)
 
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
@@ -1327,7 +1344,8 @@ class GenerationMixin:
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
-                assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
+                if pad_token_id is None:
+                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
@@ -1567,7 +1585,8 @@ class GenerationMixin:
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
-                assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
+                if pad_token_id is None:
+                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
@@ -1761,9 +1780,10 @@ class GenerationMixin:
 
         batch_beam_size, cur_len = input_ids.shape
 
-        assert (
-            num_beams * batch_size == batch_beam_size
-        ), f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+        if num_beams * batch_size != batch_beam_size:
+            raise ValueError(
+                f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+            )
 
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
@@ -2361,9 +2381,10 @@ class GenerationMixin:
 
         batch_beam_size, cur_len = input_ids.shape
 
-        assert (
-            num_beams * batch_size == batch_beam_size
-        ), f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+        if num_beams * batch_size != batch_beam_size:
+            raise ValueError(
+                f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+            )
 
         beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=device)
         # initialise score of first beam of each group with 0 and the rest with 1e-9. This ensures that the beams in
@@ -2557,10 +2578,14 @@ def top_k_top_p_filtering(
 
     Args:
         logits: logits distribution shape (batch size, vocabulary size)
-        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        Make sure we keep at least min_tokens_to_keep per batch example in the output
+        top_k (:obj:`int`, `optional`, defaults to 0):
+            If > 0, only keep the top k tokens with highest probability (top-k filtering)
+        top_p (:obj:`float`, `optional`, defaults to 1.0):
+            If < 1.0, only keep the top tokens with cumulative probability >= top_p (nucleus filtering). Nucleus
+            filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+            Minimumber of tokens we keep per batch example in the output.
+
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
     if top_k > 0:

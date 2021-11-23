@@ -12,26 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import importlib
 import logging
+import random
 import string
+import unittest
 from abc import abstractmethod
 from functools import lru_cache
-from typing import List, Optional
-from unittest import mock, skipIf
+from unittest import skipIf
 
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
     AutoTokenizer,
-    is_tf_available,
-    is_torch_available,
+    DistilBertForSequenceClassification,
+    IBertConfig,
+    RobertaConfig,
+    TextClassificationPipeline,
     pipeline,
 )
-from transformers.file_utils import to_py_obj
-from transformers.pipelines import Pipeline
-from transformers.testing_utils import _run_slow_tests, is_pipeline_test, require_tf, require_torch, slow
+from transformers.pipelines import get_task
+from transformers.pipelines.base import _pad
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 
 logger = logging.getLogger(__name__)
@@ -83,6 +87,12 @@ def get_tiny_config_from_class(configuration_class):
 @lru_cache(maxsize=100)
 def get_tiny_tokenizer_from_checkpoint(checkpoint):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+    if tokenizer.vocab_size < 300:
+        # Wav2Vec2ForCTC for instance
+        # ByT5Tokenizer
+        # all are already small enough and have no Fast version that can
+        # be retrained
+        return tokenizer
     logger.info("Training new from iterator ...")
     vocabulary = string.ascii_letters + string.digits + " "
     tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
@@ -97,6 +107,12 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config):
         feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
+
+    # Speech2TextModel specific.
+    if hasattr(tiny_config, "input_feat_per_channel") and feature_extractor:
+        feature_extractor = feature_extractor.__class__(
+            feature_size=tiny_config.input_feat_per_channel, num_mel_bins=tiny_config.input_feat_per_channel
+        )
     return feature_extractor
 
 
@@ -119,15 +135,31 @@ class PipelineTestCaseMeta(type):
             def test(self):
                 if ModelClass.__name__.endswith("ForCausalLM"):
                     tiny_config.is_encoder_decoder = False
+                    if hasattr(tiny_config, "encoder_no_repeat_ngram_size"):
+                        # specific for blenderbot which supports both decoder-only
+                        # encoder/decoder but the test config  only reflects
+                        # encoder/decoder arch
+                        tiny_config.encoder_no_repeat_ngram_size = 0
                 if ModelClass.__name__.endswith("WithLMHead"):
                     tiny_config.is_decoder = True
-                model = ModelClass(tiny_config)
+                try:
+                    model = ModelClass(tiny_config)
+                except ImportError as e:
+                    self.skipTest(
+                        f"Cannot run with {tiny_config} as the model requires a library that isn't installed: {e}"
+                    )
                 if hasattr(model, "eval"):
                     model = model.eval()
                 if tokenizer_class is not None:
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
-                        if hasattr(model.config, "max_position_embeddings"):
+                        # XLNet actually defines it as -1.
+                        if isinstance(model.config, (RobertaConfig, IBertConfig)):
+                            tokenizer.model_max_length = model.config.max_position_embeddings - 2
+                        elif (
+                            hasattr(model.config, "max_position_embeddings")
+                            and model.config.max_position_embeddings > 0
+                        ):
                             tokenizer.model_max_length = model.config.max_position_embeddings
                     # Rust Panic exception are NOT Exception subclass
                     # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
@@ -137,7 +169,26 @@ class PipelineTestCaseMeta(type):
                 else:
                     tokenizer = None
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
-                self.run_pipeline_test(model, tokenizer, feature_extractor)
+                pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
+                if pipeline is None:
+                    # The test can disable itself, but it should be very marginal
+                    # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
+                    return
+                self.run_pipeline_test(pipeline, examples)
+
+                def run_batch_test(pipeline, examples):
+                    # Need to copy because `Conversation` are stateful
+                    if pipeline.tokenizer is not None and pipeline.tokenizer.pad_token_id is None:
+                        return  # No batching for this and it's OK
+
+                    # 10 examples with batch size 4 means there needs to be a unfinished batch
+                    # which is important for the unbatcher
+                    dataset = [copy.deepcopy(random.choice(examples)) for i in range(10)]
+
+                    for item in pipeline(dataset, batch_size=4):
+                        pass
+
+                run_batch_test(pipeline, examples)
 
             return test
 
@@ -187,226 +238,182 @@ class PipelineTestCaseMeta(type):
         return type.__new__(mcs, name, bases, dct)
 
 
-VALID_INPUTS = ["A simple string", ["list of strings"]]
+@is_pipeline_test
+class CommonPipelineTest(unittest.TestCase):
+    @require_torch
+    def test_pipeline_iteration(self):
+        from torch.utils.data import Dataset
+
+        class MyDataset(Dataset):
+            data = [
+                "This is a test",
+                "This restaurant is great",
+                "This restaurant is awful",
+            ]
+
+            def __len__(self):
+                return 3
+
+            def __getitem__(self, i):
+                return self.data[i]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+        dataset = MyDataset()
+        for output in text_classifier(dataset):
+            self.assertEqual(output, {"label": ANY(str), "score": ANY(float)})
+
+    @require_torch
+    def test_check_task_auto_inference(self):
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+
+        self.assertIsInstance(pipe, TextClassificationPipeline)
+
+    @require_torch
+    def test_pipeline_override(self):
+        class MyPipeline(TextClassificationPipeline):
+            pass
+
+        text_classifier = pipeline(model="hf-internal-testing/tiny-random-distilbert", pipeline_class=MyPipeline)
+
+        self.assertIsInstance(text_classifier, MyPipeline)
+
+    def test_check_task(self):
+        task = get_task("gpt2")
+        self.assertEqual(task, "text-generation")
+
+        with self.assertRaises(RuntimeError):
+            # Wrong framework
+            get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
+
+    @require_torch
+    def test_iterator_data(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+        # When using multiple workers on streamable data it should still work
+        # This will force using `num_workers=1` with a warning for now.
+        results = []
+        for out in pipe(data(10), num_workers=2):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+    @require_tf
+    def test_iterator_data_tf(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
+        out = pipe("This is a test")
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+    @require_torch
+    def test_unbatch_attentions_hidden_states(self):
+        model = DistilBertForSequenceClassification.from_pretrained(
+            "hf-internal-testing/tiny-random-distilbert", output_hidden_states=True, output_attentions=True
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-distilbert")
+        text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+
+        # Used to throw an error because `hidden_states` are a tuple of tensors
+        # instead of the expected tensor.
+        outputs = text_classifier(["This is great !"] * 20, batch_size=32)
+        self.assertEqual(len(outputs), 20)
 
 
 @is_pipeline_test
-class CustomInputPipelineCommonMixin:
-    pipeline_task = None
-    pipeline_loading_kwargs = {}  # Additional kwargs to load the pipeline with
-    pipeline_running_kwargs = {}  # Additional kwargs to run the pipeline with
-    small_models = []  # Models tested without the @slow decorator
-    large_models = []  # Models tested with the @slow decorator
-    valid_inputs = VALID_INPUTS  # Some inputs which are valid to compare fast and slow tokenizers
+class PipelinePadTest(unittest.TestCase):
+    @require_torch
+    def test_pipeline_padding(self):
+        import torch
 
-    def setUp(self) -> None:
-        if not is_tf_available() and not is_torch_available():
-            return  # Currently no JAX pipelines
+        items = [
+            {
+                "label": "label1",
+                "input_ids": torch.LongTensor([[1, 23, 24, 2]]),
+                "attention_mask": torch.LongTensor([[0, 1, 1, 0]]),
+            },
+            {
+                "label": "label2",
+                "input_ids": torch.LongTensor([[1, 23, 24, 43, 44, 2]]),
+                "attention_mask": torch.LongTensor([[0, 1, 1, 1, 1, 0]]),
+            },
+        ]
 
-        # Download needed checkpoints
-        models = self.small_models
-        if _run_slow_tests:
-            models = models + self.large_models
-
-        for model_name in models:
-            if is_torch_available():
-                pipeline(
-                    self.pipeline_task,
-                    model=model_name,
-                    tokenizer=model_name,
-                    framework="pt",
-                    **self.pipeline_loading_kwargs,
-                )
-            if is_tf_available():
-                pipeline(
-                    self.pipeline_task,
-                    model=model_name,
-                    tokenizer=model_name,
-                    framework="tf",
-                    **self.pipeline_loading_kwargs,
-                )
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "input_ids", 10, "right"),
+                torch.LongTensor([[1, 23, 24, 2, 10, 10], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "input_ids", 10, "left"),
+                torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
+            )
+        )
 
     @require_torch
-    @slow
-    def test_pt_defaults(self):
-        pipeline(self.pipeline_task, framework="pt", **self.pipeline_loading_kwargs)
+    def test_pipeline_image_padding(self):
+        import torch
 
-    @require_tf
-    @slow
-    def test_tf_defaults(self):
-        pipeline(self.pipeline_task, framework="tf", **self.pipeline_loading_kwargs)
+        items = [
+            {
+                "label": "label1",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
+            {
+                "label": "label2",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "pixel_values", 10, "right"),
+                torch.zeros((2, 3, 10, 10)),
+            )
+        )
 
     @require_torch
-    def test_torch_small(self):
-        for model_name in self.small_models:
-            pipe_small = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="pt",
-                **self.pipeline_loading_kwargs,
-            )
-            self._test_pipeline(pipe_small)
+    def test_pipeline_offset_mapping(self):
+        import torch
 
-    @require_tf
-    def test_tf_small(self):
-        for model_name in self.small_models:
-            pipe_small = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="tf",
-                **self.pipeline_loading_kwargs,
-            )
-            self._test_pipeline(pipe_small)
+        items = [
+            {
+                "offset_mappings": torch.zeros([1, 11, 2], dtype=torch.long),
+            },
+            {
+                "offset_mappings": torch.zeros([1, 4, 2], dtype=torch.long),
+            },
+        ]
 
-    @require_torch
-    @slow
-    def test_torch_large(self):
-        for model_name in self.large_models:
-            pipe_large = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="pt",
-                **self.pipeline_loading_kwargs,
-            )
-            self._test_pipeline(pipe_large)
-
-    @require_tf
-    @slow
-    def test_tf_large(self):
-        for model_name in self.large_models:
-            pipe_large = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="tf",
-                **self.pipeline_loading_kwargs,
-            )
-            self._test_pipeline(pipe_large)
-
-    def _test_pipeline(self, pipe: Pipeline):
-        raise NotImplementedError
-
-    @require_torch
-    def test_compare_slow_fast_torch(self):
-        for model_name in self.small_models:
-            pipe_slow = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="pt",
-                use_fast=False,
-                **self.pipeline_loading_kwargs,
-            )
-            pipe_fast = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="pt",
-                use_fast=True,
-                **self.pipeline_loading_kwargs,
-            )
-            self._compare_slow_fast_pipelines(pipe_slow, pipe_fast, method="forward")
-
-    @require_tf
-    def test_compare_slow_fast_tf(self):
-        for model_name in self.small_models:
-            pipe_slow = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="tf",
-                use_fast=False,
-                **self.pipeline_loading_kwargs,
-            )
-            pipe_fast = pipeline(
-                task=self.pipeline_task,
-                model=model_name,
-                tokenizer=model_name,
-                framework="tf",
-                use_fast=True,
-                **self.pipeline_loading_kwargs,
-            )
-            self._compare_slow_fast_pipelines(pipe_slow, pipe_fast, method="call")
-
-    def _compare_slow_fast_pipelines(self, pipe_slow: Pipeline, pipe_fast: Pipeline, method: str):
-        """We check that the inputs to the models forward passes are identical for
-        slow and fast tokenizers.
-        """
-        with mock.patch.object(
-            pipe_slow.model, method, wraps=getattr(pipe_slow.model, method)
-        ) as mock_slow, mock.patch.object(
-            pipe_fast.model, method, wraps=getattr(pipe_fast.model, method)
-        ) as mock_fast:
-            for inputs in self.valid_inputs:
-                if isinstance(inputs, dict):
-                    inputs.update(self.pipeline_running_kwargs)
-                    _ = pipe_slow(**inputs)
-                    _ = pipe_fast(**inputs)
-                else:
-                    _ = pipe_slow(inputs, **self.pipeline_running_kwargs)
-                    _ = pipe_fast(inputs, **self.pipeline_running_kwargs)
-
-                mock_slow.assert_called()
-                mock_fast.assert_called()
-
-                self.assertEqual(len(mock_slow.call_args_list), len(mock_fast.call_args_list))
-                for mock_slow_call_args, mock_fast_call_args in zip(
-                    mock_slow.call_args_list, mock_slow.call_args_list
-                ):
-                    slow_call_args, slow_call_kwargs = mock_slow_call_args
-                    fast_call_args, fast_call_kwargs = mock_fast_call_args
-
-                    slow_call_args, slow_call_kwargs = to_py_obj(slow_call_args), to_py_obj(slow_call_kwargs)
-                    fast_call_args, fast_call_kwargs = to_py_obj(fast_call_args), to_py_obj(fast_call_kwargs)
-
-                    self.assertEqual(slow_call_args, fast_call_args)
-                    self.assertDictEqual(slow_call_kwargs, fast_call_kwargs)
-
-
-@is_pipeline_test
-class MonoInputPipelineCommonMixin(CustomInputPipelineCommonMixin):
-    """A version of the CustomInputPipelineCommonMixin
-    with a predefined `_test_pipeline` method.
-    """
-
-    mandatory_keys = {}  # Keys which should be in the output
-    invalid_inputs = [None]  # inputs which are not allowed
-    expected_multi_result: Optional[List] = None
-    expected_check_keys: Optional[List[str]] = None
-
-    def _test_pipeline(self, pipe: Pipeline):
-        self.assertIsNotNone(pipe)
-
-        mono_result = pipe(self.valid_inputs[0], **self.pipeline_running_kwargs)
-        self.assertIsInstance(mono_result, list)
-        self.assertIsInstance(mono_result[0], (dict, list))
-
-        if isinstance(mono_result[0], list):
-            mono_result = mono_result[0]
-
-        for key in self.mandatory_keys:
-            self.assertIn(key, mono_result[0])
-
-        multi_result = [pipe(input, **self.pipeline_running_kwargs) for input in self.valid_inputs]
-        self.assertIsInstance(multi_result, list)
-        self.assertIsInstance(multi_result[0], (dict, list))
-
-        if self.expected_multi_result is not None:
-            for result, expect in zip(multi_result, self.expected_multi_result):
-                for key in self.expected_check_keys or []:
-                    self.assertEqual(
-                        set([o[key] for o in result]),
-                        set([o[key] for o in expect]),
-                    )
-
-        if isinstance(multi_result[0], list):
-            multi_result = multi_result[0]
-
-        for result in multi_result:
-            for key in self.mandatory_keys:
-                self.assertIn(key, result)
-
-        self.assertRaises(Exception, pipe, self.invalid_inputs)
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "offset_mappings", 0, "right"),
+                torch.zeros((2, 11, 2), dtype=torch.long),
+            ),
+        )

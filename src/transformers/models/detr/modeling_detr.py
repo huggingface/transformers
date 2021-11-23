@@ -151,7 +151,7 @@ class DetrObjectDetectionOutput(ModelOutput):
             unnormalized bounding boxes.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
-            `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
+            `True`) and labels are provided. It is a list of dictionaries containing the two above keys (:obj:`logits`
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
@@ -218,8 +218,8 @@ class DetrSegmentationOutput(ModelOutput):
             :meth:`~transformers.DetrFeatureExtractor.post_process_panoptic` to evaluate instance and panoptic
             segmentation masks respectively.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
-            Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
-            `True`) and labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits`
+            Optional, only returned when auxiliary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to
+            `True`) and labels are provided. It is a list of dictionaries containing the two above keys (:obj:`logits`
             and :obj:`pred_boxes`) for each decoder layer.
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
@@ -648,9 +648,10 @@ class DetrEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        if self.training:
+            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
@@ -807,6 +808,10 @@ class DetrPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, DetrDecoder):
+            module.gradient_checkpointing = value
+
 
 DETR_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
@@ -889,7 +894,8 @@ class DetrEncoder(DetrPreTrainedModel):
 
         # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -996,7 +1002,9 @@ class DetrDecoder(DetrPreTrainedModel):
         # in DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -1084,7 +1092,7 @@ class DetrDecoder(DetrPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1173,7 +1181,8 @@ class DetrModel(DetrPreTrainedModel):
         self.encoder = DetrEncoder(config)
         self.decoder = DetrDecoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_encoder(self):
         return self.encoder
@@ -1327,7 +1336,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
@@ -1488,7 +1498,8 @@ class DetrForSegmentation(DetrPreTrainedModel):
             hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrSegmentationOutput, config_class=_CONFIG_FOR_DOC)

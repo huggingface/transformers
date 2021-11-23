@@ -5,9 +5,11 @@ from .. import is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
+from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.longformer import LongformerOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
@@ -61,6 +63,14 @@ class FeaturesManager:
         "bart": supported_features_mapping("default", onnx_config_cls=BartOnnxConfig),
         "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
         "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
+        "camembert": supported_features_mapping(
+            "default",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=CamembertOnnxConfig,
+        ),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
         "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
         "longformer": supported_features_mapping("default", onnx_config_cls=LongformerOnnxConfig),
@@ -77,6 +87,13 @@ class FeaturesManager:
             "causal-lm-with-past",
             "sequence-classification-with-past",
             onnx_config_cls=GPTNeoOnnxConfig,
+        ),
+        "layoutlm": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls=LayoutLMOnnxConfig,
         ),
     }
 
@@ -101,7 +118,7 @@ class FeaturesManager:
         task = FeaturesManager.feature_to_task(feature)
         if task not in FeaturesManager._TASKS_TO_AUTOMODELS:
             raise KeyError(
-                f"Unknown task: {feature}."
+                f"Unknown task: {feature}. "
                 f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
 
@@ -114,7 +131,7 @@ class FeaturesManager:
 
         Args:
             model: The model to export
-            feature: The name of the feature to check if it is avaiable
+            feature: The name of the feature to check if it is available
 
         Returns:
             (str) The type of the model (OnnxConfig) The OnnxConfig instance holding the model export properties

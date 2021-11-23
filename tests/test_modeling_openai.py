@@ -90,7 +90,6 @@ class OpenAIGPTModelTester:
             # hidden_dropout_prob=self.hidden_dropout_prob,
             # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range
             pad_token_id=self.pad_token_id,
@@ -144,7 +143,7 @@ class OpenAIGPTModelTester:
         model = OpenAIGPTForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        # print(config.num_labels, sequence_labels.size())
+
         sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
         result = model(input_ids, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
