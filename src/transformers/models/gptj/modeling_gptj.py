@@ -976,8 +976,8 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The GPT-J Model transformer with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    The GPT-J Model transformer with a span classification head on top for extractive question-answering tasks like
+    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     GPTJ_START_DOCSTRING,
 )

@@ -28,8 +28,8 @@ if is_torch_available():
     _import_structure["modeling_gptj"] = [
         "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTJForCausalLM",
-        "GPTJForSequenceClassification",
         "GPTJForQuestionAnswering",
+        "GPTJForSequenceClassification",
         "GPTJModel",
         "GPTJPreTrainedModel",
     ]
