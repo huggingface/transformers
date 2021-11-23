@@ -50,7 +50,7 @@ class PushToHubCallback(Callback):
         hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
-        checkpoint (:obj:`bool`, `optional`):
+        checkpoint (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
             resumed. Only usable when `save_strategy` is `epoch`.
         """
