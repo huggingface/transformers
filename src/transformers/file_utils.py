@@ -2308,7 +2308,7 @@ class PushToHubMixin:
         with open(extra_data_path, "wb") as f:
             pickle.dump(extra_data, f)
 
-    def load_repo_checkpoint(self, repo_path_or_name, organization):
+    def load_repo_checkpoint(self, repo_path_or_name, organization=None):
         if getattr(self, "optimizer", None) is None:
             raise RuntimeError("Checkpoint loading failed as no optimizer is attached to the model. "
                                "This is most likely caused by the model not being compiled.")
