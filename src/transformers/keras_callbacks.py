@@ -94,7 +94,7 @@ class PushToHubCallback(Callback):
                 self.tokenizer.save_pretrained(self.output_dir)
             if self.checkpoint:
                 checkpoint_dir = os.path.join(self.output_dir, "checkpoint")
-                self.model.save_checkpoint(checkpoint_dir, epoch)
+                self.model._save_checkpoint(checkpoint_dir, epoch)
             _, self.last_job = self.repo.push_to_hub(
                 commit_message=f"Training in progress epoch {epoch}", blocking=False
             )
