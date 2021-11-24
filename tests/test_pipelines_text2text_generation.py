@@ -49,8 +49,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="pt")
         # do_sample=False necessary for reproducibility
         outputs = generator("Something there", do_sample=False,
-                            num_return_sequences=num_return_sequences,
-                            num_beams=num_return_sequences)
+                            num_return_sequences=num_return_sequences,num_beams=num_return_sequences)
         self.assertEqual(outputs, [{"generated_text": ANY(str)} for _ in range(num_return_sequences)])
 
     @require_tf
