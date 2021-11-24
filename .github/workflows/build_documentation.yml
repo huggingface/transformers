@@ -5,9 +5,6 @@ on:
     branches:
       - new_front_github_actions
 
-env:
-  HUGGINGFACE_PUSH: ${{ secrets.HUGGINGFACE_PUSH }}
-
 jobs:
   build_and_package:
     runs-on: ubuntu-latest
@@ -45,9 +42,8 @@ jobs:
 
       - name: Setup git
         run: |
-          git config --global user.name HuggingFace
+          git config --global user.name Hugging Face
           git config --global user.email transformers@huggingface.co
-          git checkout -b new-branch
 
       - name: Make documentation
         run: |
@@ -57,5 +53,5 @@ jobs:
         run: |
           git add build
           git commit -m "Updated with commit ${{ github.sha }}"
-          git push --force origin new-branch
+#          git push origin main
 
