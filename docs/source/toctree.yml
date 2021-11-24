@@ -1,6 +1,6 @@
-- sections:
+- sections: 
   - local: index
-  - title: 🤗 Transformers
+    title: 🤗 Transformers
   - local: quicktour
     title: Quick tour
   - local: installation
