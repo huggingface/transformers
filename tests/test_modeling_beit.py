@@ -414,6 +414,7 @@ def prepare_img():
     return image
 
 
+@require_torch
 @require_vision
 class BeitModelIntegrationTest(unittest.TestCase):
     @cached_property
