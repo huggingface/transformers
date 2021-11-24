@@ -277,7 +277,7 @@ jobs:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -310,7 +310,7 @@ jobs:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
