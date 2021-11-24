@@ -110,12 +110,13 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_resize=True, size=224, resample=Image.BILINEAR, apply_ocr=True, **kwargs):
+    def __init__(self, do_resize=True, size=224, resample=Image.BILINEAR, apply_ocr=True, ocr_lang=None, **kwargs):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
         self.apply_ocr = apply_ocr
+        self.ocr_lang = ocr_lang
         if apply_ocr:
             requires_backends(self, "pytesseract")
 
@@ -199,7 +200,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(self.to_pil_image(image))
+                words, boxes = apply_tesseract(self.to_pil_image(image), self.ocr_lang)
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 
