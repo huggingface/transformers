@@ -1,4 +1,3 @@
-versions:
 - value: master
   label: master
 - value: v4.12.5
