@@ -283,9 +283,9 @@ class TailFreeLogitsWarper(LogitsWarper):
         # Centre the distribution around the cutoff as in the original implementation of the algorithm
         sorted_indices_to_remove = torch.cat(
             (
-                torch.zeros(scores.shape[0], 1, dtype=torch.bool),
+                torch.zeros(scores.shape[0], 1, dtype=torch.bool, device=scores.device),
                 sorted_indices_to_remove,
-                torch.ones(scores.shape[0], 1, dtype=torch.bool),
+                torch.ones(scores.shape[0], 1, dtype=torch.bool, device=scores.device),
             ),
             dim=-1,
         )
