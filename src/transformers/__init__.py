@@ -94,7 +94,8 @@ _import_structure = {
         "DataCollatorWithPadding",
         "default_data_collator",
     ],
-    "feature_extraction_sequence_utils": ["BatchFeature", "SequenceFeatureExtractor"],
+    "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
+    "feature_extraction_utils": ["BatchFeature"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -2059,9 +2060,10 @@ if TYPE_CHECKING:
         DataCollatorWithPadding,
         default_data_collator,
     )
+    from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature, SequenceFeatureExtractor
+    from .feature_extraction_utils import BatchFeature
 
     # Files and general utilities
     from .file_utils import (
