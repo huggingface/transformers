@@ -47,11 +47,11 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: Image.Image):
+def apply_tesseract(image: Image.Image, lang: Optional[str]):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
 
     # apply OCR
-    data = pytesseract.image_to_data(image, output_type="dict")
+    data = pytesseract.image_to_data(image, lang=lang, output_type="dict")
     words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
 
     # filter empty words and corresponding coordinates
