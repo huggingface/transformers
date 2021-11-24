@@ -102,6 +102,8 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         apply_ocr (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
+        ocr_lang (:obj:`Optional[str]`, `optional`, defaults to :obj:`None`):
+            Which language model the Tesseract OCR engine uses. English is used by default.
 
             .. note::
 
