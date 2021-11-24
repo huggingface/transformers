@@ -57,6 +57,7 @@ from .file_utils import (
     is_torch_available,
     to_py_obj,
     torch_required,
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT
 )
 from .utils import logging
 
@@ -1720,15 +1721,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
-            msg = (
-                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
-            )
+            vocab_files_names = list(cls.vocab_files_names.values())
+            if subfolder:
+                vocab_files_names = [os.path.join(subfolder, file_name) for file_name in vocab_files_names]
+            msg = (f"Can't load tokenizer for '{pretrained_model_name_or_path}'. \n"
+                   f"The required tokenizer files are: {vocab_files_names}\n\n"
+                   "Make sure that:\n\n")
+            if os.path.isdir(pretrained_model_name_or_path):
+                msg += f"- '{pretrained_model_name_or_path}' is the correct path to a directory containing the files listed above\n"
+                msg += f"  (if you didn't mean to use the local directory '{pretrained_model_name_or_path}', try renaming it to something else)\n\n"
+            else:
+                msg += f"- the model repository '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{pretrained_model_name_or_path}' exists and it contains the files listed above\n\n"
+                msg += f"- or '{pretrained_model_name_or_path}' is the correct path to a local directory\n\n"
 
             if revision is not None:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+                msg += (f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) "
+                        f"that exists for the model repository: {HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{pretrained_model_name_or_path}\n\n")
 
             raise EnvironmentError(msg)
 
