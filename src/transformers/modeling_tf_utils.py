@@ -788,7 +788,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 "This is most likely caused by the model not being compiled."
             )
         # First, clone the repo. Don't worry, it won't actually create a remote repo if it doesn't exist!
-        repo = self._create_or_get_repo(repo_path_or_name, organization)
+        repo = self._create_or_get_repo(repo_path_or_name, organization=organization)
 
         # Now make sure the repo actually has a checkpoint in it. If the repo doesn't exist it will be empty
         # and the checks will fail here.
