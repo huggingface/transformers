@@ -22,8 +22,6 @@ import pickle
 import re
 import warnings
 from typing import Dict, List, Optional, Union
-from huggingface_hub import list_repo_files
-from requests.exceptions import HTTPError
 
 import h5py
 import numpy as np
@@ -32,6 +30,8 @@ from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
+
+from huggingface_hub import list_repo_files
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
