@@ -769,7 +769,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         with open(extra_data_path, "wb") as f:
             pickle.dump(extra_data, f)
 
-    def load_repo_checkpoint(self, repo_path_or_name, organization=None):
+    def load_repo_checkpoint(self, repo_path_or_name):
         """
         Loads a saved checkpoint (model weights and optimizer state) from a repo. Returns the current epoch count when
         the checkpoint was made.
@@ -778,8 +778,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             repo_path_or_name (:obj:`str`):
                 Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
                 the repository will have the name of that local folder).
-            organization (:obj:`str`, `optional`):
-                Organization whose account the checkpoint is stored in.
 
         Returns:
             :obj:`dict`: A dictionary of extra metadata from the checkpoint, most commonly an "epoch" count.
@@ -796,7 +794,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 if file not in repo_files:
                     raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
             # This function is safe now that we know the repo exists
-            repo = self._create_or_get_repo(repo_path_or_name, organization=organization)
+            repo = self._create_or_get_repo(repo_path_or_name)
             local_dir = repo.local_dir
         else:
             local_dir = repo_path_or_name
