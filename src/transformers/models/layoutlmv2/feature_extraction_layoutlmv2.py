@@ -103,7 +103,8 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         apply_ocr (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
         ocr_lang (:obj:`Optional[str]`, `optional`, defaults to :obj:`None`):
-            The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is used.
+            The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+            used.
 
             .. note::
 
