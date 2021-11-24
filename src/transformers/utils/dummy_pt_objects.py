@@ -2491,7 +2491,7 @@ class GPTJForCausalLM:
         requires_backends(self, ["torch"])
 
 
-class GPTJForSequenceClassification:
+class GPTJForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2503,7 +2503,7 @@ class GPTJForSequenceClassification:
         requires_backends(self, ["torch"])
 
 
-class GPTJForQuestionAnswering:
+class GPTJForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
