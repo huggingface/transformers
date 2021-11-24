@@ -353,7 +353,7 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
 
-        model = TFViTModel.from_pretrained("google/vit-base-patch16-224", from_pt=True)
+        model = TFViTModel.from_pretrained("google/vit-base-patch16-224")
         self.assertIsNotNone(model)
 
 
@@ -363,6 +363,7 @@ def prepare_img():
     return image
 
 
+@require_tf
 @require_vision
 class TFViTModelIntegrationTest(unittest.TestCase):
     @cached_property
