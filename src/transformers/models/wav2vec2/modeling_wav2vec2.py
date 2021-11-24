@@ -17,13 +17,14 @@
 import math
 import warnings
 from dataclasses import dataclass
+from itertools import permutations
 from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -1592,6 +1593,238 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
+
+        self.init_weights()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        will not be updated during training.
+        """
+        self.wav2vec2.feature_extractor._freeze_parameters()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.wav2vec2.parameters():
+            param.requires_grad = False
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
+    def forward(
+        self,
+        input_values,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = torch.stack(hidden_states, dim=1)
+            norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
+            hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
+        else:
+            hidden_states = outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        if attention_mask is None:
+            pooled_output = hidden_states.mean(dim=1)
+        else:
+            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            hidden_states[~padding_mask] = 0.0
+            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
+
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
+    SUPERB Keyword Spotting.
+    """,
+    WAV_2_VEC_2_START_DOCSTRING,
+)
+class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.wav2vec2 = Wav2Vec2Model(config)
+        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        if config.use_weighted_layer_sum:
+            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        will not be updated during training.
+        """
+        self.wav2vec2.feature_extractor._freeze_parameters()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.wav2vec2.parameters():
+            param.requires_grad = False
+
+    def pit_loss_single_permutation(self, logits, loss_mask, labels):
+        bce_loss = BCEWithLogitsLoss(reduction="none")
+        loss = bce_loss(logits, labels)
+        loss = loss * loss_mask
+        loss = loss.mean(dim=2).sum(dim=1)
+        loss = torch.unsqueeze(loss, dim=1)
+        return loss
+
+    def pit_loss(self, logits, attention_mask, labels):
+        label_permutations = permutations(range(self.config.num_labels))
+        loss_mask = self._get_feature_vector_attention_mask(logits.shape[1], attention_mask)
+        losses = []
+        for p in label_permutations:
+            labels_perm = labels[:, :, p]
+            loss_perm = self.pit_loss_single_permutation(logits, loss_mask, labels_perm)
+            losses.append(loss_perm)
+        loss = torch.cat(losses, dim=1)
+        min_loss, min_idx = loss.min(dim=1)
+        loss = min_loss.sum() / loss_mask.sum()
+        return loss
+
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
+    def forward(
+        self,
+        input_values,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = torch.stack(hidden_states, dim=1)
+            norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
+            hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
+        else:
+            hidden_states = outputs[0]
+
+        logits = self.classifier(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.pit_loss(logits, attention_mask, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+@add_start_docstrings(
+    """
+    Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
+    SUPERB Keyword Spotting.
+    """,
+    WAV_2_VEC_2_START_DOCSTRING,
+)
+class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.wav2vec2 = Wav2Vec2Model(config)
+        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        if config.use_weighted_layer_sum:
+            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
+        self.projector = nn.Linear(config.hidden_size, config.tdnn_proj_size)
+        self.tdnn = nn.Sequential(
+            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=5, dilation=1, bias=True),
+            nn.ReLU(),
+            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=3, dilation=2, bias=True),
+            nn.ReLU(),
+            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=3, dilation=3, bias=True),
+            nn.ReLU(),
+            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=1, dilation=1, bias=True),
+            nn.ReLU(),
+            nn.Conv1d(config.tdnn_proj_size, config.tdnn_output_size, kernel_size=1, dilation=1, bias=True),
+            nn.ReLU(),
+        )
 
         self.init_weights()
 
