@@ -343,9 +343,10 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     from .integrations import is_wandb_available
-    
+
     assert is_wandb_available(), "This function needs wandb installed: `pip " "install wandb`"
     import wandb
+
     # add WandbCallback if not already added in trainer callbacks
     reporting_to_wandb = False
     for callback in trainer.callback_handler.callbacks:
@@ -354,7 +355,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             break
     if not reporting_to_wandb:
         trainer.add_callback(WandbCallback())
-    trainer.args.report_to = 'wandb'
+    trainer.args.report_to = "wandb"
     best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
     sweep_id = kwargs.pop("sweep_id", None)
     project = kwargs.pop("project", None)
@@ -365,26 +366,29 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
     sweep_config = trainer.hp_space(None)
     sweep_config["metric"]["goal"] = direction
     sweep_config["metric"]["name"] = metric
-    sweep_config["name"] = name
+    if name:
+        sweep_config["name"] = name
 
     def _objective():
-        
+
         run = wandb.run if wandb.run else wandb.init()
         trainer.state.trial_name = run.name
         run.config.update({"assignments": {}, "metric": metric})
         config = wandb.config
-        
+
         trainer.objective = None
         import pdb
-        trainer.train(resume_from_checkpoint=None, trial=vars(config)['_items'])
+
+        trainer.train(resume_from_checkpoint=None, trial=vars(config)["_items"])
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
             trainer.objective = trainer.compute_objective(metrics)
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
-                raise Exception("Provided metric not found. This might result in expected sweeps charts. Please check the `metric` parameter")
-                #logger.warn("Provided metric not found. This might result in expected sweeps charts. Please check the `metric` parameter")
+                logger.warn(
+                    f"Provided metric {metric} not found. This might result in expected sweeps charts. The available metrics are {format_metrics.keys()}"
+                )
         best_score = False
         if best_trial["run_id"] is not None:
             if direction == "minimize":

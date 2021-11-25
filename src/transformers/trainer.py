@@ -917,7 +917,7 @@ class Trainer:
 
             if self.control.should_save:
                 self._tune_save_checkpoint()
-            tune.report(objective=self.objective, **metrics)       
+            tune.report(objective=self.objective, **metrics)
 
     def _tune_save_checkpoint(self):
         from ray import tune
