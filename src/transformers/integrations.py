@@ -386,7 +386,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             trainer.objective = trainer.compute_objective(metrics)
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
-                logger.warn(
+                logger.warning(
                     f"Provided metric {metric} not found. This might result in expected sweeps charts. The available metrics are {format_metrics.keys()}"
                 )
         best_score = False
@@ -404,6 +404,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
         return trainer.objective
 
     sweep_id = wandb.sweep(sweep_config, project=project, entity=entity) if not sweep_id else sweep_id
+    logger.info("wandb sweep id - {sweep_id}")
     wandb.agent(sweep_id, function=_objective, count=n_trials)
 
     return BestRun(best_trial["run_id"], best_trial["objective"], best_trial["hyperparameters"])
