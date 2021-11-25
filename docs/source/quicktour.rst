@@ -337,8 +337,14 @@ Once your model is fine-tuned, you can save it with its tokenizer in the followi
 
 .. code-block::
 
-    tokenizer.save_pretrained(save_directory)
-    model.save_pretrained(save_directory)
+    pt_save_directory = './pt_save_pretrained'
+    tokenizer.save_pretrained(pt_save_directory)
+    pt_model.save_pretrained(pt_save_directory)
+
+.. code-block::
+    tf_save_directory = './tf_save_pretrained'
+    tokenizer.save_pretrained(tf_save_directory)
+    tf_model.save_pretrained(tf_save_directory)
 
 You can then load this model back using the :func:`~transformers.AutoModel.from_pretrained` method by passing the
 directory name instead of the model name. One cool feature of 🤗 Transformers is that you can easily switch between
@@ -348,16 +354,16 @@ loading a saved PyTorch model in a TensorFlow model, use :func:`~transformers.TF
 .. code-block::
 
     from transformers import TFAutoModel
-    tokenizer = AutoTokenizer.from_pretrained(save_directory)
-    model = TFAutoModel.from_pretrained(save_directory, from_pt=True)
+    tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+    tf_model = TFAutoModel.from_pretrained(pt_save_directory, from_pt=True)
 
 and if you are loading a saved TensorFlow model in a PyTorch model, you should use the following code:
 
 .. code-block::
 
     from transformers import AutoModel
-    tokenizer = AutoTokenizer.from_pretrained(save_directory)
-    model = AutoModel.from_pretrained(save_directory, from_tf=True)
+    tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+    pt_model = AutoModel.from_pretrained(tf_save_directory, from_tf=True)
 
 Lastly, you can also ask the model to return all hidden states and all attention weights if you need them:
 
