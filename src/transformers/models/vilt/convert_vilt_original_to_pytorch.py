@@ -17,11 +17,13 @@
 
 import argparse
 from pathlib import Path
+import json
 
 import torch
 from PIL import Image
 
 import requests
+from huggingface_hub import cached_download, hf_hub_url
 from transformers import BertTokenizer, ViltConfig, ViltForVisualQuestionAnswering, ViltModel, ViTFeatureExtractor
 from transformers.utils import logging
 
@@ -102,7 +104,12 @@ def create_rename_keys(config, base_model=False):
         # classification head
         rename_keys.extend(
             [
-                
+                ("vqa_classifier.0.weight", "classifier.0.weight"),
+                ("vqa_classifier.0.bias", "classifier.0.bias"),
+                ("vqa_classifier.1.weight", "classifier.1.weight"),
+                ("vqa_classifier.1.bias", "classifier.1.bias"),
+                ("vqa_classifier.3.weight", "classifier.3.weight"),
+                ("vqa_classifier.3.bias", "classifier.3.bias"),
             ]
         )
 
@@ -180,6 +187,14 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     base_model = False
     if "mlm" in checkpoint_url:
         base_model = True
+    if "vqa" in checkpoint_url:
+        repo_id = "datasets/huggingface/label-files"
+        filename = "vqa2-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
+        config.num_labels = 3129
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")['state_dict']
     remove_ignore_keys_(state_dict)
@@ -199,14 +214,19 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Prepare text + image
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    text = "hello world"
+    text = "how many cats are there?"
     input_ids = tokenizer(text, return_tensors="pt").input_ids
     image = prepare_img()
     feature_extractor = ViTFeatureExtractor(size=384)
     pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
     # Forward pass
     outputs = model(input_ids=input_ids, pixel_values=pixel_values)
-    print(outputs.last_hidden_state.shape)
+    if base_model:
+        print(outputs.last_hidden_state.shape)
+    else:
+        print(outputs.logits.shape)
+        predicted_idx = outputs.logits.argmax(-1).item()
+        print(model.config.id2label[predicted_idx])
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
