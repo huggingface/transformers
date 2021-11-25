@@ -17,10 +17,10 @@
 
 import collections.abc
 import math
-from packaging import version
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
@@ -650,10 +650,10 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
 
         # Classifier head
         self.classifier = nn.Sequential(
-                nn.Linear(config.hidden_size, config.hidden_size * 2),
-                nn.LayerNorm(config.hidden_size * 2),
-                nn.GELU(),
-                nn.Linear(config.hidden_size * 2, vs),
+            nn.Linear(config.hidden_size, config.hidden_size * 2),
+            nn.LayerNorm(config.hidden_size * 2),
+            nn.GELU(),
+            nn.Linear(config.hidden_size * 2, config.num_labels),
         )
 
         # Initialize weights and apply final processing
