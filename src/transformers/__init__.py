@@ -977,7 +977,7 @@ if is_torch_available():
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ImageGPTForCausalLM",
+            "ImageGPTForCausalImageModeling",
             "ImageGPTForImageClassification",
             "ImageGPTModel",
             "ImageGPTPreTrainedModel",
@@ -2823,7 +2823,7 @@ if TYPE_CHECKING:
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ImageGPTForCausalLM,
+            ImageGPTForCausalImageModeling,
             ImageGPTForImageClassification,
             ImageGPTModel,
             ImageGPTPreTrainedModel,
