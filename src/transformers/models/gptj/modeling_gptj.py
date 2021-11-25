@@ -444,12 +444,14 @@ class GPTJModel(GPTJPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.init_weights()
 
         # Model parallel
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -680,11 +682,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         super().__init__(config)
         self.transformer = GPTJModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
-        self.init_weights()
 
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -855,11 +859,12 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         self.transformer = GPTJModel(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.init_weights()
-
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

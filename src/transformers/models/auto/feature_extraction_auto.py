@@ -81,9 +81,9 @@ class AutoFeatureExtractor:
         r"""
         Instantiate one of the feature extractor classes of the library from a pretrained model vocabulary.
 
-        The tokenizer class to instantiate is selected based on the :obj:`model_type` property of the config object
-        (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+        The feature extractor class to instantiate is selected based on the :obj:`model_type` property of the config
+        object (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when
+        it's missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
 
         List options
 
@@ -136,10 +136,10 @@ class AutoFeatureExtractor:
 
             >>> from transformers import AutoFeatureExtractor
 
-            >>> # Download vocabulary from huggingface.co and cache.
+            >>> # Download feature extractor from huggingface.co and cache.
             >>> feature_extractor = AutoFeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')
 
-            >>> # If vocabulary files are in a directory (e.g. feature extractor was saved using `save_pretrained('./test/saved_model/')`)
+            >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using `save_pretrained('./test/saved_model/')`)
             >>> feature_extractor = AutoFeatureExtractor.from_pretrained('./test/saved_model/')
 
         """
