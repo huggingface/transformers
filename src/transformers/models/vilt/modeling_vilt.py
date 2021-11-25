@@ -646,7 +646,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vilt = ViltModel(config, add_pooling_layer=False)
+        self.vilt = ViltModel(config)
 
         # Classifier head
         self.classifier = nn.Sequential(
