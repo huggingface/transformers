@@ -429,6 +429,7 @@ jobs:
         run: |
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
+          rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
           pip install .[testing,deepspeed,fairscale]
 
       - name: Are GPUs recognized by our DL frameworks
