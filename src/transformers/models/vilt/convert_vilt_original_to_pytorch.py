@@ -16,15 +16,16 @@
 
 
 import argparse
-from pathlib import Path
 import json
+from pathlib import Path
 
 import torch
 from PIL import Image
+from torchvision import transforms as T
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import BertTokenizer, ViltConfig, ViltForVisualQuestionAnswering, ViltModel, ViTFeatureExtractor
+from transformers import BertTokenizer, ViltConfig, ViltForVisualQuestionAnswering, ViltModel
 from transformers.utils import logging
 
 
@@ -59,9 +60,15 @@ def create_rename_keys(config, base_model=False):
         [
             # text embeddings
             ("text_embeddings.word_embeddings.weight", "vilt.embeddings.text_embeddings.word_embeddings.weight"),
-            ("text_embeddings.position_embeddings.weight", "vilt.embeddings.text_embeddings.position_embeddings.weight"),
+            (
+                "text_embeddings.position_embeddings.weight",
+                "vilt.embeddings.text_embeddings.position_embeddings.weight",
+            ),
             ("text_embeddings.position_ids", "vilt.embeddings.text_embeddings.position_ids"),
-            ("text_embeddings.token_type_embeddings.weight", "vilt.embeddings.text_embeddings.token_type_embeddings.weight"),
+            (
+                "text_embeddings.token_type_embeddings.weight",
+                "vilt.embeddings.text_embeddings.token_type_embeddings.weight",
+            ),
             ("text_embeddings.LayerNorm.weight", "vilt.embeddings.text_embeddings.LayerNorm.weight"),
             ("text_embeddings.LayerNorm.bias", "vilt.embeddings.text_embeddings.LayerNorm.bias"),
             # patch embeddings
@@ -80,8 +87,8 @@ def create_rename_keys(config, base_model=False):
             ("transformer.norm.weight", "vilt.layernorm.weight"),
             ("transformer.norm.bias", "vilt.layernorm.bias"),
             ("pooler.dense.weight", "vilt.pooler.dense.weight"),
-            ("pooler.dense.bias", "vilt.pooler.dense.bias")
-        ]       
+            ("pooler.dense.bias", "vilt.pooler.dense.bias"),
+        ]
     )
 
     # classifier head(s)
@@ -161,8 +168,8 @@ def remove_ignore_keys_(state_dict):
         "mlm_score.transform.dense.bias",
         "mlm_score.transform.LayerNorm.weight",
         "mlm_score.transform.LayerNorm.bias",
-        "mlm_score.decoder.weight", 
-        "itm_score.fc.weight", 
+        "mlm_score.decoder.weight",
+        "itm_score.fc.weight",
         "itm_score.fc.bias",
     ]
     for k in ignore_keys:
@@ -188,15 +195,15 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if "mlm" in checkpoint_url:
         base_model = True
     if "vqa" in checkpoint_url:
+        config.num_labels = 3129
         repo_id = "datasets/huggingface/label-files"
         filename = "vqa2-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        config.num_labels = 3129
     # load state_dict of original model, remove and rename some keys
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")['state_dict']
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
     remove_ignore_keys_(state_dict)
     if base_model:
         remove_classification_head_(state_dict)
@@ -214,11 +221,14 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Prepare text + image
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    text = "how many cats are there?"
+    text = "How many cats are there?"
     input_ids = tokenizer(text, return_tensors="pt").input_ids
     image = prepare_img()
-    feature_extractor = ViTFeatureExtractor(size=384)
-    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+    # feature_extractor = ViTFeatureExtractor(size=384)
+    # pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+    # using a simpler transformation for now
+    transformations = T.Compose([T.Resize(384), T.ToTensor(), T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
+    pixel_values = transformations(image).unsqueeze(0)
     # Forward pass
     outputs = model(input_ids=input_ids, pixel_values=pixel_values)
     if base_model:

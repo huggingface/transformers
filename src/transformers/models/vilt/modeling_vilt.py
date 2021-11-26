@@ -87,22 +87,121 @@ class ViltEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
+    def visual_embed(self, _x, max_image_len=200, mask_it=False):
+        _, _, ph, pw = self.patch_embeddings.projection.weight.shape
+
+        x = self.patch_embeddings(_x)
+        x_mask = (_x.sum(dim=1) != 0).float()[:, None, :, :]
+        x_mask = nn.functional.interpolate(x_mask, size=(x.shape[2], x.shape[3])).long()
+        x_h = x_mask[:, 0].sum(dim=1)[:, 0]
+        x_w = x_mask[:, 0].sum(dim=2)[:, 0]
+
+        B, C, H, W = x.shape
+        patch_dim = self.config.image_size // self.config.patch_size
+        spatial_pos = self.position_embeddings[:, 1:, :].transpose(1, 2).view(1, C, patch_dim, patch_dim)
+        pos_embed = torch.cat(
+            [
+                nn.functional.pad(
+                    nn.functional.interpolate(
+                        spatial_pos,
+                        size=(h, w),
+                        mode="bilinear",
+                        align_corners=True,
+                    ),
+                    (0, W - w, 0, H - h),
+                )
+                for h, w in zip(x_h, x_w)
+            ],
+            dim=0,
+        )
+
+        pos_embed = pos_embed.flatten(2).transpose(1, 2)
+        x = x.flatten(2).transpose(1, 2)
+        patch_index = (
+            torch.stack(
+                torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1])),
+                dim=-1,
+            )[None, None, :, :, :]
+            .expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)
+            .flatten(1, 3)
+        )
+        x_mask = x_mask.flatten(1)
+
+        if mask_it:
+            x, label = self.mask_tokens(_x, x)
+
+        if max_image_len < 0 or max_image_len is None or not isinstance(max_image_len, int):
+            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
+            # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
+            # if self.patch_size = 32, 25 * 41 = 1025
+            # if res is 384 x 640, 12 * 20 = 240
+            eff = x_h * x_w
+            max_image_len = eff.max()
+        else:
+            eff = x_h * x_w
+            max_image_len = min(eff.max(), max_image_len)
+
+        valid_idx = x_mask.nonzero(as_tuple=False)
+        non_valid_idx = (1 - x_mask).nonzero(as_tuple=False)
+        unique_rows = valid_idx[:, 0].unique()
+        valid_row_idx = [valid_idx[valid_idx[:, 0] == u] for u in unique_rows]
+        non_valid_row_idx = [non_valid_idx[non_valid_idx[:, 0] == u] for u in unique_rows]
+
+        valid_nums = [v.size(0) for v in valid_row_idx]
+        non_valid_nums = [v.size(0) for v in non_valid_row_idx]
+        pad_nums = [max_image_len - v for v in valid_nums]
+
+        select = list()
+        for i, (v, nv, p) in enumerate(zip(valid_nums, non_valid_nums, pad_nums)):
+            if p <= 0:
+                valid_choice = torch.multinomial(torch.ones(v).float(), max_image_len)
+                select.append(valid_row_idx[i][valid_choice])
+            else:
+                pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
+                select.append(
+                    torch.cat(
+                        [valid_row_idx[i], non_valid_row_idx[i][pad_choice]],
+                        dim=0,
+                    )
+                )
+
+        select = torch.cat(select, dim=0)
+        x = x[select[:, 0], select[:, 1]].view(B, -1, C)
+        x_mask = x_mask[select[:, 0], select[:, 1]].view(B, -1)
+        patch_index = patch_index[select[:, 0], select[:, 1]].view(B, -1, 2)
+        pos_embed = pos_embed[select[:, 0], select[:, 1]].view(B, -1, C)
+
+        if mask_it:
+            label = label[select[:, 0], select[:, 1]].view(B, -1, 3)
+
+            label[x_mask == 0] = -100
+            label = torch.cat(
+                [
+                    torch.full((label.shape[0], 1, 3), -100).to(label),
+                    label,
+                ],
+                dim=1,
+            )
+
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+        pos_embed = torch.cat((self.position_embeddings[:, 0, :][:, None, :].expand(B, -1, -1), pos_embed), dim=1)
+        x = x + pos_embed
+        x = self.dropout(x)
+
+        x_mask = torch.cat([torch.ones(x_mask.shape[0], 1).to(x_mask), x_mask], dim=1)
+
+        if mask_it:
+            return x, x_mask, (patch_index, (H, W)), label
+        else:
+            return x, x_mask, (patch_index, (H, W)), None
+
     def forward(self, input_ids, token_type_ids, pixel_values):
         # PART 1: text embeddings
         text_embeds = self.text_embeddings(input_ids, token_type_ids)
 
-        # PART 2: patch embeddings
-        batch_size, num_channels, height, width = pixel_values.shape
-        image_embeds = self.patch_embeddings(pixel_values)
-
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        image_embeds = torch.cat((cls_tokens, image_embeds), dim=1)
-
-        # add positional encoding to each token
-        image_embeds = image_embeds + self.position_embeddings
-
-        embeddings = self.dropout(image_embeds)
+        # PART 2: patch embeddings (with interpolated position encodings)
+        image_embeds, image_masks, patch_index, image_labels = self.visual_embed(pixel_values)
 
         # PART 3: add token type embeddings
         # 0 indicates text, 1 indicates patch
@@ -196,11 +295,11 @@ class PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        # if height != self.image_size[0] or width != self.image_size[1]:
+        #     raise ValueError(
+        #         f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+        #     )
+        x = self.projection(pixel_values)
         return x
 
 
@@ -699,9 +798,9 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooler_output = outputs.pooler_output if return_dict else outputs[1]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        logits = self.classifier(pooler_output)
 
         loss = None
         if labels is not None:

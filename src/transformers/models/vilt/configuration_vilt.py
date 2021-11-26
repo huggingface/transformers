@@ -43,7 +43,7 @@ class ViltConfig(PretrainedConfig):
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.ViltModel`.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 40):
-            The maximum sequence length that this model might ever be used with. 
+            The maximum sequence length that this model might ever be used with.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
