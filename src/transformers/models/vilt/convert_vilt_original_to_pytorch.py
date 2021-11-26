@@ -202,6 +202,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
+
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
     remove_ignore_keys_(state_dict)
