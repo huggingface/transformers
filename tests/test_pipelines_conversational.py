@@ -29,6 +29,7 @@ from transformers import (
     Conversation,
     ConversationalPipeline,
     FlaxAutoModelForCausalLM,
+    MBartConfig,
     TFAutoModelForCausalLM,
     pipeline,
 )
@@ -65,6 +66,10 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
     )
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if isinstance(model.config, MBartConfig):
+            self.skipTest(
+                "MBart is ForConditional, but expects explicity `decoder_start_token_id` to choose a language, so it will yield an error when being used as a conversational pipeline, which is totally fine."
+            )
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
         return conversation_agent, [Conversation("Hi there!")]
 
