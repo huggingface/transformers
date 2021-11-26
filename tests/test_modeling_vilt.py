@@ -25,7 +25,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
-    from transformers import ViltForVisualQuestionAnswering, ViltModel
+    from transformers import ViltForPreTraining, ViltForVisualQuestionAnswering, ViltModel
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -166,6 +166,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         (
             ViltModel,
             ViltForVisualQuestionAnswering,
+            ViltForPreTraining,
         )
         if is_torch_available()
         else ()

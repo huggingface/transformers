@@ -25,7 +25,7 @@ from torchvision import transforms as T
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import BertTokenizer, ViltConfig, ViltForVisualQuestionAnswering, ViltForPreTraining
+from transformers import BertTokenizer, ViltConfig, ViltForPreTraining, ViltForVisualQuestionAnswering
 from transformers.utils import logging
 
 
@@ -118,7 +118,7 @@ def create_rename_keys(config, vqa_model=False):
         # )
 
         # if just the base model, we should remove "vilt" from all keys that start with "vilt"
-        #rename_keys = [(pair[0], pair[1][5:]) if pair[1].startswith("vilt") else pair for pair in rename_keys]
+        # rename_keys = [(pair[0], pair[1][5:]) if pair[1].startswith("vilt") else pair for pair in rename_keys]
     else:
         pass
 
@@ -215,7 +215,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if vqa_model:
         print(outputs.logits.shape)
         predicted_idx = outputs.logits.argmax(-1).item()
-        print(model.config.id2label[predicted_idx]) 
+        print(model.config.id2label[predicted_idx])
     else:
         print(outputs.prediction_logits.shape)
 

@@ -835,7 +835,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
         if mlm_labels is not None:
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), mlm_labels.view(-1))
-            total_loss = masked_lm_loss 
+            total_loss = masked_lm_loss
 
         if not return_dict:
             output = (mlm_logits) + outputs[2:]
