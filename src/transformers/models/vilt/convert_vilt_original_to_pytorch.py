@@ -25,7 +25,7 @@ from torchvision import transforms as T
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import BertTokenizer, ViltConfig, ViltForVisualQuestionAnswering, ViltModel
+from transformers import BertTokenizer, ViltConfig, ViltForVisualQuestionAnswering, ViltForPreTraining
 from transformers.utils import logging
 
 
@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, base_model=False):
+def create_rename_keys(config, vqa_model=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
@@ -92,22 +92,7 @@ def create_rename_keys(config, base_model=False):
     )
 
     # classifier head(s)
-    if base_model:
-        rename_keys.extend(
-            [
-                # TODO
-                # ("classifier.0.weight", ""),
-                # ("classifier.0.bias", ""),
-                # ("classifier.1.weight", ""),
-                # ("classifier.1.bias", ""),
-                # ("classifier.3.weight", ""),
-                # ("classifier.3.bias", ""),
-            ]
-        )
-
-        # if just the base model, we should remove "vilt" from all keys that start with "vilt"
-        rename_keys = [(pair[0], pair[1][5:]) if pair[1].startswith("vilt") else pair for pair in rename_keys]
-    else:
+    if vqa_model:
         # classification head
         rename_keys.extend(
             [
@@ -119,17 +104,31 @@ def create_rename_keys(config, base_model=False):
                 ("vqa_classifier.3.bias", "classifier.3.bias"),
             ]
         )
+        # rename_keys.extend(
+        #     [
+        #         ("mlm_score.bias"),
+        #         ("mlm_score.transform.dense.weight"),
+        #         ("mlm_score.transform.dense.bias"),
+        #         ("mlm_score.transform.LayerNorm.weight"),
+        #         ("mlm_score.transform.LayerNorm.bias"),
+        #         ("mlm_score.decoder.weight"),
+        #         ("itm_score.fc.weight"),
+        #         ("itm_score.fc.bias"),
+        #     ]
+        # )
+
+        # if just the base model, we should remove "vilt" from all keys that start with "vilt"
+        #rename_keys = [(pair[0], pair[1][5:]) if pair[1].startswith("vilt") else pair for pair in rename_keys]
+    else:
+        pass
 
     return rename_keys
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, base_model=False):
+def read_in_q_k_v(state_dict, config):
     for i in range(config.num_hidden_layers):
-        if base_model:
-            prefix = ""
-        else:
-            prefix = "vilt."
+        prefix = "vilt."
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop(f"transformer.blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"transformer.blocks.{i}.attn.qkv.bias")
@@ -161,21 +160,6 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-def remove_ignore_keys_(state_dict):
-    ignore_keys = [
-        "mlm_score.bias",
-        "mlm_score.transform.dense.weight",
-        "mlm_score.transform.dense.bias",
-        "mlm_score.transform.LayerNorm.weight",
-        "mlm_score.transform.LayerNorm.bias",
-        "mlm_score.decoder.weight",
-        "itm_score.fc.weight",
-        "itm_score.fc.bias",
-    ]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
-
-
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -190,11 +174,10 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
 
     # define default ViT configuration
-    config = ViltConfig(image_size=384, patch_size=32)
-    base_model = False
-    if "mlm" in checkpoint_url:
-        base_model = True
+    config = ViltConfig(image_size=384, patch_size=32, tie_word_embeddings=False)
+    vqa_model = False
     if "vqa" in checkpoint_url:
+        vqa_model = True
         config.num_labels = 3129
         repo_id = "datasets/huggingface/label-files"
         filename = "vqa2-id2label.json"
@@ -205,19 +188,16 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
-    remove_ignore_keys_(state_dict)
-    if base_model:
-        remove_classification_head_(state_dict)
-    rename_keys = create_rename_keys(config, base_model)
+    rename_keys = create_rename_keys(config, vqa_model)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config, base_model)
+    read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
-    if base_model:
-        model = ViltModel(config).eval()
-    else:
+    if vqa_model:
         model = ViltForVisualQuestionAnswering(config).eval()
+    else:
+        model = ViltForPreTraining(config).eval()
     model.load_state_dict(state_dict)
 
     # Prepare text + image
@@ -232,12 +212,12 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     pixel_values = transformations(image).unsqueeze(0)
     # Forward pass
     outputs = model(input_ids=input_ids, pixel_values=pixel_values)
-    if base_model:
-        print(outputs.last_hidden_state.shape)
-    else:
+    if vqa_model:
         print(outputs.logits.shape)
         predicted_idx = outputs.logits.argmax(-1).item()
-        print(model.config.id2label[predicted_idx])
+        print(model.config.id2label[predicted_idx]) 
+    else:
+        print(outputs.prediction_logits.shape)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")

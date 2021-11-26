@@ -3543,6 +3543,13 @@ class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
 VILT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class ViltForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ViltForVisualQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
