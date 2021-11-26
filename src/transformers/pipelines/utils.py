@@ -150,9 +150,13 @@ class PipelineIterator(IterableDataset):
         else:
             loader_batched = {}
             for k, element in self._loader_batch_data.items():
-                if k == "past_key_values":
+                if k in {"past_key_values", "hidden_states", "attentions"}:
+                    if isinstance(element[0], TorchTensor):
+                        loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                    elif isinstance(element[0], np.ndarray):
+                        loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
-                if isinstance(element[self._loader_batch_index], TorchTensor):
+                elif isinstance(element[self._loader_batch_index], TorchTensor):
                     loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
                 elif isinstance(element[self._loader_batch_index], np.ndarray):
                     loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)

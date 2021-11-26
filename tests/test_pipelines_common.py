@@ -310,7 +310,7 @@ class CommonPipelineTest(unittest.TestCase):
 
     @require_torch
     def test_iterator_data_num_workers(self):
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification", framework="pt")
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="pt")
         # When using multiple workers on streamable data it should still work
         # This will force using `num_workers=1` with a warning for now.
         results = []
@@ -323,7 +323,7 @@ class CommonPipelineTest(unittest.TestCase):
     def test_iterator_data_tf(self):
         pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
         out = pipe("This is a test")
-        self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+        self.assertEqual(nested_simplify(out), [{"label": "LABEL_0", "score": 0.504}])
         pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification", framework="tf")
         results = []
         for out in pipe(data(10), batch_size=2):
@@ -337,7 +337,7 @@ class CommonPipelineTest(unittest.TestCase):
             model="Narsil/tiny-distilbert-sequence-classification", framework="flax", model_kwargs={"from_pt": True}
         )
         out = pipe("This is a test")
-        self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+        self.assertEqual(nested_simplify(out), [{"label": "LABEL_0", "score": 0.504}])
         results = []
         for out in pipe(data(10), batch_size=2):
             self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
