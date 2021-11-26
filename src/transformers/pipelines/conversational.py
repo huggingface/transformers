@@ -283,6 +283,9 @@ class ConversationalPipeline(Pipeline):
                 model_inputs["attention_mask"] = model_inputs["attention_mask"][:, -trim:]
         conversation = model_inputs.pop("conversation")
         generate_kwargs["max_length"] = max_length
+        import ipdb
+
+        ipdb.set_trace()
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1

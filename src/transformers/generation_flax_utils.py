@@ -271,7 +271,7 @@ class FlaxGenerationMixin:
             if decoder_start_token_id is not None:
                 input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
             else:
-                input_ids = jnp.ones((input_ids.shape[0], 0), dtype="i4")
+                input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * bos_token_id
 
         do_sample = do_sample if do_sample is not None else self.config.do_sample
         num_beams = num_beams if num_beams is not None else self.config.num_beams
