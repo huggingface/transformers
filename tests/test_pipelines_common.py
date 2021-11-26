@@ -331,6 +331,7 @@ class CommonPipelineTest(unittest.TestCase):
             results.append(out)
         self.assertEqual(len(results), 10)
 
+    @require_torch
     @require_flax
     def test_iterator_data_flax(self):
         pipe = pipeline(
