@@ -444,7 +444,7 @@ class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
         init_variables = self.module.init(
             jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
-        return init_variables["cache"]
+        return unfreeze(init_variables["cache"])
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     def __call__(
