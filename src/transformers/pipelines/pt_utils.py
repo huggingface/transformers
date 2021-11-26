@@ -24,6 +24,7 @@ class PipelineIterator(IterableDataset):
         Roughly equivalent to
 
         .. code-block::
+        
             for item in loader:
                 yield infer(item, **params)
 
