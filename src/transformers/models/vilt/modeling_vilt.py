@@ -243,9 +243,10 @@ class ViltEmbeddings(nn.Module):
 
         # PART 3: add token type embeddings
         # 0 indicates text, 1 indicates patch
+        patch_shape = image_embeds.size()[:2]
         text_embeds, image_embeds = (
             text_embeds + self.token_type_embeddings(torch.zeros_like(input_ids)),
-            image_embeds + self.token_type_embeddings(torch.ones(image_embeds.size()[:2]).long()),
+            image_embeds + self.token_type_embeddings(torch.ones(patch_shape, device=input_ids.device).long()),
         )
 
         # PART 4: concatenate
