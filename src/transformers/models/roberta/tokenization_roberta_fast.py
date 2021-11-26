@@ -194,9 +194,9 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
 
         This is needed to preserve backward compatibility with all the previously used models based on Roberta.
         """
-        # Mask token behave like a normal word, i.e. include the space before it and
-        # is included in the raw text, there should be a match in a non-normalized sentence.
-        value = AddedToken(value, lstrip=True, rstrip=False, normalized=False) if isinstance(value, str) else value
+        # Mask token behave like a normal word, i.e. include the space before it
+        # So we set lstrip to True
+        value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
         self._mask_token = value
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
