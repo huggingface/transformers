@@ -51,6 +51,15 @@ The easiest way to use a pretrained model on a given task is to use :func:`~tran
 Let's see how this work for sentiment analysis (the other tasks are all covered in the :doc:`task summary
 </task_summary>`):
 
+Install the following dependencies (if not already installed):
+
+.. code-block::
+
+    >>> pip install torch
+    >>> pip install tensorflow
+    >>> pip install transformers
+    >>> pip install datasets
+
 .. code-block::
 
     >>> from transformers import pipeline
