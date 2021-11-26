@@ -334,7 +334,7 @@ class CommonPipelineTest(unittest.TestCase):
     @require_flax
     def test_iterator_data_flax(self):
         pipe = pipeline(
-            model="Narsil/tiny-distilbert-sequence-classification", framework="flax", model_kwargs={"from_pt": True}
+            model="hf-internal-testing/tiny-random-distilbert", framework="flax", model_kwargs={"from_pt": True}
         )
         out = pipe("This is a test")
         self.assertEqual(nested_simplify(out), [{"label": "LABEL_0", "score": 0.504}])
