@@ -4,7 +4,13 @@
 </p>
 
 ## What is this about?
-This is an open-source effort to train and evaluate code generation models. CodeParrot 🦜 is a GPT-2 model trained from scratch on Python code. 
+This is an open-source effort to train and evaluate code generation models. CodeParrot 🦜 is a GPT-2 model trained from scratch on Python code. The highlights of this repo are:
+- initialize and train a GPT-2 language model from scratch for code generation
+- clean and deduplicate a large (>100GB) dataset with `datasets`
+- train with `accelerate` on multiple GPUs using data parallelism and mixed precision
+- continuously push checkpoints to the hub with `huggingface_hub`
+- stream the dataset with `datasets` during training to avoid disk bottlenecks
+- apply `code_eval` metric in `datasets` to evaluate on OpenAI's HumanEval benchmark
 
 ## Installation
 To install the dependencies simply run the following command:
