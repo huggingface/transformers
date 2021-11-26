@@ -53,12 +53,12 @@ Let's see how this work for sentiment analysis (the other tasks are all covered 
 
 Install the following dependencies (if not already installed):
 
-.. code-block::
+.. code-block:: bash
 
-    >>> pip install torch
-    >>> pip install tensorflow
-    >>> pip install transformers
-    >>> pip install datasets
+    ## PYTORCH CODE
+    pip install torch
+    ## TENSORFLOW CODE
+    pip install tensorflow
 
 .. code-block::
 
