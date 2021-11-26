@@ -86,7 +86,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         return_tensors = self.framework
         if self.tokenizer.pad_token is None:
             # Override for tokenizers not supporting padding
-            logger.warning(
+            logger.error(
                 "Tokenizer was not supporting padding necessary for zero-shot, attempting to use  `pad_token=eos_token`"
             )
             self.tokenizer.pad_token = self.tokenizer.eos_token

@@ -24,7 +24,7 @@ class PipelineIterator(IterableDataset):
         Roughly equivalent to
 
         .. code-block::
-        
+
             for item in loader:
                 yield infer(item, **params)
 
@@ -67,30 +67,50 @@ class PipelineIterator(IterableDataset):
         return self
 
     def loader_batch_item(self):
+        """
+        Return item located at `loader_batch_index` within
+        the current `loader_batch_data`.
+        """
         if isinstance(self._loader_batch_data, torch.Tensor):
+            # Batch data is simple tensor, just fetch the slice
             result = self._loader_batch_data[self._loader_batch_index]
         else:
+            # Batch data is assumed to be BaseModelOutput (or dict)
             loader_batched = {}
             for k, element in self._loader_batch_data.items():
                 if k == "past_key_values":
+                    # Past key values are never used by postprocessing and can be safely discarded
                     continue
                 if isinstance(element[self._loader_batch_index], torch.Tensor):
+                    # Take correct batch data, but make it looked like batch_size=1
+                    # For compatibility with other methods within transformers
+
                     loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
                 elif isinstance(element[self._loader_batch_index], np.ndarray):
+                    # Take correct batch data, but make it looked like batch_size=1
+                    # For compatibility with other methods within transformers
                     loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
                 else:
+                    # This is typically a list, so no need to `unsqueeze`.
                     loader_batched[k] = element[self._loader_batch_index]
+            # Recreate the element by reusing the original class to make it look
+            # batch_size=1
             result = self._loader_batch_data.__class__(loader_batched)
         self._loader_batch_index += 1
         return result
 
     def __next__(self):
         if self._loader_batch_index is not None and self._loader_batch_index < self.loader_batch_size:
+            # We are currently unrolling a batch so we just need to return
+            # the current item within a batch
             return self.loader_batch_item()
 
+        # We're out of items within a batch
         item = next(self.iterator)
         processed = self.infer(item, **self.params)
+        # We now have a batch of "inferred things".
         if self.loader_batch_size is not None:
+            # Try to infer the size of the batch
             if isinstance(processed, torch.Tensor):
                 first_tensor = processed
             else:
@@ -104,10 +124,12 @@ class PipelineIterator(IterableDataset):
                 # could be last batch so we can't unroll as many
                 # elements.
                 self.loader_batch_size = observed_batch_size
+            # Setting internal index to unwrap the batch
             self._loader_batch_data = processed
             self._loader_batch_index = 0
             return self.loader_batch_item()
         else:
+            # We're not unrolling batches
             return processed
 
 
@@ -119,10 +141,18 @@ class PipelineChunkIterator(PipelineIterator):
 
     def __next__(self):
         if self.subiterator is None:
+            "Subiterator None means we haven't started a `preprocess` iterator. so start it"
             self.subiterator = self.infer(next(self.iterator), **self.params)
         try:
+            # Try to return next item
             processed = next(self.subiterator)
         except StopIteration:
+            # When a preprocess iterator ends, we can start lookig at the next item
+            # ChunkIterator will keep feeding until ALL elements of iterator
+            # all have created their subiterator and have been iterating against.
+            #
+            # Another way to look at it, is we're basically flattening lists of lists
+            # into a single list, but with generators
             self.subiterator = self.infer(next(self.iterator), **self.params)
             processed = next(self.subiterator)
         return processed
@@ -134,6 +164,14 @@ class PipelinePackIterator(PipelineIterator):
         return self
 
     def __next__(self):
+        # Extremely similar to PipelineIterator in its unpacking mechanism
+        # BUT, we have an extra required item which is the presence of `is_last`
+        # That is because everything is flattened by `PipelineChunkIterator` we
+        # need to keep track of how to regroup here in the original `process`
+        # boundaries so that `process` and `postprocess` see the same data.
+
+        # This iterator accumulates items (possibly while unbatching) until it
+        # its a `is_last` and then just passes it on to the caller.
         is_last = False
         accumulator = []
         if self._loader_batch_index is not None and self._loader_batch_index < self.loader_batch_size:

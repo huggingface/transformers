@@ -966,8 +966,18 @@ class Pipeline(_ScikitCompat):
                 "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a dataset",
                 UserWarning,
             )
-        if isinstance(inputs, list):
-            if self.framework == "pt":
+
+        is_dataset = Dataset is not None and isinstance(inputs, Dataset)
+        is_generator = isinstance(inputs, types.GeneratorType)
+        is_list = isinstance(inputs, list)
+
+        is_iterable = is_dataset or is_generator or is_list
+
+        # TODO make the get_iterator work also for `tf` (and `flax`).
+        can_use_iterator = self.framework == "pt" and (is_dataset or is_generator or is_list)
+
+        if is_list:
+            if can_use_iterator:
                 final_iterator = self.get_iterator(
                     inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
                 )
@@ -975,23 +985,12 @@ class Pipeline(_ScikitCompat):
                 return outputs
             else:
                 return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
-        elif (
-            Dataset is not None
-            and isinstance(inputs, Dataset)
-            or isinstance(inputs, types.GeneratorType)
-            and self.framework == "pt"
-        ):
+        elif can_use_iterator:
             return self.get_iterator(
                 inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
             )
-        elif isinstance(inputs, types.GeneratorType):
-            if self.framework == "pt":
-                return self.get_iterator(
-                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
-                )
-            else:
-                # TODO make the get_iterator work also for `tf` (and `flax`).
-                return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
+        elif is_iterable:
+            return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
