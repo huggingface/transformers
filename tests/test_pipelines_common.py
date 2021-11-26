@@ -27,6 +27,7 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
     AutoTokenizer,
+    DistilBertForSequenceClassification,
     IBertConfig,
     RobertaConfig,
     TextClassificationPipeline,
@@ -257,7 +258,7 @@ class CommonPipelineTest(unittest.TestCase):
                 return self.data[i]
 
         text_classifier = pipeline(
-            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
         )
         dataset = MyDataset()
         for output in text_classifier(dataset):
@@ -265,7 +266,7 @@ class CommonPipelineTest(unittest.TestCase):
 
     @require_torch
     def test_check_task_auto_inference(self):
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
 
         self.assertIsInstance(pipe, TextClassificationPipeline)
 
@@ -274,7 +275,7 @@ class CommonPipelineTest(unittest.TestCase):
         class MyPipeline(TextClassificationPipeline):
             pass
 
-        text_classifier = pipeline(model="Narsil/tiny-distilbert-sequence-classification", pipeline_class=MyPipeline)
+        text_classifier = pipeline(model="hf-internal-testing/tiny-random-distilbert", pipeline_class=MyPipeline)
 
         self.assertIsInstance(text_classifier, MyPipeline)
 
@@ -292,11 +293,11 @@ class CommonPipelineTest(unittest.TestCase):
             for _ in range(n):
                 yield "This is a test"
 
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification")
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
 
         results = []
         for out in pipe(data(10)):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
 
@@ -304,7 +305,7 @@ class CommonPipelineTest(unittest.TestCase):
         # This will force using `num_workers=1` with a warning for now.
         results = []
         for out in pipe(data(10), num_workers=2):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
 
@@ -314,13 +315,26 @@ class CommonPipelineTest(unittest.TestCase):
             for _ in range(n):
                 yield "This is a test"
 
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification", framework="tf")
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
         out = pipe("This is a test")
         results = []
         for out in pipe(data(10)):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_1", "score": 0.502})
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
+
+    @require_torch
+    def test_unbatch_attentions_hidden_states(self):
+        model = DistilBertForSequenceClassification.from_pretrained(
+            "hf-internal-testing/tiny-random-distilbert", output_hidden_states=True, output_attentions=True
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-distilbert")
+        text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+
+        # Used to throw an error because `hidden_states` are a tuple of tensors
+        # instead of the expected tensor.
+        outputs = text_classifier(["This is great !"] * 20, batch_size=32)
+        self.assertEqual(len(outputs), 20)
 
 
 @is_pipeline_test

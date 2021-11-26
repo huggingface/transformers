@@ -23,7 +23,7 @@ import re
 PATH_TO_TRANSFORMERS = "src/transformers"
 
 # Matches is_xxx_available()
-_re_backend = re.compile(r"is\_([a-z]*)_available()")
+_re_backend = re.compile(r"is\_([a-z_]*)_available()")
 # Matches from xxx import bla
 _re_single_line_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
 _re_test_backend = re.compile(r"^\s+if\s+is\_[a-z]*\_available\(\)")
@@ -131,6 +131,7 @@ def create_dummy_object(name, backend_name):
         "ForConditionalGeneration",
         "ForMaskedLM",
         "ForMultipleChoice",
+        "ForNextSentencePrediction",
         "ForObjectDetection",
         "ForQuestionAnswering",
         "ForSegmentation",
