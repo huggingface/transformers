@@ -351,6 +351,7 @@ Once your model is fine-tuned, you can save it with its tokenizer in the followi
     >>> pt_model.save_pretrained(pt_save_directory)
 
 .. code-block::
+
     >>> tf_save_directory = './tf_save_pretrained'
     >>> tokenizer.save_pretrained(tf_save_directory)
     >>> tf_model.save_pretrained(tf_save_directory)
