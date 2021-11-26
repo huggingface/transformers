@@ -68,8 +68,7 @@ class PipelineIterator(IterableDataset):
 
     def loader_batch_item(self):
         """
-        Return item located at `loader_batch_index` within
-        the current `loader_batch_data`.
+        Return item located at `loader_batch_index` within the current `loader_batch_data`.
         """
         if isinstance(self._loader_batch_data, torch.Tensor):
             # Batch data is simple tensor, just fetch the slice
