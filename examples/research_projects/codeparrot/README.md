@@ -1,9 +1,13 @@
 # CodeParrot 🦜
+<p align="center">
+    <img src="images/code-highlighting-streamlit.png" alt="drawing" width="350"/>
+</p>
 
 ## What is this about?
 This is an open-source effort to train and evaluate code generation models. CodeParrot 🦜 is a GPT-2 model trained from scratch on Python code. 
 
 ## Installation
+To install the dependencies simply run the following command:
 ```bash
 pip install -r requirements.txt
 ```
@@ -44,6 +48,13 @@ The validation loss can be calculate with the `scripts/validation_loss.py` scrip
 |GPT-neo (1.5B)| 4.79% | 7.47% | 16.30% |
 |GPT-neo (2.7B)| 6.41% | 11.27% | 21.37% |
 |GPT-J (6B)| 11.62% | 15.74% | 27.74% |
+
+Both CodeParrot 🦜 models are still underfitted and longer training would likely improve the performance, especially for the large model.
+
+## Demo
+Give the model a shot yourself! There are two demos to interact with the model:
+- [Code generation](https://huggingface.co/spaces/lvwerra/codeparrot-generation)
+- [Code highlighting](https://huggingface.co/spaces/lvwerra/codeparrot-highlighting)
 
 ## Further Resources
 A detailed description of the project can be found in the chapter "Training Transformers from Scratch" in the upcoming O'Reilly book [Natural Language Processing with Transformers](https://learning.oreilly.com/library/view/natural-language-processing/9781098103231/).
