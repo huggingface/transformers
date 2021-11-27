@@ -10,25 +10,34 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-BrandNewBERT
+ViLT
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The BrandNewBERT model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT AUTHORS
-HERE>. <INSERT SHORT SUMMARY HERE>
+The VilT model was proposed in `ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision
+<https://arxiv.org/abs/2102.03334>`__ by Wonjae Kim, Bokyung Son, Ildoo Kim. ViLT incorporates text embeddings into a
+Vision Transformer (ViT), allowing it to have a minimal design for Vision-and-Language Pre-training (VLP).
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Vision-and-Language Pre-training (VLP) has improved performance on various joint vision-and-language downstream tasks.
+Current approaches to VLP heavily rely on image feature extraction processes, most of which involve region supervision
+(e.g., object detection) and the convolutional architecture (e.g., ResNet). Although disregarded in the literature, we
+find it problematic in terms of both (1) efficiency/speed, that simply extracting input features requires much more
+computation than the multimodal interaction steps; and (2) expressive power, as it is upper bounded to the expressive
+power of the visual embedder and its predefined visual vocabulary. In this paper, we present a minimal VLP model,
+Vision-and-Language Transformer (ViLT), monolithic in the sense that the processing of visual inputs is drastically
+simplified to just the same convolution-free manner that we process textual inputs. We show that ViLT is up to tens of
+times faster than previous VLP models, yet with competitive or better downstream task performance.*
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by `<INSERT YOUR HF USERNAME HERE> <https://huggingface.co/<INSERT YOUR HF USERNAME
-HERE>>`__. The original code can be found `here <<INSERT LINK TO GITHUB REPO HERE>>`__.
+This model was contributed by `Niels Rogge <https://huggingface.co/nielsr>`__. The original code can be found `here
+<https://github.com/dandelin/ViLT>`__.
 
 ViltConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -37,19 +46,18 @@ ViltConfig
     :members:
 
 
-ViltTokenizer
+ViltFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.ViltTokenizer
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
+.. autoclass:: transformers.ViltFeatureExtractor
+    :members: __call__
 
 
-ViltTokenizerFast
+ViltProcessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.ViltTokenizerFast
-    :members:
+.. autoclass:: transformers.ViltProcessor
+    :members: __call__
 
 
 ViltModel
@@ -77,4 +85,11 @@ ViltForVisualQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ViltForVisualQuestionAnswering
+    :members: forward
+
+
+ViltForImageRetrievalTextRetrieval
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ViltForImageRetrievalTextRetrieval
     :members: forward

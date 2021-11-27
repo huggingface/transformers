@@ -18,30 +18,40 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
     "configuration_vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig"],
 }
 
+if is_vision_available():
+    _import_structure["feature_extraction_vilt"] = ["ViltFeatureExtractor"]
+    _import_structure["processing_vilt"] = ["ViltProcessor"]
+
 if is_torch_available():
     _import_structure["modeling_vilt"] = [
+        "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ViltForImageRetrievalTextRetrieval",
         "ViltForPreTraining",
         "ViltForVisualQuestionAnswering",
         "ViltLayer",
         "ViltModel",
         "ViltPreTrainedModel",
-        "ViLT_PRETRAINED_MODEL_ARCHIVE_LIST",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig
 
+    if is_vision_available():
+        from .feature_extraction_vilt import ViltFeatureExtractor
+        from .processing_vilt import ViltProcessor
+
     if is_torch_available():
         from .modeling_vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViltForImageRetrievalTextRetrieval,
             ViltForPreTraining,
             ViltForVisualQuestionAnswering,
             ViltLayer,

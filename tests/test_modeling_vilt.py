@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BrandNewBERT model. """
+""" Testing suite for the PyTorch ViLT model. """
 
 
 import unittest
@@ -25,7 +25,12 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
-    from transformers import ViltForPreTraining, ViltForVisualQuestionAnswering, ViltModel
+    from transformers import (
+        ViltForImageRetrievalTextRetrieval,
+        ViltForPreTraining,
+        ViltForVisualQuestionAnswering,
+        ViltModel,
+    )
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -166,6 +171,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         (
             ViltModel,
             ViltForVisualQuestionAnswering,
+            ViltForImageRetrievalTextRetrieval,
             ViltForPreTraining,
         )
         if is_torch_available()

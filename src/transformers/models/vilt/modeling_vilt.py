@@ -24,7 +24,7 @@ import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -895,7 +895,7 @@ class ViltMLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Vilt Model transformer with an classifier head on top (a linear layer on top of the final hidden state of the [CLS]
+    Vilt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
     token) for visual question answering, e.g. for VQAv2.
     """,
     VILT_START_DOCSTRING,
@@ -914,6 +914,82 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
             nn.GELU(),
             nn.Linear(config.hidden_size * 2, config.num_labels),
         )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            ...
+
+        Returns:
+
+
+        Examples::
+            >>> TODO
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.vilt(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            pixel_values=pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooler_output = outputs.pooler_output if return_dict else outputs[1]
+
+        logits = self.classifier(pooler_output)
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported.")
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Vilt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
+    token) for image-to-text or text-to-image retrieval, e.g. MSCOCO and F30K.
+    """,
+    VILT_START_DOCSTRING,
+)
+class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.vilt = ViltModel(config)
+
+        # Classifier head
+        self.rank_output = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -960,17 +1036,11 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
 
         pooler_output = outputs.pooler_output if return_dict else outputs[1]
 
-        logits = self.classifier(pooler_output)
+        logits = self.rank_output(pooler_output)
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            raise NotImplementedError("Training is not yet supported.")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
