@@ -32,10 +32,12 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     config = LukeConfig(use_entity_aware_attention=True, **metadata["model_config"])
 
     # Load in the weights from the checkpoint_path
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu")["module"]
 
     # Load the entity vocab file
     entity_vocab = load_original_entity_vocab(entity_vocab_path)
+    # add an entry for [MASK2]
+    entity_vocab["[MASK2]"] = max(entity_vocab.values()) + 1
 
     tokenizer = XLMRobertaTokenizer.from_pretrained(metadata["model_config"]["bert_model_name"])
 
@@ -68,7 +70,8 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     # Initialize the embedding of the [MASK2] entity using that of the [MASK] entity for downstream tasks
     entity_emb = state_dict["entity_embeddings.entity_embeddings.weight"]
-    entity_emb[entity_vocab["[MASK2]"]] = entity_emb[entity_vocab["[MASK]"]]
+    entity_mask_emb = entity_emb[entity_vocab["[MASK]"]]
+    state_dict["entity_embeddings.entity_embeddings.weight"] = torch.cat([entity_emb, entity_mask_emb])
 
     model = LukeModel(config=config).eval()
 
