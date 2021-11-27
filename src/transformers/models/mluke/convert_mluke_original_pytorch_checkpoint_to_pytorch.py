@@ -50,6 +50,12 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "r") as f:
+        tokenizer_config = json.load(f)
+    tokenizer_config["tokenizer_class"] = "MLukeTokenizer"
+    with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w") as f:
+        json.dump(tokenizer_config, f)
+
     with open(os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:
         json.dump(entity_vocab, f)
 
@@ -92,7 +98,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     text = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
     span = (0, 9)
-    encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
+    encoding = tokenizer(text, entity_spans=[span], return_tensors="pt")
 
     outputs = model(**encoding)
 
@@ -144,12 +150,6 @@ def load_original_entity_vocab(entity_vocab_path):
             new_entity_name = f"{language}:{entity_name}"
             new_mapping[new_entity_name] = entity_id
     return new_mapping
-
-
-def convert_original_entity_vocab_for_hugging_face(entity_vocab_path: str, save_path: str):
-    new_mapping = convert_luke_checkpoint(entity_vocab_path)
-    with open(save_path, "w") as f:
-        json.dump(new_mapping, f, ensure_ascii=False)
 
 
 if __name__ == "__main__":
