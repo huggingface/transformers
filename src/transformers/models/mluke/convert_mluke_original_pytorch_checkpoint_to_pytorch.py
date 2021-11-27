@@ -70,7 +70,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     # Initialize the embedding of the [MASK2] entity using that of the [MASK] entity for downstream tasks
     entity_emb = state_dict["entity_embeddings.entity_embeddings.weight"]
-    entity_mask_emb = entity_emb[entity_vocab["[MASK]"]]
+    entity_mask_emb = entity_emb[entity_vocab["[MASK]"]].unsqueeze(0)
     state_dict["entity_embeddings.entity_embeddings.weight"] = torch.cat([entity_emb, entity_mask_emb])
 
     model = LukeModel(config=config).eval()
