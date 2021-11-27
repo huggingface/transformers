@@ -87,46 +87,42 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
             f"Unexpected keys {', '.join([key for key in unexpected_keys if not (key.startswith('entity_predictions') or key.startswith('lm_head'))])}"
         )
 
-    # # Check outputs
-    # tokenizer = MLukeTokenizer.from_pretrained(pytorch_dump_folder_path, task="entity_classification")
-    #
-    # text = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
-    # span = (39, 42)
-    # encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
-    #
-    # outputs = model(**encoding)
-    #
-    # # Verify word hidden states
-    # if model_size == "large":
-    #     expected_shape = torch.Size((1, 42, 1024))
-    #     expected_slice = torch.tensor(
-    #         [[0.0133, 0.0865, 0.0095], [0.3093, -0.2576, -0.7418], [-0.1720, -0.2117, -0.2869]]
-    #     )
-    # else:  # base
-    #     expected_shape = torch.Size((1, 42, 768))
-    #     expected_slice = torch.tensor([[0.0037, 0.1368, -0.0091], [0.1099, 0.3329, -0.1095], [0.0765, 0.5335, 0.1179]])
-    #
-    # if not (outputs.last_hidden_state.shape == expected_shape):
-    #     raise ValueError(
-    #         f"Outputs.last_hidden_state.shape is {outputs.last_hidden_state.shape}, Expected shape is {expected_shape}"
-    #     )
-    # if not torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4):
-    #     raise ValueError
-    #
-    # # Verify entity hidden states
-    # if model_size == "large":
-    #     expected_shape = torch.Size((1, 1, 1024))
-    #     expected_slice = torch.tensor([[0.0466, -0.0106, -0.0179]])
-    # else:  # base
-    #     expected_shape = torch.Size((1, 1, 768))
-    #     expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]])
-    #
-    # if not (outputs.entity_last_hidden_state.shape != expected_shape):
-    #     raise ValueError(
-    #         f"Outputs.entity_last_hidden_state.shape is {outputs.entity_last_hidden_state.shape}, Expected shape is {expected_shape}"
-    #     )
-    # if not torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4):
-    #     raise ValueError
+    # Check outputs
+    tokenizer = MLukeTokenizer.from_pretrained(pytorch_dump_folder_path, task="entity_classification")
+
+    text = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
+    span = (0, 9)
+    encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
+
+    outputs = model(**encoding)
+
+    # Verify word hidden states
+    if model_size == "large":
+        raise NotImplementedError
+    else:  # base
+        expected_shape = torch.Size((1, 45, 768))
+        expected_slice = torch.tensor([[0.0892, 0.0596, -0.2819], [0.0134, 0.1199, 0.0573], [-0.0169, 0.0927, 0.0644]])
+
+    if not (outputs.last_hidden_state.shape == expected_shape):
+        raise ValueError(
+            f"Outputs.last_hidden_state.shape is {outputs.last_hidden_state.shape}, Expected shape is {expected_shape}"
+        )
+    if not torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4):
+        raise ValueError
+
+    # Verify entity hidden states
+    if model_size == "large":
+        raise NotImplementedError
+    else:  # base
+        expected_shape = torch.Size((1, 1, 768))
+        expected_slice = torch.tensor([[-0.1482, 0.0609, 0.0322]])
+
+    if not (outputs.entity_last_hidden_state.shape != expected_shape):
+        raise ValueError(
+            f"Outputs.entity_last_hidden_state.shape is {outputs.entity_last_hidden_state.shape}, Expected shape is {expected_shape}"
+        )
+    if not torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4):
+        raise ValueError
 
     # Finally, save our PyTorch model and tokenizer
     print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))
