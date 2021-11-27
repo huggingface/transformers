@@ -189,6 +189,11 @@ class MLukeTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             mask_token=mask_token,
             sp_model_kwargs=self.sp_model_kwargs,
+            task=task,
+            max_entity_length=max_entity_length,
+            max_mention_length=max_mention_length,
+            entity_token_1=entity_token_1,
+            entity_token_2=entity_token_2,
             **kwargs,
         )
 
@@ -1164,6 +1169,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                     f"{num_invalid_entities} entities are ignored because their entity spans are invalid due to the truncation of input tokens"
                 )
 
+            overflowing_entities = []
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and total_entity_len > max_entity_length:
                 # truncate entities up to max_entity_length
                 valid_entity_ids, valid_pair_entity_ids, overflowing_entities = self.truncate_sequences(
