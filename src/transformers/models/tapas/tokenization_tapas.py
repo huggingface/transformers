@@ -2758,7 +2758,7 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
     # Second, replace cell values by Cell objects
     for row_index, row in table.iterrows():
         for col_index, cell in enumerate(row):
-            table.iloc[row_index, col_index] = Cell(text=cell)
+            table.loc[row_index, col_index] = Cell(text=cell)
 
     # Third, add numeric_value attributes to these Cell objects
     for col_index, column in enumerate(table.columns):
