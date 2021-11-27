@@ -54,6 +54,8 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         tokenizer_config = json.load(f)
     tokenizer_config["tokenizer_class"] = "MLukeTokenizer"
     with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w") as f:
+
+
         json.dump(tokenizer_config, f)
 
     with open(os.path.join(pytorch_dump_folder_path, MLukeTokenizer.vocab_files_names["entity_vocab_file"]), "w") as f:

@@ -35,7 +35,8 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, task=None, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", task=task, **kwargs)
+        kwargs.update({"task": task})
+        return self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", use_auth_token=True, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -43,7 +44,7 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base")
+        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", use_auth_token=True)
         text = "lower newer"
         spm_tokens = ["▁lower", "▁new", "er"]
         tokens = tokenizer.tokenize(text)
@@ -64,7 +65,7 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/luke-large")
+        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base",)
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
@@ -123,11 +124,30 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
     tokenizer_class = MLukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = MLukeTokenizer.from_pretrained(
+            "studio-ousia/mluke-base", return_token_type_ids=True, use_auth_token=True
+        )
+        cls.entity_classification_tokenizer = MLukeTokenizer.from_pretrained(
+            "studio-ousia/mluke-base", return_token_type_ids=True, task="entity_classification", use_auth_token=True
+        )
+        cls.entity_pair_tokenizer = MLukeTokenizer.from_pretrained(
+            "studio-ousia/mluke-base",
+            return_token_type_ids=True,
+            task="entity_pair_classification",
+            use_auth_token=True,
+        )
+
+        cls.entity_span_tokenizer = MLukeTokenizer.from_pretrained(
+            "studio-ousia/mluke-base",
+            return_token_type_ids=True,
+            task="entity_span_classification",
+            use_auth_token=True,
+        )
 
     def test_single_text_no_padding_or_truncation(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
+        tokenizer = self.tokenizer
         sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
         entities = ["en:ISO 639-3", "DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
         spans = [(0, 9), (59, 63), (68, 75), (77, 88)]
@@ -136,7 +156,7 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and Afghanistan.</s>",
+            "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         # fmt: off
         self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3")
@@ -158,6 +178,7 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0, 0])
         # fmt: off
         self.assertEqual(
+            encoding["entity_position_ids"],
             [
                 [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
                 [17, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
@@ -168,7 +189,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         # fmt: on
 
     def test_single_text_only_entity_spans_no_padding_or_truncation(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
+        tokenizer = self.tokenizer
+
         sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
         entities = ["en:ISO 639-3", "DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
         spans = [(0, 9), (59, 63), (68, 75), (77, 88)]
@@ -177,21 +199,29 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and Afghanistan.</s>",
+            "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         # fmt: off
         self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3")
         self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][19:25], spaces_between_special_tokens=False), "アフガニスタン")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][20:25], spaces_between_special_tokens=False), "アフガニスタン")
         self.assertEqual(tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan")
         # fmt: on
 
-        mask_id = tokenizer.entity_vocab["[MASK]"]
-        self.assertEqual(encoding["entity_ids"], [mask_id, mask_id, mask_id])
+        self.assertEqual(
+            encoding["entity_ids"],
+            [
+                tokenizer.entity_vocab["en:ISO 639-3"],
+                tokenizer.entity_vocab["[UNK]"],
+                tokenizer.entity_vocab["ja:アフガニスタン"],
+                tokenizer.entity_vocab["en:Afghanistan"],
+            ],
+        )
         self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1, 1])
         self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0, 0])
         # fmt: off
         self.assertEqual(
+            encoding["entity_position_ids"],
             [
                 [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
                 [17, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
@@ -202,7 +232,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         # fmt: on
 
     def test_single_text_padding_pytorch_tensors(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
+        tokenizer = self.tokenizer
+
         sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
         entities = ["en:ISO 639-3", "DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
         spans = [(0, 9), (59, 63), (68, 75), (77, 88)]
@@ -230,7 +261,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_position_ids"].shape, (1, 16, tokenizer.max_mention_length))
 
     def test_text_pair_no_padding_or_truncation(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
+        tokenizer = self.tokenizer
+
         sentence = "ISO 639-3 uses the code fas"
         sentence_pair = "for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
         entities = ["en:ISO 639-3"]
@@ -253,10 +285,10 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             "<s> ISO 639-3 uses the code fas</s></s> for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3")
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][20:25], spaces_between_special_tokens=False), "アフガニスタン")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][19], spaces_between_special_tokens=False), "Iran")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][21:27], spaces_between_special_tokens=False), "アフガニスタン")
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
+            tokenizer.decode(encoding["input_ids"][28], spaces_between_special_tokens=False), "Afghanistan"
         )
 
         self.assertEqual(
@@ -272,17 +304,19 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0, 0])
         # fmt: off
         self.assertEqual(
+            encoding["entity_position_ids"],
             [
                 [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [17, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [19, 20, 21, 22, 23, 24, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+                [19, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [21, 22, 23, 24, 25, 26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [28, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
             ]
         )
         # fmt: on
 
     def test_text_pair_only_entity_spans_no_padding_or_truncation(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
+        tokenizer = self.tokenizer
+
         sentence = "ISO 639-3 uses the code fas"
         sentence_pair = "for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
         entities = ["en:ISO 639-3"]
@@ -305,29 +339,36 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             "<s> ISO 639-3 uses the code fas</s></s> for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3")
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][20:25], spaces_between_special_tokens=False), "アフガニスタン")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][19], spaces_between_special_tokens=False), "Iran")
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][21:27], spaces_between_special_tokens=False), "アフガニスタン")
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
+            tokenizer.decode(encoding["input_ids"][28], spaces_between_special_tokens=False), "Afghanistan"
         )
 
-        mask_id = tokenizer.entity_vocab["[MASK]"]
-        self.assertEqual(encoding["entity_ids"], [mask_id, mask_id, mask_id])
-        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1, 1])
-        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0, 0])
+        self.assertEqual(
+            encoding["entity_ids"],
+            [
+                tokenizer.entity_vocab["en:ISO 639-3"],
+                tokenizer.entity_vocab["[UNK]"],
+                tokenizer.entity_vocab["ja:アフガニスタン"],
+                tokenizer.entity_vocab["en:Afghanistan"],
+            ],
+        )
         # fmt: off
         self.assertEqual(
+            encoding["entity_position_ids"],
             [
                 [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [17, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [19, 20, 21, 22, 23, 24, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+                [19, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [21, 22, 23, 24, 25, 26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [28, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
             ]
         )
         # fmt: on
 
     def test_text_pair_padding_pytorch_tensors(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
+        tokenizer = self.tokenizer
+
         sentence = "ISO 639-3 uses the code fas"
         sentence_pair = "for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
         entities = ["en:ISO 639-3"]
@@ -344,15 +385,15 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             entity_spans_pair=spans_pair,
             return_token_type_ids=True,
             padding="max_length",
-            max_length=30,
+            max_length=40,
             max_entity_length=16,
             return_tensors="pt",
         )
 
         # test words
-        self.assertEqual(encoding["input_ids"].shape, (1, 30))
-        self.assertEqual(encoding["attention_mask"].shape, (1, 30))
-        self.assertEqual(encoding["token_type_ids"].shape, (1, 30))
+        self.assertEqual(encoding["input_ids"].shape, (1, 40))
+        self.assertEqual(encoding["attention_mask"].shape, (1, 40))
+        self.assertEqual(encoding["token_type_ids"].shape, (1, 40))
 
         # test entities
         self.assertEqual(encoding["entity_ids"].shape, (1, 16))
@@ -361,7 +402,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_position_ids"].shape, (1, 16, tokenizer.max_mention_length))
 
     def test_entity_classification_no_padding_or_truncation(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
+        tokenizer = self.entity_classification_tokenizer
+
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         span = (15, 34)
 
@@ -393,11 +435,14 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         # fmt: on
 
     def test_entity_classification_padding_pytorch_tensors(self):
-        tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
+        tokenizer = self.entity_classification_tokenizer
+
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         span = (15, 34)
 
-        encoding = tokenizer(sentence, entity_spans=[span], return_token_type_ids=True)
+        encoding = tokenizer(
+            sentence, entity_spans=[span], return_token_type_ids=True, padding="max_length", return_tensors="pt"
+        )
 
         # test words
         self.assertEqual(encoding["input_ids"].shape, (1, 512))
@@ -413,9 +458,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
     def test_entity_pair_classification_no_padding_or_truncation(self):
-        tokenizer = MLukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_pair_classification", return_token_type_ids=True
-        )
+        tokenizer = self.entity_pair_tokenizer
+
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         # head and tail information
         spans = [(0, 8), (84, 89)]
@@ -449,9 +493,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         # fmt: on
 
     def test_entity_pair_classification_padding_pytorch_tensors(self):
-        tokenizer = MLukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_pair_classification", return_token_type_ids=True
-        )
+        tokenizer = self.entity_pair_tokenizer
+
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         # head and tail information
         spans = [(0, 8), (84, 89)]
@@ -479,9 +522,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
     def test_entity_span_classification_no_padding_or_truncation(self):
-        tokenizer = MLukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_span_classification", return_token_type_ids=True
-        )
+        tokenizer = self.entity_span_tokenizer
+
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         spans = [(0, 8), (15, 34), (84, 89)]
 
@@ -509,9 +551,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_end_positions"], [1, 6, 18])
 
     def test_entity_span_classification_padding_pytorch_tensors(self):
-        tokenizer = MLukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_span_classification", return_token_type_ids=True
-        )
+        tokenizer = self.entity_span_tokenizer
+
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         spans = [(0, 8), (15, 34), (84, 89)]
 
