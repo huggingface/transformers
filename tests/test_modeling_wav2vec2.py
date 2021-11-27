@@ -854,6 +854,34 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
 
+    def test_compute_mask_indices_approx_percentage_span(self):
+        # for a few combinations of sequence length, mask_prob, and mask_length,
+        # we check whether we approximate the expected  number of spanned features
+        batch_size = 10
+        sequence_length = 150
+        mask_length = 10
+
+        for mask_prob in (0, 0.05, 0.20, 0.5, 0.8, 1.0):
+            mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+            mask = torch.from_numpy(mask).to(torch_device)
+
+            num_masked_elements = torch.sum(mask, dim=1)
+            percentage_masked = (num_masked_elements / sequence_length).tolist()
+
+            for percentage in percentage_masked:
+                self.assertLessEqual(percentage, mask_prob + 0.1)
+
+    def test_compute_mask_indices_low_prob(self):
+        batch_size = 4
+        sequence_length = 60
+        mask_prob = 0.0001
+        mask_length = 4
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = torch.from_numpy(mask).to(torch_device)
+
+        self.assertEqual(mask.sum(), 0)
+
     def test_compute_mask_indices_overlap(self):
         batch_size = 4
         sequence_length = 80

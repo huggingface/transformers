@@ -147,9 +147,10 @@ def _compute_mask_indices(
     Args:
         shape: the the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
-            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
-            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
+        mask_prob: The approximate percentage (between 0 and 1) of time steps which should be masked. This percentage
+                   will be multiplied by number the of timesteps and divided by length of mask span to get a probability
+                   for each token to be chosen as start of the span to be masked. Due to overlaps and mask length the
+                   percentage is not exact, but will deviate in either direction.
         mask_length: size of the mask
         min_masks: minimum number of masked spans
     """
@@ -163,6 +164,7 @@ def _compute_mask_indices(
             f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
         )
 
+    # epsilon is used for probabilistic rounding
     epsilon = np.random.rand(1).item()
 
     def compute_num_masked_span(input_length):
@@ -192,13 +194,14 @@ def _compute_mask_indices(
     for input_length in input_lengths:
         # compute num of masked spans for this input
         num_masked_span = compute_num_masked_span(input_length)
+
         # get random indices to mask
         spec_aug_mask_idx = np.random.choice(
             np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
         )
 
         # pick first sampled index that will serve as a dummy index to pad vector
-        dummy_mask_idx = spec_aug_mask_idx[0]
+        dummy_mask_idx = 0
 
         spec_aug_mask_idx = np.concatenate(
             [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
@@ -1179,10 +1182,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         elif self.config.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob,
+                mask_prob=self.config.mask_time_prob * self.config.mask_time_length,
                 mask_length=self.config.mask_time_length,
                 attention_mask=attention_mask,
-                min_masks=2,
+                min_masks=self.config.mask_time_min_masks,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -1191,9 +1194,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             # generate indices & apply SpecAugment along feature axis
             mask_feature_indices = _compute_mask_indices(
                 (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob,
+                mask_prob=self.config.mask_feature_prob * self.config.mask_feature_length,
                 mask_length=self.config.mask_feature_length,
-                min_masks=1,
+                min_masks=self.config.mask_feature_min_masks,
             )
             mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
             mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)

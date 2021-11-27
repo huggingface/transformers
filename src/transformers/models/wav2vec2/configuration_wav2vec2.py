@@ -102,16 +102,28 @@ class Wav2Vec2Config(PretrainedConfig):
             <https://arxiv.org/abs/1904.08779>`__.
         mask_time_prob (:obj:`float`, `optional`, defaults to 0.05):
             Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
-            masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature vectors will be
-            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+            masked. At most ``mask_time_prob * sequence_length * mask_time_length`` feature vectors will be
+            masked along the time axis. Note that overlap may decrease the total amount of masked vectors.
+            This is only relevant if ``apply_spec_augment is True``.
         mask_time_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the time axis.
+        mask_time_min_masks (:obj:`int`, `optional`, defaults to 2),:
+            The minimum number of feature vectors along the time axis which will be masked each time step,
+            irrespectively of ``mask_time_prob``. Note that 1 mask is of length ``mask_time_length`` and therefore
+            setting ``mask_time_min_masks=n`` will cause at minimum approximately ``n*mask_time_length`` feature
+            vectors to be masked (assuming no overlap).
         mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
             Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
-            be masked. Approximately ``mask_time_prob * hidden_size // mask_time_length`` feature vectors will be
-            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+            be masked. At most ``mask_feature_prob * sequence_length * mask_feature_length`` feature vectors will be
+            masked along the feature axis. Note that overlap may decrease the total amount of masked vectors.
+            This is only relevant if ``apply_spec_augment is True``.
         mask_feature_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the feature axis.
+        mask_feature_min_masks (:obj:`int`, `optional`, defaults to 0),:
+            The minimum number of feature vectors along the feature axis which will be masked each time step,
+            irrespectively of ``mask_feature_prob``. Note that 1 mask is of length ``mask_feature_length`` and therefore
+            setting ``mask_feature_min_masks=n`` will cause at minimum approximately ``n*mask_feature_length`` feature
+            vectors to be masked (assuming no overlap).
         num_codevectors_per_group (:obj:`int`, `optional`, defaults to 320):
             Number of entries in each quantization codebook (group).
         num_codevector_groups (:obj:`int`, `optional`, defaults to 2):
@@ -198,8 +210,10 @@ class Wav2Vec2Config(PretrainedConfig):
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
+        mask_time_min_masks=2,
         mask_feature_prob=0.0,
         mask_feature_length=10,
+        mask_feature_min_masks=0,
         num_codevectors_per_group=320,
         num_codevector_groups=2,
         contrastive_logits_temperature=0.1,
@@ -265,8 +279,10 @@ class Wav2Vec2Config(PretrainedConfig):
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
 
         # parameters for pretraining with codevector quantized representations
         self.num_codevectors_per_group = num_codevectors_per_group
