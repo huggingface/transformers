@@ -169,7 +169,8 @@ class Seq2SeqTrainer(Trainer):
             # very ugly hack to make it work
             generation_inputs["input_ids"] = generation_inputs.pop(self.tokenizer.model_input_names[0])
         else:
-            generation_inputs = inputs["input_ids"]
+            generation_inputs = dict()
+            generation_inputs['input_ids'] = inputs["input_ids"]
 
         generated_tokens = self.model.generate(
             **generation_inputs,
