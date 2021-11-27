@@ -38,6 +38,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     entity_vocab = load_original_entity_vocab(entity_vocab_path)
     # add an entry for [MASK2]
     entity_vocab["[MASK2]"] = max(entity_vocab.values()) + 1
+    config.entity_vocab_size += 1
 
     tokenizer = XLMRobertaTokenizer.from_pretrained(metadata["model_config"]["bert_model_name"])
 
