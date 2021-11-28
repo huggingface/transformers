@@ -20,6 +20,7 @@ from typing import Iterable, List, Tuple, Union
 import numpy as np
 from packaging.version import Version, parse
 
+from transformers import LayoutLMv2Model
 from transformers import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
 from transformers.file_utils import is_torch_onnx_dict_inputs_support_available
 from transformers.onnx.config import OnnxConfig
@@ -82,6 +83,7 @@ def export(
         raise ImportError("Cannot convert because PyTorch is not installed. Please install torch first.")
 
     import torch
+    import torch.nn as nn
     from torch.onnx import export
 
     from ..file_utils import torch_version
@@ -109,6 +111,18 @@ def export(
 
         if not inputs_match:
             raise ValueError("Model and config inputs doesn't match")
+
+        if isinstance(model.base_model, LayoutLMv2Model):
+            class PoolerLayer(nn.Module):
+                def __init__(self):
+                    super(PoolerLayer, self).__init__()
+                    self.pool = nn.AvgPool2d(kernel_size=[8, 8], stride=[8, 8])
+
+                def forward(self, x):
+                    pooled_output = self.pool(x)
+                    return pooled_output
+
+            model.layoutlmv2.visual.pool = PoolerLayer()
 
         config.patch_ops()
 

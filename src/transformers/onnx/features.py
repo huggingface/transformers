@@ -10,6 +10,7 @@ from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
+from ..models.layoutlmv2 import LayoutLMv2OnnxConfig
 from ..models.longformer import LongformerOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
@@ -95,6 +96,13 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls=LayoutLMOnnxConfig,
         ),
+        "layoutlmv2": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls=LayoutLMv2OnnxConfig,
+        )
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_KIND.values())))

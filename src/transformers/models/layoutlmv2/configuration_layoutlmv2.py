@@ -13,10 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ LayoutLMv2 model configuration """
+from collections import OrderedDict
+from typing import Any, List, Mapping, Optional
 
+from ...tokenization_utils import PreTrainedTokenizer, TensorType
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import is_detectron2_available
 from ...utils import logging
+from ...onnx import OnnxConfig, PatchingSpec
+from ...onnx.utils import compute_effective_axis_dimension
+from ... import is_torch_available
 
 
 logger = logging.get_logger(__name__)
@@ -222,3 +228,71 @@ class LayoutLMv2Config(PretrainedConfig):
             setattr(to_set, attributes[-1], v)
 
         return detectron2_config
+
+
+class LayoutLMv2OnnxConfig(OnnxConfig):
+    def __init__(
+            self,
+            config: PretrainedConfig,
+            task: str = "default",
+            patching_specs: List[PatchingSpec] = None
+    ):
+        super().__init__(config, task=task, patching_specs=patching_specs)
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("bbox", {0: "batch", 1: "sequence"}),
+                ("image", {0: "batch"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("token_type_ids", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        """
+        Generate inputs to provide to the ONNX exporter for the specific framework
+
+        Args:
+            tokenizer: The tokenizer associated with this model configuration
+            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
+            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
+            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
+            framework: The framework (optional) the tokenizer will generate tensor for
+
+        Returns:
+            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
+        """
+
+        import torch
+        if not framework == TensorType.PYTORCH:
+            raise NotImplementedError("Exporting LayoutLM to ONNX is currently only supported for PyTorch.")
+
+        if not is_torch_available():
+            raise ValueError("Cannot generate dummy inputs without PyTorch installed.")
+
+        batch_size = compute_effective_axis_dimension(
+            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+        )
+
+        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
+        seq_length = compute_effective_axis_dimension(
+            seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
+        )
+
+        dummy_input = [[" ".join([tokenizer.unk_token])] * seq_length] * batch_size
+        box = [48, 84, 73, 128]
+        bbox = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
+        input_dict = dict(tokenizer(dummy_input, boxes=bbox, return_tensors=framework))
+        input_dict["attention_mask"] = input_dict["attention_mask"].type(torch.float)
+        input_dict["image"] = torch.zeros((batch_size, 3, 224, 224), dtype=torch.int64)
+        return input_dict
