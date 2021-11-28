@@ -47,6 +47,7 @@ Ready-made configurations include the following models:
 - DistilBERT
 - GPT Neo
 - LayoutLM
+- LayoutLMv2
 - Longformer
 - mBART
 - OpenAI GPT-2
