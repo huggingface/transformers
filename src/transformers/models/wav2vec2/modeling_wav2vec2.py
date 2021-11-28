@@ -145,14 +145,15 @@ def _compute_mask_indices(
     on CPU as part of the preprocessing during training.
 
     Args:
-        shape: the the shape for which to compute masks.
-            should be of size 2 where first element is batch size and 2nd is timesteps
-        mask_prob: The approximate percentage (between 0 and 1) of time steps which should be masked. This percentage
-                   will be multiplied by number the of timesteps and divided by length of mask span to get a probability
-                   for each token to be chosen as start of the span to be masked. Due to overlaps and mask length the
-                   percentage is not exact, but will deviate in either direction.
+        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
+               the first element is the batch size and the second element is the length of the axis to span.
+        mask_prob: The probability for each token to be chosen as start of the span to be masked. This will results in
+                   at most `ceil(mask_prob * shape[1]) * mask_length` masked tokens. Due to overlapping spans the
+                   expected amount of masked tokens will be fewer.
         mask_length: size of the mask
         min_masks: minimum number of masked spans
+        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
+                        each batch dimension.
     """
     batch_size, sequence_length = shape
 
@@ -161,22 +162,27 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} "
+            f"and `sequence_length`: {sequence_length}`"
         )
 
-    # epsilon is used for probabilistic rounding
-    epsilon = np.random.rand(1).item()
-
-    def compute_num_masked_span(input_length):
+    def compute_num_masked_span(feature_axis_length: int, use_probabilistic_rounding: bool):
         """Given input length, compute how many spans should be masked"""
-        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
-        num_masked_span = max(num_masked_span, min_masks)
+        assert feature_axis_length <= sequence_length
 
-        # make sure num masked indices <= sequence_length
-        if num_masked_span * mask_length > sequence_length:
-            num_masked_span = sequence_length // mask_length
+        if use_probabilistic_rounding:
+            epsilon = np.random.rand(1).item()
+            num_selected_start_tokens = math.floor(mask_prob * feature_axis_length + epsilon)
+        else:
+            num_selected_start_tokens = math.ceil(mask_prob * feature_axis_length)
 
-        return num_masked_span
+        num_selected_start_tokens = max(num_selected_start_tokens, min_masks)
+
+        # make sure num masked indices <= length of sequence to mask
+        if num_selected_start_tokens > feature_axis_length:
+            num_selected_start_tokens = feature_axis_length
+
+        return num_selected_start_tokens
 
     # compute number of masked spans in batch
     input_lengths = (
@@ -185,23 +191,34 @@ def _compute_mask_indices(
         else [sequence_length for _ in range(batch_size)]
     )
 
-    # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    # select the indexes which will start a span of length `mask_length`
     spec_aug_mask_idxs = []
+    non_masked_batch_dimensions = []
 
-    max_num_masked_span = compute_num_masked_span(sequence_length)
+    max_num_masked_span = compute_num_masked_span(sequence_length, use_probabilistic_rounding=False)
 
-    for input_length in input_lengths:
+    for batch_idx, input_length in enumerate(input_lengths):
         # compute num of masked spans for this input
-        num_masked_span = compute_num_masked_span(input_length)
+        num_masked_span = compute_num_masked_span(input_length, use_probabilistic_rounding=True)
 
         # get random indices to mask
-        spec_aug_mask_idx = np.random.choice(
-            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
-        )
+        if num_masked_span == 0:
+            # in this case we pretend to choose index 0, but at the end
+            # we revert the masking in this dimension.
+            # Note that we have to choose 'a' index to make sure the `dummy_mask_idx`
+            # can be selected, which is needed to keep the dimensionality equal.
+            spec_aug_mask_idx = np.array([0])
+            non_masked_batch_dimensions.append(batch_idx)
+            num_masked_span += 1  # to ensure we don't pad this
+        else:
+            spec_aug_mask_idx = np.random.choice(
+                np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
+            )
 
         # pick first sampled index that will serve as a dummy index to pad vector
-        dummy_mask_idx = 0
+        # to ensure same dimension for all batches due to probabilistic rounding
+        # Picking first sample just pads those vectors twice.
+        dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
             [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
@@ -216,14 +233,20 @@ def _compute_mask_indices(
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
 
+    # add offset to the starting indexes so that that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
     offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
         batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
-    # scatter indices to mask
+    # create the zero mask and scatter indices
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
+
+    # revert any masks in dimensions where 0 spans were selected
+    if len(non_masked_batch_dimensions) >= 1:
+        spec_aug_mask[non_masked_batch_dimensions, :] = 0
 
     return spec_aug_mask
 
@@ -1182,7 +1205,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         elif self.config.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob * self.config.mask_time_length,
+                mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 attention_mask=attention_mask,
                 min_masks=self.config.mask_time_min_masks,
@@ -1194,7 +1217,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             # generate indices & apply SpecAugment along feature axis
             mask_feature_indices = _compute_mask_indices(
                 (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob * self.config.mask_feature_length,
+                mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
                 min_masks=self.config.mask_feature_min_masks,
             )
