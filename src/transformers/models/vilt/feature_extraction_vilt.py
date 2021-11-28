@@ -85,16 +85,16 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             image = self.to_pil_image(image)
 
         w, h = image.size
-        min = shorter
-        max = longer
-        scale = min / min(w, h)
+        min_size = shorter
+        max_size = longer
+        scale = min_size / min(w, h)
         if h < w:
-            newh, neww = min, scale * w
+            newh, neww = min_size, scale * w
         else:
-            newh, neww = scale * h, self.min
+            newh, neww = scale * h, min_size
 
-        if max(newh, neww) > max:
-            scale = max / max(newh, neww)
+        if max(newh, neww) > max_size:
+            scale = max_size / max(newh, neww)
             newh = newh * scale
             neww = neww * scale
 

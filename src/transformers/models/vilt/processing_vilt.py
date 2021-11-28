@@ -16,8 +16,12 @@
 Processor class for ViLT.
 """
 
+from typing import List, Optional, Union
+
 from transformers import BertTokenizer
 
+from ...file_utils import TensorType
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from .feature_extraction_vilt import ViltFeatureExtractor
 
 
@@ -102,7 +106,26 @@ class ViltProcessor:
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        images,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs
+    ) -> BatchEncoding:
         """
         This method uses ViltFeatureExtractor's :meth:`~transformers.ViltFeatureExtractor.__call__` method to prepare
         image(s) for the model, and BertTokenizer's :meth:`~transformers.BertTokenizer.__call__` to prepare text for
@@ -110,7 +133,28 @@ class ViltProcessor:
 
         Please refer to the docstring of the above two methods for more information.
         """
-        return self.current_processor(*args, **kwargs)
+        encoding = self.tokenizer(
+            text=text,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
+        # add pixel_values
+        encoding["pixel_values"] = self.feature_extractor(images, return_tensors=return_tensors).pixel_values
+
+        return encoding
 
     def batch_decode(self, *args, **kwargs):
         """
