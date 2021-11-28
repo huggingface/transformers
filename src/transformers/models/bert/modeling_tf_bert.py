@@ -820,9 +820,15 @@ class TFBertMainLayer(tf.keras.layers.Layer):
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
         else:
-            extended_attention_mask = tf.reshape(
-                inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+            if attention_mask_shape.ndim == 3:
+                extended_attention_mask = tf.reshape(
+                inputs["attention_mask"], (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
+            else:
+                extended_attention_mask = tf.reshape(
+                    inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+                )
+
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
