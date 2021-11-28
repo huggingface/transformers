@@ -39,7 +39,8 @@ methods for using all the tokenizers:
 - Managing special tokens (like mask, beginning-of-sentence, etc.): adding them, assigning them to attributes in the
   tokenizer for easy access and making sure they are not split during tokenization.
 
-:class:`~transformers.BatchEncoding` holds the output of the tokenizer's encoding methods (``__call__``,
+:class:`~transformers.BatchEncoding` holds the output of the
+:class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase`'s encoding methods (``__call__``,
 ``encode_plus`` and ``batch_encode_plus``) and is derived from a Python dictionary. When the tokenizer is a pure python
 tokenizer, this class behaves just like a standard python dictionary and holds the various model inputs computed by
 these methods (``input_ids``, ``attention_mask``...). When the tokenizer is a "Fast" tokenizer (i.e., backed by
