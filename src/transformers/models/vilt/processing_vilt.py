@@ -15,10 +15,10 @@
 """
 Processor class for ViLT.
 """
-from contextlib import contextmanager
+
+from transformers import BertTokenizer
 
 from .feature_extraction_vilt import ViltFeatureExtractor
-from transformers import BertTokenizer
 
 
 class ViltProcessor:
@@ -37,14 +37,12 @@ class ViltProcessor:
     """
 
     def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, Vilt2FeatureExtractor):
+        if not isinstance(feature_extractor, ViltFeatureExtractor):
             raise ValueError(
                 f"`feature_extractor` has to be of type {ViltFeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
         if not isinstance(tokenizer, BertTokenizer):
-            raise ValueError(
-                f"`tokenizer` has to be of type {BertTokenizer.__class__}, but is {type(tokenizer)}"
-            )
+            raise ValueError(f"`tokenizer` has to be of type {BertTokenizer.__class__}, but is {type(tokenizer)}")
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer

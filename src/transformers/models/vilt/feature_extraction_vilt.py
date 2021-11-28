@@ -43,12 +43,12 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     Args:
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
-            is set to :obj:`True`.
-        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+            Whether to resize the input based on :obj:`size`.
+        size (:obj:`int`, `optional`, defaults to 384):
+            Resize the shorter side of the input to the given size. Should be an integer. The longer side will be
+            limited to under int((1333 / 800) * size) while preserving the aspect ratio. Only has an effect if
+            :obj:`do_resize` is set to :obj:`True`.
+        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
             Only has an effect if :obj:`do_resize` is set to :obj:`True`.
@@ -65,8 +65,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def __init__(
         self,
         do_resize=True,
-        size=224,
-        resample=Image.BILINEAR,
+        size=384,
+        resample=Image.BICUBIC,
         do_normalize=True,
         image_mean=None,
         image_std=None,
@@ -79,6 +79,29 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+
+    def _resize(self, image, shorter=800, longer=1333, resample=Image.BICUBIC):
+        if not isinstance(image, Image.Image):
+            image = self.to_pil_image(image)
+
+        w, h = image.size
+        min = shorter
+        max = longer
+        scale = min / min(w, h)
+        if h < w:
+            newh, neww = min, scale * w
+        else:
+            newh, neww = scale * h, self.min
+
+        if max(newh, neww) > max:
+            scale = max / max(newh, neww)
+            newh = newh * scale
+            neww = neww * scale
+
+        newh, neww = int(newh + 0.5), int(neww + 0.5)
+        newh, neww = newh // 32 * 32, neww // 32 * 32
+
+        return self.resize(image, size=(neww, newh), resample=resample)
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -137,7 +160,10 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+            longer = int((1333 / 800) * self.size)
+            images = [
+                self._resize(image=image, shorter=self.size, longer=longer, resample=self.resample) for image in images
+            ]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 

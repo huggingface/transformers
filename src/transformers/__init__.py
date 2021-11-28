@@ -2598,7 +2598,7 @@ if TYPE_CHECKING:
         from .models.layoutxlm import LayoutXLMProcessor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
-        from .models.vilt import VilTFeatureExtractor, ViltProcessor
+        from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
