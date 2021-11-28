@@ -22,8 +22,11 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 
 
 _import_structure = {
-    "configuration_layoutlmv2": ["LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv2Config",
-                                 "LayoutLMv2OnnxConfig"],
+    "configuration_layoutlmv2": [
+        "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMv2Config",
+        "LayoutLMv2OnnxConfig"
+    ],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }
 
@@ -46,8 +49,11 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_layoutlmv2 import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv2Config,\
-        LayoutLMv2OnnxConfig
+    from .configuration_layoutlmv2 import (
+        LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMv2Config,
+        LayoutLMv2OnnxConfig,
+    )
     from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
 
     if is_tokenizers_available():
