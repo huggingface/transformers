@@ -1287,6 +1287,7 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
+            step = -1
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -1386,6 +1387,13 @@ class Trainer:
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
+            if step < 0:
+                logger.warning(
+                    f"There seems to be not a single sample in your epoch_iterator, stopping training at step"
+                    f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
+                    f" num_steps ({max_steps}) higher than the number of available samples."
+                )
+                self.control.should_training_stop = True
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
@@ -2221,15 +2229,12 @@ class Trainer:
 
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
+            deepspeed_engine, _, _ = deepspeed_init(
+                self, num_training_steps=0, resume_from_checkpoint=None, inference=True
+            )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
-            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
-            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
-            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
-            deepspeed_engine.optimizer.optimizer = None
-            deepspeed_engine.lr_scheduler = None
 
         model = self._wrap_model(self.model, training=False)
 
@@ -2644,7 +2649,9 @@ class Trainer:
                 commit_message = f"Training in progress, step {self.state.global_step}"
             else:
                 commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-            _, self.push_in_progress = self.repo.push_to_hub(commit_message=commit_message, blocking=False)
+            _, self.push_in_progress = self.repo.push_to_hub(
+                commit_message=commit_message, blocking=False, auto_lfs_prune=True
+            )
         finally:
             if self.args.hub_strategy == HubStrategy.CHECKPOINT:
                 # Move back the checkpoint to its place
@@ -2680,12 +2687,16 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        git_head_commit_url = self.repo.push_to_hub(commit_message=commit_message, blocking=blocking)
+        git_head_commit_url = self.repo.push_to_hub(
+            commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
+        )
         # push separately the model card to be independant from the rest of the model
         if self.args.should_save:
             self.create_model_card(model_name=model_name, **kwargs)
             try:
-                self.repo.push_to_hub(commit_message="update model card README.md", blocking=blocking)
+                self.repo.push_to_hub(
+                    commit_message="update model card README.md", blocking=blocking, auto_lfs_prune=True
+                )
             except EnvironmentError as exc:
                 logger.error(f"Error pushing update to the model card. Please read logs and retry.\n${exc}")
 

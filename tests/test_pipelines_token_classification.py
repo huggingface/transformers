@@ -582,14 +582,14 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_tf
     def test_tf_only(self):
-        model_name = "Narsil/small"  # This model only has a TensorFlow version
+        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
         # We test that if we don't specificy framework='tf', it gets detected automatically
         token_classifier = pipeline(task="ner", model=model_name)
         self.assertEqual(token_classifier.framework, "tf")
 
     @require_tf
     def test_small_model_tf(self):
-        model_name = "Narsil/small2"
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
@@ -602,8 +602,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_no_offset_tokenizer(self):
-        model_name = "Narsil/small2"
-        tokenizer = AutoTokenizer.from_pretrained("Narsil/small2", use_fast=False)
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
         token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
@@ -616,7 +616,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_small_model_pt(self):
-        model_name = "Narsil/small2"
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
         outputs = token_classifier("This is a test !")
         self.assertEqual(

@@ -469,7 +469,8 @@ class XLMModel(XLMPreTrainedModel):
                 if self.attentions[int(layer)].n_heads == config.n_heads:
                     self.prune_heads({int(layer): list(map(int, heads))})
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
     def get_input_embeddings(self):
@@ -687,7 +688,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.pred_layer.proj
@@ -785,7 +787,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.sequence_summary = SequenceSummary(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -885,7 +888,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -989,7 +993,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         self.transformer = XLMModel(config)
         self.qa_outputs = SQuADHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=XLMForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
@@ -1108,7 +1113,8 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         self.dropout = nn.Dropout(config.dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1201,7 +1207,8 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.num_labels, 1)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(

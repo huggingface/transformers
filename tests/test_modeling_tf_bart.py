@@ -23,6 +23,7 @@ from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from .test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():
@@ -177,7 +178,7 @@ def prepare_bart_inputs_dict(
 
 
 @require_tf
-class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True

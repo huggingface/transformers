@@ -598,7 +598,8 @@ class BeitModel(BeitPreTrainedModel):
         )
         self.pooler = BeitPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
@@ -715,7 +716,8 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -805,7 +807,8 @@ class BeitForImageClassification(BeitPreTrainedModel):
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -1121,7 +1124,8 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         self.decode_head = BeitUperHead(config)
         self.auxiliary_head = BeitFCNHead(config) if config.use_auxiliary_head else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
@@ -1133,7 +1137,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
                 auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
             )
         # compute weighted loss
-        loss_fct = CrossEntropyLoss(ignore_index=255)
+        loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
         main_loss = loss_fct(upsampled_logits, labels)
         auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
         loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss

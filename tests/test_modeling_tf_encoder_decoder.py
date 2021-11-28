@@ -457,6 +457,14 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
 
+        # Test with the TF checkpoint
+        model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
+
+        output_ids = model.generate(input_ids=input_dict["input_ids"], max_length=None).numpy().tolist()
+        summary = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        self.assertEqual(summary, [EXPECTED_SUMMARY_STUDENTS])
+
 
 @require_tf
 class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
@@ -784,6 +792,16 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
         self.assertAlmostEqual(max_diff, 0.0, places=3)
+
+        # Make sure `from_pretrained` following `save_pretrained` work and give the same result
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            encoder_decoder_tf.save_pretrained(tmp_dirname)
+            encoder_decoder_tf = TFEncoderDecoderModel.from_pretrained(tmp_dirname)
+
+            logits_tf_2 = encoder_decoder_tf(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+
+            max_diff = np.max(np.abs(logits_tf_2.numpy() - logits_tf.numpy()))
+            self.assertAlmostEqual(max_diff, 0.0, places=3)
 
         # TensorFlow => PyTorch
         with tempfile.TemporaryDirectory() as tmp_dirname:
