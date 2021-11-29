@@ -27,7 +27,7 @@ limitations under the License.
         <img alt="GitHub" src="https://img.shields.io/github/license/huggingface/transformers.svg?color=blue">
     </a>
     <a href="https://huggingface.co/docs/transformers/index">
-        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/transformers/index.html.svg?down_color=red&down_message=offline&up_message=online">
+        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/transformers/index.svg?down_color=red&down_message=offline&up_message=online">
     </a>
     <a href="https://github.com/huggingface/transformers/releases">
         <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/transformers.svg">
