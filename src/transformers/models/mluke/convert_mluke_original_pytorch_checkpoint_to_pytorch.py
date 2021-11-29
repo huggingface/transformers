@@ -20,7 +20,7 @@ import os
 
 import torch
 
-from transformers import LukeConfig, LukeModel, XLMRobertaTokenizer, MLukeTokenizer
+from transformers import LukeConfig, LukeModel, MLukeTokenizer, XLMRobertaTokenizer
 from transformers.tokenization_utils_base import AddedToken
 
 
@@ -54,7 +54,6 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         tokenizer_config = json.load(f)
     tokenizer_config["tokenizer_class"] = "MLukeTokenizer"
     with open(os.path.join(pytorch_dump_folder_path, "tokenizer_config.json"), "w") as f:
-
 
         json.dump(tokenizer_config, f)
 
