@@ -22,7 +22,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
+from ...activations import ACT2FN, gelu
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -108,6 +108,47 @@ class BaseLukeModelOutput(BaseModelOutput):
 
     entity_last_hidden_state: torch.FloatTensor = None
     entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class LukeMaskedLMOutput(BaseLukeModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states and attentions.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Masked language modeling (MLM) loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        entity_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Masked entity prediction (MEP) loss.
+        entity_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the entity prediction head (scores for each entity vocabulary token before SoftMax).
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        entity_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, entity_length, hidden_size)`):
+            Sequence of entity hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
+            of each layer plus the initial entity embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    entity_loss: Optional[torch.FloatTensor] = None
+    entity_logits: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -226,11 +267,7 @@ class LukeEmbeddings(nn.Module):
         )
 
     def forward(
-        self,
-        input_ids=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None,
     ):
         if position_ids is None:
             if input_ids is not None:
@@ -347,12 +384,7 @@ class LukeSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self,
-        word_hidden_states,
-        entity_hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
+        self, word_hidden_states, entity_hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
 
@@ -455,20 +487,11 @@ class LukeAttention(nn.Module):
         raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
     def forward(
-        self,
-        word_hidden_states,
-        entity_hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
+        self, word_hidden_states, entity_hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
         self_outputs = self.self(
-            word_hidden_states,
-            entity_hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions,
+            word_hidden_states, entity_hidden_states, attention_mask, head_mask, output_attentions,
         )
         if entity_hidden_states is None:
             concat_self_outputs = self_outputs[0]
@@ -532,21 +555,12 @@ class LukeLayer(nn.Module):
         self.output = LukeOutput(config)
 
     def forward(
-        self,
-        word_hidden_states,
-        entity_hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
+        self, word_hidden_states, entity_hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
 
         self_attention_outputs = self.attention(
-            word_hidden_states,
-            entity_hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
+            word_hidden_states, entity_hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
         )
         if entity_hidden_states is None:
             concat_attention_output = self_attention_outputs[0]
@@ -618,11 +632,7 @@ class LukeEncoder(nn.Module):
                 )
             else:
                 layer_outputs = layer_module(
-                    word_hidden_states,
-                    entity_hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
+                    word_hidden_states, entity_hidden_states, attention_mask, layer_head_mask, output_attentions,
                 )
 
             word_hidden_states = layer_outputs[0]
@@ -672,6 +682,38 @@ class LukePooler(nn.Module):
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
+
+
+class EntityPredictionHeadTransform(nn.Module):
+    def __init__(self, config: LukeConfig):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.entity_emb_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(config.entity_emb_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class EntityPredictionHead(nn.Module):
+    def __init__(self, config: LukeConfig):
+        super().__init__()
+        self.config = config
+        self.transform = EntityPredictionHeadTransform(config)
+        self.decoder = nn.Linear(config.entity_emb_size, config.entity_vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.entity_vocab_size))
+
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states) + self.bias
+
+        return hidden_states
 
 
 class LukePreTrainedModel(PreTrainedModel):
@@ -922,10 +964,7 @@ class LukeModel(LukePreTrainedModel):
 
         # First, compute word embeddings
         word_embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
         )
 
         # Second, compute extended attention mask
@@ -1011,6 +1050,137 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask)) * mask
     return incremental_indices.long() + padding_idx
+
+
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
+class LukeLMHead(nn.Module):
+    """Luke Head for masked language modeling."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        self.decoder.bias = self.bias
+
+    def forward(self, features, **kwargs):
+        x = self.dense(features)
+        x = gelu(x)
+        x = self.layer_norm(x)
+
+        # project back to size of vocabulary with bias
+        x = self.decoder(x)
+
+        return x
+
+    def _tie_weights(self):
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        self.bias = self.decoder.bias
+
+
+@add_start_docstrings(
+    """
+    The LUKE model with a language modeling head and entity prediction head on top 
+    for masked language modeling and masked entity prediction.
+    """,
+    LUKE_START_DOCSTRING,
+)
+class LukeForMaskedLM(LukePreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.luke = LukeModel(config)
+
+        self.lm_head = LukeLMHead(config)
+        self.entity_predictions = EntityPredictionHead(config)
+
+        self.loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def tie_weights(self):
+        super().tie_weights()
+        self._tie_or_clone_weights(self.entity_predictions.decoder, self.luke.entity_embeddings.entity_embeddings)
+
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
+
+    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=LukeMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        entity_ids=None,
+        entity_attention_mask=None,
+        entity_token_type_ids=None,
+        entity_position_ids=None,
+        labels=None,
+        entity_labels=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        entity_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+
+        Returns:
+
+        """
+
+        outputs = self.luke(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            entity_ids=entity_ids,
+            entity_attention_mask=entity_attention_mask,
+            entity_token_type_ids=entity_token_type_ids,
+            entity_position_ids=entity_position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        entity_loss = None
+        entity_logits = None
+        if entity_labels is not None:
+            entity_logits = self.entity_predictions(outputs.entity_last_hidden_state)
+            entity_loss = self.loss_fn(entity_logits.view(-1, self.config.entity_vocab_size), entity_labels.view(-1))
+
+        word_loss = None
+        word_logits = None
+        if labels is not None:
+            word_logits = self.lm_head(outputs.last_hidden_state)
+            word_loss = self.loss_fn(word_logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        return LukeMaskedLMOutput(
+            loss=word_loss,
+            logits=word_logits,
+            entity_loss=entity_loss,
+            entity_logits=entity_logits,
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            entity_last_hidden_state=outputs.entity_last_hidden_state,
+            entity_hidden_states=outputs.entity_hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
