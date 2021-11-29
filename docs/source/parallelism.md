@@ -122,7 +122,7 @@ Implementations:
 
 - [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
 - [Fairscale](https://github.com/facebookresearch/fairscale/#optimizer-state-sharding-zero) ZeRO-DP stages 1+2+3
-- [`transformers` integration](docs/transformers/master/en/main_classes/trainer#trainer-integrations)
+- [`transformers` integration](main_classes/trainer#trainer-integrations)
 
 ## Naive Model Parallel (Vertical) and Pipeline Parallel
 

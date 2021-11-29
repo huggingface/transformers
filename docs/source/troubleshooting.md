@@ -27,4 +27,4 @@ ValueError: Connection error, and we cannot find the requested files in the cach
 Please try again or make sure your Internet connection is on.
 ```
 
-One possible solution in this situation is to use the ["offline-mode"](docs/transformers/master/en/installation#offline-mode).
+One possible solution in this situation is to use the ["offline-mode"](installation#offline-mode).
