@@ -58,7 +58,7 @@ is its ``__call__``: you just need to feed your sentence to your tokenizer objec
 
 This returns a dictionary string to list of ints. The `input_ids <glossary#input-ids>`__ are the indices
 corresponding to each token in our sentence. We will see below what the `attention_mask
-<glossary#attention-mask>`__ is used for and in :ref:`the next section <sentence-pairs>` the goal of
+<glossary#attention-mask>`__ is used for and in :ref:`the next section <preprocessing-pairs-of-sentences>` the goal of
 `token_type_ids <glossary#token-type-ids>`__.
 
 The tokenizer can decode a list of token ids in a proper sentence:
