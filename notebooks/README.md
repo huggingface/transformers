@@ -85,4 +85,4 @@ You can open any page of the documentation as a notebook in colab (there is a bu
 
 ## Community notebooks:
 
-More notebooks developed by the community are available [here](docs/transformers/master/en/community#community-notebooks).
+More notebooks developed by the community are available [here](community#community-notebooks).
