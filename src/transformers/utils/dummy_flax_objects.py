@@ -647,6 +647,9 @@ class FlaxBlenderbotForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBlenderbotModel:
     def __init__(self, *args, **kwargs):
@@ -656,6 +659,9 @@ class FlaxBlenderbotModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBlenderbotPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -664,6 +670,9 @@ class FlaxBlenderbotPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxCLIPModel:
