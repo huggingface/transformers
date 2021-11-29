@@ -793,7 +793,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             for file in ("checkpoint/weights.h5", "checkpoint/extra_data.pickle"):
                 if file not in repo_files:
                     raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
-            # This function is safe now that we know the repo exists
             if "/" not in repo_path_or_name:
                 model_id = repo_path_or_name
                 repo_path_or_name = self.get_full_repo_name(repo_path_or_name)
