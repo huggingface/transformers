@@ -132,22 +132,24 @@ class TransfoXLModelTester:
         outputs2 = model(input_ids_2, labels=lm_labels, mems=outputs1["mems"])
 
         outputs = {
-            "loss": outputs1["loss"],
+            "loss_1": outputs1["loss"],
             "mems_1": outputs1["mems"],
             "lm_logits_1": lm_logits_1,
+            "loss_2": outputs2["loss"],
             "mems_2": outputs2["mems"],
             "lm_logits_2": lm_logits_2,
         }
         return outputs
 
     def check_transfo_xl_lm_head_output(self, result):
-        self.parent.assertEqual(result["loss"].shape, ())
+        self.parent.assertEqual(result["loss_1"].shape, ())
         self.parent.assertEqual(result["lm_logits_1"].shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
             [mem.shape for mem in result["mems_1"]],
             [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
+        self.parent.assertEqual(result["loss_2"].shape, ())
         self.parent.assertEqual(result["lm_logits_2"].shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
             [mem.shape for mem in result["mems_2"]],
