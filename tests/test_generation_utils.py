@@ -1631,10 +1631,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(list(bart_model.generate(input_ids).shape), [1, 22])
         self.assertEqual(list(bart_model.generate(input_ids, max_length=max_length).shape), [1, 33])
         self.assertEqual(list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria).shape), [1, 44])
-        self.assertEqual(
-            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=max_length).shape),
-            [1, 44],
-        )
+        with self.assertWarns(UserWarning):
+            self.assertEqual(
+                list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=max_length).shape),
+                [1, 44],
+            )
 
     def test_custom_logits_processor(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
