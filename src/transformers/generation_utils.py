@@ -892,9 +892,14 @@ class GenerationMixin:
             warnings.warn(
                 "Both `max_length` and `max_new_tokens` have been set but they serve the same purpose.", UserWarning
             )
-        if stopping_criteria:
+        if stopping_criteria is not None:
             for stopping_criterion in stopping_criteria:
                 if isinstance(stopping_criterion, MaxLengthCriteria):
+                    if max_length is not None:
+                        warnings.warn(
+                            "A stopping criteria of type `MaxLengthCriteria` as well as `max_length` was passed to `generate`. The `MaxLengthCriteria` will be used.",
+                            UserWarning,
+                        )
                     max_length = stopping_criterion.max_length
         max_length = max_length if max_length is not None else self.config.max_length
         num_beams = num_beams if num_beams is not None else self.config.num_beams
