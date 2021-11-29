@@ -80,7 +80,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     entity_mask_emb = entity_emb[entity_vocab["[MASK]"]].unsqueeze(0)
     state_dict["entity_embeddings.entity_embeddings.weight"] = torch.cat([entity_emb, entity_mask_emb])
 
-    model = LukeModel(config=config).eval()
+    model = LukeForMaskedLM(config=config).eval()
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     if not (
