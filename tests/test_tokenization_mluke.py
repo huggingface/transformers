@@ -158,12 +158,12 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
             "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
-        # fmt: off
         self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3")
         self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
         self.assertEqual(tokenizer.decode(encoding["input_ids"][19:25], spaces_between_special_tokens=False), "アフガニスタン")
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan")
-        # fmt: on
+        self.assertEqual(
+            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
+        )
 
         self.assertEqual(
             encoding["entity_ids"],
@@ -201,12 +201,12 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
             "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
-        # fmt: off
         self.assertEqual(tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3")
         self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
         self.assertEqual(tokenizer.decode(encoding["input_ids"][20:25], spaces_between_special_tokens=False), "アフガニスタン")
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan")
-        # fmt: on
+        self.assertEqual(
+            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
+        )
 
         self.assertEqual(
             encoding["entity_ids"],
