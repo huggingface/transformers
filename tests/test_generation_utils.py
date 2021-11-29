@@ -1617,17 +1617,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         # BeamSearchScorer max_length should not influence "real" max_length
         self.assertEqual(generated_ids.tolist(), generated_ids_no_max_len.tolist())
 
-    def test_custom_stopping_criteria(self):
+    def test_custom_stopping_criteria_priorities(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
         bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
+        bart_model.config.max_length = 22
+        max_length = 33
         stopping_criteria = StoppingCriteriaList()
-        stopping_criteria.append(MaxLengthCriteria(max_length=10))
-        # XXX: Used to fail with `stopping_criteria` being defined twice in call arguments
-        # https://github.com/huggingface/transformers/issues/12118
-        bart_model.generate(input_ids, stopping_criteria=stopping_criteria)
+        stopping_criteria.append(MaxLengthCriteria(max_length=44))
+
+        self.assertEqual(list(bart_model.generate(input_ids).shape), [1, 22])
+        self.assertEqual(list(bart_model.generate(input_ids, max_length=max_length).shape), [1, 33])
+        self.assertEqual(list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria).shape), [1, 44])
+        self.assertEqual(
+            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=max_length).shape),
+            [1, 44],
+        )
 
     def test_custom_logits_processor(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
