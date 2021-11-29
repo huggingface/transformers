@@ -19,8 +19,11 @@
 import copy
 import json
 import os
+import re
 import warnings
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
+
+from packaging import version
 
 from . import __version__
 from .file_utils import (
@@ -28,6 +31,7 @@ from .file_utils import (
     PushToHubMixin,
     cached_path,
     copy_func,
+    get_list_of_files,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -37,6 +41,8 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+FULL_CONFIGURATION_FILE = "config.json"
+_re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
@@ -536,14 +542,22 @@ class PretrainedConfig(PushToHubMixin):
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        if os.path.isdir(pretrained_model_name_or_path):
-            config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
-        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
+            configuration_file = get_configuration_file(
+                pretrained_model_name_or_path,
+                revision=revision,
+                use_auth_token=use_auth_token,
+                local_files_only=local_files_only,
             )
+
+            if os.path.isdir(pretrained_model_name_or_path):
+                config_file = os.path.join(pretrained_model_name_or_path, configuration_file)
+            else:
+                config_file = hf_bucket_url(
+                    pretrained_model_name_or_path, filename=configuration_file, revision=revision, mirror=None
+                )
 
         try:
             # Load from URL or cache if already cached
@@ -794,6 +808,56 @@ class PretrainedConfig(PushToHubMixin):
         """
         if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+
+
+def get_configuration_file(
+    path_or_repo: Union[str, os.PathLike],
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+    local_files_only: bool = False,
+) -> str:
+    """
+    Get the configuration file to use for this version of transformers.
+
+    Args:
+        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a `directory`.
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            identifier allowed by git.
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to only rely on local files and not to attempt to download any files.
+
+    Returns:
+        :obj:`str`: The configuration file to use.
+    """
+    # Inspect all files from the repo/folder.
+    all_files = get_list_of_files(
+        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
+    )
+    configuration_files_map = {}
+    for file_name in all_files:
+        search = _re_configuration_file.search(file_name)
+        if search is not None:
+            v = search.groups()[0]
+            configuration_files_map[v] = file_name
+    available_versions = sorted(configuration_files_map.keys())
+
+    # Defaults to FULL_CONFIGURATION_FILE and then try to look at some newer versions.
+    configuration_file = FULL_CONFIGURATION_FILE
+    transformers_version = version.parse(__version__)
+    for v in available_versions:
+        if version.parse(v) <= transformers_version:
+            configuration_file = configuration_files_map[v]
+        else:
+            # No point going further since the versions are sorted.
+            break
+
+    return configuration_file
 
 
 PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)

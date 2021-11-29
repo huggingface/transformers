@@ -23,6 +23,7 @@ import math
 import os
 import sys
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import Optional
 
 import datasets
@@ -318,6 +319,7 @@ def main():
         if model_args.config_overrides is not None:
             logger.info(f"Overriding config: {model_args.config_overrides}")
             config.update_from_string(model_args.config_overrides)
+            logger.info(f"New config: {config}")
 
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
@@ -402,7 +404,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.

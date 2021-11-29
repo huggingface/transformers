@@ -143,7 +143,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -293,7 +293,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -429,6 +429,7 @@ jobs:
         run: |
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
+          rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
           pip install .[testing,deepspeed,fairscale]
 
       - name: Are GPUs recognized by our DL frameworks

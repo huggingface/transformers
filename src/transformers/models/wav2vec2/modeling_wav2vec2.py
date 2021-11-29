@@ -399,20 +399,22 @@ class Wav2Vec2FeatureExtractor(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
+        self._requires_grad = True
 
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
+        self._requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
-        if self.training:
+        if self._requires_grad and self.training:
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self.gradient_checkpointing and self.training:
+            if self._requires_grad and self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -493,7 +495,8 @@ class Wav2Vec2Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -579,7 +582,10 @@ class Wav2Vec2Attention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -929,6 +935,55 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
+class Wav2Vec2Adapter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        # feature dim might need to be down-projected
+        if config.output_hidden_size != config.hidden_size:
+            self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
+            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
+        else:
+            self.proj = self.proj_layer_norm = None
+
+        self.layers = nn.ModuleList(Wav2Vec2AdapterLayer(config) for _ in range(config.num_adapter_layers))
+        self.layerdrop = config.layerdrop
+
+    def forward(self, hidden_states):
+        # down project hidden_states if necessary
+        if self.proj is not None and self.proj_layer_norm is not None:
+            hidden_states = self.proj(hidden_states)
+            hidden_states = self.proj_layer_norm(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+
+        for layer in self.layers:
+            layerdrop_prob = np.random.random()
+            if not self.training or (layerdrop_prob > self.layerdrop):
+                hidden_states = layer(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
+
+
+class Wav2Vec2AdapterLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.output_hidden_size,
+            2 * config.output_hidden_size,
+            config.adapter_kernel_size,
+            stride=config.adapter_stride,
+            padding=1,
+        )
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        return hidden_states
+
+
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -973,10 +1028,14 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
+    ):
         """
         Computes the output length of the convolutional layers
         """
+
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
@@ -986,10 +1045,22 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+
         return input_lengths
 
-    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
+    ):
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = output_lengths.to(torch.long)
+
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
@@ -1079,7 +1150,10 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         else:
             self.encoder = Wav2Vec2Encoder(config)
 
-        self.init_weights()
+        self.adapter = Wav2Vec2Adapter(config) if config.add_adapter else None
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def _mask_hidden_states(
         self,
@@ -1154,7 +1228,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
 
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
@@ -1170,6 +1246,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
+
+        if self.adapter is not None:
+            hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
@@ -1191,7 +1270,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
@@ -1319,7 +1399,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         if attention_mask is not None:
             # compute reduced attention_mask correponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
 
         quantized_features, codevector_perplexity = self.quantizer(
             extract_features, mask_time_indices=mask_time_indices
@@ -1400,7 +1482,8 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         self.dropout = nn.Dropout(config.final_dropout)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Wav2Vec2BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1483,7 +1566,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
@@ -1590,7 +1674,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """

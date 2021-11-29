@@ -362,20 +362,22 @@ class UniSpeechSatFeatureExtractor(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
+        self._requires_grad = True
 
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
+        self._requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
-        if self.training:
+        if self._requires_grad and self.training:
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self.gradient_checkpointing and self.training:
+            if self._requires_grad and self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -457,7 +459,8 @@ class UniSpeechSatAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -543,7 +546,10 @@ class UniSpeechSatAttention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -887,7 +893,6 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat
 class UniSpeechSatPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -948,7 +953,10 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(torch.long)
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
@@ -1024,7 +1032,6 @@ UNISPEECH_SAT_INPUTS_DOCSTRING = r"""
     "The bare UniSpeechSat Model transformer outputting raw hidden-states without any specific head on top.",
     UNISPEECH_SAT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
 class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
     def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
@@ -1039,8 +1046,10 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         else:
             self.encoder = UniSpeechSatEncoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
@@ -1163,7 +1172,8 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         if self.config.do_stable_layer_norm:
             self.layer_norm_for_extract.requires_grad = False
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_gumbel_temperature(self, temperature: int):
         """
@@ -1320,7 +1330,8 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
@@ -1428,7 +1439,8 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """

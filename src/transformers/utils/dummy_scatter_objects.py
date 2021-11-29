@@ -13,6 +13,9 @@ class TapasForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["scatter"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["scatter"])
+
 
 class TapasForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -21,6 +24,9 @@ class TapasForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["scatter"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["scatter"])
 
 
 class TapasForSequenceClassification:
@@ -31,6 +37,9 @@ class TapasForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["scatter"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["scatter"])
+
 
 class TapasModel:
     def __init__(self, *args, **kwargs):
@@ -40,6 +49,9 @@ class TapasModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["scatter"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["scatter"])
+
 
 class TapasPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -48,6 +60,9 @@ class TapasPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["scatter"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["scatter"])
 
 
 def load_tf_weights_in_tapas(*args, **kwargs):

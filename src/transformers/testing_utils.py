@@ -39,6 +39,7 @@ from .file_utils import (
     is_onnx_available,
     is_pandas_available,
     is_pytesseract_available,
+    is_pytorch_quantization_available,
     is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -367,6 +368,17 @@ def require_scatter(test_case):
     """
     if not is_scatter_available():
         return unittest.skip("test requires PyTorch Scatter")(test_case)
+    else:
+        return test_case
+
+
+def require_pytorch_quantization(test_case):
+    """
+    Decorator marking a test that requires PyTorch Quantization Toolkit. These tests are skipped when PyTorch
+    Quantization Toolkit isn't installed.
+    """
+    if not is_pytorch_quantization_available():
+        return unittest.skip("test requires PyTorch Quantization Toolkit")(test_case)
     else:
         return test_case
 
