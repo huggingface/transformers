@@ -15,13 +15,13 @@
 """ Tokenization classes for XLM-RoBERTa model."""
 
 
+import itertools
+import json
 import os
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
-import json
-import itertools
 
-
+import numpy as np
 import sentencepiece as spm
 
 from ...file_utils import add_end_docstrings, is_tf_available, is_torch_available
