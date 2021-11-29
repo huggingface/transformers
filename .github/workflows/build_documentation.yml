@@ -17,7 +17,6 @@ jobs:
         with:
           repository: 'huggingface/doc-builder'
           token: ${{ secrets.HUGGINGFACE_PUSH }}
-          ref: launch-script
 
       - name: Clone transformers
         run: |
@@ -53,5 +52,5 @@ jobs:
         run: |
           git add build
           git commit -m "Updated with commit ${{ github.sha }}"
-#          git push origin main
+          git push origin main
 
