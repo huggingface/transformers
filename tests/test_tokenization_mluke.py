@@ -36,7 +36,7 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, task=None, **kwargs):
         kwargs.update(self.special_tokens_map)
         kwargs.update({"task": task})
-        return self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", use_auth_token=True, **kwargs)
+        return self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -44,7 +44,7 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", use_auth_token=True)
+        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base")
         text = "lower newer"
         spm_tokens = ["▁lower", "▁new", "er"]
         tokens = tokenizer.tokenize(text)
@@ -65,7 +65,7 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base",)
+        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
@@ -127,10 +127,10 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = MLukeTokenizer.from_pretrained(
-            "studio-ousia/mluke-base", return_token_type_ids=True, use_auth_token=True
+            "studio-ousia/mluke-base", return_token_type_ids=True
         )
         cls.entity_classification_tokenizer = MLukeTokenizer.from_pretrained(
-            "studio-ousia/mluke-base", return_token_type_ids=True, task="entity_classification", use_auth_token=True
+            "studio-ousia/mluke-base", return_token_type_ids=True, task="entity_classification"
         )
         cls.entity_pair_tokenizer = MLukeTokenizer.from_pretrained(
             "studio-ousia/mluke-base",

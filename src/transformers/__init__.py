@@ -1037,6 +1037,7 @@ if is_torch_available():
             "LukeForEntityClassification",
             "LukeForEntityPairClassification",
             "LukeForEntitySpanClassification",
+            "LukeForMaskedLM",
             "LukeModel",
             "LukePreTrainedModel",
         ]
@@ -2904,6 +2905,7 @@ if TYPE_CHECKING:
             LukeForEntityClassification,
             LukeForEntityPairClassification,
             LukeForEntitySpanClassification,
+            LukeForMaskedLM,
             LukeModel,
             LukePreTrainedModel,
         )
