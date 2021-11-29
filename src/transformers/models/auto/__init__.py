@@ -32,6 +32,7 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_auto"] = [
         "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+        "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_CAUSAL_LM_MAPPING",
         "MODEL_FOR_CTC_MAPPING",
         "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
@@ -137,6 +138,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+            MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
