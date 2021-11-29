@@ -248,7 +248,7 @@ class FlaxBlenderbotAttention(nn.Module):
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
@@ -413,10 +413,10 @@ class FlaxBlenderbotEncoderLayer(nn.Module):
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -533,10 +533,10 @@ class FlaxBlenderbotDecoderLayer(nn.Module):
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -679,15 +679,13 @@ class FlaxBlenderbotEncoder(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings,
             embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.layers = FlaxBlenderbotEncoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
@@ -750,15 +748,13 @@ class FlaxBlenderbotDecoder(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings,
             embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.layers = FlaxBlenderbotDecoderLayerCollection(self.config, self.dtype)
@@ -823,8 +819,7 @@ class FlaxBlenderbotModule(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.encoder = FlaxBlenderbotEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
@@ -1232,7 +1227,7 @@ class FlaxBlenderbotForConditionalGenerationModule(nn.Module):
             self.model.shared.num_embeddings,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
