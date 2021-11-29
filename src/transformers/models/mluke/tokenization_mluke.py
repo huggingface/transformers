@@ -570,7 +570,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _encode_plus(
         self,
         text: Union[TextInput],
@@ -735,7 +734,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair]],
