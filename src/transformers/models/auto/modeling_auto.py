@@ -147,7 +147,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-        ("imagegpt", "ImageGPTForCausalLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -199,7 +198,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        ("imagegpt", "ImageGPTForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -230,6 +228,13 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
+    ]
+)
+
+MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
+    # Model for Causal Image Modeling mapping
+    [
+        ("imagegpt", "ImageGPTForCausalImageModeling"),
     ]
 )
 
@@ -524,6 +529,9 @@ MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
 MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES
+)
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
