@@ -18,6 +18,7 @@
 import functools
 import inspect
 import os
+import pickle
 import re
 import warnings
 from typing import Dict, List, Optional, Union
@@ -29,6 +30,8 @@ from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
+
+from huggingface_hub import Repository, list_repo_files
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
@@ -752,6 +755,73 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return main_layer.get_input_embeddings()
         else:
             raise NotImplementedError
+
+    def _save_checkpoint(self, checkpoint_dir, epoch):
+        if not os.path.isdir(checkpoint_dir):
+            os.mkdir(checkpoint_dir)
+        # We avoid tf.train.checkpoint or saving weights in TF format, even though that includes optimizer
+        # state for us, because it requires special handling for objects like custom losses, which we use
+        # internally and which users are likely to use too
+        weights_path = os.path.join(checkpoint_dir, "weights.h5")
+        self.save_weights(weights_path)
+        extra_data = {"epoch": epoch, "optimizer_state": self.optimizer.get_weights()}
+        extra_data_path = os.path.join(checkpoint_dir, "extra_data.pickle")
+        with open(extra_data_path, "wb") as f:
+            pickle.dump(extra_data, f)
+
+    def load_repo_checkpoint(self, repo_path_or_name):
+        """
+        Loads a saved checkpoint (model weights and optimizer state) from a repo. Returns the current epoch count when
+        the checkpoint was made.
+
+        Args:
+            repo_path_or_name (:obj:`str`):
+                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
+                the repository will have the name of that local folder).
+
+        Returns:
+            :obj:`dict`: A dictionary of extra metadata from the checkpoint, most commonly an "epoch" count.
+        """
+        if getattr(self, "optimizer", None) is None:
+            raise RuntimeError(
+                "Checkpoint loading failed as no optimizer is attached to the model. "
+                "This is most likely caused by the model not being compiled."
+            )
+        if not os.path.isdir(repo_path_or_name):
+            # If this isn't a local path, check that the remote repo exists and has a checkpoint in it
+            repo_files = list_repo_files(repo_path_or_name)
+            for file in ("checkpoint/weights.h5", "checkpoint/extra_data.pickle"):
+                if file not in repo_files:
+                    raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
+            if "/" not in repo_path_or_name:
+                model_id = repo_path_or_name
+                repo_path_or_name = self.get_full_repo_name(repo_path_or_name)
+            else:
+                model_id = repo_path_or_name.split("/")[-1]
+            repo = Repository(model_id, clone_from=f"https://huggingface.co/{repo_path_or_name}")
+            local_dir = repo.local_dir
+        else:
+            local_dir = repo_path_or_name
+
+        # Now make sure the repo actually has a checkpoint in it.
+        checkpoint_dir = os.path.join(local_dir, "checkpoint")
+        weights_file = os.path.join(checkpoint_dir, "weights.h5")
+        if not os.path.isfile(weights_file):
+            raise FileNotFoundError(f"Could not find checkpoint file weights.h5 in repo {repo_path_or_name}!")
+        extra_data_file = os.path.join(checkpoint_dir, "extra_data.pickle")
+        if not os.path.isfile(extra_data_file):
+            raise FileNotFoundError(f"Could not find checkpoint file extra_data.pickle in repo {repo_path_or_name}!")
+
+        # Assuming the repo is real and we got a checkpoint, load the weights and the optimizer state into the model.
+        # The optimizer state includes the iteration count, so learning rate schedules should resume as normal too.
+        self.load_weights(weights_file)
+        with open(extra_data_file, "rb") as f:
+            extra_data = pickle.load(f)
+        self.optimizer.set_weights(extra_data["optimizer_state"])
+
+        # Finally, return the epoch number from the checkpoint. This isn't a property of the model, so we can't
+        # set it directly, but the user can pass it to fit().
+        return {"epoch": extra_data["epoch"]}
 
     def compile(
         self,
