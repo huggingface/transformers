@@ -1088,6 +1088,14 @@ class LukeLMHead(nn.Module):
     LUKE_START_DOCSTRING,
 )
 class LukeForMaskedLM(LukePreTrainedModel):
+    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias", r"entity_predictions.decoder.weight"]
+    _keys_to_ignore_on_load_missing = [
+        r"position_ids",
+        r"lm_head.decoder.weight",
+        r"lm_head.decoder.bias",
+        r"entity_predictions.decoder.weight",
+    ]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1159,15 +1167,13 @@ class LukeForMaskedLM(LukePreTrainedModel):
         )
 
         entity_loss = None
-        entity_logits = None
+        entity_logits = self.entity_predictions(outputs.entity_last_hidden_state)
         if entity_labels is not None:
-            entity_logits = self.entity_predictions(outputs.entity_last_hidden_state)
             entity_loss = self.loss_fn(entity_logits.view(-1, self.config.entity_vocab_size), entity_labels.view(-1))
 
         word_loss = None
-        word_logits = None
+        word_logits = self.lm_head(outputs.last_hidden_state)
         if labels is not None:
-            word_logits = self.lm_head(outputs.last_hidden_state)
             word_loss = self.loss_fn(word_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         return LukeMaskedLMOutput(
