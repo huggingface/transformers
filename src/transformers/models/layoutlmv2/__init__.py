@@ -25,7 +25,7 @@ _import_structure = {
     "configuration_layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMv2Config",
-        "LayoutLMv2OnnxConfig"
+        "LayoutLMv2OnnxConfig",
     ],
     "tokenization_layoutlmv2": ["LayoutLMv2Tokenizer"],
 }

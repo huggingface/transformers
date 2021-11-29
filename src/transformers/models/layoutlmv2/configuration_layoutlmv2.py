@@ -231,12 +231,7 @@ class LayoutLMv2Config(PretrainedConfig):
 
 
 class LayoutLMv2OnnxConfig(OnnxConfig):
-    def __init__(
-            self,
-            config: PretrainedConfig,
-            task: str = "default",
-            patching_specs: List[PatchingSpec] = None
-    ):
+    def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
         super().__init__(config, task=task, patching_specs=patching_specs)
 
     @property
@@ -274,6 +269,7 @@ class LayoutLMv2OnnxConfig(OnnxConfig):
         """
 
         import torch
+
         if not framework == TensorType.PYTORCH:
             raise NotImplementedError("Exporting LayoutLM to ONNX is currently only supported for PyTorch.")
 

@@ -113,6 +113,7 @@ def export(
             raise ValueError("Model and config inputs doesn't match")
 
         if isinstance(model.base_model, LayoutLMv2Model):
+
             class PoolerLayer(nn.Module):
                 def __init__(self):
                     super(PoolerLayer, self).__init__()
