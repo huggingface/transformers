@@ -694,7 +694,7 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    losses: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
     prediction_scores: torch.FloatTensor = None
     mems: List[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -1095,16 +1095,30 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
 
+        if labels is not None:
+            # Prevents all labels being -100 and throwing an error
+            # when backwarding the loss
+            miss_valid_label = labels[0, 1:].sum() == (labels.size(1) - 1) * -100
+            if miss_valid_label:
+                # Sets an <EOS> token, just to prevent loss from being NaN
+                labels[0, 1] = self.config.eos_token_id
+
         softmax_output = self.crit(pred_hid, labels)
         prediction_scores = softmax_output.view(bsz, tgt_len, -1) if labels is None else ()
-        loss = softmax_output.view(bsz, tgt_len - 1) if labels is not None else None
+
+        if labels is not None:
+            loss = softmax_output.view(bsz, tgt_len - 1)
+            # Avoids from incorporating padding (-100) tokens into loss value
+            loss = loss[loss != 0].mean()
+        else:
+            loss = None
 
         if not return_dict:
             output = (prediction_scores,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TransfoXLLMHeadModelOutput(
-            losses=loss,
+            loss=loss,
             prediction_scores=prediction_scores,
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
