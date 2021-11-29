@@ -31,7 +31,7 @@ from tensorflow.python.keras.engine import data_adapter
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
 
-from huggingface_hub import list_repo_files, Repository
+from huggingface_hub import Repository, list_repo_files
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
@@ -794,11 +794,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 if file not in repo_files:
                     raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
             # This function is safe now that we know the repo exists
-            if '/' not in repo_path_or_name:
+            if "/" not in repo_path_or_name:
                 model_id = repo_path_or_name
                 repo_path_or_name = self.get_full_repo_name(repo_path_or_name)
             else:
-                model_id = repo_path_or_name.split('/')[-1]
+                model_id = repo_path_or_name.split("/")[-1]
             repo = Repository(model_id, clone_from=f"https://huggingface.co/{repo_path_or_name}")
             local_dir = repo.local_dir
         else:
