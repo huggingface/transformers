@@ -328,6 +328,11 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     return num_models_equal, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
 
 
+def convert_readme_to_index(model_list):
+    model_list = model_list.replace("https://huggingface.co/docs/transformers/master/", "")
+    return model_list.replace("https://huggingface.co/docs/transformers/", "")
+
+
 def _find_text_in_file(filename, start_prompt, end_prompt):
     """
     Find the text in `filename` between a line beginning with `start_prompt` and before `end_prompt`, removing empty
@@ -380,10 +385,11 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
 
         converted_md_lists.append((filename, num_models_equal, converted_md_list, _start_prompt, _end_prompt))
 
-    if md_list != index_list:
+    converted_md_list = convert_readme_to_index(md_list)
+    if converted_md_list != index_list:
         if overwrite:
             with open(os.path.join(PATH_TO_DOCS, "index.mdx"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [md_list] + lines[end_index:])
+                f.writelines(lines[:start_index] + [converted_md_list] + lines[end_index:])
         else:
             raise ValueError(
                 "The model list in the README changed and the list in `index.mdx` has not been updated. Run "
