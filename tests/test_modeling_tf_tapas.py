@@ -553,7 +553,7 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
         # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
         # but since it's not straightforward to do this with the TF 1 implementation, we test it with
         # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
-        model = TFTapasModel.from_pretrained("google/tapas-base-finetuned-wtq", from_pt=True)
+        model = TFTapasModel.from_pretrained("google/tapas-base-finetuned-wtq")
         tokenizer = self.default_tokenizer
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="tf")
@@ -588,7 +588,7 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_conversational(self):
         # note that google/tapas-base-finetuned-sqa should correspond to tapas_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-sqa", from_pt=True)
+        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-sqa")
         tokenizer = self.default_tokenizer
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="tf")
@@ -633,7 +633,7 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     def test_inference_question_answering_head_conversational_absolute_embeddings(self):
         # note that google/tapas-small-finetuned-sqa should correspond to tapas_sqa_inter_masklm_small_reset
         # however here we test the version with absolute position embeddings
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-small-finetuned-sqa", from_pt=True)
+        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-small-finetuned-sqa")
         tokenizer = self.default_tokenizer
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="tf")
@@ -677,7 +677,7 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_weak_supervision(self):
         # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq", from_pt=True)
+        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
 
         tokenizer = self.default_tokenizer
         # let's test on a batch
@@ -721,7 +721,7 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_training_question_answering_head_weak_supervision(self):
         # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq", from_pt=True)
+        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
         tokenizer = self.default_tokenizer
         # let's test on a batch
         table, queries, answer_coordinates, answer_text, float_answer = prepare_tapas_batch_inputs_for_training()
@@ -779,9 +779,7 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
         # note that google/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
-        model = TFTapasForQuestionAnswering.from_pretrained(
-            "google/tapas-base-finetuned-wikisql-supervised", from_pt=True
-        )
+        model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wikisql-supervised")
         tokenizer = self.default_tokenizer
 
         table, queries = prepare_tapas_single_inputs_for_inference()
@@ -831,7 +829,7 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_head(self):
         # note that google/tapas-base-finetuned-tabfact should correspond to tapas_tabfact_inter_masklm_base_reset
-        model = TFTapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact", from_pt=True)
+        model = TFTapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
         tokenizer = self.default_tokenizer
 
         table, queries = prepare_tapas_single_inputs_for_inference()

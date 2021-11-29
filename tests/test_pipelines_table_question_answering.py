@@ -530,7 +530,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @slow
     def test_integration_wtq_tf(self):
         model_id = "google/tapas-base-finetuned-wtq"
-        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
+        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         table_querier = pipeline("table-question-answering", model=model, tokenizer=tokenizer)
 
@@ -600,7 +600,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @slow
     def test_integration_sqa_tf(self):
         model_id = "google/tapas-base-finetuned-sqa"
-        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
+        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         table_querier = pipeline(
             "table-question-answering",
