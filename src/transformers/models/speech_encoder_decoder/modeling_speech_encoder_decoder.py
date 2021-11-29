@@ -232,11 +232,13 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
-        # encoder outputs might need to be projected to different dimension for decoder
+        # get encoder output hidden size
+        self.encoder_output_dim = getattr(config.encoder, "output_hidden_size", config.encoder.hidden_size)
         if (
-            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            self.encoder_output_dim != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
         ):
+            # encoder outputs might need to be projected to different dimension for decoder
             self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
         if self.encoder.get_output_embeddings() is not None:
@@ -487,7 +489,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         # optionally project encoder_hidden_states
         if (
-            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            self.encoder_output_dim != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
