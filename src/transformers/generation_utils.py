@@ -573,7 +573,6 @@ class GenerationMixin:
             processors = LogitsProcessorList()
         else:
             processors = logits_processor
-        existing_processors_types = [type(processor) for processor in processors]
         # init warp parameters
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         no_repeat_ngram_size = (
@@ -601,55 +600,34 @@ class GenerationMixin:
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
-        if (
-            diversity_penalty is not None
-            and diversity_penalty > 0.0
-            and HammingDiversityLogitsProcessor not in existing_processors_types
-        ):
+        if diversity_penalty is not None and diversity_penalty > 0.0:
             processors.append(
                 HammingDiversityLogitsProcessor(
                     diversity_penalty=diversity_penalty, num_beams=num_beams, num_beam_groups=num_beam_groups
                 )
             )
-        if (
-            repetition_penalty is not None
-            and repetition_penalty != 1.0
-            and RepetitionPenaltyLogitsProcessor not in existing_processors_types
-        ):
+        if repetition_penalty is not None and repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
-        if (
-            no_repeat_ngram_size is not None
-            and no_repeat_ngram_size > 0
-            and NoRepeatNGramLogitsProcessor not in existing_processors_types
-        ):
+        if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
-        if (
-            encoder_no_repeat_ngram_size is not None
-            and encoder_no_repeat_ngram_size > 0
-            and EncoderNoRepeatNGramLogitsProcessor not in existing_processors_types
-        ):
+        if encoder_no_repeat_ngram_size is not None and encoder_no_repeat_ngram_size > 0:
             if self.config.is_encoder_decoder:
                 processors.append(EncoderNoRepeatNGramLogitsProcessor(encoder_no_repeat_ngram_size, encoder_input_ids))
             else:
                 raise ValueError(
                     "It's impossible to use `encoder_no_repeat_ngram_size` with decoder-only architecture"
                 )
-        if bad_words_ids is not None and NoBadWordsLogitsProcessor not in existing_processors_types:
+        if bad_words_ids is not None:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
-        if (
-            min_length is not None
-            and eos_token_id is not None
-            and min_length > -1
-            and MinLengthLogitsProcessor not in existing_processors_types
-        ):
+        if min_length is not None and eos_token_id is not None and min_length > -1:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
-        if prefix_allowed_tokens_fn is not None and PrefixConstrainedLogitsProcessor not in existing_processors_types:
+        if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams // num_beam_groups))
-        if forced_bos_token_id is not None and ForcedBOSTokenLogitsProcessor not in existing_processors_types:
+        if forced_bos_token_id is not None:
             processors.append(ForcedBOSTokenLogitsProcessor(forced_bos_token_id))
-        if forced_eos_token_id is not None and ForcedEOSTokenLogitsProcessor not in existing_processors_types:
+        if forced_eos_token_id is not None:
             processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
-        if remove_invalid_values is True and InfNanRemoveLogitsProcessor not in existing_processors_types:
+        if remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
         return processors
 
@@ -663,12 +641,12 @@ class GenerationMixin:
     ) -> StoppingCriteriaList:
         if stopping_criteria is None:
             stopping_criteria = StoppingCriteriaList()
-        existing_criteria_types = [type(criteria) for criteria in stopping_criteria]
-        if max_length is not None and MaxLengthCriteria not in existing_criteria_types:
+        max_length_in_criteria = any([isinstance(criteria, MaxLengthCriteria) for criteria in stopping_criteria])
+        if max_length is not None and not max_length_in_criteria:
             stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
-        if max_time is not None and MaxTimeCriteria not in existing_criteria_types:
+        if max_time is not None:
             stopping_criteria.append(MaxTimeCriteria(max_time=max_time))
-        if max_new_tokens is not None and MaxNewTokensCriteria not in existing_criteria_types:
+        if max_new_tokens is not None:
             stopping_criteria.append(MaxNewTokensCriteria(start_length=start_length, max_new_tokens=max_new_tokens))
         return stopping_criteria
 
