@@ -3,7 +3,7 @@ name: Build documentation
 on:
   push:
     branches:
-      - new_front_github_actions
+      - master
 
 jobs:
   build_and_package:
@@ -41,7 +41,7 @@ jobs:
 
       - name: Setup git
         run: |
-          git config --global user.name Hugging Face
+          git config --global user.name "Hugging Face"
           git config --global user.email transformers@huggingface.co
 
       - name: Make documentation
