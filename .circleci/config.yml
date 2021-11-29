@@ -79,7 +79,7 @@ jobs:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - run: pip install tensorflow_probability
@@ -116,7 +116,7 @@ jobs:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - run: pip install tensorflow_probability
@@ -148,7 +148,7 @@ jobs:
                       - v0.4-torch_and_flax-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - save_cache:
@@ -184,7 +184,7 @@ jobs:
                       - v0.4-torch_and_flax-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - save_cache:
@@ -214,7 +214,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - save_cache:
@@ -249,7 +249,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - save_cache:
@@ -278,7 +278,7 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - run: pip install tensorflow_probability
             - save_cache:
@@ -312,7 +312,7 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - run: pip install tensorflow_probability
             - save_cache:
@@ -341,7 +341,7 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: sudo pip install .[flax,testing,sentencepiece,flax-speech,vision]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
@@ -374,7 +374,7 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: sudo pip install .[flax,testing,sentencepiece,vision,flax-speech]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
@@ -404,7 +404,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - save_cache:
@@ -440,7 +440,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - save_cache:
@@ -470,7 +470,7 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
             - run: pip install tensorflow_probability
             - save_cache:
@@ -505,7 +505,7 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
             - run: pip install tensorflow_probability
             - save_cache:
@@ -532,7 +532,7 @@ jobs:
                   keys:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[ja,testing,sentencepiece,jieba]
             - run: python -m unidic download
             - save_cache:
@@ -564,7 +564,7 @@ jobs:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
             - save_cache:
@@ -599,7 +599,7 @@ jobs:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
             - run: pip install -r examples/pytorch/_tests_requirements.txt
             - save_cache:
@@ -633,7 +633,7 @@ jobs:
             - run: |
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[torch,sentencepiece,testing]
             - save_cache:
                   key: v0.4-hub-{{ checksum "setup.py" }}
@@ -671,7 +671,7 @@ jobs:
             - run: |
                 git config --global user.email "ci@dummy.com"
                 git config --global user.name "ci"
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[torch,sentencepiece,testing]
             - save_cache:
                   key: v0.4-hub-{{ checksum "setup.py" }}
@@ -699,7 +699,7 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[torch,testing,sentencepiece,onnxruntime]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
@@ -732,7 +732,7 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[torch,testing,sentencepiece,onnxruntime]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
@@ -757,7 +757,7 @@ jobs:
                       - v0.4-build_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install ."[docs]"
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - run: pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
@@ -784,7 +784,7 @@ jobs:
                       - v0.4-deploy_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install ."[docs]"
             - save_cache:
                   key: v0.4-deploy_doc-{{ checksum "setup.py" }}
@@ -806,7 +806,7 @@ jobs:
                   keys:
                       - v0.4-code_quality-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
@@ -832,7 +832,7 @@ jobs:
                   keys:
                       - v0.4-repository_consistency-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
                   key: v0.4-repository_consistency-{{ checksum "setup.py" }}
@@ -862,7 +862,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
+            - run: /usr/local/bin/python -m pip install --upgrade pip
             - run: pip install .[torch,testing,vision]
             - run: pip install torchvision
             - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
