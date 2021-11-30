@@ -2250,9 +2250,9 @@ class Trainer:
         # while ``train`` is running, cast it to the right dtype first and then put on device
         if not self.is_in_train:
             if args.fp16_full_eval:
-                model = model.float16().to(args.device)
+                model = model.to(dtype=torch.float16, device=args.device)
             elif args.bf16_full_eval:
-                model = model.bfloat16().to(args.device)
+                model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = dataloader.batch_size
 
@@ -2758,9 +2758,9 @@ class Trainer:
         # while ``train`` is running, cast it to the right dtype first and then put on device
         if not self.is_in_train:
             if args.fp16_full_eval:
-                model = model.float16().to(args.device)
+                model = model.to(dtype=torch.float16, device=args.device)
             elif args.bf16_full_eval:
-                model = model.bfloat16().to(args.device)
+                model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)

@@ -775,7 +775,7 @@ class TrainingArguments:
         if self.run_name is None:
             self.run_name = self.output_dir
 
-        if self.fp16_backend:
+        if self.fp16_backend and self.fp16_backend != "auto":
             warnings.warn(
                 "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `half_precision_backend` instead",
                 FutureWarning,
