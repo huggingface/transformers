@@ -320,7 +320,7 @@ def is_torch_bf16_available():
         # with additional check for torch version
         # to succeed:
         # 1. the hardware needs to support bf16 (arch >= Ampere)
-        # 2. torch >= 1.9
+        # 2. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
         # 3. CUDA >= 11
         # 4. torch.autocast exists
         # XXX: one problem here is that it may give invalid results on mixed hardware, so it's
@@ -332,7 +332,7 @@ def is_torch_bf16_available():
             return False
         if int(torch.version.cuda.split(".")[0]) < 11:
             return False
-        if not version.parse(torch.__version__) >= version.parse("1.09"):
+        if not version.parse(torch.__version__) >= version.parse("1.10"):
             return False
         if not hasattr(torch, "autocast"):
             return False
