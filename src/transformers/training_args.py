@@ -780,7 +780,7 @@ class TrainingArguments:
                 "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation can only be used on CUDA devices."
             )
 
-        if (self.fp16 or self.fp16_full_eval or self.fp16_opt_level or self.fp16_backend) and self.bfloat16:
+        if (self.fp16 or self.half_precision_full_eval or self.fp16_opt_level or self.fp16_backend) and self.bfloat16:
             # This check should be modified once AMP supports bfloat16.
             raise ValueError("bfloat16 cannot be used together with AMP, APEX, or FP16.")
 
