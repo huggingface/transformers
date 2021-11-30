@@ -244,12 +244,14 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
 
-        # only if we have an explicit fp16.enabled = False then it's fp32, if it's True or this
-        # whole config section is missing then the fallback is fp16
+        # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_false("fp16.enabled"):
-            self._dtype = torch.float32
-        # later there will be other dtypes besides just fp16 and fp32
-        # also not quite sure what dtype should be under apex, defaulting to fp16 for now
+            if self.is_true("bfloat16.enabled"):
+                self._dtype = torch.bfloat16
+            else:
+                self._dtype = torch.float32
+        else:
+            self._dtype = torch.float16
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
