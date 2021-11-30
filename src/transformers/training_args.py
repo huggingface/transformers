@@ -207,12 +207,11 @@ class TrainingArguments:
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
-        bfloat16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use bfloat16 (16 bits) instead of float32 (32 bits). Requires hardware support.
+        bf16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Amphere or
+            higher NVIDIA architecture.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
-        bf16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
@@ -220,9 +219,12 @@ class TrainingArguments:
             The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
             other choices will force the requested backend.
-        half_precision_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use full 16-bit precision evaluation instead of 32-bit. This will be faster and save memory but
-            can harm metric values.
+        bf16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
+            metric values.
+        fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
+            metric values.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         xpu_backend (:obj:`str`, `optional`):
@@ -511,20 +513,15 @@ class TrainingArguments:
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
-
-    bfloat16: bool = field(
+    bf16: bool = field(
         default=False,
         metadata={
-            "help": "Whether to use bfloat16 (16 bits) instead of float32 (32 bits). Requires hardware support."
+            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Amphere or higher NVIDIA architecture"
         },
     )
     fp16: bool = field(
         default=False,
         metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
-    )
-    bf16: bool = field(
-        default=False,
-        metadata={"help": "Whether to use bf16 (mixed) precision instead of 32-bit"},
     )
     fp16_opt_level: str = field(
         default="O1",
@@ -539,9 +536,13 @@ class TrainingArguments:
         default="auto",
         metadata={"help": "The backend to be used for half precision.", "choices": ["auto", "amp", "apex"]},
     )
-    half_precision_full_eval: bool = field(
+    bf16_full_eval: bool = field(
         default=False,
-        metadata={"help": "Whether to use full half precision evaluation instead of 32-bit"},
+        metadata={"help": "Whether to use full bfloat16 evaluation instead of 32-bit"},
+    )
+    fp16_full_eval: bool = field(
+        default=False,
+        metadata={"help": "Whether to use full float16 evaluation instead of 32-bit"},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
     xpu_backend: str = field(
@@ -775,14 +776,14 @@ class TrainingArguments:
                 raise ValueError("bf16 is not supported by apex backend")
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
-        if is_torch_available() and self.device.type != "cuda" and (self.fp16 or self.half_precision_full_eval):
+        if (
+            is_torch_available()
+            and self.device.type != "cuda"
+            and (self.fp16 or self.fp16_full_eval or self.bf16 or self.bf16_full_eval)
+        ):
             raise ValueError(
-                "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation can only be used on CUDA devices."
+                "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
             )
-
-        if (self.fp16 or self.half_precision_full_eval or self.fp16_opt_level or self.fp16_backend) and self.bfloat16:
-            # This check should be modified once AMP supports bfloat16.
-            raise ValueError("bfloat16 cannot be used together with AMP, APEX, or FP16.")
 
         if self.report_to is None:
             logger.info(

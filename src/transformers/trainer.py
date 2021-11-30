@@ -353,13 +353,13 @@ class Trainer:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
         # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
         #    and we only use deepspeed for training at the moment
-        # 3. full half precision eval - since the model needs to be half'ed first
+        # 3. full bf16 or fp16 eval - since the model needs to be cast to the right dtype first
         # 4. Sharded DDP - same as MP
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
             or args.deepspeed
-            or (args.half_precision_full_eval and not args.do_train)
+            or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
         ):
             self.place_model_on_device = False
@@ -1049,7 +1049,7 @@ class Trainer:
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
-        if args.half_precision_full_eval and not args.do_train:
+        if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train:
             self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
@@ -2228,12 +2228,12 @@ class Trainer:
 
         Works both with or without labels.
         """
-        prediction_loss_only = (
-            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
-        )
+        args = self.args
+
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if self.args.deepspeed and not self.deepspeed:
+        if args.deepspeed and not self.deepspeed:
 
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
@@ -2248,8 +2248,11 @@ class Trainer:
 
         # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
         # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.half_precision_full_eval:
-            model = model.half().to(self.args.device)
+        if not self.is_in_train:
+            if args.fp16_full_eval:
+                model = model.float16().to(args.device)
+            elif args.bf16_full_eval:
+                model = model.bfloat16().to(args.device)
 
         batch_size = dataloader.batch_size
 
@@ -2267,9 +2270,9 @@ class Trainer:
         eval_dataset = dataloader.dataset
 
         if is_torch_tpu_available():
-            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
+            dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
 
-        if self.args.past_index >= 0:
+        if args.past_index >= 0:
             self._past = None
 
         # Initialize containers
@@ -2309,10 +2312,10 @@ class Trainer:
                 labels = self._pad_across_processes(labels)
                 labels = self._nested_gather(labels)
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
-            self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
+            self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
+            if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
                 if losses_host is not None:
                     losses = nested_numpify(losses_host)
                     all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
@@ -2328,7 +2331,7 @@ class Trainer:
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, labels_host = None, None, None
 
-        if self.args.past_index and hasattr(self, "_past"):
+        if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
 
@@ -2728,14 +2731,14 @@ class Trainer:
 
         Works both with or without labels.
         """
+        args = self.args
+
         if not isinstance(dataloader.dataset, collections.abc.Sized):
             raise ValueError("dataset must implement __len__")
-        prediction_loss_only = (
-            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
-        )
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if self.args.deepspeed and not self.deepspeed:
+        if args.deepspeed and not self.deepspeed:
 
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
@@ -2753,8 +2756,11 @@ class Trainer:
 
         # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
         # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.half_precision_full_eval:
-            model = model.half().to(self.args.device)
+        if not self.is_in_train:
+            if args.fp16_full_eval:
+                model = model.float16().to(args.device)
+            elif args.bf16_full_eval:
+                model = model.bfloat16().to(args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
@@ -2765,7 +2771,7 @@ class Trainer:
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
 
-        world_size = max(1, self.args.world_size)
+        world_size = max(1, args.world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
         if not prediction_loss_only:
@@ -2780,9 +2786,9 @@ class Trainer:
         model.eval()
 
         if is_torch_tpu_available():
-            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
+            dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
 
-        if self.args.past_index >= 0:
+        if args.past_index >= 0:
             self._past = None
 
         self.callback_handler.eval_dataloader = dataloader
@@ -2796,10 +2802,10 @@ class Trainer:
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
-            self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
+            self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
+            if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
                 if not prediction_loss_only:
                     preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
@@ -2808,7 +2814,7 @@ class Trainer:
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, labels_host = None, None, None
 
-        if self.args.past_index and hasattr(self, "_past"):
+        if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
 
