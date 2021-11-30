@@ -230,12 +230,12 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import VisionTextDualEncoderModel, BertTokenizer
+            >>> from transformers import VisionTextDualEncoderModel, AutoTokenizer
 
-            >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "bert-base-uncased")
-            >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+            >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
+            >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
 
-            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
+            >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"],  padding=True, return_tensors="pt")
             >>> text_features = model.get_text_features(**inputs)
         """
         text_outputs = self.text_model(
@@ -269,10 +269,10 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
             >>> from PIL import Image
             >>> import requests
-            >>> from transformers import VisionTextDualEncoderModel, ViTFeatureExtractor
+            >>> from transformers import VisionTextDualEncoderModel, AutoFeatureExtractor
 
-            >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "bert-base-uncased")
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+            >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
+            >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
 
             >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
             >>> image = Image.open(requests.get(url, stream=True).raw)
