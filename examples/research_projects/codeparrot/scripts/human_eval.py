@@ -7,12 +7,8 @@ from datasets import load_dataset, load_metric
 from tqdm import tqdm
 
 import transformers
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, set_seed
-
-
-transformers.logging.set_verbosity_error()
-os.environ["HF_ALLOW_CODE_EVAL"] = "1"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+from arguments import HumanEvalArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, pipeline, set_seed
 
 
 def first_block(string):
@@ -27,47 +23,63 @@ def complete_code(pipe, prompt, num_completions=1, **gen_kwargs):
     return [first_block(code_gen["generated_text"][len(prompt) :]) for code_gen in code_gens]
 
 
-# Settings
-gen_kwargs = {
-    "do_sample": True,
-    "temperature": 0.2,
-    "max_new_tokens": 256,
-    "top_p": 0.95,
-    "top_k": 0,
-}
+def main():
+    # Setup configuration
+    parser = HfArgumentParser(HumanEvalArguments)
+    args = parser.parse_args()
 
-bs = 10
-samples = 200
-num_workers = multiprocessing.cpu_count()
-model_ckpt = "lvwerra/codeparrot"
-set_seed(1)
+    transformers.logging.set_verbosity_error()
+    os.environ["HF_ALLOW_CODE_EVAL"] = args.HF_ALLOW_CODE_EVAL
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# Load model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
-model = AutoModelForCausalLM.from_pretrained(model_ckpt)
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=0)
+    if args.num_workers is None:
+        args.num_workers = multiprocessing.cpu_count()
 
-# Load evaluation dataset and metric
-human_eval = load_dataset("openai_humaneval")
-code_eval_metric = load_metric("code_eval")
+    set_seed(args.seed)
 
-# Generate completions for evaluation set
-n_tasks = len(human_eval["test"])
-generations, references = [], []
-for task in tqdm(range(n_tasks)):
-    task_generations = []
-    prompt = human_eval["test"][task]["prompt"].strip()
-    for batch in range(samples // bs):
-        task_generations.extend(complete_code(pipe, prompt, num_completions=bs, **gen_kwargs))
-    generations.append([prompt + gen for gen in task_generations])
-    test_func = human_eval["test"][task]["test"]
-    entry_point = f"check({human_eval['test'][task]['entry_point']})"
-    references.append("\n" + test_func + "\n" + entry_point)
+    # Generation settings
+    gen_kwargs = {
+        "do_sample": args.do_sample,
+        "temperature": args.temperature,
+        "max_new_tokens": args.max_new_tokens,
+        "top_p": args.top_p,
+        "top_k": args.top_k,
+    }
 
-# Evaluate completions with "code_eval" metric
-pass_at_k, _ = code_eval_metric.compute(references=references, predictions=generations, num_workers=num_workers)
-print(f"Results: {pass_at_k}")
+    # Load model and tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
+    model = AutoModelForCausalLM.from_pretrained(args.model_ckpt)
+    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=-1)
 
-# Save results to json file
-with open("eval_results.json", "w") as fp:
-    json.dump(pass_at_k, fp)
+    # Load evaluation dataset and metric
+    human_eval = load_dataset("openai_humaneval")
+    code_eval_metric = load_metric("code_eval")
+
+    # Generate completions for evaluation set
+    n_tasks = 4  # len(human_eval["test"])
+    generations, references = [], []
+    for task in tqdm(range(n_tasks)):
+        task_generations = []
+        prompt = human_eval["test"][task]["prompt"].strip()
+        for batch in range(args.n_samples // args.batch_size):
+            task_generations.extend(complete_code(pipe, prompt, num_completions=args.batch_size, **gen_kwargs))
+        generations.append([prompt + gen for gen in task_generations])
+        test_func = human_eval["test"][task]["test"]
+        entry_point = f"check({human_eval['test'][task]['entry_point']})"
+        references.append("\n" + test_func + "\n" + entry_point)
+
+    # Evaluate completions with "code_eval" metric
+    pass_at_k, _ = code_eval_metric.compute(
+        references=references, predictions=generations, num_workers=args.num_workers
+    )
+    print(f"Results: {pass_at_k}")
+
+    # Save results to json file
+    with open(args.output_file, "w") as fp:
+        json.dump(pass_at_k, fp)
+
+
+# For some reason the folliwng seems to be necessary sometimes for code_eval to work nice with multiprocessing
+# https://stackoverflow.com/questions/60804599/python-multiprocessing-keeps-spawning-the-whole-script
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,4 @@
 import logging
-from argparse import Namespace
 
 import torch
 from datasets import load_dataset
@@ -7,7 +6,8 @@ from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
 
 from accelerate import Accelerator
-from transformers import AutoTokenizer, GPT2LMHeadModel, set_seed
+from arguments import EvaluationArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, set_seed
 
 
 class ConstantLengthDataset(IterableDataset):
@@ -42,11 +42,11 @@ class ConstantLengthDataset(IterableDataset):
                     yield torch.tensor(input_ids)
 
 
-def create_dataloader(dataset_name, args):
+def create_dataloader(args):
     ds_kwargs = {"streaming": True}
-    valid_data = load_dataset(dataset_name, split="train", **ds_kwargs)
+    valid_data = load_dataset(args.dataset_name, split="train", **ds_kwargs)
     valid_dataset = ConstantLengthDataset(tokenizer, valid_data, seq_length=args.seq_length)
-    eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
+    eval_dataloader = DataLoader(valid_dataset, batch_size=args.batch_size)
     return eval_dataloader
 
 
@@ -56,7 +56,7 @@ def evaluate(args):
     for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
             outputs = model(batch, labels=batch)
-        loss = outputs.loss.repeat(args.valid_batch_size)
+        loss = outputs.loss.repeat(args.batch_size)
         losses.append(accelerator.gather(loss))
 
         if args.max_eval_steps > 0 and step >= args.max_eval_steps:
@@ -70,20 +70,11 @@ def evaluate(args):
 
 
 # Setup Accelerator
-accelerator = Accelerator(dispatch_batches=True)
-acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
+accelerator = Accelerator()
 
-# Hyperparameters
-project_name = "lvwerra/codeparrot"
-dataset_name = "lvwerra/codeparrot-clean-valid"
-config = {
-    "valid_batch_size": 2,
-    "max_eval_steps": 5_000,
-    "seq_length": 1024,
-    "seed": 1,
-    "save_checkpoint_steps": 50_000,
-}
-args = Namespace(**config)
+# Parse configuration
+parser = HfArgumentParser(EvaluationArguments)
+args = parser.parse_args()
 set_seed(args.seed)
 
 # Logging
@@ -93,11 +84,11 @@ logging.basicConfig(
 )
 
 # Load model and tokenizer
-model = GPT2LMHeadModel.from_pretrained(project_name)
-tokenizer = AutoTokenizer.from_pretrained(project_name)
+model = AutoModelForCausalLM.from_pretrained(args.model_ckpt)
+tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
 
 # Load dataset and dataloader
-eval_dataloader = create_dataloader(dataset_name, args)
+eval_dataloader = create_dataloader(args)
 
 # Prepare everything with our `accelerator`.
 model, eval_dataloader = accelerator.prepare(model, eval_dataloader)

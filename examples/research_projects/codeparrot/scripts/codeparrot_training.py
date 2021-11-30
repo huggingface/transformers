@@ -1,5 +1,6 @@
 import logging
 from argparse import Namespace
+from pathlib import Path
 
 import datasets
 import torch
@@ -11,8 +12,9 @@ from torch.utils.tensorboard import SummaryWriter
 import transformers
 import wandb
 from accelerate import Accelerator
+from arguments import TrainingArguments
 from huggingface_hub import Repository
-from transformers import AdamW, AutoTokenizer, GPT2LMHeadModel, get_scheduler, set_seed
+from transformers import AdamW, AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, get_scheduler, set_seed
 
 
 class ConstantLengthDataset(IterableDataset):
@@ -56,13 +58,17 @@ class ConstantLengthDataset(IterableDataset):
                     yield torch.tensor(input_ids)
 
 
-def setup_logging(project_name):
+def setup_logging(args):
+    project_name = args.model_ckpt.split("/")[-1]
     logger = logging.getLogger(__name__)
+    log_dir = Path(args.save_dir) / "log/"
+    log_dir.mkdir(exist_ok=True)
+    filename = f"debug_{accelerator.process_index}.log"
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
-        handlers=[logging.FileHandler(f"log/debug_{accelerator.process_index}.log"), logging.StreamHandler()],
+        handlers=[logging.FileHandler(log_dir / filename), logging.StreamHandler()],
     )
     if accelerator.is_main_process:  # we only want to setup logging once
         wandb.init(project=project_name, config=args)
@@ -81,11 +87,11 @@ def setup_logging(project_name):
     return logger, tb_writer, run_name
 
 
-def create_dataloaders(dataset_name, args):
+def create_dataloaders(args):
     ds_kwargs = {"streaming": True}
-    train_data = load_dataset(dataset_name + "-train", split="train", **ds_kwargs)
+    train_data = load_dataset(args.dataset_name_train, split="train", **ds_kwargs)
     train_data = train_data.shuffle(buffer_size=args.shuffle_buffer, seed=args.seed)
-    valid_data = load_dataset(dataset_name + "-valid", split="train", **ds_kwargs)
+    valid_data = load_dataset(args.dataset_name_valid, split="train", **ds_kwargs)
     train_dataset = ConstantLengthDataset(tokenizer, train_data, infinite=True, seq_length=args.seq_length)
     valid_dataset = ConstantLengthDataset(tokenizer, valid_data, infinite=False, seq_length=args.seq_length)
     train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size)
@@ -136,42 +142,34 @@ accelerator = Accelerator()
 acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
 
 # Hyperparameters (codeparrot-small configs are in comments)
-project_name = "lvwerra/codeparrot"
-dataset_name = "../codeparrot-clean"
-config = {
-    "train_batch_size": 2,  # 16
-    "valid_batch_size": 2,  # 16
-    "weight_decay": 0.1,
-    "shuffle_buffer": 1_000,
-    "learning_rate": 2e-4,  # 5e-4
-    "lr_scheduler_type": "cosine",
-    "num_warmup_steps": 750,  # 2000
-    "gradient_accumulation_steps": 16,  # 1
-    "gradient_checkpointing": True,  # False
-    "max_train_steps": 50_000,  # 150_000
-    "max_eval_steps": -1,
-    "seq_length": 1024,
-    "seed": 1,
-    "save_checkpoint_steps": 50_000,
-}  # 15_000
-args = Namespace(**config, **acc_state)
+parser = HfArgumentParser(TrainingArguments)
+args = parser.parse_args()
+# args.save_dir = Path(args.save_dir)
+
+args = Namespace(**vars(args), **acc_state)
 samples_per_step = accelerator.state.num_processes * args.train_batch_size
 set_seed(args.seed)
 
+# Clone model repository
+if accelerator.is_main_process:
+    hf_repo = Repository(args.save_dir, clone_from=args.model_ckpt)
+
 # Logging
-logger, tb_writer, run_name = setup_logging(project_name.split("/")[1])
+logger, tb_writer, run_name = setup_logging(args)
 logger.info(accelerator.state)
 
-# Load model and tokenizer
+# Checkout new branch on repo
 if accelerator.is_main_process:
-    hf_repo = Repository("./", clone_from=project_name, revision=run_name)
-model = GPT2LMHeadModel.from_pretrained("./")
+    hf_repo.git_checkout(run_name, create_branch_ok=True)
+
+# Load model and tokenizer
+model = AutoModelForCausalLM.from_pretrained(args.save_dir)
 if args.gradient_checkpointing:
     model.gradient_checkpointing_enable()
-tokenizer = AutoTokenizer.from_pretrained("./")
+tokenizer = AutoTokenizer.from_pretrained(args.save_dir)
 
 # Load dataset and dataloader
-train_dataloader, eval_dataloader = create_dataloaders(dataset_name, args)
+train_dataloader, eval_dataloader = create_dataloaders(args)
 
 # Prepare the optimizer and learning rate scheduler
 optimizer = AdamW(get_grouped_params(model, args), lr=args.learning_rate)
@@ -214,7 +212,7 @@ for step, batch in enumerate(train_dataloader, start=1):
         log_metrics(step, {"loss/eval": eval_loss, "perplexity": perplexity})
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained("./", save_function=accelerator.save)
+        unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
         if accelerator.is_main_process:
             hf_repo.push_to_hub(commit_message=f"step {step}")
         model.train()
@@ -227,6 +225,6 @@ eval_loss, perplexity = evaluate(args)
 log_metrics(step, {"loss/eval": eval_loss, "perplexity": perplexity})
 accelerator.wait_for_everyone()
 unwrapped_model = accelerator.unwrap_model(model)
-unwrapped_model.save_pretrained("./", save_function=accelerator.save)
+unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
 if accelerator.is_main_process:
     hf_repo.push_to_hub(commit_message="final model")
