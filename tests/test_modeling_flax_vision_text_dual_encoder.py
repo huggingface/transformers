@@ -21,7 +21,6 @@ import unittest
 
 import numpy as np
 
-from transformers import AutoTokenizer
 from transformers.file_utils import is_flax_available, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
@@ -60,8 +59,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import CLIPFeatureExtractor
 
 
 # Inspired by
@@ -377,10 +374,7 @@ class FlaxVisionTextDualEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model = FlaxVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1)
-
-        feature_extractor = CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32")
-        tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-italian-xxl-uncased")
-        processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+        processor = VisionTextDualEncoderProcessor.from_pretrained("clip-italian/clip-italian")
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = processor(
