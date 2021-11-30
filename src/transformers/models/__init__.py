@@ -102,6 +102,7 @@ from . import (
     unispeech,
     unispeech_sat,
     vision_encoder_decoder,
+    vision_text_dual_encoder,
     visual_bert,
     vit,
     wav2vec2,

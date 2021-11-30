@@ -32,6 +32,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
         ("segformer", "SegformerModel"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
         ("beit", "BeitModel"),
