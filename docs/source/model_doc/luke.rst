@@ -137,7 +137,7 @@ LukeModel
 .. autoclass:: transformers.LukeModel
     :members: forward
 
-LukeModel
+LukeForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.LukeForMaskedLM
