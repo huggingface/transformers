@@ -22,11 +22,11 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 
 
 # Matches is_xxx_available()
-_re_backend = re.compile(r"is\_([a-z]*)_available()")
+_re_backend = re.compile(r"is\_([a-z_]*)_available()")
 # Catches a line with a key-values pattern: "bla": ["foo", "bar"]
 _re_import_struct_key_value = re.compile(r'\s+"\S*":\s+\[([^\]]*)\]')
 # Catches a line if is_foo_available
-_re_test_backend = re.compile(r"^\s*if\s+is\_[a-z]*\_available\(\)")
+_re_test_backend = re.compile(r"^\s*if\s+is\_[a-z_]*\_available\(\)")
 # Catches a line _import_struct["bla"].append("foo")
 _re_import_struct_add_one = re.compile(r'^\s*_import_structure\["\S*"\]\.append\("(\S*)"\)')
 # Catches a line _import_struct["bla"].extend(["foo", "bar"]) or _import_struct["bla"] = ["foo", "bar"]
