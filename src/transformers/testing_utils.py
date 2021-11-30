@@ -44,6 +44,7 @@ from .file_utils import (
     is_scatter_available,
     is_sentencepiece_available,
     is_soundfile_availble,
+    is_tensorflow_probability_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
@@ -288,6 +289,19 @@ def require_torch_scatter(test_case):
     """
     if not is_scatter_available():
         return unittest.skip("test requires PyTorch scatter")(test_case)
+    else:
+        return test_case
+
+
+def require_tensorflow_probability(test_case):
+    """
+    Decorator marking a test that requires TensorFlow probability.
+
+    These tests are skipped when TensorFlow probability isn't installed.
+
+    """
+    if not is_tensorflow_probability_available():
+        return unittest.skip("test requires TensorFlow probability")(test_case)
     else:
         return test_case
 

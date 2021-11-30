@@ -1466,6 +1466,7 @@ if is_tf_available():
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "TF_MODEL_MAPPING",
             "TF_MODEL_WITH_LM_HEAD_MAPPING",
@@ -1478,6 +1479,7 @@ if is_tf_available():
             "TFAutoModelForQuestionAnswering",
             "TFAutoModelForSeq2SeqLM",
             "TFAutoModelForSequenceClassification",
+            "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
             "TFAutoModelWithLMHead",
         ]
@@ -1785,6 +1787,16 @@ if is_tf_available():
             "TFT5ForConditionalGeneration",
             "TFT5Model",
             "TFT5PreTrainedModel",
+        ]
+    )
+    _import_structure["models.tapas"].extend(
+        [
+            "TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFTapasForMaskedLM",
+            "TFTapasForQuestionAnswering",
+            "TFTapasForSequenceClassification",
+            "TFTapasModel",
+            "TFTapasPreTrainedModel",
         ]
     )
     _import_structure["models.transfo_xl"].extend(
@@ -3267,6 +3279,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
@@ -3279,6 +3292,7 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelWithLMHead,
         )
@@ -3524,6 +3538,14 @@ if TYPE_CHECKING:
             TFT5ForConditionalGeneration,
             TFT5Model,
             TFT5PreTrainedModel,
+        )
+        from .models.tapas import (
+            TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFTapasForMaskedLM,
+            TFTapasForQuestionAnswering,
+            TFTapasForSequenceClassification,
+            TFTapasModel,
+            TFTapasPreTrainedModel,
         )
         from .models.transfo_xl import (
             TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
