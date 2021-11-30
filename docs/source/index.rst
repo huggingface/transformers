@@ -646,6 +646,7 @@ Flax), PyTorch, and/or TensorFlow.
     model_doc/led
     model_doc/longformer
     model_doc/luke
+    model_doc/mluke
     model_doc/lxmert
     model_doc/marian
     model_doc/m2m_100

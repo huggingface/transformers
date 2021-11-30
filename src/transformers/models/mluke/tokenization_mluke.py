@@ -148,10 +148,33 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
 """
 
+"""
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        entity_vocab_file (:obj:`str`):
+            Path to the entity vocabulary file.
+        task (:obj:`str`, `optional`):
+            Task for which you want to prepare sequences. One of :obj:`"entity_classification"`,
+            :obj:`"entity_pair_classification"`, or :obj:`"entity_span_classification"`. If you specify this argument,
+            the entity sequence is automatically created based on the given entity span(s).
+        max_entity_length (:obj:`int`, `optional`, defaults to 32):
+            The maximum length of :obj:`entity_ids`.
+        max_mention_length (:obj:`int`, `optional`, defaults to 30):
+            The maximum number of tokens inside an entity span.
+        entity_token_1 (:obj:`str`, `optional`, defaults to :obj:`<ent>`):
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            ``task`` is set to :obj:`"entity_classification"` or :obj:`"entity_pair_classification"`.
+        entity_token_2 (:obj:`str`, `optional`, defaults to :obj:`<ent2>`):
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            ``task`` is set to :obj:`"entity_pair_classification"`.
+"""
 
 class MLukeTokenizer(PreTrainedTokenizer):
     """
-    Adapted from :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on
+    Adapted from :class:`~transformers.XLMRobertaTokenizer` and :class:`~transformers.LukeTokenizer`. Based on
     `SentencePiece <https://github.com/google/sentencepiece>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
@@ -160,6 +183,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
+        entity_vocab_file (:obj:`str`):
+            Path to the entity vocabulary file.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -189,6 +214,20 @@ class MLukeTokenizer(PreTrainedTokenizer):
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        task (:obj:`str`, `optional`):
+            Task for which you want to prepare sequences. One of :obj:`"entity_classification"`,
+            :obj:`"entity_pair_classification"`, or :obj:`"entity_span_classification"`. If you specify this argument,
+            the entity sequence is automatically created based on the given entity span(s).
+        max_entity_length (:obj:`int`, `optional`, defaults to 32):
+            The maximum length of :obj:`entity_ids`.
+        max_mention_length (:obj:`int`, `optional`, defaults to 30):
+            The maximum number of tokens inside an entity span.
+        entity_token_1 (:obj:`str`, `optional`, defaults to :obj:`<ent>`):
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            ``task`` is set to :obj:`"entity_classification"` or :obj:`"entity_pair_classification"`.
+        entity_token_2 (:obj:`str`, `optional`, defaults to :obj:`<ent2>`):
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            ``task`` is set to :obj:`"entity_pair_classification"`.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (:obj:`dict`, `optional`):
