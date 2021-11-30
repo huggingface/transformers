@@ -477,6 +477,13 @@ else:
 if is_tf_available():
     import tensorflow as tf
 
+if is_flax_available():
+    import jax
+
+    jax_device = jax.default_backend()
+else:
+    jax_device = None
+
 
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
