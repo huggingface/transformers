@@ -1859,8 +1859,8 @@ class Trainer:
         if self.use_amp:
             with autocast(dtype=self.amp_dtype):
                 loss = self.compute_loss(model, inputs)
-                print (f"{self.amp_dtype}")
-                print (f"{loss}")
+                print(f"{self.amp_dtype}")
+                print(f"{loss}")
         else:
             loss = self.compute_loss(model, inputs)
 
