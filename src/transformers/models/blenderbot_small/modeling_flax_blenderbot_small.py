@@ -698,11 +698,8 @@ class FlaxBlenderbotSmallEncoder(nn.Module):
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
-        # BlenderbotSmall is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
         self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
+            self.config.max_position_embeddings,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
@@ -724,7 +721,7 @@ class FlaxBlenderbotSmallEncoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(position_ids + self.offset)
+        embed_pos = self.embed_positions(position_ids)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -769,11 +766,8 @@ class FlaxBlenderbotSmallDecoder(nn.Module):
                 embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
-        # BlenderbotSmall is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
         self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
+            self.config.max_position_embeddings,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
@@ -800,10 +794,11 @@ class FlaxBlenderbotSmallDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        positions = self.embed_positions(position_ids + self.offset)
+        positions = self.embed_positions(position_ids)
 
+        # BlenderbotSmall applies layer norm on inputs_embeds in decoder
+        inputs_embeds = self.layernorm_embedding(inputs_embeds)
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
