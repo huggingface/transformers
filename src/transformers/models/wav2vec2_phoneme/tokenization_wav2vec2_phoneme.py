@@ -18,7 +18,7 @@ import json
 import os
 import sys
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 
 from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
 from ...tokenization_utils_base import AddedToken
@@ -114,7 +114,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        word_delimiter_token="|",
         phonemizer_lang="en-us",
         phonemizer_backend="espeak",
         **kwargs
@@ -124,7 +123,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            word_delimiter_token=word_delimiter_token,
             phonemizer_lang=phonemizer_lang,
             phonemizer_backend=phonemizer_backend,
             **kwargs,
@@ -133,47 +131,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self.phonemizer_lang = phonemizer_lang
         self.phonemizer_backend = phonemizer_backend
 
-        self._word_delimiter_token = word_delimiter_token
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
-
-        # make sure that tokens made of several
-        # characters are not split at tokenization
-        for token in self.encoder.keys():
-            if len(token) > 1:
-                self.unique_no_split_tokens.append(token)
-
-        self._create_trie(self.unique_no_split_tokens)
-
-    @property
-    def word_delimiter_token(self) -> str:
-        """
-        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
-        """
-        if self._word_delimiter_token is None and self.verbose:
-            logger.error("Using word_delimiter_token, but it is not set yet.")
-            return None
-        return str(self._word_delimiter_token)
-
-    @property
-    def word_delimiter_token_id(self) -> Optional[int]:
-        """
-        :obj:`Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns :obj:`None` if the token has
-        not been set.
-        """
-        if self._word_delimiter_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.word_delimiter_token)
-
-    @word_delimiter_token.setter
-    def word_delimiter_token(self, value):
-        self._word_delimiter_token = value
-
-    @word_delimiter_token_id.setter
-    def word_delimiter_token_id(self, value):
-        self._word_delimiter_token = self.convert_tokens_to_ids(value)
 
     @property
     def vocab_size(self) -> int:
@@ -181,6 +141,37 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self) -> Dict:
         return dict(self.encoder, **self.added_tokens_encoder)
+
+    def prepare_for_tokenization(
+        self, text: str, is_split_into_words: bool = False, text_lang: Optional[str] = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Performs any necessary transformations before tokenization.
+
+        This method should pop the arguments from kwargs and return the remaining :obj:`kwargs` as well. We test the
+        :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
+
+        Args:
+            text (:obj:`str`):
+                The text to prepare.
+            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
+                tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
+                which it will tokenize. This is useful for NER or token classification.
+             text_lang:
+                Input language of the transcription that is passed to the phonemizer.
+
+        Returns:
+            :obj:`Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+        """
+        if is_split_into_words:
+            text = " " + text
+
+        # set the correct phonemizer language
+        if text_lang is not None:
+            self.phonemizer_lang = text_lang
+
+        return (text, {})
 
     def _tokenize(self, text, **kwargs):
         """
@@ -195,10 +186,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             raise ImportError("...")
 
         separator = Separator(phone="", word="")
-
         phonemes = phonemize(text, language=self.phonemizer_lang, backend=self.phonemizer_backend, strip=True, separator=separator)
-
-        print(phonemes)
 
         return list(phonemes)
 
@@ -227,16 +215,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         join_token = ""
 
         # replace delimiter token
-        string = join_token.join(
-            [" " if token == self.word_delimiter_token else token for token in filtered_tokens]
-        ).strip()
+        string = join_token.join(filtered_tokens).strip()
 
         return string
-
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        if is_split_into_words:
-            text = " " + text
-        return (text, kwargs)
 
     def _decode(
         self,
