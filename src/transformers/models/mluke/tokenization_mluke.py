@@ -1254,7 +1254,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
             valid_pair_entity_ids, valid_pair_entity_token_spans = None, None
             if pair_entity_ids is not None:
                 valid_pair_entity_ids = [
-                    ent_id for ent_id, span in zip(pair_entity_ids, pair_entity_token_spans) if span[1] <= len(pair_ids)
+                    ent_id
+                    for ent_id, span in zip(pair_entity_ids, pair_entity_token_spans)
+                    if span[1] <= len(pair_ids)
                 ]
                 valid_pair_entity_token_spans = [span for span in pair_entity_token_spans if span[1] <= len(pair_ids)]
                 total_entity_len += len(valid_pair_entity_ids)
@@ -1328,7 +1330,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
         if return_length:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
-        batch_outputs = BatchEncoding(encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis)
+        batch_outputs = BatchEncoding(
+            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+        )
 
         return batch_outputs
 

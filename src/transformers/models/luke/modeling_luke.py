@@ -1124,7 +1124,11 @@ class LukeLMHead(nn.Module):
     LUKE_START_DOCSTRING,
 )
 class LukeForMaskedLM(LukePreTrainedModel):
-    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias", r"entity_predictions.decoder.weight"]
+    _keys_to_ignore_on_save = [
+        r"lm_head.decoder.weight",
+        r"lm_head.decoder.bias",
+        r"entity_predictions.decoder.weight",
+    ]
     _keys_to_ignore_on_load_missing = [
         r"position_ids",
         r"lm_head.decoder.weight",
