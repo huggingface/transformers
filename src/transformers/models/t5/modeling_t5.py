@@ -469,7 +469,6 @@ class T5Attention(nn.Module):
                     hidden_states = past_key_value
             return hidden_states
 
-        # hidden_states = hidden_states.to(torch.bfloat16)
         # get query states
         query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
 
@@ -651,7 +650,6 @@ class T5Block(nn.Module):
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
-        # TODO
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
