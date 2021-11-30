@@ -20,9 +20,9 @@ The LUKE model was proposed in `mLUKE: The Power of Entity Representations in Mu
 <https://arxiv.org/abs/2110.08151>`_ by Ryokan Ri, Ikuya Yamada, and Yoshimasa Tsuruoka. It's a multilingual extension
 of the `LUKE model <https://arxiv.org/abs/2010.01057>`__ trained on the basis of XLMRoBERTa.
 
-It is based on RoBERTa and adds entity embeddings as well as an entity-aware self-attention mechanism, which helps
+It is based on XLMRoBERTa and adds entity embeddings, which helps
 improve performance on various downstream tasks involving reasoning about entities such as named entity recognition,
-extractive and cloze-style question answering, entity typing, and relation classification.
+extractive question answering, relation classification, cloze-style knowledge completion.
 
 The abstract from the paper is the following:
 
@@ -44,7 +44,7 @@ One can directly plug in the weights of mLUKE into a LUKE model, like so:
 
     model = LukeModel.from_pretrained('studio-ousia/mluke-base')
 
-Note that mLUKE has its own tokenizer, based on :class:`~transformers.MLukeTokenizer`. You can initialize it as
+Note that mLUKE has its own tokenizer, :class:`~transformers.MLukeTokenizer`. You can initialize it as
 follows:
 
 .. code-block::
@@ -57,8 +57,7 @@ follows:
 As mLUKE's architecture is equivalent to that of LUKE, one can refer to :doc:`LUKE's documentation page <luke>` for all
 tips, code examples and notebooks.
 
-This model was contributed by `ryo0634 <https://huggingface.co/ryo0634>`__ and `nielsr
-<https://huggingface.co/nielsr>`__. The original code can be found `here <https://github.com/studio-ousia/luke>`__.
+This model was contributed by `ryo0634 <https://huggingface.co/ryo0634>`__. The original code can be found `here <https://github.com/studio-ousia/luke>`__.
 
 MLukeTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
