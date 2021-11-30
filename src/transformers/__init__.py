@@ -187,6 +187,11 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.blenderbot_small": [
+        "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BlenderbotSmallConfig",
+        "BlenderbotSmallTokenizer",
+    ],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -1920,6 +1925,7 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
+
     _import_structure["models.beit"].extend(
         [
             "FlaxBeitForImageClassification",
@@ -1955,6 +1961,13 @@ if is_flax_available():
     )
     _import_structure["models.blenderbot"].extend(
         ["FlaxBlenderbotForConditionalGeneration", "FlaxBlenderbotModel", "FlaxBlenderbotPreTrainedModel"]
+    )
+    _import_structure["models.blenderbot_small"].extend(
+        [
+            "FlaxBlenderbotSmallForConditionalGeneration",
+            "FlaxBlenderbotSmallModel",
+            "FlaxBlenderbotSmallPreTrainedModel",
+        ]
     )
     _import_structure["models.clip"].extend(
         [
@@ -3574,6 +3587,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
+
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
@@ -3660,6 +3674,11 @@ if TYPE_CHECKING:
             FlaxBlenderbotForConditionalGeneration,
             FlaxBlenderbotModel,
             FlaxBlenderbotPreTrainedModel,
+        )
+        from .models.blenderbot_small import (
+            FlaxBlenderbotSmallForConditionalGeneration,
+            FlaxBlenderbotSmallModel,
+            FlaxBlenderbotSmallPreTrainedModel,
         )
         from .models.clip import (
             FlaxCLIPModel,

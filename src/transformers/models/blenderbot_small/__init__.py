@@ -17,7 +17,8 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+# rely on isort to merge the imports
+from ...file_utils import _LazyModule, is_flax_available, is_tokenizers_available
 
 
 _import_structure = {
@@ -28,21 +29,13 @@ _import_structure = {
 if is_tokenizers_available():
     _import_structure["tokenization_blenderbot_small_fast"] = ["BlenderbotSmallTokenizerFast"]
 
-if is_torch_available():
-    _import_structure["modeling_blenderbot_small"] = [
-        "BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BlenderbotSmallForCausalLM",
-        "BlenderbotSmallForConditionalGeneration",
-        "BlenderbotSmallModel",
-        "BlenderbotSmallPreTrainedModel",
+if is_flax_available():
+    _import_structure["modeling_flax_blenderbot_small"] = [
+        "FlaxBlenderbotSmallForConditionalGeneration",
+        "FlaxBlenderbotSmallModel",
+        "FlaxBlenderbotSmallPreTrainedModel",
     ]
 
-if is_tf_available():
-    _import_structure["modeling_tf_blenderbot_small"] = [
-        "TFBlenderbotSmallForConditionalGeneration",
-        "TFBlenderbotSmallModel",
-        "TFBlenderbotSmallPreTrainedModel",
-    ]
 
 if TYPE_CHECKING:
     from .configuration_blenderbot_small import BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotSmallConfig
@@ -51,21 +44,13 @@ if TYPE_CHECKING:
     if is_tokenizers_available():
         from .tokenization_blenderbot_small_fast import BlenderbotSmallTokenizerFast
 
-    if is_torch_available():
+    if is_flax_available():
         from .modeling_blenderbot_small import (
-            BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BlenderbotSmallForCausalLM,
-            BlenderbotSmallForConditionalGeneration,
-            BlenderbotSmallModel,
-            BlenderbotSmallPreTrainedModel,
+            FlaxBlenderbotSmallForConditionalGeneration,
+            FlaxBlenderbotSmallModel,
+            FlaxBlenderbotSmallPreTrainedModel,
         )
 
-    if is_tf_available():
-        from .modeling_tf_blenderbot_small import (
-            TFBlenderbotSmallForConditionalGeneration,
-            TFBlenderbotSmallModel,
-            TFBlenderbotSmallPreTrainedModel,
-        )
 
 else:
     import sys
