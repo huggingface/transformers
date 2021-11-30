@@ -61,7 +61,7 @@ class FeaturesManager:
     _SUPPORTED_MODEL_KIND = {
         "albert": supported_features_mapping("default", onnx_config_cls=AlbertOnnxConfig),
         "bart": supported_features_mapping("default", onnx_config_cls=BartOnnxConfig),
-        "marian": supported_features_mapping("seq2seq-lm", onnx_config_cls=MarianOnnxConfig),
+        "marian": supported_features_mapping("default", "seq2seq-lm", onnx_config_cls=MarianOnnxConfig),
         "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
         "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
