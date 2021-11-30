@@ -350,10 +350,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
-        # save mask value here. Need fp32 and fp16 mask values
+        # save mask value here. Need fp32, fp16 and bf16 mask values
         self.register_buffer("self_mask_value_float16", torch.tensor(-1e3))
+        self.register_buffer("self_mask_value_bfloat16", torch.tensor(-1e3))
         self.register_buffer("self_mask_value_float32", torch.tensor(-1e5))
         self.register_buffer("mask_value_float16", torch.tensor(-1e4))
+        self.register_buffer("mask_value_bfloat16", torch.tensor(-1e4))
         self.register_buffer("mask_value_float32", torch.tensor(-1e9))
 
     def forward(
@@ -762,6 +764,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if query_key_dots.dtype == torch.float16:
             self_mask_value = self.self_mask_value_float16.half()
             mask_value = self.mask_value_float16.half()
+        elif query_key_dots.dtype == torch.bfloat16:
+            self_mask_value = self.self_mask_value_bfloat16.bfloat16()
+            mask_value = self.mask_value_bfloat16.bfloat16()
         else:
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
@@ -1035,6 +1040,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # save mask value here
         self.register_buffer("mask_value_float16", torch.tensor(-1e4))
+        self.register_buffer("mask_value_bfloat16", torch.tensor(-1e4))
         self.register_buffer("mask_value_float32", torch.tensor(-1e9))
 
     def forward(
@@ -1158,6 +1164,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
             # get mask tensor depending on half precision or not
             if query_key_dots.dtype == torch.float16:
                 mask_value = self.mask_value_float16.half()
+            elif query_key_dots.dtype == torch.bfloat16:
+                mask_value = self.mask_value_bfloat16.bfloat16()
             else:
                 mask_value = self.mask_value_float32
 
