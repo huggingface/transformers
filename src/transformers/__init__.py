@@ -603,7 +603,6 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1309,11 +1308,7 @@ if is_torch_available():
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
-    _import_structure["models.vision_text_dual_encoder"].extend(
-        [
-            "VisionTextDualEncoderModel",
-        ]
-    )
+    _import_structure["models.vision_text_dual_encoder"].extend(["VisionTextDualEncoderModel"])
     _import_structure["models.visual_bert"].extend(
         [
             "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2021,11 +2016,7 @@ if is_flax_available():
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
-    _import_structure["models.vision_text_dual_encoder"].extend(
-        [
-            "FlaxVisionTextDualEncoderModel",
-        ]
-    )
+    _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
@@ -2482,7 +2473,6 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
-
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3559,7 +3549,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
-
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,

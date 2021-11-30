@@ -16,7 +16,7 @@ VisionTextDualEncoder
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The :class:`transformers.VisionTextDualEncoderModel` can be used to initialize a vision-text dual encoder model with
+The :class:`~transformers.VisionTextDualEncoderModel` can be used to initialize a vision-text dual encoder model with
 any pretrained vision autoencoding model as the vision encoder (*e.g.* :doc:`ViT <vit>`, :doc:`BEiT <beit>`, :doc:`DeiT
 <deit>`) and any pretrained text model as the text encoder (*e.g.* :doc:`RoBERTa <roberta>`, :doc:`BERT <bert>`). This
 Two projection layers are added on top of both the vision and text encoder to project the output embeddings to a shared

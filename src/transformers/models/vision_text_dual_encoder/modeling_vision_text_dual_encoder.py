@@ -36,7 +36,7 @@ _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
 VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
     as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded
-    via :meth:`~transformers.AutoModel.from_pretrained` function. The projection layers are automatically added to the
+    via the :meth:`~transformers.AutoModel.from_pretrained` method. The projection layers are automatically added to the
     model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
     In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how

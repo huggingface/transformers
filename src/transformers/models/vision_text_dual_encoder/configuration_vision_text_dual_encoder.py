@@ -92,7 +92,6 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         if vision_model_type == "clip":
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config).vision_config
         elif vision_model_type == "clip_vision_model":
-
             self.vision_config = CLIPVisionConfig(**vision_config)
         else:
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
