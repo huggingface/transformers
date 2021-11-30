@@ -215,6 +215,8 @@ class TrainingArguments:
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+        fp16_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
+            This argument is deprecated. Use ``half_precision_backend`` instead.
         half_precision_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
             The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
@@ -681,6 +683,10 @@ class TrainingArguments:
         },
     )
     # Deprecated arguments
+    fp16_backend: str = field(
+        default="auto",
+        metadata={"help": "Deprecated. Use half_precision_backend instead", "choices": ["auto", "amp", "apex"]},
+    )
     push_to_hub_model_id: str = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
     )
@@ -769,11 +775,20 @@ class TrainingArguments:
         if self.run_name is None:
             self.run_name = self.output_dir
 
+        if self.fp16_backend:
+            warnings.warn(
+                "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `half_precision_backend` instead",
+                FutureWarning,
+            )
+            self.half_precision_backend = self.fp16_backend
+
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
         if self.bf16:
             if self.half_precision_backend == "apex":
-                raise ValueError("bf16 is not supported by apex backend")
+                raise ValueError(
+                    " `--half_precision_backend apex`: bf16 is not supported by apex. Use `--half_precision_backend amp` instead"
+                )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
         if (
