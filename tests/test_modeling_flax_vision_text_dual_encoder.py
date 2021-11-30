@@ -21,7 +21,6 @@ import unittest
 
 import numpy as np
 
-import requests
 from transformers import AutoTokenizer
 from transformers.file_utils import is_flax_available, is_torch_available, is_vision_available
 from transformers.testing_utils import (
@@ -96,11 +95,7 @@ class VisionTextDualEncoderMixin:
 
         model = FlaxVisionTextDualEncoderModel(config)
 
-        output = model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-        )
+        output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
 
         self.assertEqual(output["text_embeds"].shape, (input_ids.shape[0], config.projection_dim))
         self.assertEqual(output["image_embeds"].shape, (pixel_values.shape[0], config.projection_dim))
@@ -113,11 +108,7 @@ class VisionTextDualEncoderMixin:
         kwargs = {"vision_model": vision_model, "text_model": text_model}
         model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(**kwargs)
 
-        output = model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-        )
+        output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
 
         self.assertEqual(output["text_embeds"].shape, (input_ids.shape[0], model.config.projection_dim))
         self.assertEqual(output["image_embeds"].shape, (pixel_values.shape[0], model.config.projection_dim))
@@ -127,22 +118,14 @@ class VisionTextDualEncoderMixin:
         kwargs = {"vision_model": vision_model, "text_model": text_model}
         model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(**kwargs)
 
-        output = model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-        )
+        output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
         out_1 = output[0]
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             model = FlaxVisionTextDualEncoderModel.from_pretrained(tmpdirname)
 
-            after_output = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_mask,
-            )
+            after_output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
             out_2 = after_output[0]
             max_diff = np.amax(np.abs(out_2 - out_1))
             self.assertLessEqual(max_diff, 1e-3)
@@ -306,11 +289,7 @@ class FlaxViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
         )
         input_ids = ids_tensor([batch_size, 4], model.config.text_config.vocab_size)
         attention_mask = random_attention_mask([batch_size, 4])
-        inputs = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        inputs = {"pixel_values": pixel_values, "input_ids": input_ids, "attention_mask": attention_mask}
 
         return model, inputs
 
@@ -361,11 +340,7 @@ class FlaxCLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase)
         )
         input_ids = ids_tensor([batch_size, 4], model.config.text_config.vocab_size)
         attention_mask = random_attention_mask([batch_size, 4])
-        inputs = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        inputs = {"pixel_values": pixel_values, "input_ids": input_ids, "attention_mask": attention_mask}
 
         return model, inputs
 
@@ -396,12 +371,6 @@ class FlaxCLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase)
         }
 
 
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
-
-
 @require_flax
 @require_vision
 class FlaxVisionTextDualEncoderIntegrationTest(unittest.TestCase):
@@ -413,7 +382,7 @@ class FlaxVisionTextDualEncoderIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-italian-xxl-uncased")
         processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
 
-        image = prepare_img()
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = processor(
             text=["una foto di un gatto", "una foto di un cane"], images=image, padding=True, return_tensors="np"
         )

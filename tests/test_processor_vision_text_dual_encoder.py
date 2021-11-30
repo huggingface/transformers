@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import pytest
 
 from transformers import BertTokenizerFast
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_vision_available
@@ -39,23 +38,9 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
+        # fmt: off
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", ",", "low", "lowest"]
+        # fmt: on
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
@@ -168,7 +153,7 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
 
         # test if it raises when no input is passed
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             processor()
 
     def test_tokenizer_decode(self):

@@ -29,7 +29,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("pegasus", "FlaxPegasusModel"),
-        ("vision_text_dual_encoder", "FlaxVisionTextDualEncoderModel"),
+        ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("distilbert", "FlaxDistilBertModel"),
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),

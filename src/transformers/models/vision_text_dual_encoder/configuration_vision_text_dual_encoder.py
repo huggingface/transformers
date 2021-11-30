@@ -27,9 +27,10 @@ logger = logging.get_logger(__name__)
 
 class VisionTextDualEncoderConfig(PretrainedConfig):
     r"""
-    :class:`VisionTextDualEncoderConfig` is the configuration class to store the configuration of a
-    :class:`~VisionTextDualEncoderModel`. It is used to instantiate VisionTextDualEncoderModel model according to the
-    specified arguments, defining the text model and vision model configs.
+    :class:`~transformers.VisionTextDualEncoderConfig` is the configuration class to store the configuration of a
+    :class:`~transformers.VisionTextDualEncoderModel`. It is used to instantiate
+    :class:`~transformers.VisionTextDualEncoderModel` model according to the specified arguments, defining the text
+    model and vision model configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.

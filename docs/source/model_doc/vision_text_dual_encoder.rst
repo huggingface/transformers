@@ -18,9 +18,9 @@ Overview
 
 The :class:`~transformers.VisionTextDualEncoderModel` can be used to initialize a vision-text dual encoder model with
 any pretrained vision autoencoding model as the vision encoder (*e.g.* :doc:`ViT <vit>`, :doc:`BEiT <beit>`, :doc:`DeiT
-<deit>`) and any pretrained text model as the text encoder (*e.g.* :doc:`RoBERTa <roberta>`, :doc:`BERT <bert>`). This
-Two projection layers are added on top of both the vision and text encoder to project the output embeddings to a shared
-latent space. dimentions. The projection layers are randomly initialized so the model should be fine-tuned on a
+<deit>`) and any pretrained text autoencoding model as the text encoder (*e.g.* :doc:`RoBERTa <roberta>`, :doc:`BERT
+<bert>`). Two projection layers are added on top of both the vision and text encoder to project the output embeddings
+to a shared latent space. The projection layers are randomly initialized so the model should be fine-tuned on a
 downstream task. This model can be used to align the vision-text embeddings using CLIP like contrastive image-text
 training and then can be used for zero-shot vision tasks such image-classification or retrieval.
 
