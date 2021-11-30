@@ -49,7 +49,8 @@ entailment (a binary classification task). For more details, see their follow-up
 intermediate pre-training <https://www.aclweb.org/anthology/2020.findings-emnlp.27/>`__ by Julian Martin Eisenschlos,
 Syrine Krichene and Thomas Müller.
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The Tensorflow version of this model was
+contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found `here
 <https://github.com/google-research/tapas>`__.
 
 Tips:
@@ -130,6 +131,24 @@ for your environment):
         >>> config = TapasConfig('google-base-finetuned-wikisql-supervised')
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
 
+In TensorFlow, this can be done as follows (make sure to have installed the `tensorflow_probability dependency
+<https://github.com/tensorflow/probability`>__ for your environment):
+
+.. code-block::
+
+        >>> from transformers import TapasConfig, TFTapasForQuestionAnswering
+
+        >>> # for example, the base sized model with default SQA configuration
+        >>> model = TFTapasForQuestionAnswering.from_pretrained('google/tapas-base')
+
+        >>> # or, the base sized model with WTQ configuration
+        >>> config = TapasConfig.from_pretrained('google/tapas-base-finetuned-wtq')
+        >>> model = TFTapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
+
+        >>> # or, the base sized model with WikiSQL configuration
+        >>> config = TapasConfig('google-base-finetuned-wikisql-supervised')
+        >>> model = TFTapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
+
 
 Of course, you don't necessarily have to follow one of these three ways in which TAPAS was fine-tuned. You can also
 experiment by defining any hyperparameters you want when initializing :class:`~transformers.TapasConfig`, and then
@@ -142,9 +161,20 @@ way. Here's an example:
         >>> from transformers import TapasConfig, TapasForQuestionAnswering
 
         >>> # you can initialize the classification heads any way you want (see docs of TapasConfig)
-        >>> config = TapasConfig(num_aggregation_labels=3, average_logits_per_cell=True, select_one_column=False)
+        >>> config = TapasConfig(num_aggregation_labels=3, average_logits_per_cell=True)
         >>> # initializing the pre-trained base sized model with our custom classification heads
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
+
+And here is the equivalent code for TensorFlow:
+
+.. code-block::
+
+        >>> from transformers import TapasConfig, TFTapasForQuestionAnswering
+
+        >>> # you can initialize the classification heads any way you want (see docs of TapasConfig)
+        >>> config = TapasConfig(num_aggregation_labels=3, average_logits_per_cell=True)
+        >>> # initializing the pre-trained base sized model with our custom classification heads
+        >>> model = TFTapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
 
 What you can also do is start from an already fine-tuned checkpoint. A note here is that the already fine-tuned
 checkpoint on WTQ has some issues due to the L2-loss which is somewhat brittle. See `here
@@ -180,12 +210,13 @@ SQA format. The author explains this `here
 are not perfect (the ``answer_coordinates`` and ``float_answer`` fields are populated based on the ``answer_text``),
 meaning that WTQ and WikiSQL results could actually be improved.
 
-**STEP 3: Convert your data into PyTorch tensors using TapasTokenizer**
+**STEP 3: Convert your data into PyTorch/TensorFlow tensors using TapasTokenizer**
 
 Third, given that you've prepared your data in this TSV/CSV format (and corresponding CSV files containing the tabular
 data), you can then use :class:`~transformers.TapasTokenizer` to convert table-question pairs into :obj:`input_ids`,
 :obj:`attention_mask`, :obj:`token_type_ids` and so on. Again, based on which of the three cases you picked above,
-:class:`~transformers.TapasForQuestionAnswering` requires different inputs to be fine-tuned:
+:class:`~transformers.TapasForQuestionAnswering`/:class:`~transformers.TFTapasForQuestionAnswering` requires different
+inputs to be fine-tuned:
 
 +------------------------------------+----------------------------------------------------------------------------------------------+
 | **Task**                           | **Required inputs**                                                                          |
@@ -219,6 +250,8 @@ are already in the TSV file of step 2. Here's an example:
         >>> inputs
         {'input_ids': tensor([[ ... ]]), 'attention_mask': tensor([[...]]), 'token_type_ids': tensor([[[...]]]),
         'numeric_values': tensor([[ ... ]]), 'numeric_values_scale: tensor([[ ... ]]), labels: tensor([[ ... ]])}
+
+Set `return_tensors='tf'` when calling the tokenizer to prepare data for the TF models.
 
 Note that :class:`~transformers.TapasTokenizer` expects the data of the table to be **text-only**. You can use
 ``.astype(str)`` on a dataframe to turn it into text-only data. Of course, this only shows how to encode a single
@@ -261,15 +294,67 @@ training example. It is advised to create a PyTorch dataset and a corresponding 
         >>> train_dataset = TableDataset(data, tokenizer)
         >>> train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
 
+And here is the equivalent code for TensorFlow:
+
+.. code-block::
+
+        >>> import tensorflow as tf
+        >>> import pandas as pd
+
+        >>> tsv_path = "your_path_to_the_tsv_file"
+        >>> table_csv_path = "your_path_to_a_directory_containing_all_csv_files"
+
+        >>> class TableDataset:
+        ...     def __init__(self, data, tokenizer):
+        ...         self.data = data
+        ...         self.tokenizer = tokenizer
+        ...
+        ...     def __iter__(self):
+        ...         for idx in range(self.__len__()):
+        ...             item = self.data.iloc[idx]
+        ...             table = pd.read_csv(table_csv_path + item.table_file).astype(str) # be sure to make your table data text only
+        ...             encoding = self.tokenizer(table=table, 
+        ...                                   queries=item.question, 
+        ...                                   answer_coordinates=item.answer_coordinates, 
+        ...                                   answer_text=item.answer_text,
+        ...                                   truncation=True,
+        ...                                   padding="max_length",
+        ...                                   return_tensors="tf"
+        ...             )
+        ...             # remove the batch dimension which the tokenizer adds by default
+        ...             encoding = {key: tf.squeeze(val,0) for key, val in encoding.items()}
+        ...             # add the float_answer which is also required (weak supervision for aggregation case)
+        ...             encoding["float_answer"] = tf.convert_to_tensor(item.float_answer,dtype=tf.float32)
+        ...             yield encoding['input_ids'], encoding['attention_mask'], encoding['numeric_values'], \
+        ...                   encoding['numeric_values_scale'], encoding['token_type_ids'], encoding['labels'], \
+        ...                   encoding['float_answer']
+        ...
+        ...     def __len__(self):
+        ...        return len(self.data)
+
+        >>> data = pd.read_csv(tsv_path, sep='\t')
+        >>> train_dataset = TableDataset(data, tokenizer)
+        >>> output_signature = (
+        ... tf.TensorSpec(shape=(512,), dtype=tf.int32),
+        ... tf.TensorSpec(shape=(512,), dtype=tf.int32),
+        ... tf.TensorSpec(shape=(512,), dtype=tf.float32),
+        ... tf.TensorSpec(shape=(512,), dtype=tf.float32),
+        ... tf.TensorSpec(shape=(512,7), dtype=tf.int32),
+        ... tf.TensorSpec(shape=(512,), dtype=tf.int32),
+        ... tf.TensorSpec(shape=(512,), dtype=tf.float32))
+        >>> train_dataloader = tf.data.Dataset.from_generator(train_dataset, output_signature=output_signature).batch(32)
+
 Note that here, we encode each table-question pair independently. This is fine as long as your dataset is **not
 conversational**. In case your dataset involves conversational questions (such as in SQA), then you should first group
 together the ``queries``, ``answer_coordinates`` and ``answer_text`` per table (in the order of their ``position``
 index) and batch encode each table with its questions. This will make sure that the ``prev_labels`` token types (see
 docs of :class:`~transformers.TapasTokenizer`) are set correctly. See `this notebook
 <https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
-for more info.
+for more info. See `this notebook
+<https://github.com/kamalkraj/Tapas-Tutorial/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
+for more info regarding using the TensorFlow model.
 
-**STEP 4: Train (fine-tune) TapasForQuestionAnswering**
+**STEP 4: Train (fine-tune) TapasForQuestionAnswering/TFTapasForQuestionAnswering**
 
 You can then fine-tune :class:`~transformers.TapasForQuestionAnswering` using native PyTorch as follows (shown here for
 the weak supervision for aggregation case):
@@ -315,6 +400,52 @@ the weak supervision for aggregation case):
         ...         loss = outputs.loss
         ...         loss.backward()
         ...         optimizer.step()
+
+
+Equivalently, fine-tuning :class:`~transformers.TFTapasForQuestionAnswering` in native TensorFlow can be done as
+follows (shown here for the weak supervision for aggregation case):
+
+.. code-block::
+
+        >>> import tensorflow as tf
+        >>> from transformers import TapasConfig, TFTapasForQuestionAnswering
+
+        >>> # this is the default WTQ configuration
+        >>> config = TapasConfig(
+        ...            num_aggregation_labels = 4,
+        ...            use_answer_as_supervision = True,
+        ...            answer_loss_cutoff = 0.664694,
+        ...            cell_selection_preference = 0.207951,
+        ...            huber_loss_delta = 0.121194,
+        ...            init_cell_selection_weights_to_zero = True,
+        ...            select_one_column = True,
+        ...            allow_empty_column_selection = False,
+        ...            temperature = 0.0352513,
+        ... )
+        >>> model = TFTapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
+
+        >>> optimizer = tf.keras.optimizers.Adam(learning_rate=5e-5)
+
+        >>> for epoch in range(2):  # loop over the dataset multiple times
+        ...    for idx, batch in enumerate(train_dataloader):
+        ...         # get the inputs; 
+        ...         input_ids = batch[0]
+        ...         attention_mask = batch[1]
+        ...         token_type_ids = batch[4]
+        ...         labels = batch[-1]
+        ...         numeric_values = batch[2]
+        ...         numeric_values_scale = batch[3]
+        ...         float_answer = batch[6]
+
+        ...         # forward + backward + optimize
+        ...         with tf.GradientTape() as tape:
+        ...              outputs = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, 
+        ...                        labels=labels, numeric_values=numeric_values, numeric_values_scale=numeric_values_scale, 
+        ...                        float_answer=float_answer )
+        ...         grads = tape.gradient(outputs.loss, model.trainable_weights)
+        ...         optimizer.apply_gradients(zip(grads, model.trainable_weights))
+
+
 
 Usage: inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -380,10 +511,68 @@ of that:
         What is the total number of movies?
         Predicted answer: SUM > 87, 53, 69
 
+
+And here is the equivalent code for TensorFlow:
+
+.. code-block::
+
+        >>> from transformers import TapasTokenizer, TFTapasForQuestionAnswering
+        >>> import pandas as pd 
+
+        >>> model_name = 'google/tapas-base-finetuned-wtq'
+        >>> model = TFTapasForQuestionAnswering.from_pretrained(model_name)
+        >>> tokenizer = TapasTokenizer.from_pretrained(model_name)
+
+        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Number of movies': ["87", "53", "69"]}
+        >>> queries = ["What is the name of the first actor?", "How many movies has George Clooney played in?", "What is the total number of movies?"]
+        >>> table = pd.DataFrame.from_dict(data)
+        >>> inputs = tokenizer(table=table, queries=queries, padding='max_length', return_tensors="tf") 
+        >>> outputs = model(**inputs)
+        >>> predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(
+        ...         inputs, 
+        ...         outputs.logits, 
+        ...         outputs.logits_aggregation
+        ... )
+
+        >>> # let's print out the results:
+        >>> id2aggregation = {0: "NONE", 1: "SUM", 2: "AVERAGE", 3:"COUNT"}
+        >>> aggregation_predictions_string = [id2aggregation[x] for x in predicted_aggregation_indices]
+
+        >>> answers = []
+        >>> for coordinates in predicted_answer_coordinates:
+        ...   if len(coordinates) == 1:
+        ...     # only a single cell:
+        ...     answers.append(table.iat[coordinates[0]])
+        ...   else:
+        ...     # multiple cells
+        ...     cell_values = []
+        ...     for coordinate in coordinates:
+        ...        cell_values.append(table.iat[coordinate])
+        ...     answers.append(", ".join(cell_values))
+
+        >>> display(table)
+        >>> print("")
+        >>> for query, answer, predicted_agg in zip(queries, answers, aggregation_predictions_string):
+        ...   print(query)
+        ...   if predicted_agg == "NONE":
+        ...     print("Predicted answer: " + answer)
+        ...   else:
+        ...     print("Predicted answer: " + predicted_agg + " > " + answer)    
+        What is the name of the first actor?
+        Predicted answer: Brad Pitt
+        How many movies has George Clooney played in?
+        Predicted answer: COUNT > 69
+        What is the total number of movies?
+        Predicted answer: SUM > 87, 53, 69
+
+
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such
 that the ``prev_labels`` token types can be overwritten by the predicted ``labels`` of the previous table-question
 pair. Again, more info can be found in `this notebook
-<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__.
+<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
+(for PyTorch) and `this notebook
+<https://github.com/kamalkraj/Tapas-Tutorial/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
+(for TensorFlow).
 
 
 Tapas specific outputs
@@ -433,3 +622,31 @@ TapasForQuestionAnswering
 
 .. autoclass:: transformers.TapasForQuestionAnswering
     :members: forward
+
+
+TFTapasModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasModel
+    :members: call
+
+
+TFTapasForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasForMaskedLM
+    :members: call
+
+
+TFTapasForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasForSequenceClassification
+    :members: call
+
+
+TFTapasForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTapasForQuestionAnswering
+    :members: call

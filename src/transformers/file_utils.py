@@ -213,6 +213,14 @@ except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
 
+_tensorflow_probability_available = importlib.util.find_spec("tensorflow_probability") is not None
+try:
+    _tensorflow_probability_version = importlib_metadata.version("tensorflow_probability")
+    logger.debug(f"Successfully imported tensorflow-probability version {_tensorflow_probability_version}")
+except importlib_metadata.PackageNotFoundError:
+    _tensorflow_probability_available = False
+
+
 _timm_available = importlib.util.find_spec("timm") is not None
 try:
     _timm_version = importlib_metadata.version("timm")
@@ -444,6 +452,10 @@ def is_pytorch_quantization_available():
     return _pytorch_quantization_available
 
 
+def is_tensorflow_probability_available():
+    return _tensorflow_probability_available
+
+
 def is_pandas_available():
     return importlib.util.find_spec("pandas") is not None
 
@@ -629,6 +641,12 @@ PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
 """
 
+# docstyle-ignore
+TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
+{0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/tensorflow/probability.
+"""
+
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -684,6 +702,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
+        ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
