@@ -417,7 +417,13 @@ class LukeModelTester:
 class LukeModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (LukeModel, LukeForEntityClassification, LukeForEntityPairClassification, LukeForEntitySpanClassification,)
+        (
+            LukeModel,
+            LukeForMaskedLM,
+            LukeForEntityClassification,
+            LukeForEntityPairClassification,
+            LukeForEntitySpanClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -445,6 +451,18 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
                     dtype=torch.long,
                     device=torch_device,
                 )
+            elif model_class == LukeForMaskedLM:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["entity_labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.entity_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+
         return inputs_dict
 
     def setUp(self):
@@ -556,7 +574,8 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
             entity_length = self.model_tester.entity_length
 
             self.assertListEqual(
-                list(entity_hidden_states[0].shape[-2:]), [entity_length, self.model_tester.hidden_size],
+                list(entity_hidden_states[0].shape[-2:]),
+                [entity_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
