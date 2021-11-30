@@ -21,8 +21,8 @@ import unittest
 
 import numpy as np
 
-from transformers.file_utils import is_flax_available, is_torch_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_torch, slow, torch_device
+from transformers.file_utils import is_flax_available, is_torch_available, is_vision_available
+from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_vision, slow, torch_device
 
 from .test_modeling_bert import BertModelTester
 from .test_modeling_clip import CLIPVisionModelTester
@@ -51,6 +51,11 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import VisionTextDualEncoderProcessor
 
 
 # Inspired by
@@ -493,3 +498,30 @@ class CLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
             "text_token_labels": token_labels,
             "text_choice_labels": choice_labels,
         }
+
+
+@require_vision
+@require_torch
+class VisionTextDualEncoderIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1)
+        processor = VisionTextDualEncoderProcessor.from_pretrained("clip-italian/clip-italian")
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(
+            text=["una foto di un gatto", "una foto di un cane"], images=image, padding=True, return_tensors="pt"
+        )
+
+        outputs = model(**inputs)
+
+        # verify the logits
+        self.assertEqual(outputs.logits_per_image.shape, (inputs.pixel_values.shape[0], inputs.input_ids.shape[0]))
+        self.assertEqual(
+            outputs.logits_per_text.shape,
+            (inputs.input_ids.shape[0], inputs.pixel_values.shape[0]),
+        )
+
+        expected_logits = torch.tensor([[1.2284727, 0.3104122]])
+
+        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
