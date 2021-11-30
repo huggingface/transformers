@@ -881,7 +881,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     """,
     IMAGEGPT_START_DOCSTRING,
 )
-class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
+class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
@@ -958,13 +958,13 @@ class ImageGPTForCausalLM(ImageGPTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ImageGPTFeatureExtractor, ImageGPTForCausalLM
+            >>> from transformers import ImageGPTFeatureExtractor, ImageGPTForCausalImageModeling
             >>> import torch
             >>> import matplotlib.pyplot as plt
             >>> import numpy as np
 
             >>> feature_extractor = ImageGPTFeatureExtractor.from_pretrained('openai/imagegpt-small')
-            >>> model = ImageGPTForCausalLM.from_pretrained('openai/imagegpt-small')
+            >>> model = ImageGPTForCausalImageModeling.from_pretrained('openai/imagegpt-small')
             >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             >>> model.to(device)
 

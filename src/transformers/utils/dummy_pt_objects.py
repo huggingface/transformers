@@ -341,6 +341,9 @@ def load_tf_weights_in_albert(*args, **kwargs):
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING = None
+
+
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
@@ -2661,7 +2664,7 @@ class IBertPreTrainedModel:
 IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ImageGPTForCausalLM:
+class ImageGPTForCausalImageModeling:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

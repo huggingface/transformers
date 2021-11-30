@@ -96,10 +96,10 @@ ImageGPTModel
     :members: forward
 
 
-ImageGPTForCausalLM
+ImageGPTForCausalImageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.ImageGPTForCausalLM
+.. autoclass:: transformers.ImageGPTForCausalImageModeling
     :members: forward
 
 

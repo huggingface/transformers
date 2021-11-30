@@ -94,7 +94,8 @@ _import_structure = {
         "DataCollatorWithPadding",
         "default_data_collator",
     ],
-    "feature_extraction_sequence_utils": ["BatchFeature", "SequenceFeatureExtractor"],
+    "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
+    "feature_extraction_utils": ["BatchFeature"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -154,9 +155,11 @@ _import_structure = {
         "CONFIG_MAPPING",
         "FEATURE_EXTRACTOR_MAPPING",
         "MODEL_NAMES_MAPPING",
+        "PROCESSOR_MAPPING",
         "TOKENIZER_MAPPING",
         "AutoConfig",
         "AutoFeatureExtractor",
+        "AutoProcessor",
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
@@ -616,6 +619,7 @@ if is_torch_available():
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
@@ -974,7 +978,7 @@ if is_torch_available():
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ImageGPTForCausalLM",
+            "ImageGPTForCausalImageModeling",
             "ImageGPTForImageClassification",
             "ImageGPTModel",
             "ImageGPTPreTrainedModel",
@@ -2057,9 +2061,10 @@ if TYPE_CHECKING:
         DataCollatorWithPadding,
         default_data_collator,
     )
+    from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature, SequenceFeatureExtractor
+    from .feature_extraction_utils import BatchFeature
 
     # Files and general utilities
     from .file_utils import (
@@ -2125,9 +2130,11 @@ if TYPE_CHECKING:
         CONFIG_MAPPING,
         FEATURE_EXTRACTOR_MAPPING,
         MODEL_NAMES_MAPPING,
+        PROCESSOR_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
         AutoFeatureExtractor,
+        AutoProcessor,
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
@@ -2515,6 +2522,7 @@ if TYPE_CHECKING:
         )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+            MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -2817,7 +2825,7 @@ if TYPE_CHECKING:
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ImageGPTForCausalLM,
+            ImageGPTForCausalImageModeling,
             ImageGPTForImageClassification,
             ImageGPTModel,
             ImageGPTPreTrainedModel,
