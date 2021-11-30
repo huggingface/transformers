@@ -21,7 +21,7 @@ from collections import OrderedDict
 
 import torch
 
-from transformers import LukeConfig, LukeModel, MLukeTokenizer, XLMRobertaTokenizer, LukeForMaskedLM
+from transformers import LukeConfig, LukeForMaskedLM, MLukeTokenizer, XLMRobertaTokenizer
 from transformers.tokenization_utils_base import AddedToken
 
 

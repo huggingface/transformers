@@ -17,9 +17,8 @@ Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The LUKE model was proposed in `mLUKE: The Power of Entity Representations in Multilingual Pretrained Language Models
-<https://arxiv.org/abs/2110.08151>`_ by Ryokan Ri, Ikuya Yamada, and Yoshimasa Tsuruoka.
-It's a multilingual extension of the `LUKE model <https://arxiv.org/abs/2010.01057>`__ trained
-on the basis of XLMRoBERTa.
+<https://arxiv.org/abs/2110.08151>`_ by Ryokan Ri, Ikuya Yamada, and Yoshimasa Tsuruoka. It's a multilingual extension
+of the `LUKE model <https://arxiv.org/abs/2010.01057>`__ trained on the basis of XLMRoBERTa.
 
 It is based on RoBERTa and adds entity embeddings as well as an entity-aware self-attention mechanism, which helps
 improve performance on various downstream tasks involving reasoning about entities such as named entity recognition,
@@ -27,7 +26,15 @@ extractive and cloze-style question answering, entity typing, and relation class
 
 The abstract from the paper is the following:
 
-*Recent studies have shown that multilingual pretrained language models can be effectively improved with cross-lingual alignment information from Wikipedia entities. However, existing methods only exploit entity information in pretraining and do not explicitly use entities in downstream tasks. In this study, we explore the effectiveness of leveraging entity representations for downstream cross-lingual tasks. We train a multilingual language model with 24 languages with entity representations and show the model consistently outperforms word-based pretrained models in various cross-lingual transfer tasks. We also analyze the model and the key insight is that incorporating entity representations into the input allows us to extract more language-agnostic features. We also evaluate the model with a multilingual cloze prompt task with the mLAMA dataset. We show that entity-based prompt elicits correct factual knowledge more likely than using only word representations.*
+*Recent studies have shown that multilingual pretrained language models can be effectively improved with cross-lingual
+alignment information from Wikipedia entities. However, existing methods only exploit entity information in pretraining
+and do not explicitly use entities in downstream tasks. In this study, we explore the effectiveness of leveraging
+entity representations for downstream cross-lingual tasks. We train a multilingual language model with 24 languages
+with entity representations and show the model consistently outperforms word-based pretrained models in various
+cross-lingual transfer tasks. We also analyze the model and the key insight is that incorporating entity
+representations into the input allows us to extract more language-agnostic features. We also evaluate the model with a
+multilingual cloze prompt task with the mLAMA dataset. We show that entity-based prompt elicits correct factual
+knowledge more likely than using only word representations.*
 
 One can directly plug in the weights of mLUKE into a LUKE model, like so:
 
@@ -37,8 +44,7 @@ One can directly plug in the weights of mLUKE into a LUKE model, like so:
 
     model = LukeModel.from_pretrained('studio-ousia/mluke-base')
 
-Note that mLUKE has its own tokenizer, based on
-:class:`~transformers.MLukeTokenizer`. You can initialize it as
+Note that mLUKE has its own tokenizer, based on :class:`~transformers.MLukeTokenizer`. You can initialize it as
 follows:
 
 .. code-block::
@@ -48,8 +54,8 @@ follows:
     tokenizer = MLukeTokenizer.from_pretrained('studio-ousia/mluke-base')
 
 
-As mLUKE's architecture is equivalent to that of LUKE, one can refer to :doc:`LUKE's documentation page
-<luke>` for all tips, code examples and notebooks.
+As mLUKE's architecture is equivalent to that of LUKE, one can refer to :doc:`LUKE's documentation page <luke>` for all
+tips, code examples and notebooks.
 
 This model was contributed by `ryo0634 <https://huggingface.co/ryo0634>`__ and `nielsr
 <https://huggingface.co/nielsr>`__. The original code can be found `here <https://github.com/studio-ousia/luke>`__.
