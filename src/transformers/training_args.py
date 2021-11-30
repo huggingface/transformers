@@ -207,6 +207,8 @@ class TrainingArguments:
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
+        bfloat16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use bfloat16 (16 bits) instead of float32 (32 bits). Requires hardware support.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         bf16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -510,6 +512,12 @@ class TrainingArguments:
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
 
+    bfloat16: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use bfloat16 (16 bits) instead of float32 (32 bits). Requires hardware support."
+        },
+    )
     fp16: bool = field(
         default=False,
         metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
@@ -771,6 +779,11 @@ class TrainingArguments:
             raise ValueError(
                 "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation can only be used on CUDA devices."
             )
+
+        if (self.fp16 or self.fp16_full_eval or self.fp16_opt_level or self.fp16_backend) and self.bfloat16:
+            # This check should be modified once AMP supports bfloat16.
+            raise ValueError("bfloat16 cannot be used together with AMP, APEX, or FP16.")
+
         if self.report_to is None:
             logger.info(
                 "The default value for the training argument `--report_to` will change in v5 (from all installed "

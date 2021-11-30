@@ -244,8 +244,8 @@ class T5LayerNorm(nn.Module):
 
         # convert into float16 if necessary
         # hidden_states = hidden_states.to(torch.float16)
-        if self.weight.dtype == torch.float16:
-            hidden_states = hidden_states.to(torch.float16)
+        if self.weight.dtype in [torch.float16, torch.bfloat16]
+            hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
 
@@ -469,7 +469,7 @@ class T5Attention(nn.Module):
                     # cross-attn
                     hidden_states = past_key_value
             return hidden_states
-        
+
         #hidden_states = hidden_states.to(torch.bfloat16)
         # get query states
         query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
