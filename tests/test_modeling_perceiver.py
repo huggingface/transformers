@@ -217,13 +217,7 @@ class PerceiverModelTester:
             num_labels=self.num_labels,
         )
 
-    def create_and_check_for_masked_lm(
-        self,
-        config,
-        inputs,
-        input_mask,
-        token_labels,
-    ):
+    def create_and_check_for_masked_lm(self, config, inputs, input_mask, token_labels):
         model = PerceiverForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
@@ -332,7 +326,11 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             return
 
         for model_class in self.all_model_classes:
-            if model_class in [*get_values(MODEL_MAPPING), PerceiverForOpticalFlow, PerceiverForMultimodalAutoencoding]:
+            if model_class in [
+                *get_values(MODEL_MAPPING),
+                PerceiverForOpticalFlow,
+                PerceiverForMultimodalAutoencoding,
+            ]:
                 continue
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -523,7 +521,9 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
                             ),
-                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
+                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. "
+                            f"Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. "
+                            f"Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
                         )
 
                 recursive_check(tuple_output, dict_output)

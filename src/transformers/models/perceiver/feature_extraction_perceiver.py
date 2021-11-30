@@ -91,6 +91,13 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def center_crop(self, image):
+        """
+        Crops :obj:`image` to `self.crop_size` using a center crop. Note that if the image is too small to be cropped to
+        the size given, it will be padded (so the returned result has the size asked).
+        Args:
+            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+                The image to resize.
+        """
         image = self.to_numpy_array(image, rescale=False, channel_first=False)
         shape = image.shape
 

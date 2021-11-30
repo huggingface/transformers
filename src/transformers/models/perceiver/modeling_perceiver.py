@@ -46,10 +46,10 @@ from ...utils import logging
 from .configuration_perceiver import PerceiverConfig
 
 
-ModalitySizeT = Mapping[str, int]
-PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
-PreprocessorT = Callable[..., PreprocessorOutputT]
-PostprocessorT = Callable[..., Any]
+ModalitySizeType = Mapping[str, int]
+PreprocessorOutputType = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
+PreprocessorType = Callable[..., PreprocessorOutputType]
+PostprocessorType = Callable[..., Any]
 
 logger = logging.get_logger(__name__)
 
@@ -227,14 +227,20 @@ class PerceiverSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, inputs=None, inputs_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        inputs=None,
+        inputs_mask=None,
+        output_attentions=False,
+    ):
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
-        # Project queries, keys and values to a common feature dimension.
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from the inputs; the attention mask needs to be
-        # such that the inputs's non-relevant tokens are not attended to.
+        # Project queries, keys and values to a common feature dimension. If this is instantiated as a cross-attention module,
+        # the keys and values come from the inputs; the attention mask needs to be such that the inputs's non-relevant tokens are not attended to.
         is_cross_attention = inputs is not None
         queries = self.query(hidden_states)
 
@@ -2197,7 +2203,8 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
         # Just a warning label: you probably don't want your spatial features to
         # have a different spatial layout than your pos coordinate system.
         # But feel free to override if you think it'll work!
-        assert pos.shape[-1] == len(index_dims)
+        if pos.shape[-1] != len(index_dims):
+            raise ValueError("Spatial features have the wrong number of dimensions.")
 
     return pos
 
@@ -2289,7 +2296,7 @@ class PerceiverEmbeddingDecoder(nn.Module):
 class PerceiverMultimodalPostprocessor(nn.Module):
     """Multimodal postprocessing for Perceiver."""
 
-    def __init__(self, modalities: Mapping[str, PostprocessorT], input_is_dict: bool = False):
+    def __init__(self, modalities: Mapping[str, PostprocessorType], input_is_dict: bool = False):
         """
         Constructor.
 
@@ -2309,7 +2316,8 @@ class PerceiverMultimodalPostprocessor(nn.Module):
     ) -> Mapping[str, torch.Tensor]:
         if not self.input_is_dict:
             # Slice up modalities by their sizes.
-            assert modality_sizes is not None
+            if modality_sizes is None:
+                raise ValueError("Modality sizes should be specified if input is not a dictionary.")
             inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
 
         outputs = {
