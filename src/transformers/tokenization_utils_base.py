@@ -1562,7 +1562,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Attempt to resume the download if such a file
                 exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             use_auth_token (:obj:`str` or `bool`, `optional`):
@@ -1722,7 +1722,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
             msg = (
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
 
@@ -1746,6 +1747,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             init_configuration,
             *init_inputs,
             use_auth_token=use_auth_token,
+            cache_dir=cache_dir,
             **kwargs,
         )
 
@@ -1757,6 +1759,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_configuration,
         *init_inputs,
         use_auth_token=None,
+        cache_dir=None,
         **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -1783,6 +1786,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
+            init_kwargs.pop("auto_map", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -1795,7 +1799,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
             try:
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, use_auth_token=use_auth_token)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    use_auth_token=use_auth_token,
+                    cache_dir=cache_dir,
+                )
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
                 # skip if an error occurred.
@@ -2027,6 +2035,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_class.endswith("Fast") and tokenizer_class != "PreTrainedTokenizerFast":
             tokenizer_class = tokenizer_class[:-4]
         tokenizer_config["tokenizer_class"] = tokenizer_class
+        if getattr(self, "_auto_map", None) is not None:
+            tokenizer_config["auto_map"] = self._auto_map
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
@@ -2223,8 +2233,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         elif padding is not False:
             if padding is True:
                 if verbose:
-                    if max_length is not None:
-                        warnings.warn("`max_length` is ignored when `padding`=`True`.")
+                    if max_length is not None and (truncation is False or truncation == "do_not_truncate"):
+                        warnings.warn(
+                            "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
+                            "To pad to max length, use `padding='max_length'`."
+                        )
                     if old_pad_to_max_length is not False:
                         warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
@@ -2726,11 +2739,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         first_element = required_input[0]
         if isinstance(first_element, (list, tuple)):
             # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
-            index = 0
-            while len(required_input[index]) == 0:
-                index += 1
-            if index < len(required_input):
-                first_element = required_input[index][0]
+            for item in required_input:
+                if len(item) != 0:
+                    first_element = item[0]
+                    break
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and _is_tensorflow(first_element):
@@ -3008,7 +3020,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Returns:
             :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
-            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing_tokens if
+            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing tokens if
             a pair of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
@@ -3055,7 +3067,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 pair_ids = pair_ids[:-num_tokens_to_remove]
             else:
                 logger.error(
-                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"We need to remove {num_tokens_to_remove} to truncate the input "
                     f"but the second sequence has a length {len(pair_ids)}. "
                     f"Please select another truncation strategy than {truncation_strategy}, "
                     f"for instance 'longest_first' or 'only_first'."
@@ -3106,11 +3118,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
 
+        # Initialize attention mask if not present.
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(required_input)
+
         if needs_to_be_padded:
             difference = max_length - len(required_input)
+
             if self.padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [1] * len(required_input) + [0] * difference
+
+                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
@@ -3120,7 +3138,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + [1] * len(required_input)
+                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
                         "token_type_ids"
@@ -3130,8 +3148,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        elif return_attention_mask and "attention_mask" not in encoded_inputs:
-            encoded_inputs["attention_mask"] = [1] * len(required_input)
 
         return encoded_inputs
 
@@ -3246,7 +3262,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         assert already_has_special_tokens and token_ids_1 is None, (
             "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
-            "Please use a slow (full python) tokenizer to activate this argument."
+            "Please use a slow (full python) tokenizer to activate this argument. "
             "Or set `return_special_tokens_mask=True` when calling the encoding method "
             "to get the special tokens mask in any tokenizer. "
         )

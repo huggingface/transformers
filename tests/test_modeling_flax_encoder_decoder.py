@@ -29,7 +29,6 @@ from .test_modeling_flax_gpt2 import FlaxGPT2ModelTester
 
 if is_flax_available():
     from transformers import (
-        AutoConfig,
         AutoTokenizer,
         EncoderDecoderConfig,
         FlaxBertModel,
@@ -350,15 +349,12 @@ class FlaxEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
         return FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
 
-    def get_decoder_config(self):
-        config = AutoConfig.from_pretrained("gpt2")
-        config.is_decoder = True
-        config.add_cross_attention = True
-        return config
-
     def _check_configuration_tie(self, model):
-        assert id(model.decoder.config) == id(model.config.decoder)
-        assert id(model.encoder.config) == id(model.config.encoder)
+
+        module = model.module.bind(model.params)
+
+        assert id(module.decoder.config) == id(model.config.decoder)
+        assert id(module.encoder.config) == id(model.config.encoder)
 
     @slow
     def test_configuration_tie(self):

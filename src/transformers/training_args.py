@@ -141,7 +141,8 @@ class TrainingArguments:
             the last epoch before stopping training).
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
-            :obj:`num_train_epochs`.
+            :obj:`num_train_epochs`. In case of using a finite iterable dataset the training may stop before reaching
+            the set number of steps when all data is exhausted
         lr_scheduler_type (:obj:`str` or :class:`~transformers.SchedulerType`, `optional`, defaults to :obj:`"linear"`):
             The scheduler type to use. See the documentation of :class:`~transformers.SchedulerType` for all possible
             values.
@@ -351,12 +352,13 @@ class TrainingArguments:
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
         hub_model_id (:obj:`str`, `optional`):
-            The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
-            name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
-            of with :obj:`"organization_name/model"`.
+            The name of the repository to keep in sync with the local `output_dir`. It can be a simple model ID in
+            which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
+            for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member of with
+            :obj:`"organization_name/model"`. Will default to :obj:`user_name/output_dir_name` with `output_dir_name`
+            being the name of :obj:`output_dir`.
 
-            Will default to :obj:`user_name/output_dir_name` with `output_dir_name` being the name of
-            :obj:`output_dir`.
+            Will default to to the name of :obj:`output_dir`.
         hub_strategy (:obj:`str` or :class:`~transformers.trainer_utils.HubStrategy`, `optional`, defaults to :obj:`"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
@@ -387,7 +389,7 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Overwrite the content of the output directory."
+                "Overwrite the content of the output directory. "
                 "Use this to continue training if output_dir points to a checkpoint directory."
             )
         },
@@ -422,7 +424,7 @@ class TrainingArguments:
     per_gpu_eval_batch_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
+            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
             "Batch size per GPU/TPU core/CPU for evaluation."
         },
     )
@@ -494,7 +496,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Limit the total amount of checkpoints."
+                "Limit the total amount of checkpoints. "
                 "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
             )
         },
@@ -520,7 +522,7 @@ class TrainingArguments:
         default="O1",
         metadata={
             "help": (
-                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
                 "See details at https://nvidia.github.io/apex/amp.html"
             )
         },

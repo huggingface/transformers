@@ -818,7 +818,8 @@ class T5Stack(T5PreTrainedModel):
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
         # Model parallel
         self.model_parallel = False
         self.device_map = None
@@ -1271,7 +1272,8 @@ class T5Model(T5PreTrainedModel):
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = T5Stack(decoder_config, self.shared)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False
@@ -1461,7 +1463,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False
@@ -1596,15 +1599,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(labels)
-
-        # If decoding with past key value states, only the last tokens
-        # should be given as an input
-        if past_key_values is not None:
-            assert labels is None, "Decoder should not use cached key value states when training."
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids[:, -1:]
-            if decoder_inputs_embeds is not None:
-                decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
 
         # Set device for model parallelism
         if self.model_parallel:
@@ -1744,7 +1738,8 @@ class T5EncoderModel(T5PreTrainedModel):
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Model parallel
         self.model_parallel = False

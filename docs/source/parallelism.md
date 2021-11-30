@@ -35,7 +35,7 @@ The following is the brief description of the main concepts that will be describ
 1. DataParallel (DP) - the same setup is replicated multiple times, and each being fed a slice of the data. The processing is done in parallel and all setups are synchronized at the end of each training step.
 2. TensorParallel (TP) - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single gpu, each shard of the tensor resides on its designated gpu. During processing each shard gets processed separately and in parallel on different GPUs and the results are synced at the end of the step. This is what one may call horizontal parallelism, as the splitting happens on horizontal level.
 3. PipelineParallel (PP) - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are places on a single gpu. Each gpu processes in parallel different stages of the pipeline and working on a small chunk of the batch.
-4. Zero Redundancy Optimizer (ZeRO) - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model does't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
+4. Zero Redundancy Optimizer (ZeRO) - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
 5. Sharded DDP - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
 
 
@@ -110,7 +110,7 @@ To me this sounds like an efficient group backpacking weight distribution strate
 2. person B carries the stove
 3. person C carries the axe
 
-Now each night they all share what they have with others and get from others what the don't have, and in the morning they pack up their allocated type of gear and continue on their way. This is Sharded DDP / Zero DP.
+Now each night they all share what they have with others and get from others what they don't have, and in the morning they pack up their allocated type of gear and continue on their way. This is Sharded DDP / Zero DP.
 
 Compare this strategy to the simple one where each person has to carry their own tent, stove and axe, which would be far more inefficient. This is DataParallel (DP and DDP) in Pytorch.
 
@@ -140,7 +140,7 @@ we just sliced it in 2 vertically, placing layers 0-3 onto GPU0 and 4-7 to GPU1.
 
 Now while data travels from layer 0 to 1, 1 to 2 and 2 to 3 this is just the normal model. But when data needs to pass from layer 3 to layer 4 it needs to travel from GPU0 to GPU1 which introduces a communication overhead. If the participating GPUs are on the same compute node (e.g. same physical machine) this copying is pretty fast, but if the GPUs are located on different compute nodes (e.g. multiple machines) the communication overhead could be significantly larger.
 
-Then layers 4 to 5 to 6 to 7 are as a normal model would have and when the 7th layer completes we often need to send the data back to layer 0 where the labels are (or alternatively send the labels to the the last layer). Now the loss can be computed and the optimizer can do its work.
+Then layers 4 to 5 to 6 to 7 are as a normal model would have and when the 7th layer completes we often need to send the data back to layer 0 where the labels are (or alternatively send the labels to the last layer). Now the loss can be computed and the optimizer can do its work.
 
 Problems:
 - the main deficiency and why this one is called "naive" MP, is that all but one GPU is idle at any given moment. So if 4 GPUs are used, it's almost identical to quadrupling the amount of memory of a single GPU, and ignoring the rest of the hardware. Plus there is the overhead of copying the data between devices. So 4x 6GB cards will be able to accommodate the same size as 1x 24GB card using naive MP, except the latter will complete the training faster, since it doesn't have the data copying overhead. But, say, if you have 40GB cards and need to fit a 45GB model you can with 4x 40GB cards (but barely because of the gradient and optimizer states)
@@ -170,27 +170,44 @@ With `chunks=1` you end up with the naive MP, which is very inefficient. With a 
 
 While the diagram shows that there is a bubble of "dead" time that can't be parallelized because the last `forward` stage has to wait for `backward` to complete the pipeline, the purpose of finding the best value for `chunks` is to enable a high concurrent GPU utilization across all participating GPUs which translates to minimizing the size of the bubble.
 
-Problems:
+There are 2 groups of solutions - the traditional Pipeline API and the more modern solutions that make things much easier for the end user.
+
+Traditional Pipeline API solutions:
+- PyTorch
+- FairScale
+- DeepSpeed
+- Megatron-LM
+
+Modern solutions:
+- Varuna
+- Sagemaker
+
+Problems with traditional Pipeline API solutions:
 - have to modify the model quite heavily, because Pipeline requires one to rewrite the normal flow of modules into a `nn.Sequential` sequence of the same, which may require changes to the design of the model.
 - currently the Pipeline API is very restricted. If you had a bunch of python variables being passed in the very first stage of the Pipeline, you will have to find a way around it. Currently, the pipeline interface requires either a single Tensor or a tuple of Tensors as the only input and output. These tensors must have a batch size as the very first dimension, since pipeline is going to chunk the mini batch into micro-batches. Possible improvements are being discussed here https://github.com/pytorch/pytorch/pull/50693
-- have to arrange each layer so that the output of one model becomes an input to the other model
+- conditional control flow at the level of pipe stages is not possible - e.g., Encoder-Decoder models like T5 require special workarounds to handle a conditional encoder stage.
+- have to arrange each layer so that the output of one model becomes an input to the other model.
+
+We are yet to experiment with Varuna and SageMaker but their papers report that they have overcome the list of problems mentioned above and that they require much smaller changes to the user's model.
 
 Implementations:
 - [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
 - [FairScale](https://fairscale.readthedocs.io/en/latest/tutorials/pipe.html)
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 
 🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive PP support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
 
 Other approaches:
 
-DeepSpeed and SageMaker use the concept of an [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
+DeepSpeed, Varuna and SageMaker use the concept of an [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
 ![interleaved-pipeline-execution](imgs/parallelism-sagemaker-interleaved-pipeline.png)
 
 Here the bubble (idle time) is further minimized by prioritizing backward passes.
 
-According to [the same document](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html), it might be able to automate the non `nn.Sequential` model conversion to pipeline. The only problem is that this is currently only available at AWS, so you can't run it on your own hardware.
+Varuna further tries to improve the schedule by using simulations to discover the most efficient scheduling.
 
 
 ## Tensor Parallelism
@@ -220,12 +237,15 @@ Special considerations: TP requires very fast network, and therefore it's not ad
 This section is based on the original much more [detailed TP overview](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
 by [@anton-l](https://github.com/anton-l).
 
+SageMaker combines TP with DP for a more efficient processing.
+
 Alternative names:
 - DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
 
 Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 
 🤗 Transformers status:
 - core: not yet implemented in the core
@@ -247,6 +267,8 @@ Since each dimension requires at least 2 GPUs, here you'd need at least 4 GPUs.
 Implementations:
 - [DeepSpeed](https://github.com/microsoft/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
 
 🤗 Transformers status: not yet implemented
 
@@ -264,6 +286,8 @@ Since each dimension requires at least 2 GPUs, here you'd need at least 8 GPUs.
 Implementations:
 - [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
 
@@ -272,7 +296,7 @@ Implementations:
 
 One of the main features of DeepSpeed is ZeRO, which is a super-scalable extension of DP. It has already been discussed in [ZeRO Data Parallel](#zero-data-parallel). Normally it's a standalone feature that doesn't require PP or TP. But it can be combined with PP and TP.
 
-When ZeRO-DP is combined with PP (and optinally TP) it typically enables only ZeRO stage 1 (optimizer sharding).
+When ZeRO-DP is combined with PP (and optionally TP) it typically enables only ZeRO stage 1 (optimizer sharding).
 
 While it's theoretically possible to use ZeRO stage 2 (gradient sharding) with Pipeline Parallelism, it will have bad performance impacts. There would need to be an additional reduce-scatter collective for every micro-batch to aggregate the gradients before sharding, which adds a potentially significant communication overhead. By nature of Pipeline Parallelism, small micro-batches are used and instead the focus is on trying to balance arithmetic intensity (micro-batch size) with minimizing the Pipeline bubble (number of micro-batches). Therefore those communication costs are going to hurt.
 
@@ -296,12 +320,27 @@ Paper: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao J
 
 It performs a sort of 4D Parallelism over Sample-Operator-Attribute-Parameter.
 
-1. Sample = Data Parallelism
-2. Operator = part vertical Layer Parallelism, but it can split the layer too - more refined level
-3. Attribute = horizontal Model Parallelism (Megatron-LM style)
-4. Parameter = Sharded model params
+1. Sample = Data Parallelism (sample-wise parallel)
+2. Operator = Parallelize a single operation into several sub-operations
+3. Attribute = Data Parallelism (length-wise parallel)
+4. Parameter = Model Parallelism (regardless of dimension - horizontal or vertical)
 
-and they are working on Pipeline Parallelism. I guess ZeRO-DP is Sample+Parameter in this context.
+Examples:
+* Sample
+
+Let's take 10 batches of sequence length 512. If we parallelize them by sample dimension into 2 devices, we get 10 x 512 which becomes be 5 x 2 x 512.
+
+* Operator
+
+If we perform layer normalization, we compute std first and mean second, and then we can normalize data. Operator parallelism allows computing std and mean in parallel. So if we parallelize them by operator dimension into 2 devices (cuda:0, cuda:1), first we copy input data into both devices, and cuda:0 computes std, cuda:1 computes mean at the same time.
+
+* Attribute
+
+We have 10 batches of 512 length. If we parallelize them by attribute dimension into 2 devices, 10 x 512 will be 10 x 2 x 256.
+
+* Parameter
+
+It is similar with tensor model parallelism or naive layer-wise model parallelism.
 
 ![flex-flow-soap](imgs/parallelism-flexflow.jpeg)
 
@@ -316,7 +355,7 @@ So the promise is very attractive - it runs a 30min simulation on the cluster of
 
 ## Which Strategy To Use When
 
-Here is a very rough outlook at which parallelism strategy to use when. The first on the list is typically faster.
+Here is a very rough outline at which parallelism strategy to use when. The first on each list is typically faster.
 
 **⇨ Single GPU**
 
@@ -327,7 +366,11 @@ Here is a very rough outlook at which parallelism strategy to use when. The firs
 * Model doesn't fit onto a single GPU:
 
     1. ZeRO + Offload CPU and optionally NVMe
+    2. as above plus Memory Centric Tiling (see below for details) if the largest layer can't fit into a single GPU
 
+* Largest Layer not fitting into a single GPU:
+
+1. ZeRO - Enable [Memory Centric Tiling](https://deepspeed.readthedocs.io/en/latest/zero3.html#memory-centric-tiling) (MCT). It allows you to run arbitrarily large layers by automatically splitting them and executing them sequentially. MCT reduces the number of parameters that are live on a GPU, but it does not affect the activation memory. As this need is very rare as of this writing a manual override of `torch.nn.Linear` needs to be done by the user.
 
 **⇨ Single Node / Multi-GPU**
 
@@ -342,7 +385,14 @@ Here is a very rough outlook at which parallelism strategy to use when. The firs
     2. ZeRO
     3. TP
 
-    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP and ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP or ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+
+    TP is almost always used within a single node. That is TP size <= gpus per node.
+
+* Largest Layer not fitting into a single GPU:
+
+    1. If not using ZeRO - must use TP, as PP alone won't be able to fit.
+    2. With ZeRO see the same entry for "Single GPU" above
 
 
 **⇨ Multi-Node / Multi-GPU**

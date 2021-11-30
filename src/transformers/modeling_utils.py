@@ -462,6 +462,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
+    @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a PyTorch model.
+        """
+        return "pt"
+
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
@@ -473,7 +480,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        if getattr(self.config, "gradient_checkpointing", False):
+
+    def post_init(self):
+        """
+        A method executed at the end of each Transformer model initialization, to execute code that needs the model's
+        modules properly initialized (such as weight initialization).
+        """
+        self.init_weights()
+        self._backward_compatibility_gradient_checkpointing()
+
+    def _backward_compatibility_gradient_checkpointing(self):
+        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()
             # Remove the attribute now that is has been consumed, so it's no saved in the config.
             delattr(self.config, "gradient_checkpointing")
@@ -778,14 +795,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}."
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. "
                 f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
             )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(
-            self.device, dtype=old_embeddings.weight.dtype
-        )
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -849,14 +865,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
-                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. "
                 f"You should either use a different resize function or make sure that `old_lm_head` are an instance of {nn.Linear}."
             )
 
         # Build new lm head
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
-        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias).to(self.device)
+        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
+        new_lm_head = new_lm_head.to(self.device, dtype=old_lm_head.weight.dtype)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
@@ -940,7 +957,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def gradient_checkpointing_enable(self, flag: bool = True):
+    def gradient_checkpointing_enable(self):
         """
         Activates gradient checkpointing for the current model.
 
@@ -951,7 +968,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
-    def gradient_checkpointing_disable(self, flag: bool = True):
+    def gradient_checkpointing_disable(self):
         """
         Deactivates gradient checkpointing for the current model.
 
@@ -960,6 +977,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if self.supports_gradient_checkpointing:
             self.apply(partial(self._set_gradient_checkpointing, value=False))
+
+    @property
+    def is_gradient_checkpointing(self) -> bool:
+        """
+        Whether gradient checkpointing is activated for this model or not.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
 
     def save_pretrained(
         self,
@@ -1033,7 +1060,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
-            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
+            for ignore_key in self._keys_to_ignore_on_save:
+                if ignore_key in state_dict.keys():
+                    del state_dict[ignore_key]
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
@@ -1121,7 +1150,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1231,7 +1260,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -1309,7 +1337,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                    f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                     f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}\n\n"
                 )
 
@@ -1344,8 +1373,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     except (UnicodeDecodeError, ValueError):
                         raise OSError(
                             f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                            f"at '{resolved_archive_file}'"
-                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                            f"at '{resolved_archive_file}'. "
+                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
                         )
 
             # set dtype to instantiate the model under:
@@ -1478,13 +1507,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # key re-naming operations are never done on the keys
         # that are loaded, but always on the keys of the newly initialized model
-        remove_prefix = not has_prefix_module and expects_prefix_module
-        add_prefix = has_prefix_module and not expects_prefix_module
+        remove_prefix_from_model = not has_prefix_module and expects_prefix_module
+        add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
-        if remove_prefix:
+        if remove_prefix_from_model:
             expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
-        elif add_prefix:
+        elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
         missing_keys = list(set(expected_keys) - set(loaded_keys))
@@ -1496,10 +1525,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if ignore_mismatched_sizes:
             for checkpoint_key in loaded_keys:
                 model_key = checkpoint_key
-                if remove_prefix and checkpoint_key.startswith(prefix):
-                    model_key = ".".join(checkpoint_key.split(".")[1:])
-                elif add_prefix:
+                if remove_prefix_from_model:
+                    # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
                     model_key = f"{prefix}.{checkpoint_key}"
+                elif add_prefix_to_model:
+                    # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                    model_key = ".".join(checkpoint_key.split(".")[1:])
 
                 if (
                     model_key in model_state_dict
@@ -1523,7 +1554,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if _fast_init:
             # retrieve unintialized modules and initialize
             uninitialized_modules = model.retrieve_modules_from_names(
-                missing_keys, add_prefix=add_prefix, remove_prefix=remove_prefix
+                missing_keys, add_prefix=add_prefix_to_model, remove_prefix=remove_prefix_from_model
             )
             for module in uninitialized_modules:
                 model._init_weights(module)

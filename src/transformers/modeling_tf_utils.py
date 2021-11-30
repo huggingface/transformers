@@ -18,6 +18,7 @@
 import functools
 import inspect
 import os
+import pickle
 import re
 import warnings
 from typing import Dict, List, Optional, Union
@@ -27,7 +28,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine import data_adapter
+from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
+
+from huggingface_hub import Repository, list_repo_files
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
@@ -43,6 +47,7 @@ from .file_utils import (
     is_remote_url,
 )
 from .generation_tf_utils import TFGenerationMixin
+from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -51,7 +56,15 @@ logger = logging.get_logger(__name__)
 tf_logger = tf.get_logger()
 
 TFModelInputType = Union[
-    List[tf.Tensor], List[np.ndarray], Dict[str, tf.Tensor], Dict[str, np.ndarray], np.ndarray, tf.Tensor
+    List[tf.Tensor],
+    List[np.ndarray],
+    List[KerasTensor],
+    Dict[str, tf.Tensor],
+    Dict[str, np.ndarray],
+    Dict[str, KerasTensor],
+    tf.Tensor,
+    np.ndarray,
+    KerasTensor,
 ]
 
 
@@ -296,7 +309,9 @@ def booleans_processing(config, **kwargs):
         )
 
         if "use_cache" in kwargs:
-            final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
+            final_booleans["use_cache"] = (
+                kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
+            )
     else:
         if (
             kwargs["output_attentions"] not in (None, config.output_attentions)
@@ -304,7 +319,7 @@ def booleans_processing(config, **kwargs):
             or ("use_cache" in kwargs and kwargs["use_cache"] not in (None, config.use_cache))
         ):
             tf_logger.warning(
-                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
+                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model. "
                 "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
 
@@ -318,7 +333,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
-            final_booleans["use_cache"] = config.use_cache
+            final_booleans["use_cache"] = getattr(config, "use_cache", None)
 
     return final_booleans
 
@@ -345,7 +360,7 @@ def input_processing(func, config, input_ids, **kwargs):
     signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
-    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
+    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -361,6 +376,15 @@ def input_processing(func, config, input_ids, **kwargs):
             FutureWarning,
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
+
+    if "past" in kwargs["kwargs_call"] and "past_key_values" in kwargs:
+        warnings.warn(
+            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            FutureWarning,
+        )
+        kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
+    elif "past_key_values" in kwargs["kwargs_call"] and "past" in kwargs:
+        kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
     if len(kwargs["kwargs_call"]) > 0:
         raise ValueError(
@@ -420,7 +444,7 @@ def input_processing(func, config, input_ids, **kwargs):
             else:
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
-        if isinstance(input_ids, tf.Tensor) or input_ids is None:
+        if isinstance(input_ids, (tf.Tensor, KerasTensor)) or input_ids is None:
             output[parameter_names[0]] = input_ids
         else:
             raise ValueError(
@@ -652,6 +676,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             "input_ids": tf.constant(DUMMY_INPUTS),
         }
 
+    @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a TensorFlow model.
+        """
+        return "tf"
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
@@ -663,6 +694,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+
+    def get_config(self):
+        return self.config.to_dict()
+
+    @classmethod
+    def from_config(cls, config, **kwargs):
+        if isinstance(config, PretrainedConfig):
+            return cls._from_config(config, **kwargs)
+        return cls._from_config(cls.config_class.from_dict(config, **kwargs))
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -715,6 +755,73 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return main_layer.get_input_embeddings()
         else:
             raise NotImplementedError
+
+    def _save_checkpoint(self, checkpoint_dir, epoch):
+        if not os.path.isdir(checkpoint_dir):
+            os.mkdir(checkpoint_dir)
+        # We avoid tf.train.checkpoint or saving weights in TF format, even though that includes optimizer
+        # state for us, because it requires special handling for objects like custom losses, which we use
+        # internally and which users are likely to use too
+        weights_path = os.path.join(checkpoint_dir, "weights.h5")
+        self.save_weights(weights_path)
+        extra_data = {"epoch": epoch, "optimizer_state": self.optimizer.get_weights()}
+        extra_data_path = os.path.join(checkpoint_dir, "extra_data.pickle")
+        with open(extra_data_path, "wb") as f:
+            pickle.dump(extra_data, f)
+
+    def load_repo_checkpoint(self, repo_path_or_name):
+        """
+        Loads a saved checkpoint (model weights and optimizer state) from a repo. Returns the current epoch count when
+        the checkpoint was made.
+
+        Args:
+            repo_path_or_name (:obj:`str`):
+                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
+                the repository will have the name of that local folder).
+
+        Returns:
+            :obj:`dict`: A dictionary of extra metadata from the checkpoint, most commonly an "epoch" count.
+        """
+        if getattr(self, "optimizer", None) is None:
+            raise RuntimeError(
+                "Checkpoint loading failed as no optimizer is attached to the model. "
+                "This is most likely caused by the model not being compiled."
+            )
+        if not os.path.isdir(repo_path_or_name):
+            # If this isn't a local path, check that the remote repo exists and has a checkpoint in it
+            repo_files = list_repo_files(repo_path_or_name)
+            for file in ("checkpoint/weights.h5", "checkpoint/extra_data.pickle"):
+                if file not in repo_files:
+                    raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
+            if "/" not in repo_path_or_name:
+                model_id = repo_path_or_name
+                repo_path_or_name = self.get_full_repo_name(repo_path_or_name)
+            else:
+                model_id = repo_path_or_name.split("/")[-1]
+            repo = Repository(model_id, clone_from=f"https://huggingface.co/{repo_path_or_name}")
+            local_dir = repo.local_dir
+        else:
+            local_dir = repo_path_or_name
+
+        # Now make sure the repo actually has a checkpoint in it.
+        checkpoint_dir = os.path.join(local_dir, "checkpoint")
+        weights_file = os.path.join(checkpoint_dir, "weights.h5")
+        if not os.path.isfile(weights_file):
+            raise FileNotFoundError(f"Could not find checkpoint file weights.h5 in repo {repo_path_or_name}!")
+        extra_data_file = os.path.join(checkpoint_dir, "extra_data.pickle")
+        if not os.path.isfile(extra_data_file):
+            raise FileNotFoundError(f"Could not find checkpoint file extra_data.pickle in repo {repo_path_or_name}!")
+
+        # Assuming the repo is real and we got a checkpoint, load the weights and the optimizer state into the model.
+        # The optimizer state includes the iteration count, so learning rate schedules should resume as normal too.
+        self.load_weights(weights_file)
+        with open(extra_data_file, "rb") as f:
+            extra_data = pickle.load(f)
+        self.optimizer.set_weights(extra_data["optimizer_state"])
+
+        # Finally, return the epoch number from the checkpoint. This isn't a property of the model, so we can't
+        # set it directly, but the user can pass it to fit().
+        return {"epoch": extra_data["epoch"]}
 
     def compile(
         self,
@@ -769,6 +876,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
+        # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
+        # should be done only with the relevant ModelOutput param that is
+        # considered by the loss.
+        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
+            y_pred = y_pred["logits"]
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
@@ -795,17 +907,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
         y_pred = self(x, training=False)
-        if not self.loss:
-            self.loss_tracker.update_state(y_pred.loss)
-            return_metrics = {"loss": self.loss_tracker.result()}
-        else:
-            # Run anyway to update state
-            self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-            return_metrics = {}
-        # Updates stateful loss metrics.
         self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+        # Updates stateful loss metrics.
+        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
+            y_pred = y_pred["logits"]
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
+        return_metrics = {}
         for metric in self.metrics:
             result = metric.result()
             if isinstance(result, dict):
@@ -1345,7 +1453,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -1403,7 +1510,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                    f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                     f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {TF2_WEIGHTS_NAME}, {WEIGHTS_NAME}.\n\n"
                 )
                 raise EnvironmentError(msg)
