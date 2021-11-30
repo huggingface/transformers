@@ -825,6 +825,10 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        trainable_position_encoding_kwargs_decoder = dict(
+            num_channels=config.d_model, index_dims=config.max_position_embeddings
+        )
+
         self.perceiver = PerceiverModel(
             config,
             input_preprocessor=PerceiverTextPreprocessor(config),
@@ -838,9 +842,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
                 num_heads=8,
                 use_query_residual=False,
                 final_project=False,
-                trainable_position_encoding_kwargs=dict(
-                    num_channels=config.d_model, index_dims=config.max_position_embeddings
-                ),
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
             ),
         )
         self.embedding_decoder = PerceiverEmbeddingDecoder(config)
@@ -910,6 +912,9 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size ** 2)
+        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
             config,
@@ -921,15 +926,12 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
                 position_encoding_type="trainable",
                 concat_or_add_pos="concat",
                 project_pos_dim=256,
-                trainable_position_encoding_kwargs=dict(
-                    num_channels=256,
-                    index_dims=config.image_size ** 2,
-                ),
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_preprocessor,
             ),
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
                 use_query_residual=True,
             ),
         )
@@ -1032,6 +1034,11 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        fourier_position_encoding_kwargs_preprocessor = dict(
+            concat_pos=True, max_resolution=(224, 224), num_bands=64, sine_only=False
+        )
+        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
             config,
@@ -1039,14 +1046,12 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
                 config,
                 prep_type="pixels",
                 spatial_downsample=1,
-                fourier_position_encoding_kwargs=dict(
-                    concat_pos=True, max_resolution=(224, 224), num_bands=64, sine_only=False
-                ),
+                fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_preprocessor,
             ),
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
                 use_query_residual=True,
             ),
         )
@@ -1146,6 +1151,11 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        fourier_position_encoding_kwargs_preprocessor = dict(
+            concat_pos=True, max_resolution=(56, 56), num_bands=64, sine_only=False
+        )
+        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
             config,
@@ -1154,14 +1164,12 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
                 prep_type="conv",
                 spatial_downsample=1,
                 position_encoding_type="fourier",
-                fourier_position_encoding_kwargs=dict(
-                    concat_pos=True, max_resolution=(56, 56), num_bands=64, sine_only=False
-                ),
+                fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_preprocessor,
             ),
             decoder=PerceiverClassificationDecoder(
                 config,
                 num_channels=config.d_latents,
-                trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
                 use_query_residual=True,
             ),
         )
@@ -1261,6 +1269,16 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        fourier_position_encoding_kwargs_preprocessor = dict(
+            num_bands=64,
+            max_resolution=config.train_size,
+            sine_only=False,
+            concat_pos=True,
+        )
+        fourier_position_encoding_kwargs_decoder = dict(
+            concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
+        )
+
         self.perceiver = PerceiverModel(
             config,
             input_preprocessor=PerceiverImagePreprocessor(
@@ -1272,12 +1290,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
                 temporal_downsample=2,
                 position_encoding_type="fourier",
                 # position_encoding_kwargs
-                fourier_position_encoding_kwargs=dict(
-                    num_bands=64,
-                    max_resolution=config.train_size,
-                    sine_only=False,
-                    concat_pos=True,
-                ),
+                fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_preprocessor,
             ),
             decoder=PerceiverOpticalFlowDecoder(
                 config,
@@ -1290,9 +1303,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
                 # We query the decoder using the first frame features
                 # rather than a standard decoder position encoding.
                 position_encoding_type="fourier",
-                fourier_position_encoding_kwargs=dict(
-                    concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
-                ),
+                fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_decoder,
             ),
         )
 
@@ -1824,7 +1835,6 @@ class PerceiverOpticalFlowDecoder(PerceiverAbstractDecoder):
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         if subsampled_points is not None:
             raise ValueError("FlowDecoder doesn't support subsampling yet.")
-        # assumes merged in time
         return inputs
 
     def forward(self, query, z, query_mask=None, output_attentions=False):
