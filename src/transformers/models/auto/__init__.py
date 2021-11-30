@@ -83,6 +83,7 @@ if is_tf_available():
         "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
         "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
         "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
         "TF_MODEL_MAPPING",
         "TF_MODEL_WITH_LM_HEAD_MAPPING",
@@ -95,6 +96,7 @@ if is_tf_available():
         "TFAutoModelForQuestionAnswering",
         "TFAutoModelForSeq2SeqLM",
         "TFAutoModelForSequenceClassification",
+        "TFAutoModelForTableQuestionAnswering",
         "TFAutoModelForTokenClassification",
         "TFAutoModelWithLMHead",
     ]
@@ -189,6 +191,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
@@ -201,6 +204,7 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelWithLMHead,
         )
