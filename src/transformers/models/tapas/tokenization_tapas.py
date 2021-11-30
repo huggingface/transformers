@@ -1897,9 +1897,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             data (:obj:`dict`):
                 Dictionary mapping features to actual values. Should be created using
                 :class:`~transformers.TapasTokenizer`.
-            logits (:obj:`np.ndarray` of shape ``(batch_size, sequence_length)``):
+            logits (:obj:`torch.Tensor` or :obj:`tf.Tensor` of shape ``(batch_size, sequence_length)``):
                 Tensor containing the logits at the token level.
-            logits_agg (:obj:`np.ndarray` of shape ``(batch_size, num_aggregation_labels)``, `optional`):
+            logits_agg (:obj:`torch.Tensor` or :obj:`tf.Tensor` of shape ``(batch_size, num_aggregation_labels)``, `optional`):
                 Tensor containing the aggregation logits.
             cell_classification_threshold (:obj:`float`, `optional`, defaults to 0.5):
                 Threshold to be used for cell selection. All table cells for which their probability is larger than
@@ -1915,6 +1915,11 @@ class TapasTokenizer(PreTrainedTokenizer):
             - predicted_aggregation_indices (``List[int]``of length ``batch_size``, `optional`, returned when
               ``logits_aggregation`` is provided): Predicted aggregation operator indices of the aggregation head.
         """
+        # converting to numpy arrays to work with PT/TF
+        logits = logits.numpy()
+        if logits_agg is not None:
+            logits_agg = logits_agg.numpy()
+        data = {key: value.numpy() for key, value in data.items() if key != "training"}
         # input data is of type float32
         # np.log(np.finfo(np.float32).max) = 88.72284
         # Any value over 88.72284 will overflow when passed through the exponential, sending a warning
@@ -1975,7 +1980,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         output = (predicted_answer_coordinates,)
 
         if logits_agg is not None:
-            predicted_aggregation_indices = logits_agg.argmax(dim=-1)
+            predicted_aggregation_indices = logits_agg.argmax(axis=-1)
             output = (predicted_answer_coordinates, predicted_aggregation_indices.tolist())
 
         return output
