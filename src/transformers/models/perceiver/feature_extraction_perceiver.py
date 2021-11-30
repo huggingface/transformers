@@ -92,8 +92,9 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
     def center_crop(self, image):
         """
-        Crops :obj:`image` to `self.crop_size` using a center crop. Note that if the image is too small to be cropped to
-        the size given, it will be padded (so the returned result has the size asked).
+        Crops :obj:`image` to `self.crop_size` using a center crop. Note that if the image is too small to be cropped
+        to the size given, it will be padded (so the returned result has the size asked).
+
         Args:
             image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
                 The image to resize.

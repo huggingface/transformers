@@ -466,7 +466,7 @@ class PerceiverLayer(nn.Module):
             head_mask,
             inputs,
             inputs_mask,
-            output_attentions=output_attentions,
+            output_attentions,
         )
         attention_output = attention_outputs[0]
 
@@ -577,8 +577,8 @@ class PerceiverEncoder(nn.Module):
 
                 layer_outputs = layer_module(
                     hidden_states,
-                    attention_mask,
-                    layer_head_mask,
+                    attention_mask=attention_mask,
+                    head_mask=layer_head_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -2073,19 +2073,23 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     Generate a Fourier frequency position encoding with linear spacing.
 
     Args:
-      pos: The Tensor containing the position of n points in d dimensional space.
-        A Torch tensor of shape [batch_size, n, d].
-      num_bands: The number of bands (K) to use.
-      max_resolution: The maximum resolution (i.e. the number of pixels per dim).
-        A tuple representing resolution for each dimension.
-      concat_pos: Whether to concatenate the input position encoding to the Fourier features.
-      sine_only: Whether to use a single phase (sin) or two (sin/cos) for each frequency band.
+      pos (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, dim)`):
+        The Tensor containing the position of n points in d dimensional space.
+      num_bands (:obj:`int`):
+        The number of frequency bands (K) to use.
+      max_resolution (:obj:`Tuple[int]`, `optional`, defaults to (224, 224)):
+        The maximum resolution (i.e. the number of pixels per dim). A tuple representing resolution for each dimension.
+      concat_pos (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        Whether to concatenate the input position encoding to the Fourier features.
+      sine_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        Whether to use a single phase (sin) or two (sin/cos) for each frequency band.
 
     Returns:
-      embedding: A Torch tensor of shape [batch_size, n, n_channels]. If concat_pos is True and sine_only is False,
-      output dimensions are ordered as: [dim_1, dim_2, ..., dim_d, sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ...,
-      sin(pi*f_1*dim_d), ..., sin(pi*f_K*dim_d), cos(pi*f_1*dim_1), ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d),
-      ..., cos(pi*f_K*dim_d)], where dim_i is pos[:, i] and f_k is the kth frequency band.
+      :obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, n_channels)`: The Fourier position
+      embeddings. If :obj:`concat_pos` is `True` and :obj:`sine_only` is `False`, output dimensions are ordered as:
+      [dim_1, dim_2, ..., dim_d, sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ..., sin(pi*f_1*dim_d), ...,
+      sin(pi*f_K*dim_d), cos(pi*f_1*dim_1), ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d), ..., cos(pi*f_K*dim_d)],
+      where dim_i is pos[:, i] and f_k is the kth frequency band.
     """
 
     batch_size = pos.shape[0]
@@ -2121,11 +2125,13 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
     Generate an array of position indices for an N-D input array.
 
     Args:
-      index_dims: The shape of the index dimensions of the input array.
-      output_range: The min and max values taken by each input index dimension.
+      index_dims (:obj:`List[int]`):
+        The shape of the index dimensions of the input array.
+      output_range (:obj:`Tuple[float]`, `optional`, defaults to :obj:`(-1.0, 1.0)`):
+        The min and max values taken by each input index dimension.
 
     Returns:
-      A Torch tensor of shape [index_dims[0], index_dims[1], .., index_dims[-1], N].
+      :obj:`torch.FloatTensor` of shape :obj:`(index_dims[0], index_dims[1], .., index_dims[-1], N)`.
     """
 
     def _linspace(n_xels_per_dim):
@@ -2186,14 +2192,15 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
     Checks or builds spatial position features (x, y, ...).
 
     Args:
-      pos: None, or an array of position features. If None, position features
-        are built. Otherwise, their size is checked.
-      index_dims: An iterable giving the spatial/index size of the data to be
-        featurized.
-      batch_size: The batch size of the data to be featurized.
+      pos (:obj:`torch.FloatTensor`):
+        None, or an array of position features. If None, position features are built. Otherwise, their size is checked.
+      index_dims (:obj:`List[int]`):
+        An iterable giving the spatial/index size of the data to be featurized.
+      batch_size (:obj:`int`):
+        The batch size of the data to be featurized.
 
     Returns:
-      An array of position features, of shape [batch_size, prod(index_dims)].
+        :obj:`torch.FloatTensor` of shape :obj:`(batch_size, prod(index_dims))` an array of position features.
     """
     if pos is None:
         pos = build_linear_positions(index_dims)
@@ -2205,7 +2212,6 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
         # But feel free to override if you think it'll work!
         if pos.shape[-1] != len(index_dims):
             raise ValueError("Spatial features have the wrong number of dimensions.")
-
     return pos
 
 
@@ -2301,11 +2307,11 @@ class PerceiverMultimodalPostprocessor(nn.Module):
         Constructor.
 
         Args:
-          modalities: dict mapping modality name to post processor for that modality
-          input_is_dict: If True, input is assumed to be dictionary structured,
-            and outputs keep the same dictionary shape. If False, input is a tensor which is sliced up during
-            postprocessing by `modality_sizes`.
-          name: name of the module
+          modalities (:obj:`Dict[str, PostprocessorType]`):`):
+            Dictionary mapping modality name to postprocessor class for that modality.
+          input_is_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, input is assumed to be dictionary structured, and outputs keep the same dictionary shape. If
+            False, input is a tensor which is sliced up during postprocessing by `modality_sizes`.
         """
         super().__init__()
         self.modalities = nn.ModuleDict(modalities)
@@ -2683,12 +2689,13 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         Constructor.
 
         Args:
-            modalities: dict mapping modality name to preprocessor
-            mask_probs: dict mapping modality name to masking probability of that
-                modality
-            min_padding_size: the minimum padding size for all modalities.
-                The final output will have num_channels equal to the maximum channels across all modalities plus
-                min_padding_size.
+            modalities (:obj:`Dict[str, PreprocessorType]`):`):
+                Dict mapping modality name to preprocessor.
+            mask_prob (:obj:`Dict[str, float]`):`):
+                Dict mapping modality name to masking probability of that modality.
+            min_padding_size (:obj:`int`, `optional`, defaults to 2):
+                The minimum padding size for all modalities. The final output will have num_channels equal to the
+                maximum channels across all modalities plus min_padding_size.
         """
         super().__init__()
         self.modalities = modalities
