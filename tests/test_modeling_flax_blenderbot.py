@@ -392,7 +392,7 @@ class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGener
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("facebook/blenderbot-400M-distill", from_pt=True)
+            model = model_class_name.from_pretrained("facebook/blenderbot-400M-distill")
             # FlaxBlenderbotForSequenceClassification expects eos token in input_ids
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
