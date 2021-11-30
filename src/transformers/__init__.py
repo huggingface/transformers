@@ -187,11 +187,6 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
-    "models.blenderbot_small": [
-        "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BlenderbotSmallConfig",
-        "BlenderbotSmallTokenizer",
-    ],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
