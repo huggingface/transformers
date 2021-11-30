@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Perceiver model. """
 
-
 import copy
 import inspect
 import os
@@ -231,13 +230,7 @@ class PerceiverModelTester:
         result = model(inputs, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_for_image_classification(
-        self,
-        config,
-        inputs,
-        input_mask,
-        image_labels,
-    ):
+    def create_and_check_for_image_classification(self, config, inputs, input_mask, image_labels):
         # set d_model and num_labels
         config.d_model = 512
         config.num_labels = self.num_labels
@@ -249,25 +242,13 @@ class PerceiverModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            inputs,
-            input_mask,
-            sequence_labels,
-            token_labels,
-        ) = config_and_inputs
+        config, inputs, input_mask, sequence_labels, token_labels = config_and_inputs
         inputs_dict = {"inputs": inputs, "attention_mask": input_mask}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
         config_and_inputs = self.prepare_config_and_inputs(model_class)
-        (
-            config,
-            inputs,
-            input_mask,
-            sequence_labels,
-            token_labels,
-        ) = config_and_inputs
+        config, inputs, input_mask, sequence_labels, token_labels = config_and_inputs
         inputs_dict = {"inputs": inputs, "attention_mask": input_mask}
 
         return config, inputs_dict
@@ -299,13 +280,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = PerceiverModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
 
-    # def _initialize_model(self, model_class, config):
-    #     if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
-    #         model = model_class(config, subsampling=self.model_tester.subsampling)
-    #     else:
-    #         model = model_class(config)
-    #     return model
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
 
@@ -330,7 +304,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def test_config(self):
-        # we don't test
+        # we don't test common_properties and arguments_init as these don't apply for Perceiver
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
@@ -358,11 +332,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             return
 
         for model_class in self.all_model_classes:
-            if model_class in [
-                *get_values(MODEL_MAPPING),
-                PerceiverForOpticalFlow,
-                PerceiverForMultimodalAutoencoding,
-            ]:
+            if model_class in [*get_values(MODEL_MAPPING), PerceiverForOpticalFlow, PerceiverForMultimodalAutoencoding]:
                 continue
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -639,10 +609,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             if model_class.__name__ == "PerceiverModel":
                 continue
-            (
-                original_config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
             model = model_class(config)
@@ -682,11 +649,8 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 for modality in outputs[0].keys():
-                    print("Processing modality:", modality)
                     out_2 = outputs[0][modality].cpu().numpy()
                     out_2[np.isnan(out_2)] = 0
-
-                    print("Shape of out 2:", out_2.shape)
 
                     with tempfile.TemporaryDirectory() as tmpdirname:
                         model.save_pretrained(tmpdirname)
@@ -698,7 +662,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                         # Make sure we don't have nans
                         out_1 = after_outputs[0][modality].cpu().numpy()
                         out_1[np.isnan(out_1)] = 0
-                        print("Shape of out_1:", out_1.shape)
                         max_diff = np.amax(np.abs(out_1 - out_2))
                         self.assertLessEqual(max_diff, 1e-5)
 

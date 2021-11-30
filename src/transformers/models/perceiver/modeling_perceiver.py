@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch Perceiver model. """
 
-
 import abc
 import math
 from dataclasses import dataclass
@@ -26,7 +25,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -71,7 +70,7 @@ class PerceiverModelOutput(ModelOutput):
 
     Args:
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`):
-            Logits.
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -176,9 +175,7 @@ class PerceiverEmbeddings(nn.Module):
         self.latents = nn.Parameter(torch.randn(config.num_latents, config.d_latents))
 
     def forward(self, batch_size):
-        embeddings = self.latents.expand(batch_size, -1, -1)  # Thanks, Phil Wang
-
-        return embeddings
+        return self.latents.expand(batch_size, -1, -1)  # Thanks, Phil Wang
 
 
 class PerceiverSelfAttention(nn.Module):
@@ -205,9 +202,9 @@ class PerceiverSelfAttention(nn.Module):
         if v_channels is None:
             v_channels = qk_channels
         if qk_channels % num_heads != 0:
-            raise ValueError(f"qk_channels ({qk_channels}) must be divisible by" f" num_heads ({num_heads}).")
+            raise ValueError(f"qk_channels ({qk_channels}) must be divisible by num_heads ({num_heads}).")
         if v_channels % num_heads != 0:
-            raise ValueError(f"v_channels ({v_channels}) must be divisible by" f" num_heads ({num_heads}).")
+            raise ValueError(f"v_channels ({v_channels}) must be divisible by num_heads ({num_heads}).")
 
         self.qk_channels = qk_channels
         self.v_channels = v_channels
@@ -230,15 +227,7 @@ class PerceiverSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        inputs=None,
-        inputs_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, inputs=None, inputs_mask=None, output_attentions=False):
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -273,7 +262,7 @@ class PerceiverSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(q_head_dim)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in PerceiverModel forward() function)
+            # Apply the attention mask (precomputed for all layers in PerceiverModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -489,9 +478,7 @@ class PerceiverLayer(nn.Module):
 
     def feed_forward_chunk(self, attention_output):
         layer_output = self.layernorm(attention_output)
-
         layer_output = self.mlp(layer_output)
-
         return layer_output
 
 
@@ -529,7 +516,7 @@ class PerceiverEncoder(nn.Module):
 
         # Construct a single block of self-attention layers.
         # We get deeper architectures by applying this block more than once.
-        self_attends = []
+        self_attention_layers = []
         for _ in range(config.num_self_attends_per_block):
             layer = PerceiverLayer(
                 config,
@@ -541,9 +528,9 @@ class PerceiverEncoder(nn.Module):
                 kv_dim=config.d_latents,
                 widening_factor=config.self_attention_widening_factor,
             )
-            self_attends.append(layer)
+            self_attention_layers.append(layer)
 
-        self.self_attends = nn.ModuleList(self_attends)
+        self.self_attends = nn.ModuleList(self_attention_layers)
 
     def forward(
         self,
@@ -599,12 +586,7 @@ class PerceiverEncoder(nn.Module):
         if not return_dict:
             return tuple(
                 v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
+                for v in [hidden_states, all_hidden_states, all_self_attentions, all_cross_attentions]
                 if v is not None
             )
         return BaseModelOutputWithCrossAttentions(
@@ -821,10 +803,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
                 logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
 
         if not return_dict:
-            return (
-                logits,
-                sequence_output,
-            ) + encoder_outputs[1:]
+            return (logits, sequence_output) + encoder_outputs[1:]
 
         return PerceiverModelOutput(
             logits=logits,
@@ -1005,13 +984,26 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1109,13 +1101,26 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1211,13 +1216,26 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1255,7 +1273,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
                     concat_pos=True,
                 ),
             ),
-            decoder=PerceiverFlowDecoder(
+            decoder=PerceiverOpticalFlowDecoder(
                 config,
                 num_channels=config.d_model,
                 output_image_shape=config.train_size,
@@ -1782,8 +1800,8 @@ class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
         return PerceiverDecoderOutput(logits=logits, cross_attentions=decoder_outputs.cross_attentions)
 
 
-class PerceiverFlowDecoder(PerceiverAbstractDecoder):
-    """Cross-attention based flow decoder."""
+class PerceiverOpticalFlowDecoder(PerceiverAbstractDecoder):
+    """Cross-attention based optical flow decoder."""
 
     def __init__(self, config, output_image_shape, output_num_channels=2, rescale_factor=100.0, **decoder_kwargs):
         super().__init__()

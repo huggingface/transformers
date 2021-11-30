@@ -36,7 +36,6 @@ class PerceiverConfig(PretrainedConfig):
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
-
     Args:
         num_latents (:obj:`int`, `optional`, defaults to 256):
             The number of latents.
@@ -81,7 +80,7 @@ class PerceiverConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         train_size (:obj:`List[int]`, `optional`, defaults to [368, 496]):
-            Training size of the images for the flow model.
+            Training size of the images for the optical flow model.
 
     Example::
 

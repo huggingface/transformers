@@ -44,10 +44,9 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-# We will verify our results on an image of a dog
-
 
 def prepare_img():
+    # We will verify our results on an image of a dog
     url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
@@ -375,13 +374,6 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
     else:
         raise ValueError(f"Task {task} not supported")
     model.eval()
-
-    # # multimodal autoencoding requires a dummy input first in order to create all parameters
-    # # (as some parameters are defined in the forward pass)
-    # input_mask = None
-    # if task == "multimodal_autoencoding":
-    #     inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
-    #     outputs = model(inputs, attention_mask=input_mask, subsampled_output_points=subsampling)
 
     # load weights
     model.load_state_dict(state_dict)
