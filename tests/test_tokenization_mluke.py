@@ -135,15 +135,13 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
         cls.entity_pair_tokenizer = MLukeTokenizer.from_pretrained(
             "studio-ousia/mluke-base",
             return_token_type_ids=True,
-            task="entity_pair_classification",
-            use_auth_token=True,
+            task="entity_pair_classification"
         )
 
         cls.entity_span_tokenizer = MLukeTokenizer.from_pretrained(
             "studio-ousia/mluke-base",
             return_token_type_ids=True,
-            task="entity_span_classification",
-            use_auth_token=True,
+            task="entity_span_classification"
         )
 
     def test_single_text_no_padding_or_truncation(self):
