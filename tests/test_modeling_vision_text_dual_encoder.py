@@ -75,11 +75,7 @@ class VisionTextDualEncoderMixin:
         model.to(torch_device)
         model.eval()
 
-        output = model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-        )
+        output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
 
         self.assertEqual(output["text_embeds"].shape, (input_ids.shape[0], config.projection_dim))
         self.assertEqual(output["image_embeds"].shape, (pixel_values.shape[0], config.projection_dim))
@@ -92,11 +88,7 @@ class VisionTextDualEncoderMixin:
         model.to(torch_device)
         model.eval()
 
-        output = model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-        )
+        output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
 
         self.assertEqual(output["text_embeds"].shape, (input_ids.shape[0], model.config.projection_dim))
         self.assertEqual(output["image_embeds"].shape, (pixel_values.shape[0], model.config.projection_dim))
@@ -111,11 +103,7 @@ class VisionTextDualEncoderMixin:
         model.to(torch_device)
         model.eval()
 
-        output = model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-        )
+        output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
 
         self.assertEqual(output["text_embeds"].shape, (input_ids.shape[0], model.config.projection_dim))
         self.assertEqual(output["image_embeds"].shape, (pixel_values.shape[0], model.config.projection_dim))
@@ -127,11 +115,7 @@ class VisionTextDualEncoderMixin:
         model.eval()
 
         with torch.no_grad():
-            output = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_mask,
-            )
+            output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
             out_1 = output[0].cpu().numpy()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -139,11 +123,7 @@ class VisionTextDualEncoderMixin:
                 model = VisionTextDualEncoderModel.from_pretrained(tmpdirname).eval()
                 model.to(torch_device)
 
-                after_output = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    attention_mask=attention_mask,
-                )
+                after_output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
                 out_2 = after_output[0].cpu().numpy()
                 max_diff = np.amax(np.abs(out_2 - out_1))
                 self.assertLessEqual(max_diff, 1e-5)
@@ -235,11 +215,7 @@ class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
         )
         input_ids = ids_tensor([batch_size, 4], model.text_model.config.vocab_size)
         attention_mask = random_attention_mask([batch_size, 4])
-        inputs = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        inputs = {"pixel_values": pixel_values, "input_ids": input_ids, "attention_mask": attention_mask}
 
         return model, inputs
 
@@ -298,11 +274,7 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
         )
         input_ids = ids_tensor([batch_size, 4], model.text_model.config.vocab_size)
         attention_mask = random_attention_mask([batch_size, 4])
-        inputs = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        inputs = {"pixel_values": pixel_values, "input_ids": input_ids, "attention_mask": attention_mask}
 
         return model, inputs
 
@@ -391,11 +363,7 @@ class CLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
         )
         input_ids = ids_tensor([batch_size, 4], model.text_model.config.vocab_size)
         attention_mask = random_attention_mask([batch_size, 4])
-        inputs = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        inputs = {"pixel_values": pixel_values, "input_ids": input_ids, "attention_mask": attention_mask}
 
         return model, inputs
 
