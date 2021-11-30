@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The Facebook, Inc. and The HuggingFace Inc. team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,20 +42,20 @@ class BlenderbotSmallConfig(PretrainedConfig):
             Vocabulary size of the BlenderbotSmall model. Defines the number of different tokens that can be
             represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.BlenderbotSmallModel` or
             :class:`~transformers.TFBlenderbotSmallModel`.
-        d_model (:obj:`int`, `optional`, defaults to 1024):
-            Dimension of the layers and the pooler layer.
-        encoder_layers (:obj:`int`, `optional`, defaults to 12):
+        d_model (:obj:`int`, `optional`, defaults to 512):
+            Dimensionality of the layers and the pooler layer.
+        encoder_layers (:obj:`int`, `optional`, defaults to 8):
             Number of encoder layers.
-        decoder_layers (:obj:`int`, `optional`, defaults to 12):
+        decoder_layers (:obj:`int`, `optional`, defaults to 8):
             Number of decoder layers.
         encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 2048):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 2048):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
@@ -67,7 +67,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
@@ -78,10 +78,15 @@ class BlenderbotSmallConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+            Whether or not the model should return the last key/values attentions (not used by all models)
+        forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
+            :obj:`eos_token_id`.
 
-        Example::
+    Example::
 
         >>> from transformers import BlenderbotSmallModel, BlenderbotSmallConfig
 
@@ -94,37 +99,37 @@ class BlenderbotSmallConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "blenderbot_small"
+    model_type = "blenderbot-small"
     keys_to_ignore_at_inference = ["past_key_values"]
-
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
         vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
+        max_position_embeddings=512,
+        encoder_layers=8,
+        encoder_ffn_dim=2048,
         encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
+        decoder_layers=8,
+        decoder_ffn_dim=2048,
         decoder_attention_heads=16,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
-        d_model=1024,
+        d_model=512,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
+        decoder_start_token_id=1,
         classifier_dropout=0.0,
         scale_embedding=False,
-        pad_token_id=1,
-        bos_token_id=0,
+        pad_token_id=0,
+        bos_token_id=1,
         eos_token_id=2,
+        forced_eos_token_id=2,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -154,5 +159,6 @@ class BlenderbotSmallConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )

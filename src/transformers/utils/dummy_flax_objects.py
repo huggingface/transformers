@@ -687,30 +687,6 @@ class FlaxBlenderbotSmallForConditionalGeneration:
         requires_backends(self, ["flax"])
 
 
-class FlaxBlenderbotSmallForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["flax"])
-
-    def __call__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxBlenderbotSmallForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["flax"])
-
-    def __call__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxBlenderbotSmallModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
