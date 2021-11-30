@@ -444,7 +444,9 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
 
         if return_labels:
             if model_class in (LukeForEntityClassification, LukeForEntityPairClassification):
-                inputs_dict["labels"] = torch.zeros(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
             elif model_class == LukeForEntitySpanClassification:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.entity_length),
