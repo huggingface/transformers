@@ -14,10 +14,12 @@
 # limitations under the License.
 """ Marian model configuration """
 from collections import OrderedDict
-from typing import Mapping
+from typing import Any, Mapping, Optional
 
+from transformers import PreTrainedTokenizer, TensorType
 from transformers.onnx import OnnxConfig
 
+from ... import is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -170,7 +172,39 @@ class MarianOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ("decoder_input_ids", {0: "batch", 1: "decoder_sequence"}),
+                ("decoder_attention_mask", {0: "batch", 1: "decoder_sequence"}),
             ]
         )
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = super().outputs
+
+        if "last_hidden_state" in common_outputs:
+            common_outputs["last_hidden_state"] = {0: "batch", 1: "decoder_sequence"}
+
+        if self.task == "default":
+            common_outputs["encoder_last_hidden_state"] = {0: "batch", 2: "encoder_sequence"}
+
+        return common_outputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+
+        # Generate encoder inputs
+        encoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        # Generate decoder inputs
+        decoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, 1, is_pair, framework)
+        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+        ordered_inputs = dict(**encoder_inputs, **decoder_inputs)
+        return ordered_inputs
