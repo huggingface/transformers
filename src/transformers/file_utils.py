@@ -316,14 +316,15 @@ def is_torch_bf16_available():
     if is_torch_available():
         import torch
 
-        # XXX: copying test function from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51 until utility function is made available
+        # since currently no utility function is available we build our own.
+        # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
         # with additional check for torch version
         # to succeed:
         # 1. the hardware needs to support bf16 (arch >= Ampere)
         # 2. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
         # 3. CUDA >= 11
         # 4. torch.autocast exists
-        # XXX: one problem here is that it may give invalid results on mixed hardware, so it's
+        # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
         # really only correct for the 0th gpu (or currently set default device if different from 0)
 
         if not torch.cuda.is_available() or torch.version.cuda is None:
