@@ -1949,6 +1949,9 @@ if is_flax_available():
             "FlaxBigBirdPreTrainedModel",
         ]
     )
+    _import_structure["models.blenderbot"].extend(
+        ["FlaxBlenderbotForConditionalGeneration", "FlaxBlenderbotModel", "FlaxBlenderbotPreTrainedModel"]
+    )
     _import_structure["models.clip"].extend(
         [
             "FlaxCLIPModel",
@@ -3644,6 +3647,11 @@ if TYPE_CHECKING:
             FlaxBigBirdForTokenClassification,
             FlaxBigBirdModel,
             FlaxBigBirdPreTrainedModel,
+        )
+        from .models.blenderbot import (
+            FlaxBlenderbotForConditionalGeneration,
+            FlaxBlenderbotModel,
+            FlaxBlenderbotPreTrainedModel,
         )
         from .models.clip import (
             FlaxCLIPModel,
