@@ -826,7 +826,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example of single-label classification::
 
         >>> from transformers import {processor_class}, {model_class}
         >>> import torch
@@ -835,11 +835,26 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        >>> labels = torch.tensor([1, 0]).unsqueeze(0)  # Batch size 1
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+
+    Example of multi-label classification::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', problem_type="multi_label_classification")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> labels = torch.tensor([[1, 1]], dtype=torch.float) # need dtype=float for BCEWithLogitsLoss
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
 """
+
 
 PT_MASKED_LM_SAMPLE = r"""
     Example::
