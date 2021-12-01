@@ -3732,31 +3732,6 @@ class PegasusPreTrainedModel:
 PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class PerceiverAudioPostprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverAudioPreprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverBasicDecoder:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverClassificationDecoder:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverClassificationPostprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PerceiverForImageClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3794,11 +3769,6 @@ class PerceiverForOpticalFlow:
         requires_backends(self, ["torch"])
 
 
-class PerceiverImagePreprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PerceiverLayer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3816,21 +3786,6 @@ class PerceiverModel:
         requires_backends(self, ["torch"])
 
 
-class PerceiverMultimodalPostprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverMultimodalPreprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverOneHotPreprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PerceiverPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3840,16 +3795,6 @@ class PerceiverPreTrainedModel:
         requires_backends(cls, ["torch"])
 
     def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverProjectionPostprocessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverTextPreprocessor:
-    def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 

@@ -1134,26 +1134,15 @@ if is_torch_available():
     _import_structure["models.perceiver"].extend(
         [
             "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PerceiverAudioPostprocessor",
-            "PerceiverAudioPreprocessor",
-            "PerceiverBasicDecoder",
-            "PerceiverClassificationDecoder",
-            "PerceiverClassificationPostprocessor",
             "PerceiverForImageClassification",
             "PerceiverForImageClassificationConvProcessing",
             "PerceiverForImageClassificationFourier",
             "PerceiverForMaskedLM",
             "PerceiverForMultimodalAutoencoding",
             "PerceiverForOpticalFlow",
-            "PerceiverImagePreprocessor",
             "PerceiverLayer",
             "PerceiverModel",
-            "PerceiverMultimodalPostprocessor",
-            "PerceiverMultimodalPreprocessor",
-            "PerceiverOneHotPreprocessor",
             "PerceiverPreTrainedModel",
-            "PerceiverProjectionPostprocessor",
-            "PerceiverTextPreprocessor",
         ]
     )
     _import_structure["models.prophetnet"].extend(
@@ -3013,26 +3002,15 @@ if TYPE_CHECKING:
         )
         from .models.perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PerceiverAudioPostprocessor,
-            PerceiverAudioPreprocessor,
-            PerceiverBasicDecoder,
-            PerceiverClassificationDecoder,
-            PerceiverClassificationPostprocessor,
             PerceiverForImageClassification,
             PerceiverForImageClassificationConvProcessing,
             PerceiverForImageClassificationFourier,
             PerceiverForMaskedLM,
             PerceiverForMultimodalAutoencoding,
             PerceiverForOpticalFlow,
-            PerceiverImagePreprocessor,
             PerceiverLayer,
             PerceiverModel,
-            PerceiverMultimodalPostprocessor,
-            PerceiverMultimodalPreprocessor,
-            PerceiverOneHotPreprocessor,
             PerceiverPreTrainedModel,
-            PerceiverProjectionPostprocessor,
-            PerceiverTextPreprocessor,
         )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
