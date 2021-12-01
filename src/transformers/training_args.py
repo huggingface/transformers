@@ -208,7 +208,7 @@ class TrainingArguments:
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
         bf16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Amphere or
+            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or
             higher NVIDIA architecture.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
@@ -518,7 +518,7 @@ class TrainingArguments:
     bf16: bool = field(
         default=False,
         metadata={
-            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Amphere or higher NVIDIA architecture"
+            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA architecture"
         },
     )
     fp16: bool = field(
