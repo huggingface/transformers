@@ -745,53 +745,6 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
-    build_doc:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: large
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-build_doc-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
-            - run: pip install ."[docs]"
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
-            - run: pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
-            - save_cache:
-                  key: v0.4-build_doc-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: cd docs && make html SPHINXOPTS="-W -j 4"
-            - store_artifacts:
-                path: ./docs/_build
-
-    deploy_doc:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: large
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-deploy_doc-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
-            - run: pip install ."[docs]"
-            - save_cache:
-                  key: v0.4-deploy_doc-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: ./.circleci/deploy.sh
-
     check_code_quality:
         working_directory: ~/transformers
         docker:
@@ -937,9 +890,7 @@ workflows:
             - run_tests_pipelines_tf
             - run_tests_onnxruntime
             - run_tests_hub
-            - build_doc
             - run_tests_layoutlmv2
-            - deploy_doc: *workflow_filters
     nightly:
         triggers:
             - schedule:

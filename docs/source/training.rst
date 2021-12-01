@@ -417,5 +417,5 @@ To look at more fine-tuning examples you can refer to:
 - `🤗 Transformers Examples <https://github.com/huggingface/transformers/tree/master/examples>`__ which includes scripts
   to train on all common NLP tasks in PyTorch and TensorFlow.
 
-- `🤗 Transformers Notebooks <notebooks.html>`__ which contains various notebooks and in particular one per task (look
-  for the `how to finetune a model on xxx`).
+- `🤗 Transformers Notebooks <notebooks>`__ which contains various notebooks and in particular one per task (look for
+  the `how to finetune a model on xxx`).
