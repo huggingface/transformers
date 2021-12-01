@@ -329,27 +329,6 @@ class TFVisionEncoderDecoderMixin:
         for tf_output_loaded, pt_output in zip(tf_outputs_loaded, pt_outputs):
             self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.numpy(), 1e-3)
 
-        # TF -> PT
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-
-            tf_model.encoder.save_pretrained(encoder_tmp_dirname)
-            tf_model.decoder.save_pretrained(decoder_tmp_dirname)
-            pt_model_loaded = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_tf=True, decoder_from_tf=True
-            )
-            # This is only for copying some specific attributes of this particular model.
-            pt_model_loaded.config = tf_model.config
-
-        pt_model_loaded.to(torch_device)
-        pt_model_loaded.eval()
-
-        with torch.no_grad():
-            pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
-
-        self.assertEqual(len(tf_outputs), len(pt_outputs_loaded), "Output lengths differ between TF and PyTorch")
-        for tf_output, pt_output_loaded in zip(tf_outputs, pt_outputs_loaded):
-            self.assert_almost_equals(tf_output.numpy(), pt_output_loaded.numpy(), 1e-3)
-
     def check_equivalence_pt_to_tf(self, config, decoder_config, inputs_dict):
 
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
@@ -439,7 +418,6 @@ class TFVisionEncoderDecoderMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_equivalence(self):
-        # TODO: Once PR #14016 is merged, this test need to be reworked in order to pass it.
 
         config_inputs_dict = self.prepare_config_and_inputs()
         # Keep only common arguments
