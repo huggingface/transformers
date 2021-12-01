@@ -154,3 +154,5 @@ Give the model a shot yourself! There are two demos to interact with CodeParrot 
 
 ## Further Resources
 A detailed description of the project can be found in the chapter "Training Transformers from Scratch" in the upcoming O'Reilly book [Natural Language Processing with Transformers](https://learning.oreilly.com/library/view/natural-language-processing/9781098103231/).
+
+This example was provided by [Leandro von Werra](www.github.com/lvwerra).
