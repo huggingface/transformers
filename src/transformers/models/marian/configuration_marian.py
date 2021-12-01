@@ -19,7 +19,6 @@ from typing import Any, Mapping, Optional
 from transformers import PreTrainedTokenizer, TensorType
 from transformers.onnx import OnnxConfig
 
-from ... import is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -202,9 +201,9 @@ class MarianOnnxConfig(OnnxConfig):
 
         # Generate encoder inputs
         encoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
-
         # Generate decoder inputs
         decoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, 1, is_pair, framework)
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+        # Combine encoder and decoder inputs
         ordered_inputs = dict(**encoder_inputs, **decoder_inputs)
         return ordered_inputs
