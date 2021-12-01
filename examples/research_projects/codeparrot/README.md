@@ -1,6 +1,6 @@
 # CodeParrot 🦜
 <p align="center">
-    <img src="images/code-highlighting-streamlit.png" alt="drawing" width="350"/>
+    <img src="https://huggingface.co/datasets/lvwerra/repo-images/raw/main/code-highlighting-streamlit.png" alt="drawing" width="350"/>
 </p>
 
 ## What is this about?
