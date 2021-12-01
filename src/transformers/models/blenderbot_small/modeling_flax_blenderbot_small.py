@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Facebook, Inc. and The HuggingFace Inc. team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -704,7 +704,7 @@ class FlaxBlenderbotSmallEncoder(nn.Module):
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.layers = FlaxBlenderbotSmallEncoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
@@ -773,7 +773,7 @@ class FlaxBlenderbotSmallDecoder(nn.Module):
         )
 
         self.layers = FlaxBlenderbotSmallDecoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
