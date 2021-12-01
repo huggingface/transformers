@@ -6,6 +6,7 @@
 ## What is this about?
 This is an open-source effort to train and evaluate code generation models. CodeParrot 🦜 is a GPT-2 model trained from scratch on Python code. The highlights of this repo are:
 - initialize and train a GPT-2 language model from scratch for code generation
+- train a custom tokenizer adapted for Python code
 - clean and deduplicate a large (>100GB) dataset with `datasets`
 - train with `accelerate` on multiple GPUs using data parallelism and mixed precision
 - continuously push checkpoints to the hub with `huggingface_hub`
@@ -18,22 +19,23 @@ To install the dependencies simply run the following command:
 pip install -r requirements.txt
 ```
 
-To reproduce the results you can follow the scripts in the following sections. Note that we don't show all possible arguments to the scripts. To get the full list of arguments with descriptions you can run the following command on any script:
+To reproduce the results you can follow the scripts in the following sections. Note that we don't always show all possible arguments to the scripts. To get the full list of arguments with descriptions you can run the following command on any script:
 
 ```bash
 python scripts/some_script.py --help
 ```
 
 Before you run any of the scripts make sure you are logged in and can push to the hub:
+
 ```bash
 huggingface-cli login
 ```
 
 ## Dataset
-The source of the dataset is the GitHub dump available on Google's [BigQuery](https://cloud.google.com/blog/topics/public-datasets/github-on-bigquery-analyze-all-the-open-source-code). The database was queried for all Python files less than 1MB in size resulting in a 180GB dataset with over 20M files. The dataset is available on the Hugging Face Hub [here](https://huggingface.co/datasets/transformersbook/codeparrot).
+The source of the dataset is the GitHub dump available on Google's [BigQuery](https://cloud.google.com/blog/topics/public-datasets/github-on-bigquery-analyze-all-the-open-source-code). The database was queried for all Python files with less than 1MB in size resulting in a 180GB dataset with over 20M files. The dataset is available on the Hugging Face Hub [here](https://huggingface.co/datasets/transformersbook/codeparrot).
 
 ### Preprocessing
-The raw dataset contains many duplications so the dataset was deduplicated and filtered using the heuristics proposed in the Codex [paper](https://arxiv.org/abs/2107.03374):
+The raw dataset contains many duplications therefore it was deduplicated and filtered using the heuristics proposed in the Codex [paper](https://arxiv.org/abs/2107.03374):
 
 - exact deduplication using each file's hash
 - filtering files with max line length > 1000
@@ -52,7 +54,7 @@ python scripts/preprocessing.py
 During preprocessing the dataset is downloaded and stored locally as well as caches of the computations. Make sure you have enough free disk space to execute it.
 
 ## Tokenizer
-Before training a new model for code we create a new tokenizer efficient at code tokenization. To train the tokenizer you can run the following command: 
+Before training a new model for code we create a new tokenizer that is efficient at code tokenization. To train the tokenizer you can run the following command: 
 ```bash
 python scripts/bpe_training.py
     --base_tokenizer gpt2
@@ -62,7 +64,7 @@ python scripts/bpe_training.py
 _Note:_ We originally trained the tokenizer on the unprocessed train split of the dataset `transformersbook/codeparrot-train`.
 
 ## Training
-The models are randomly initialized and trained from scratch. To initialize a new model you can run
+The models are randomly initialized and trained from scratch. To initialize a new model you can run:
 
 ```bash
 python scripts/initialize_model.py 
@@ -75,14 +77,14 @@ This will initialize a new model with the architecture and configuration of `gpt
 
 Now that the dataset, tokenizer, and model are ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.
 
-First you need to configure `accelerate` and Weights&Biases for login:
+First you need to configure `accelerate` and login to Weights&Biases:
 
 ```bash
 acclerate config
 wandb login
 ```
 
-Then to train the large model you can run
+Note that during the `accelerate` configuration we enabled FP16. Then to train the large model you can run
 
 ```bash
 python scripts/codeparrot_training.py
@@ -146,7 +148,7 @@ The results as well as reference values are shown in the following table:
 The numbers were obtained by sampling with `T = [0.2, 0.6, 0.8]` and picking the best value for each metric. Both CodeParrot 🦜 models are still underfitted and longer training would likely improve the performance.
 
 ## Demo
-Give the model a shot yourself! There are two demos to interact with the model:
+Give the model a shot yourself! There are two demos to interact with CodeParrot 🦜:
 - [Code generation](https://huggingface.co/spaces/lvwerra/codeparrot-generation)
 - [Code highlighting](https://huggingface.co/spaces/lvwerra/codeparrot-highlighting)
 
