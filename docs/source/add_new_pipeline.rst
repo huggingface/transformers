@@ -13,9 +13,9 @@ How to add a pipeline to 🤗 Transformers?
 =======================================================================================================================
 
 First and foremost, you need to decide the raw entries the pipeline will be able to take. It can be strings, raw bytes,
-dictionnaries or whatever seems to be the most likely desired input. Try to keep these inputs as pure Python as
-possible as it makes compatibility easier (even through other languages via JSON). Those will be the :obj:`inputs` of
-the pipeline (:obj:`preprocess`).
+dictionaries or whatever seems to be the most likely desired input. Try to keep these inputs as pure Python as possible
+as it makes compatibility easier (even through other languages via JSON). Those will be the :obj:`inputs` of the
+pipeline (:obj:`preprocess`).
 
 Then define the :obj:`outputs`. Same policy as the :obj:`inputs`. The simpler, the better. Those will be the outputs of
 :obj:`postprocess` method.
@@ -29,36 +29,36 @@ Start by inheriting the base class :obj:`Pipeline`. with the 4 methods needed to
     from transformers import Pipeline
 
     class MyPipeline(Pipeline):
-        def _sanitize_parameters(self, **kwargs)
+        def _sanitize_parameters(self, **kwargs):
             preprocess_kwargs = {}
             if "maybe_arg" in kwargs:
                 preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
             return preprocess_kwargs, {}, {}
 
-        def preprocess(self, inputs, maybe_arg=2)
+        def preprocess(self, inputs, maybe_arg=2):
             model_input = Tensor(....)
             return {"model_input": model_input}
 
-        def _forward(self, model_inputs)
+        def _forward(self, model_inputs):
             # model_inputs == {"model_input": model_input}
-            oututs = self.model(**model_inputs)
+            outputs = self.model(**model_inputs)
             # Maybe {"logits": Tensor(...)}
             return outputs
 
-        def postprocess(self, model_outputs)
+        def postprocess(self, model_outputs):
             best_class = model_outputs["logits"].softmax(-1)
             return best_class
 
 
-The structure of this breakdown is to support relatively seemless support for CPU/GPU, while supporting doing
+The structure of this breakdown is to support relatively seamless support for CPU/GPU, while supporting doing
 pre/postprocessing on the CPU on different threads
 
-:obj:`preprocess` will take the original defined inputs, and turn them something feedable to the model. It might
-contain more information and is usally a :obj:`Dict`.
+:obj:`preprocess` will take the originally defined inputs, and turn them into something feedable to the model. It might
+contain more information and is usually a :obj:`Dict`.
 
-:obj:`_forward` is the implementation detail and is not meant to be called directly :obj:`forward` is the preferred
+:obj:`_forward` is the implementation detail and is not meant to be called directly. :obj:`forward` is the preferred
 called method as it contains safeguards to make sure everything is working on the expected device. If anything is
-linked to a real model it belongs in the :obj:`_forward` method, anything else is in the preprocess/postrocess.
+linked to a real model it belongs in the :obj:`_forward` method, anything else is in the preprocess/postprocess.
 
 :obj:`postprocess` methods will take the output of :obj:`_forward` and turn it into the final output that were decided
 earlier.
@@ -89,12 +89,12 @@ In order to achieve that, we'll update our :obj:`postprocess` method with a defa
 .. code-block::
 
 
-        def postprocess(self, model_outputs, top_k=5)
+        def postprocess(self, model_outputs, top_k=5):
             best_class = model_outputs["logits"].softmax(-1)
             # Add logic to handle top_k
             return best_class
 
-        def _sanitize_parameters(self, **kwargs)
+        def _sanitize_parameters(self, **kwargs):
             preprocess_kwargs = {}
             if "maybe_arg" in kwargs:
                 preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
@@ -124,7 +124,7 @@ Create a new file ``tests/test_pipelines_MY_PIPELINE.py`` with example with the 
 The :obj:`run_pipeline_test` function will be very generic and run on small random models on every possible
 architecture as defined by :obj:`model_mapping` and :obj:`tf_model_mapping`.
 
-This is very important to test future compatibilty, meaning if someone adds a new model for
+This is very important to test future compatibility, meaning if someone adds a new model for
 :obj:`XXXForQuestionAnswering` then the pipeline test will attempt to run on it. Because the models are random it's
 impossible to check for actual values, that's why There is a helper :obj:`ANY` that will simply attempt to match the
 output of the pipeline TYPE.

@@ -5,6 +5,7 @@ from .. import is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
+from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
@@ -64,6 +65,14 @@ class FeaturesManager:
         "marian": supported_features_mapping("default", "seq2seq-lm", onnx_config_cls=MarianOnnxConfig),
         "mbart": supported_features_mapping("default", onnx_config_cls=MBartOnnxConfig),
         "bert": supported_features_mapping("default", onnx_config_cls=BertOnnxConfig),
+        "camembert": supported_features_mapping(
+            "default",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=CamembertOnnxConfig,
+        ),
         "distilbert": supported_features_mapping("default", onnx_config_cls=DistilBertOnnxConfig),
         "gpt2": supported_features_mapping("default", onnx_config_cls=GPT2OnnxConfig),
         "longformer": supported_features_mapping("default", onnx_config_cls=LongformerOnnxConfig),
@@ -111,7 +120,7 @@ class FeaturesManager:
         task = FeaturesManager.feature_to_task(feature)
         if task not in FeaturesManager._TASKS_TO_AUTOMODELS:
             raise KeyError(
-                f"Unknown task: {feature}."
+                f"Unknown task: {feature}. "
                 f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
 

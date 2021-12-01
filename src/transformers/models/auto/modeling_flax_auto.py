@@ -29,6 +29,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("pegasus", "FlaxPegasusModel"),
+        ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("distilbert", "FlaxDistilBertModel"),
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),
@@ -38,6 +39,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("bart", "FlaxBartModel"),
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
+        ("gptj", "FlaxGPTJModel"),
         ("electra", "FlaxElectraModel"),
         ("clip", "FlaxCLIPModel"),
         ("vit", "FlaxViTModel"),
@@ -46,6 +48,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5Model"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
         ("marian", "FlaxMarianModel"),
+        ("blenderbot", "FlaxBlenderbotModel"),
     ]
 )
 
@@ -89,6 +92,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("marian", "FlaxMarianMTModel"),
         ("encoder-decoder", "FlaxEncoderDecoderModel"),
+        ("blenderbot", "FlaxBlenderbotForConditionalGeneration"),
     ]
 )
 
@@ -100,11 +104,18 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("vision-encoder-decoder", "FlaxVisionEncoderDecoderModel"),
+    ]
+)
+
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
+        ("gptj", "FlaxGPTJForCausalLM"),
     ]
 )
 
@@ -176,6 +187,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
 FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
@@ -279,3 +291,10 @@ class FlaxAutoModelForImageClassification(_BaseAutoModelClass):
 FlaxAutoModelForImageClassification = auto_class_update(
     FlaxAutoModelForImageClassification, head_doc="image classification"
 )
+
+
+class FlaxAutoModelForVision2Seq(_BaseAutoModelClass):
+    _model_mapping = FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING
+
+
+FlaxAutoModelForVision2Seq = auto_class_update(FlaxAutoModelForVision2Seq, head_doc="vision-to-text modeling")

@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 from time import sleep
 from typing import Optional, Union
@@ -23,6 +24,7 @@ class PushToHubCallback(Callback):
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
+        checkpoint: bool = False,
     ):
         """
         output_dir (:obj:`str`):
@@ -39,15 +41,22 @@ class PushToHubCallback(Callback):
         tokenizer (:obj:`PreTrainedTokenizerBase`, `optional`):
             The tokenizer used by the model. If supplied, will be uploaded to the repo alongside the weights.
         hub_model_id (:obj:`str`, `optional`):
-            The name of the repository to keep in sync with the local `output_dir`. Should be the whole repository
-            name, for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member
-            of with :obj:`"organization_name/model"`. Will default to :obj:`user_name/output_dir_name` with
-            `output_dir_name` being the name of :obj:`output_dir`.
+            The name of the repository to keep in sync with the local `output_dir`. It can be a simple model ID in
+            which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
+            for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member of with
+            :obj:`"organization_name/model"`.
+
+            Will default to to the name of :obj:`output_dir`.
         hub_token (:obj:`str`, `optional`):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             :obj:`huggingface-cli login`.
+        checkpoint (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
+            resumed. Only usable when `save_strategy` is `epoch`.
         """
         super().__init__()
+        if checkpoint and save_strategy != "epoch":
+            raise ValueError("Cannot save checkpoints when save_strategy is not 'epoch'!")
         if isinstance(save_strategy, str):
             save_strategy = IntervalStrategy(save_strategy.lower())
         self.save_strategy = save_strategy
@@ -56,13 +65,14 @@ class PushToHubCallback(Callback):
         self.save_steps = save_steps
         output_dir = Path(output_dir)
         if hub_model_id is None:
-            repo_name = get_full_repo_name(output_dir.absolute().name, token=hub_token)
-        else:
-            repo_name = hub_model_id
+            hub_model_id = output_dir.absolute().name
+        if "/" not in hub_model_id:
+            hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
         self.output_dir = output_dir
-        self.repo = Repository(str(output_dir), clone_from=repo_name)
+        self.repo = Repository(str(output_dir), clone_from=hub_model_id)
         self.tokenizer = tokenizer
         self.last_job = None
+        self.checkpoint = checkpoint
 
     def on_train_batch_end(self, batch, logs=None):
         if self.save_strategy == IntervalStrategy.STEPS and batch + 1 % self.save_steps == 0:
@@ -82,6 +92,9 @@ class PushToHubCallback(Callback):
             self.model.save_pretrained(self.output_dir)
             if self.tokenizer is not None:
                 self.tokenizer.save_pretrained(self.output_dir)
+            if self.checkpoint:
+                checkpoint_dir = os.path.join(self.output_dir, "checkpoint")
+                self.model._save_checkpoint(checkpoint_dir, epoch)
             _, self.last_job = self.repo.push_to_hub(
                 commit_message=f"Training in progress epoch {epoch}", blocking=False
             )

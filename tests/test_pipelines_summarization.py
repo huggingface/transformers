@@ -36,8 +36,12 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer)
+        return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]
+
+    def run_pipeline_test(self, summarizer, _):
+        model = summarizer.model
 
         outputs = summarizer("(CNN)The Palestinian Authority officially became")
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])

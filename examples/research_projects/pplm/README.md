@@ -17,7 +17,7 @@ Please check out the repo under uber-research for more information: https://gith
 git clone https://github.com/huggingface/transformers && cd transformers
 pip install .
 pip install nltk torchtext # additional requirements.
-cd examples/text-generation/pplm
+cd examples/research_projects/pplm
 ```
 
 ## PPLM-BoW 

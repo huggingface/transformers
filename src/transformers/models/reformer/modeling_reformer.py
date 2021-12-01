@@ -254,7 +254,7 @@ class ReformerEmbeddings(nn.Module):
 
         if position_ids.shape[-1] > self.max_position_embeddings:
             raise ValueError(
-                f"Sequence Length: {position_ids.shape[-1]} has to be larger equal than "
+                f"Sequence Length: {position_ids.shape[-1]} has to be less or equal than "
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
 
@@ -1974,7 +1974,8 @@ class ReformerModel(ReformerPreTrainedModel):
         self.embeddings = ReformerEmbeddings(config)
         self.encoder = ReformerEncoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1992,7 +1993,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ReformerModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2188,7 +2189,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -2198,7 +2200,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2303,7 +2305,8 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -2313,7 +2316,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2390,11 +2393,12 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         if config.is_decoder is True:
             logger.warning("You might want to disable causal masking for sequence classification")
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2508,11 +2512,12 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         # 2 * config.hidden_size because we use reversible residual layers
         self.qa_outputs = nn.Linear(2 * config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
