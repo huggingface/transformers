@@ -401,7 +401,7 @@ class GenerationMixin:
 
         # First if `inputs_embeds` are given, but no `attention_mask` assume that full attention_mask is used
         if inputs_embeds is not None:
-            return torch.ones((inputs_embeds.shape[0], inputs_embeds.shape[1]), dtype=torch.long)
+            return torch.ones((inputs_embeds.shape[0], inputs_embeds.shape[1]), dtype=torch.long, device=self.device)
 
         # Otherwise, use `input_ids`
         is_pad_token_in_inputs_ids = (pad_token_id is not None) and (pad_token_id in input_ids)
