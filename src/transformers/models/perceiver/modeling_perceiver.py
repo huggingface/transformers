@@ -2735,14 +2735,21 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         inputs_without_pos = {}
         for modality, preprocessor in self.modalities.items():
             # preprocess each modality using the respective preprocessor.
+            print(f"Preprocessing modality {modality}")
+            print("Device of inputs:", inputs[modality].device)
+
             output, _, inputs_without_pos[modality] = preprocessor(
                 inputs[modality], pos=pos, network_input_is_1d=network_input_is_1d
             )
+
+            print("Device of output:", output.device)
 
             # pad to the same common_channel_size.
             batch_size, num_samples, num_channels = output.shape
             pos_enc = self.padding[modality].expand(batch_size, -1, -1)
 
+            print("Device of pos_enc:", pos_enc.device)
+            
             padding = torch.broadcast_to(
                 pos_enc,
                 [batch_size, num_samples, self.num_channels - num_channels],
