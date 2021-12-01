@@ -883,15 +883,7 @@ class GenerationMixin:
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
 
-        # set init values
-        if max_length is None and max_new_tokens is None:
-            # Both are None, default
-            max_length = self.config.max_length
-        elif max_length is not None and max_new_tokens is not None:
-            # Both are set, this is odd, raise a warning
-            warnings.warn(
-                "Both `max_length` and `max_new_tokens` have been set but they serve the same purpose.", UserWarning
-            )
+        # if `MaxLengthCriteria` exists it overwrites `max_length`
         if stopping_criteria is not None:
             for stopping_criterion in stopping_criteria:
                 if isinstance(stopping_criterion, MaxLengthCriteria):
@@ -901,6 +893,17 @@ class GenerationMixin:
                             UserWarning,
                         )
                     max_length = stopping_criterion.max_length
+
+        # set init values
+        if max_length is None and max_new_tokens is None:
+            # Both are None, default
+            max_length = self.config.max_length
+        elif max_length is not None and max_new_tokens is not None:
+            # Both are set, this is odd, raise a warning
+            warnings.warn(
+                "Both `max_length` and `max_new_tokens` have been set but they serve the same purpose.", UserWarning
+            )
+
         max_length = max_length if max_length is not None else self.config.max_length
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
