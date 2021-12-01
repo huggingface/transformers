@@ -114,9 +114,9 @@ class SEWDConfig(PretrainedConfig):
             <https://arxiv.org/abs/1904.08779>`__.
         mask_time_prob (:obj:`float`, `optional`, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independ masks over the axis. If
+            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
             reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
-            masked, `mask_time_prob` should be ``prob_vector_start*mask_time_length`` Note that overlap may decrease
+            masked, `mask_time_prob` should be ``prob_vector_start*mask_time_length``. Note that overlap may decrease
             the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment is True``.
         mask_time_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the time axis.
@@ -126,9 +126,9 @@ class SEWDConfig(PretrainedConfig):
             ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''
         mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independ masks over
+            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
             the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
-            span to be masked, `mask_feature_prob` should be ``prob_vector_start*mask_feature_length`` Note that
+            span to be masked, `mask_feature_prob` should be ``prob_vector_start*mask_feature_length``. Note that
             overlap may decrease the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment
             is True``.
         mask_feature_length (:obj:`int`, `optional`, defaults to 10):
