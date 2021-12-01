@@ -95,8 +95,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`"|"`):
-            The token used for defining the end of a word.
 
         **kwargs
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
@@ -179,16 +177,28 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         text = text.lower()
 
+        # create list of phonemes
+        phonemes = self.phonemize(text, self.phonemizer_lang)
+
+        # make sure ' ' is between phonemes
+        tokens = phonemes.split(" ")
+        return tokens
+
+    def phonemize(self, text: str, text_lang: Optional[str] = None):
         try:
             from phonemizer import phonemize
             from phonemizer.separator import Separator
         except ImportError:
             raise ImportError("...")
 
-        separator = Separator(phone="", word="")
-        phonemes = phonemize(text, language=self.phonemizer_lang, backend=self.phonemizer_backend, strip=True, separator=separator)
+        # set the correct phonemizer language
+        if text_lang is None:
+            text_lang = self.phonemizer_lang
 
-        return list(phonemes)
+        separator = Separator(phone=" ", word="", syllable="")
+        phonemes = phonemize(text, language=text_lang, backend=self.phonemizer_backend, strip=True, separator=separator)
+
+        return phonemes
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) in an index (integer) using the vocab."""
@@ -212,10 +222,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # filter self.pad_token which is used as CTC-blank token
         filtered_tokens = list(filter(lambda token: token != self.pad_token, tokens))
 
-        join_token = ""
-
         # replace delimiter token
-        string = join_token.join(filtered_tokens).strip()
+        string = " ".join(filtered_tokens).strip()
 
         return string
 

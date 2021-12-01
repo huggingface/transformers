@@ -16,11 +16,14 @@
 
 
 import argparse
+import os
+import json
 
 import fairseq
 import torch
+from fairseq.data import Dictionary
 
-from transformers import UniSpeechConfig, UniSpeechForPreTraining, logging
+from transformers import UniSpeechConfig, UniSpeechForPreTraining, logging, Wav2Vec2PhonemeCTCTokenizer, Wav2Vec2FeatureExtractor, Wav2Vec2Processor, UniSpeechForCTC
 
 
 logging.set_verbosity_info()
@@ -57,6 +60,12 @@ TOP_LEVEL_KEYS = [
 
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
     for attribute in key.split("."):
+        if attribute in ["quantizer", "project_q", "project_hid"]:
+            return
+
+        if attribute == "ctc_proj":
+            attribute = "lm_head"
+
         hf_pointer = getattr(hf_pointer, attribute)
 
     if weight_type is not None:
@@ -84,7 +93,8 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
 
 def recursively_load_weights(fairseq_model, hf_model):
     unused_weights = []
-    fairseq_dict = fairseq_model.state_dict()
+#    fairseq_dict = fairseq_model.state_dict()
+    fairseq_dict = fairseq_model
 
     feature_extractor = hf_model.unispeech.feature_extractor
 
@@ -163,7 +173,9 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 
 @torch.no_grad()
-def convert_unispeech_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
+def convert_unispeech_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
@@ -172,10 +184,69 @@ def convert_unispeech_checkpoint(checkpoint_path, pytorch_dump_folder_path, conf
     else:
         config = UniSpeechConfig()
 
-    hf_unispeech = UniSpeechForPreTraining(config)
+    if is_finetuned:
+        if dict_path:
+#            with open(dict_path, "r") as f:
+#                dict_obj = json.load(f)
+#
+#            with open(dict_path, "w") as f:
+#                lines = [f"{k} {v}\n" for k,v in dict_obj.items()]
+#                for line in lines:
+#                    f.write(line)
 
-    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
-    model = model[0].eval()
+            target_dict = Dictionary.load_from_json(dict_path)
+
+            # important change bos & pad token id since CTC symbol is <pad> and
+            # not <s> as in fairseq
+            config.bos_token_id = target_dict.pad_index
+            config.pad_token_id = target_dict.bos_index
+            config.eos_token_id = target_dict.eos_index
+            config.vocab_size = len(target_dict.symbols)
+            vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
+            if not os.path.isdir(pytorch_dump_folder_path):
+                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
+                return
+            os.makedirs(pytorch_dump_folder_path, exist_ok=True)
+            vocab_dict = target_dict.indices
+
+            # fairseq has the <pad> and <s> switched
+            vocab_dict["<pad>"] = 42
+            vocab_dict["<s>"] = 43
+            with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
+                json.dump(vocab_dict, vocab_handle)
+            tokenizer = Wav2Vec2PhonemeCTCTokenizer(
+                vocab_path,
+                unk_token=target_dict.unk_word,
+                pad_token=target_dict.pad_word,
+                bos_token=target_dict.bos_word,
+                eos_token=target_dict.eos_word,
+                word_delimiter_token="|",
+                do_lower_case=False,
+            )
+            return_attention_mask = True if config.feat_extract_norm == "layer" else False
+            feature_extractor = Wav2Vec2FeatureExtractor(
+                feature_size=1,
+                sampling_rate=16000,
+                padding_value=0,
+                do_normalize=True,
+                return_attention_mask=return_attention_mask,
+            )
+            processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor.save_pretrained(pytorch_dump_folder_path)
+
+        hf_unispeech = UniSpeechForCTC(config)
+    else:
+        hf_unispeech = UniSpeechForPreTraining(config)
+
+    if is_finetuned:
+#        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+#                [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1]), "w2v_path": checkpoint_path}
+#        )
+        model = torch.load(checkpoint_path)["model"]
+    else:
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
+
+#    model = model[0].eval()
 
     recursively_load_weights(model, hf_unispeech)
 
@@ -186,6 +257,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
+    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument(
+        "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
+    )
     args = parser.parse_args()
-    convert_unispeech_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_unispeech_checkpoint(
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, not args.not_finetuned
+    )
