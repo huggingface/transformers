@@ -159,10 +159,15 @@ class PerceiverModelTester:
         elif model_class.__name__ == "PerceiverForMultimodalAutoencoding":
             config.d_model = 409
             images = torch.randn(
-                (self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size)
+                (self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size),
+                device=torch_device,
             )
-            audio = torch.randn((self.batch_size, self.num_frames * self.audio_samples_per_frame, 1))
-            inputs = dict(image=images, audio=audio, label=torch.zeros((self.batch_size, self.num_labels)))
+            audio = torch.randn(
+                (self.batch_size, self.num_frames * self.audio_samples_per_frame, 1), device=torch_device
+            )
+            inputs = dict(
+                image=images, audio=audio, label=torch.zeros((self.batch_size, self.num_labels), device=torch_device)
+            )
         else:
             raise ValueError(f"Model class {model_class} not supported")
 
@@ -391,8 +396,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             config.return_dict = True
 
-            print("Model class:", model_class)
-
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
@@ -521,8 +524,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-
-            print("Model class:", model_class)
 
             model = model_class(config)
             model.to(torch_device)
