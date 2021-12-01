@@ -215,7 +215,6 @@ def default_hp_space_wandb(trial) -> Dict[str, float]:
     from .integrations import is_wandb_available
 
     assert is_wandb_available(), "This function needs wandb installed: `pip " "install wandb`"
-    import wandb
 
     return {
         "method": "random",
