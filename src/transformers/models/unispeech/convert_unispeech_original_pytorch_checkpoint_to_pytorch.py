@@ -66,13 +66,16 @@ TOP_LEVEL_KEYS = [
 ]
 
 
-def set_recursively(hf_pointer, key, value, full_name, weight_type):
+def set_recursively(hf_pointer, key, value, full_name, weight_type, is_finetuned):
     for attribute in key.split("."):
-        if attribute in ["quantizer", "project_q", "project_hid"]:
-            return
+        if is_finetuned:
+            if attribute in ["quantizer", "project_q", "project_hid"]:
+                # those layers are only relevant for pretraining and should be dropped
+                return
 
-        if attribute == "ctc_proj":
-            attribute = "lm_head"
+            if attribute == "ctc_proj":
+                # we should rename `ctc_proj` to `lm_head` for fine-tuned phoneme models
+                attribute = "lm_head"
 
         hf_pointer = getattr(hf_pointer, attribute)
 
@@ -99,10 +102,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
 
 
-def recursively_load_weights(fairseq_model, hf_model):
+def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
     unused_weights = []
-    #    fairseq_dict = fairseq_model.state_dict()
-    fairseq_dict = fairseq_model
+    fairseq_dict = fairseq_model.state_dict()
 
     feature_extractor = hf_model.unispeech.feature_extractor
 
@@ -136,7 +138,7 @@ def recursively_load_weights(fairseq_model, hf_model):
                         weight_type = "weight"
                     else:
                         weight_type = None
-                    set_recursively(hf_model, mapped_key, value, name, weight_type)
+                    set_recursively(hf_model, mapped_key, value, name, weight_type, is_finetuned)
                 continue
         if not is_used:
             unused_weights.append(name)
@@ -194,14 +196,6 @@ def convert_unispeech_checkpoint(
 
     if is_finetuned:
         if dict_path:
-            #            with open(dict_path, "r") as f:
-            #                dict_obj = json.load(f)
-            #
-            #            with open(dict_path, "w") as f:
-            #                lines = [f"{k} {v}\n" for k,v in dict_obj.items()]
-            #                for line in lines:
-            #                    f.write(line)
-
             target_dict = Dictionary.load_from_json(dict_path)
 
             # important change bos & pad token id since CTC symbol is <pad> and
@@ -247,16 +241,15 @@ def convert_unispeech_checkpoint(
         hf_unispeech = UniSpeechForPreTraining(config)
 
     if is_finetuned:
-        #        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-        #                [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1]), "w2v_path": checkpoint_path}
-        #        )
-        model = torch.load(checkpoint_path)["model"]
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+            [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1]), "w2v_path": checkpoint_path}
+        )
     else:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
 
-    #    model = model[0].eval()
+    model = model[0].eval()
 
-    recursively_load_weights(model, hf_unispeech)
+    recursively_load_weights(model, hf_unispeech, is_finetuned)
 
     hf_unispeech.save_pretrained(pytorch_dump_folder_path)
 
