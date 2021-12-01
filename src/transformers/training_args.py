@@ -208,8 +208,8 @@ class TrainingArguments:
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
         bf16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or
-            higher NVIDIA architecture.
+            Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
+            NVIDIA architecture. This is an experimental API and it may change.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
@@ -223,7 +223,7 @@ class TrainingArguments:
             other choices will force the requested backend.
         bf16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
-            metric values.
+            metric values. This is an experimental API and it may change.
         fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
@@ -518,7 +518,7 @@ class TrainingArguments:
     bf16: bool = field(
         default=False,
         metadata={
-            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA architecture"
+            "help": "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA architecture. This is an experimental API and it may change."
         },
     )
     fp16: bool = field(
@@ -540,7 +540,9 @@ class TrainingArguments:
     )
     bf16_full_eval: bool = field(
         default=False,
-        metadata={"help": "Whether to use full bfloat16 evaluation instead of 32-bit"},
+        metadata={
+            "help": "Whether to use full bfloat16 evaluation instead of 32-bit. This is an experimental API and it may change."
+        },
     )
     fp16_full_eval: bool = field(
         default=False,
