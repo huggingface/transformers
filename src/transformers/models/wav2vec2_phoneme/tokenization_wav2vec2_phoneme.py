@@ -18,7 +18,7 @@ import json
 import os
 import sys
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
 from ...tokenization_utils_base import AddedToken
@@ -155,9 +155,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
-                which it will tokenize. This is useful for NER or token classification.
-             text_lang:
-                Input language of the transcription that is passed to the phonemizer.
+                which it will tokenize. This is useful for NER or token classification. text_lang: Input language of
+                the transcription that is passed to the phonemizer.
 
         Returns:
             :obj:`Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
@@ -196,7 +195,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             text_lang = self.phonemizer_lang
 
         separator = Separator(phone=" ", word="", syllable="")
-        phonemes = phonemize(text, language=text_lang, backend=self.phonemizer_backend, strip=True, separator=separator)
+        phonemes = phonemize(
+            text, language=text_lang, backend=self.phonemizer_backend, strip=True, separator=separator
+        )
 
         return phonemes
 
@@ -236,9 +237,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
     ) -> str:
         """
-        special _decode function is needed for Wav2Vec2PhonemeTokenizer because added tokens should be treated exactly the
-        same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
-        the whole token list and not individually on added tokens
+        special _decode function is needed for Wav2Vec2PhonemeTokenizer because added tokens should be treated exactly
+        the same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be
+        called on the whole token list and not individually on added tokens
         """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 

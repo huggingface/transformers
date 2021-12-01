@@ -16,14 +16,22 @@
 
 
 import argparse
-import os
 import json
+import os
 
 import fairseq
 import torch
 from fairseq.data import Dictionary
 
-from transformers import UniSpeechConfig, UniSpeechForPreTraining, logging, Wav2Vec2PhonemeCTCTokenizer, Wav2Vec2FeatureExtractor, Wav2Vec2Processor, UniSpeechForCTC
+from transformers import (
+    UniSpeechConfig,
+    UniSpeechForCTC,
+    UniSpeechForPreTraining,
+    Wav2Vec2FeatureExtractor,
+    Wav2Vec2PhonemeCTCTokenizer,
+    Wav2Vec2Processor,
+    logging,
+)
 
 
 logging.set_verbosity_info()
@@ -93,7 +101,7 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
 
 def recursively_load_weights(fairseq_model, hf_model):
     unused_weights = []
-#    fairseq_dict = fairseq_model.state_dict()
+    #    fairseq_dict = fairseq_model.state_dict()
     fairseq_dict = fairseq_model
 
     feature_extractor = hf_model.unispeech.feature_extractor
@@ -186,13 +194,13 @@ def convert_unispeech_checkpoint(
 
     if is_finetuned:
         if dict_path:
-#            with open(dict_path, "r") as f:
-#                dict_obj = json.load(f)
-#
-#            with open(dict_path, "w") as f:
-#                lines = [f"{k} {v}\n" for k,v in dict_obj.items()]
-#                for line in lines:
-#                    f.write(line)
+            #            with open(dict_path, "r") as f:
+            #                dict_obj = json.load(f)
+            #
+            #            with open(dict_path, "w") as f:
+            #                lines = [f"{k} {v}\n" for k,v in dict_obj.items()]
+            #                for line in lines:
+            #                    f.write(line)
 
             target_dict = Dictionary.load_from_json(dict_path)
 
@@ -239,14 +247,14 @@ def convert_unispeech_checkpoint(
         hf_unispeech = UniSpeechForPreTraining(config)
 
     if is_finetuned:
-#        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-#                [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1]), "w2v_path": checkpoint_path}
-#        )
+        #        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+        #                [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1]), "w2v_path": checkpoint_path}
+        #        )
         model = torch.load(checkpoint_path)["model"]
     else:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
 
-#    model = model[0].eval()
+    #    model = model[0].eval()
 
     recursively_load_weights(model, hf_unispeech)
 

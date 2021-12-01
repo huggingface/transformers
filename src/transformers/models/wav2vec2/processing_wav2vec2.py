@@ -15,13 +15,13 @@
 """
 Speech processor class for Wav2Vec2
 """
-from contextlib import contextmanager
 import warnings
+from contextlib import contextmanager
 
+from ...tokenization_utils import PreTrainedTokenizer
+from ..auto.tokenization_auto import AutoTokenizer
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
-from ..auto.tokenization_auto import AutoTokenizer
-from ...tokenization_utils import PreTrainedTokenizer
 
 
 class Wav2Vec2Processor:
@@ -129,8 +129,8 @@ class Wav2Vec2Processor:
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` and returns its output. If used in the context
         :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.__call__`. Please refer to the docstring of
-        the above two methods for more information.
+        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.__call__`. Please refer to the docstring of the
+        above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
@@ -139,8 +139,8 @@ class Wav2Vec2Processor:
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.pad` and returns its output. If used in the context
         :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.pad`. Please refer to the docstring of the
-        above two methods for more information.
+        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.pad`. Please refer to the docstring of the above
+        two methods for more information.
         """
         return self.current_processor.pad(*args, **kwargs)
 

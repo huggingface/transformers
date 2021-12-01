@@ -210,7 +210,28 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": "If :obj:`True`, will use the token generated when running"
-            ":obj:`transformers-cli logiin as HTTP bearer authorization for remote files."
+            ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
+        },
+    )
+    unk_token: Optional[str] = field(
+        default="[UNK]",
+        metadata={"help": "The unk token for the tokenizer"},
+    )
+    pad_token: Optional[str] = field(
+        default="[PAD]",
+        metadata={"help": "The padding token for the tokenizer"},
+    )
+    word_delimiter_token: Optional[str] = field(
+        default="|",
+        metadata={"help": "The word delimiter token for the tokenizer"},
+    )
+    phoneme_language: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The target language that should be used be"
+            " passed to the tokenizer for tokenization. Note that"
+            " this is only relevant if the model classifies the"
+            " input audio to a sequence of phoneme sequences."
         },
     )
 
@@ -275,7 +296,12 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
-def create_vocabulary_from_data(datasets: DatasetDict):
+def create_vocabulary_from_data(
+    datasets: DatasetDict,
+    word_delimiter_token: Optional[str] = None,
+    unk_token: Optional[str] = None,
+    pad_token: Optional[str] = None,
+):
     # Given training and test labels create vocabulary
     def extract_all_chars(batch):
         all_text = " ".join(batch["target_text"])
@@ -298,12 +324,16 @@ def create_vocabulary_from_data(datasets: DatasetDict):
     vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
 
     # replace white space with delimiter token
-    vocab_dict["|"] = vocab_dict[" "]
-    del vocab_dict[" "]
+    if word_delimiter_token is not None:
+        vocab_dict[word_delimiter_token] = vocab_dict[" "]
+        del vocab_dict[" "]
 
     # add unk and pad token
-    vocab_dict["[UNK]"] = len(vocab_dict)
-    vocab_dict["[PAD]"] = len(vocab_dict)
+    if unk_token is not None:
+        vocab_dict[unk_token] = len(vocab_dict)
+
+    if pad_token is not None:
+        vocab_dict[pad_token] = len(vocab_dict)
 
     return vocab_dict
 
@@ -391,65 +421,81 @@ def main():
     # that make training complicated and do not help in transcribing the speech
     # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
     # that could be easily picked up by the model
-
     chars_to_ignore_regex = (
         f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
     )
+    text_column_name = data_args.text_column_name
 
     def remove_special_characters(batch):
         if chars_to_ignore_regex is not None:
-            batch["target_text"] = re.sub(chars_to_ignore_regex, "", batch[data_args.text_column_name]).lower() + " "
+            batch["target_text"] = re.sub(chars_to_ignore_regex, "", batch[text_column_name]).lower() + " "
         else:
-            batch["target_text"] = batch[data_args.text_column_name].lower() + " "
+            batch["target_text"] = batch[text_column_name].lower() + " "
         return batch
 
     with training_args.main_process_first(desc="dataset map special characters removal"):
         raw_datasets = raw_datasets.map(
             remove_special_characters,
-            remove_columns=[data_args.text_column_name],
+            remove_columns=[text_column_name],
             desc="remove special characters from datasets",
         )
 
-    # 3. Next, we create the vocabulary of the model by extracting all unique characters from
+    # save special tokens for tokenizer
+    word_delimiter_token = data_args.word_delimiter_token
+    unk_token = data_args.unk_token
+    pad_token = data_args.pad_token
+
+    # 3. Next, if no tokenizer file is defined,
+    # we create the vocabulary of the model by extracting all unique characters from
     # the training and evaluation datasets
     # We need to make sure that only first rank saves vocabulary
     # make sure all processes wait until vocab is created
-    vocab_file = os.path.join(training_args.output_dir, "vocab.json")
+    tokenizer_name_or_path = model_args.tokenizer_name_or_path
+    if tokenizer_name_or_path is None:
+        # save vocab in training output dir
+        tokenizer_name_or_path = training_args.output_dir
 
-    with training_args.main_process_first():
-        if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
-            os.remove(vocab_file)
+        vocab_file = os.path.join(tokenizer_name_or_path, "vocab.json")
 
-    with training_args.main_process_first(desc="dataset map vocabulary creation"):
-        if not os.path.isfile(vocab_file):
-            os.makedirs(training_args.output_dir, exist_ok=True)
-            vocab_dict = create_vocabulary_from_data(raw_datasets)
+        with training_args.main_process_first():
+            if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
+                os.remove(vocab_file)
 
-            # save vocab dict to be loaded into tokenizer
-            with open(vocab_file, "w") as file:
-                json.dump(vocab_dict, file)
+        with training_args.main_process_first(desc="dataset map vocabulary creation"):
+            if not os.path.isfile(vocab_file):
+                os.makedirs(tokenizer_name_or_path, exist_ok=True)
+                vocab_dict = create_vocabulary_from_data(
+                    raw_datasets,
+                    word_delimiter_token=word_delimiter_token,
+                    unk_token=unk_token,
+                    pad_token=pad_token,
+                )
 
-    # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
-    # Note for distributed training, the .from_pretrained methods guarantee that only
-    # one local process can concurrently download model & vocab.
+                # save vocab dict to be loaded into tokenizer
+                with open(vocab_file, "w") as file:
+                    json.dump(vocab_dict, file)
 
-    # load config
-    config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
-    )
+        # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
+        # Note for distributed training, the .from_pretrained methods guarantee that only
+        # one local process can concurrently download model & vocab.
 
-    # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
+        # load config
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        )
+
+        # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
     config_for_tokenizer = config if config.tokenizer_class is not None else None
     tokenizer_type = config.model_type if config.tokenizer_class is None else None
 
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
-        training_args.output_dir,
+        tokenizer_name_or_path,
         config=config_for_tokenizer,
         tokenizer_type=tokenizer_type,
-        unk_token="[UNK]",
-        pad_token="[PAD]",
-        word_delimiter_token="|",
+        unk_token=unk_token,
+        pad_token=pad_token,
+        word_delimiter_token=word_delimiter_token,
         use_auth_token=data_args.use_auth_token,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
@@ -502,12 +548,17 @@ def main():
     # derive max & min input length for sample rate & max duration
     max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
     min_input_length = data_args.min_duration_in_seconds * processor.feature_extractor.sampling_rate
+    audio_column_name = data_args.audio_column_name
+    num_workers = data_args.preprocessing_num_workers
+
+    # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
+    phoneme_language = data_args.phoneme_language
 
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
     def prepare_dataset(batch):
         # load audio
-        sample = batch[data_args.audio_column_name]
+        sample = batch[audio_column_name]
 
         batch["input_values"] = processor(
             sample["array"], sampling_rate=sample["sampling_rate"], truncate=True, max_length=max_input_length
@@ -516,14 +567,18 @@ def main():
 
         # Setup the processor for targets
         with processor.as_target_processor():
-            batch["labels"] = processor(batch["target_text"]).input_ids
+            additional_kwargs = {}
+            if phoneme_language is not None:
+                additional_kwargs["text_lang"] = phoneme_language
+
+            batch["labels"] = processor(batch["target_text"], **additional_kwargs).input_ids
         return batch
 
     with training_args.main_process_first(desc="dataset map preprocessing"):
         vectorized_datasets = raw_datasets.map(
             prepare_dataset,
             remove_columns=raw_datasets["train"].column_names,
-            num_proc=data_args.preprocessing_num_workers,
+            num_proc=num_workers,
             desc="preprocess datasets",
         )
 
@@ -531,7 +586,7 @@ def main():
             # filter data that is shorter than min_input_length
             vectorized_datasets = vectorized_datasets.filter(
                 lambda x: x > min_input_length,
-                num_proc=data_args.preprocessing_num_workers,
+                num_proc=num_workers,
                 input_columns=["input_length"],
             )
 
