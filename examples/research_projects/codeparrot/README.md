@@ -47,9 +47,9 @@ The script to process the full dataset can be found in `scripts/preprocessing.py
 
 To execute the preprocessing run the following command:
 ```bash
-python scripts/preprocessing.py 
-    --dataset_name lvwerra/codeparrot 
-    --output_dir codeparrot-clean
+python scripts/preprocessing.py \
+--dataset_name lvwerra/codeparrot \
+--output_dir codeparrot-clean \
 ```
 During preprocessing the dataset is downloaded and stored locally as well as caches of the computations. Make sure you have enough free disk space to execute it.
 
@@ -67,11 +67,11 @@ _Note:_ We originally trained the tokenizer on the unprocessed train split of th
 The models are randomly initialized and trained from scratch. To initialize a new model you can run:
 
 ```bash
-python scripts/initialize_model.py 
-    --config_name gpt2-large 
-    --tokenizer_name lvwerra/codeparrot 
-    --model_name codeparrot 
-    --push_to_hub True
+python scripts/initialize_model.py \
+--config_name gpt2-large \
+--tokenizer_name lvwerra/codeparrot \
+--model_name codeparrot \
+--push_to_hub True\
 ```
 This will initialize a new model with the architecture and configuration of `gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the the hub.
 
@@ -93,16 +93,16 @@ python scripts/codeparrot_training.py
 If you want to train the small model you need to make some modifications:
 
 ```bash
-accelerate launch scripts/codeparrot_training.py 
-    --model_ckpt lvwerra/codeparrot-small 
-    --train_batch_size 12 
-    --eval_batch_size 12 
-    --learning_rate 5e-4 
-    --num_warmup_steps 2000 
-    --gradient_accumulation 1 
-    --gradient_checkpointing False 
-    --max_train_steps 150000 
-    --save_checkpoint_steps 15000
+accelerate launch scripts/codeparrot_training.py \
+--model_ckpt lvwerra/codeparrot-small \
+--train_batch_size 12 \
+--eval_batch_size 12 \
+--learning_rate 5e-4 \
+--num_warmup_steps 2000 \
+--gradient_accumulation 1 \
+--gradient_checkpointing False \
+--max_train_steps 150000 \
+--save_checkpoint_steps 15000
 ```
 
 Reminder that you can see the full set of possible options with descriptions (for all scripts) by running:
@@ -114,18 +114,18 @@ python scripts/codeparrot_training.py --help
 ## Evaluation
 For evaluating the language modeling loss on the validation set or any other dataset you can use the following command:
 ```bash
-python scripts/validation_loss.py
-    --model_ckpt lvwerra/codeparrot
-    --dataset_name lvwerra/codeparrot-clean-valid
+python scripts/validation_loss.py \
+--model_ckpt lvwerra/codeparrot \
+--dataset_name lvwerra/codeparrot-clean-valid
 ```
 In addition we evaluate the model on OpenAI's _HumanEval_ benchmark. You can run the evaluation with the following command:
 
 ```bash
-python scripts/human_eval.py --model_ckpt lvwerra/codeparrot 
-    --do_sample True
-    --temperature 0.2
-    --top_p 0.95
-    --n_samples=200
+python scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
+--do_sample True \
+--temperature 0.2 \
+--top_p 0.95 \
+--n_samples=200
 ```
 
 The results as well as reference values are shown in the following table:
