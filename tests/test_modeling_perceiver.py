@@ -137,7 +137,7 @@ class PerceiverModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
         if model_class is None or model_class.__name__ == "PerceiverModel":
-            inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            inputs = floats_tensor([self.batch_size, self.seq_length, config.d_model], self.vocab_size)
             return config, inputs, input_mask, sequence_labels, token_labels
         elif model_class.__name__ == "PerceiverForMaskedLM":
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -357,9 +357,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_determinism(self):
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "PerceiverModel":
-                continue
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             model = model_class(config)
@@ -391,11 +388,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         seq_len = getattr(self.model_tester, "num_latents", None)
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "PerceiverModel":
-                continue
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             config.return_dict = True
+
+            print("Model class:", model_class)
 
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
@@ -409,15 +405,13 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             cross_attentions = outputs.cross_attentions
 
             # check expected number of attentions depending on model class
-            if model.__class__.__name__ in ["PerceiverForMaskedLM", "PerceiverForImageClassification"]:
-                expected_num_self_attentions = (
-                    self.model_tester.num_blocks * self.model_tester.num_self_attends_per_block
-                )
+            expected_num_self_attentions = self.model_tester.num_blocks * self.model_tester.num_self_attends_per_block
+            if model.__class__.__name__ == "PerceiverModel":
+                # we expect to have 2 cross-attentions, namely one in the PerceiverEncoder, and one in PerceiverBasicDecoder
+                expected_num_cross_attentions = 1
+            else:
                 # we expect to have 2 cross-attentions, namely one in the PerceiverEncoder, and one in PerceiverBasicDecoder
                 expected_num_cross_attentions = 2
-            else:
-                # todo
-                pass
             self.assertEqual(len(self_attentions), expected_num_self_attentions)
             self.assertEqual(len(cross_attentions), expected_num_cross_attentions)
 
@@ -481,9 +475,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "PerceiverModel":
-                continue
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             inputs_dict["output_hidden_states"] = True
@@ -529,10 +520,9 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "PerceiverModel":
-                continue
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+
+            print("Model class:", model_class)
 
             model = model_class(config)
             model.to(torch_device)
@@ -607,8 +597,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_feed_forward_chunking(self):
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "PerceiverModel":
-                continue
             original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
@@ -636,9 +624,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_save_load(self):
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "PerceiverModel":
-                continue
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             model = model_class(config)

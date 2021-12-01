@@ -52,7 +52,7 @@ def prepare_img():
     return im
 
 
-def rename_keys(state_dict, task):
+def rename_keys(state_dict, architecture):
     for name in list(state_dict):
         param = state_dict.pop(name)
 
@@ -124,7 +124,7 @@ def rename_keys(state_dict, task):
         name = name.replace("multimodal_decoder/~decoder_query/label_padding/pos_embs", "decoder.padding.label")
         name = name.replace("multimodal_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
         name = name.replace("multimodal_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
-        if task == "multimodal_autoencoding":
+        if architecture == "multimodal_autoencoding":
             name = name.replace(
                 "classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs",
                 "decoder.modalities.label.decoder.output_position_encodings.position_embeddings",
@@ -261,7 +261,7 @@ def rename_keys(state_dict, task):
 
 
 @torch.no_grad()
-def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="MLM"):
+def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architecture="MLM"):
     """
     Copy/paste/tweak model's weights to our Perceiver structure.
     """
@@ -271,7 +271,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         checkpoint = pickle.loads(f.read())
 
     state = None
-    if isinstance(checkpoint, dict) and task in [
+    if isinstance(checkpoint, dict) and architecture in [
         "image_classification",
         "image_classification_fourier",
         "image_classification_conv",
@@ -295,17 +295,17 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
                 state_dict[scope_name + "/" + param_name] = param
 
     # rename keys
-    rename_keys(state_dict, task=task)
+    rename_keys(state_dict, architecture=architecture)
 
     # load HuggingFace model
     config = PerceiverConfig()
     subsampling = None
     repo_id = "datasets/huggingface/label-files"
-    if task == "MLM":
+    if architecture == "MLM":
         config.qk_channels = 8 * 32
         config.v_channels = 1280
         model = PerceiverForMaskedLM(config)
-    elif "image_classification" in task:
+    elif "image_classification" in architecture:
         config.num_latents = 512
         config.d_latents = 1024
         config.d_model = 512
@@ -322,18 +322,18 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        if task == "image_classification":
+        if architecture == "image_classification":
             config.image_size = 224
             model = PerceiverForImageClassification(config)
-        elif task == "image_classification_fourier":
+        elif architecture == "image_classification_fourier":
             config.d_model = 261
             model = PerceiverForImageClassificationFourier(config)
-        elif task == "image_classification_conv":
+        elif architecture == "image_classification_conv":
             config.d_model = 322
             model = PerceiverForImageClassificationConvProcessing(config)
         else:
-            raise ValueError(f"Task {task} not supported")
-    elif task == "optical_flow":
+            raise ValueError(f"Architecture {architecture} not supported")
+    elif architecture == "optical_flow":
         config.num_latents = 2048
         config.d_latents = 512
         config.d_model = 322
@@ -342,7 +342,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.num_self_attention_heads = 16
         config.num_cross_attention_heads = 1
         model = PerceiverForOpticalFlow(config)
-    elif task == "multimodal_autoencoding":
+    elif architecture == "multimodal_autoencoding":
         config.num_latents = 28 * 28 * 1
         config.d_latents = 512
         config.d_model = 704
@@ -372,7 +372,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
     else:
-        raise ValueError(f"Task {task} not supported")
+        raise ValueError(f"Architecture {architecture} not supported")
     model.eval()
 
     # load weights
@@ -380,7 +380,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
 
     # prepare dummy input
     input_mask = None
-    if task == "MLM":
+    if architecture == "MLM":
         tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
         text = "This is an incomplete sentence where some words are missing."
         encoding = tokenizer(text, padding="max_length", return_tensors="pt")
@@ -388,20 +388,20 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
         inputs = encoding.input_ids
         input_mask = encoding.attention_mask
-    elif task in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
+    elif architecture in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
         feature_extractor = PerceiverFeatureExtractor()
         image = prepare_img()
         encoding = feature_extractor(image, return_tensors="pt")
         inputs = encoding.pixel_values
-    elif task == "optical_flow":
+    elif architecture == "optical_flow":
         inputs = torch.randn(1, 2, 27, 368, 496)
-    elif task == "multimodal_autoencoding":
+    elif architecture == "multimodal_autoencoding":
         images = torch.randn((1, 16, 3, 224, 224))
         audio = torch.randn((1, 30720, 1))
         inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
 
     # forward pass
-    if task == "multimodal_autoencoding":
+    if architecture == "multimodal_autoencoding":
         outputs = model(inputs=inputs, attention_mask=input_mask, subsampled_output_points=subsampling)
     else:
         outputs = model(inputs=inputs, attention_mask=input_mask)
@@ -414,7 +414,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         for k, v in logits.items():
             print(f"Shape of logits of modality {k}", v.shape)
 
-    if task == "MLM":
+    if architecture == "MLM":
         expected_slice = torch.tensor(
             [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
         )
@@ -428,7 +428,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, task="ML
         print("Predicted string:")
         print(tokenizer.decode(masked_tokens_predictions))
 
-    elif task in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
+    elif architecture in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
         print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
 
     # Finally, save files
@@ -455,14 +455,14 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory, provided as a string.",
     )
     parser.add_argument(
-        "--task",
+        "--architecture",
         default="MLM",
         type=str,
         help="""
-        Task, provided as a string. One of 'MLM', 'image_classification', image_classification_fourier',
+        Architecture, provided as a string. One of 'MLM', 'image_classification', image_classification_fourier',
         image_classification_fourier', 'optical_flow' or 'multimodal_autoencoding'.
         """,
     )
 
     args = parser.parse_args()
-    convert_perceiver_checkpoint(args.pickle_file, args.pytorch_dump_folder_path, args.task)
+    convert_perceiver_checkpoint(args.pickle_file, args.pytorch_dump_folder_path, args.architecture)
