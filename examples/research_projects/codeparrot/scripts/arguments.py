@@ -98,7 +98,6 @@ class HumanEvalArguments:
     output_file: Optional[str] = field(
         default="eval_results.json", metadata={"help": "Random seed used for evaluation."}
     )
-
     HF_ALLOW_CODE_EVAL: Optional[str] = field(
         default="0", metadata={"help": "Allow `code_eval` to execute Python code on machine"}
     )
@@ -151,7 +150,7 @@ class TokenizerTrainingArguments:
         default="transformersbook/codeparrot-train", metadata={"help": "Dataset to train tokenizer on."}
     )
     text_column: Optional[str] = field(default="content", metadata={"help": "Column containing text data to process."})
-    vocab_size: Optional[int] = field(default=100000, metadata={"help": "Number of examples to train tokenizer on."})
+    vocab_size: Optional[int] = field(default=200000, metadata={"help": "Number of examples to train tokenizer on."})
     n_examples: Optional[int] = field(
         default=32768, metadata={"help": "Number of examples to train the tokenizer on."}
     )
