@@ -89,6 +89,7 @@ class DefaultDataCollator(DataCollatorMixin):
         return_tensors (:obj:`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
+
     return_tensors: str = "pt"
 
     def __call__(self, features: List[Dict[str, Any]], return_tensors=None) -> Dict[str, Any]:
