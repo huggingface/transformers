@@ -792,9 +792,12 @@ if is_torch_available():
             "CharacterBertForQuestionAnswering",
             "CharacterBertForSequenceClassification",
             "CharacterBertForTokenClassification",
+            "CharacterBertLayer",
             "CharacterBertLMHeadModel",
             "CharacterBertModel",
             "CharacterBertPreTrainedModel",
+            "CharacterCnn",
+            "load_tf_weights_in_character_bert",
         ]
     )
     _import_structure["models.clip"].extend(
