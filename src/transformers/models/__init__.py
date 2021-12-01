@@ -34,6 +34,7 @@ from . import (
     byt5,
     camembert,
     canine,
+    character_bert,
     clip,
     convbert,
     cpm,
