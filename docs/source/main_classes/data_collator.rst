@@ -35,6 +35,7 @@ DefaultDataCollator
 .. autoclass:: transformers.data.data_collator.DefaultDataCollator
     :members:
 
+
 DataCollatorWithPadding
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
