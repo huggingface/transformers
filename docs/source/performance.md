@@ -244,7 +244,7 @@ If we look at what's happening with FP16 training (mixed precision) we have:
 
 So the savings only happen for the forward activations saved for the backward computation, and there is a slight overhead because the model weights are stored both in half- and full-precision.
 
-In 🤗 Transformers this is enabled by passing `--fp16` to the 🤗 Trainer.
+In 🤗 Transformers fp16 mixed precision is enabled by passing `--fp16` to the 🤗 Trainer.
 
 Now let's look at a simple text-classification fine-tuning on 2 GPUs (I'm giving the command for reference):
 ```
@@ -305,11 +305,15 @@ In 🤗 Transformers the full fp16 inference is enabled by passing `--fp16_full_
 
 If you own the new Ampere hardware you can start using bf16 for your training and evaluation. While bf16 has a worse precision than fp16, it has a much much bigger dynamic range. Therefore, if in the past you were experiencing overflow issues while training the model, bf16 will prevent this from happening most of the time. Remember that in fp16 the biggest number you can have is `65535` and any number above that will overflow. a bf16 number can be as large as `3.39e+38` (!) which is about the same as fp32 - because both have 8-bits used for the numerical range.
 
-As a result of that loss scaling is no longer needed for example. The loss can be a huge number and it's no problem for bf16.
-
 Automatic Mixed Precision (AMP) is the same as with fp16, except it'll use bf16.
 
-In 🤗 Transformers this is enabled by passing `--bf16` to the 🤗 Trainer.
+Thanks to the fp32-like dynamic range with bf16 mixed precision loss scaling is no longer needed.
+
+If you have tried to finetune models pre-trained under bf16 mixed precision (e.g. T5) it's very likely that you have encountered overflow issues. Now you should be able to finetune those models without any issues.
+
+That's said also be aware that if you pre-trained a model in bf16, it's likely to have overflow issues if someone tries to finetune it in fp16 down the road. So once started on the bf16-mode path it's best to remain on it and not switch to fp16.
+
+In 🤗 Transformers bf16 mixed precision is enabled by passing `--bf16` to the 🤗 Trainer.
 
 If you use your own trainer, this is just:
 
