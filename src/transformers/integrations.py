@@ -377,7 +377,6 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
         config = wandb.config
 
         trainer.objective = None
-        import pdb
 
         trainer.train(resume_from_checkpoint=None, trial=vars(config)["_items"])
         # If there hasn't been any evaluation during the training loop.
