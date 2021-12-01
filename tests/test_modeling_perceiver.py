@@ -863,6 +863,56 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.1653, -0.1993, -0.7521])
+        expected_slice = torch.tensor([-1.1653, -0.1993, -0.7521], device=torch_device)
+
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_image_classification_fourier(self):
+
+        # TODO replace by deepmind/vision-perceiver-fourier
+        feature_extractor = PerceiverFeatureExtractor()
+        model = PerceiverForImageClassificationFourier.from_pretrained("nielsr/vision-perceiver-fourier")
+        model.to(torch_device)
+
+        # prepare inputs
+        image = prepare_img()
+        inputs = feature_extractor(image, return_tensors="pt").pixel_values.to(torch_device)
+        input_mask = None
+
+        # forward pass
+        outputs = model(inputs=inputs, attention_mask=input_mask)
+        logits = outputs.logits
+
+        # verify logits
+        expected_shape = torch.Size((1, model.config.num_labels))
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-1.1295, -0.2832, 0.3226], device=torch_device)
+
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_image_classification_conv(self):
+
+        # TODO replace by deepmind/vision-perceiver-conv
+        feature_extractor = PerceiverFeatureExtractor()
+        model = PerceiverForImageClassificationConvProcessing.from_pretrained("nielsr/vision-perceiver-conv")
+        model.to(torch_device)
+
+        # prepare inputs
+        image = prepare_img()
+        inputs = feature_extractor(image, return_tensors="pt").pixel_values.to(torch_device)
+        input_mask = None
+
+        # forward pass
+        outputs = model(inputs=inputs, attention_mask=input_mask)
+        logits = outputs.logits
+
+        # verify logits
+        expected_shape = torch.Size((1, model.config.num_labels))
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-1.1186, 0.0554, 0.0897], device=torch_device)
 
         self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
