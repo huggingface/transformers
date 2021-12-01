@@ -902,17 +902,6 @@ class GenerationMixin:
                         )
                     max_length = stopping_criterion.max_length
 
-        # set init values
-        if max_length is None and max_new_tokens is None:
-            # Both are None, default
-            max_length = self.config.max_length
-        elif max_length is not None and max_new_tokens is not None:
-            # Both are set, this is odd, raise a warning
-            warnings.warn(
-                "Both `max_length` and `max_new_tokens` have been set but they serve the same purpose.", UserWarning
-            )
-
-        max_length = max_length if max_length is not None else self.config.max_length
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
         do_sample = do_sample if do_sample is not None else self.config.do_sample

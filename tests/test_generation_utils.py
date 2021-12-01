@@ -1652,8 +1652,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertEqual(list(bart_model.generate(input_ids, max_length=max_length).shape), [1, 33])
         self.assertEqual(list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria).shape), [1, 44])
-            self.assertEqual(
         with self.assertWarns(UserWarning):
+            self.assertEqual(
                 list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=max_length).shape),
                 [1, 44],
             )
