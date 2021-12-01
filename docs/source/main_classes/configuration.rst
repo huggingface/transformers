@@ -17,6 +17,11 @@ The base class :class:`~transformers.PretrainedConfig` implements the common met
 either from a local file or directory, or from a pretrained model configuration provided by the library (downloaded
 from HuggingFace's AWS S3 repository).
 
+Each derived config class implements model specific attributes. Common attributes present in all config classes are:
+:obj:`hidden_size`, :obj:`num_attention_heads`, and :obj:`num_hidden_layers`. Text models further implement:
+:obj:`vocab_size`.
+
+
 
 PretrainedConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

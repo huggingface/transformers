@@ -399,7 +399,7 @@ class LukeSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -579,6 +579,7 @@ class LukeEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LukeLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -600,7 +601,7 @@ class LukeEncoder(nn.Module):
                 all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            if getattr(self.config, "gradient_checkpointing", False):
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -681,6 +682,7 @@ class LukePreTrainedModel(PreTrainedModel):
 
     config_class = LukeConfig
     base_model_prefix = "luke"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
@@ -698,6 +700,10 @@ class LukePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, LukeEncoder):
+            module.gradient_checkpointing = value
 
 
 LUKE_START_DOCSTRING = r"""
@@ -812,7 +818,8 @@ class LukeModel(LukePreTrainedModel):
 
         self.pooler = LukePooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1023,7 +1030,8 @@ class LukeForEntityClassification(LukePreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=EntityClassificationOutput, config_class=_CONFIG_FOR_DOC)
@@ -1136,7 +1144,8 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size * 2, config.num_labels, False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=EntityPairClassificationOutput, config_class=_CONFIG_FOR_DOC)
@@ -1251,7 +1260,8 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size * 3, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=EntitySpanClassificationOutput, config_class=_CONFIG_FOR_DOC)

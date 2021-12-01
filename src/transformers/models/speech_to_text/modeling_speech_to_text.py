@@ -63,7 +63,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -149,8 +150,8 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
-            # in forward, put the weights on correct device
-            emb_weights = emb_weights.to(self.weights.device)
+            # in forward put the weights on the correct dtype and device of the param
+            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
         self.weights = nn.Parameter(emb_weights)
         self.weights.requires_grad = False
@@ -223,9 +224,12 @@ class Speech2TextAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -251,7 +255,8 @@ class Speech2TextAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -337,7 +342,10 @@ class Speech2TextAttention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -531,6 +539,7 @@ class Speech2TextDecoderLayer(nn.Module):
 class Speech2TextPreTrainedModel(PreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -543,26 +552,30 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _get_subsampled_output_lengths(self, input_lengths: torch.LongTensor):
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (Speech2TextDecoder, Speech2TextEncoder)):
+            module.gradient_checkpointing = value
+
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers
         """
-
         for i in range(self.config.num_conv_layers):
             input_lengths = (input_lengths - 1) // 2 + 1
 
         return input_lengths
 
-    def _get_subsampled_encoder_attn_mask(self, attention_mask):
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
-        subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
-        max_len = subsampled_lengths.max().item()
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
         bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros((bsz, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
+        attention_mask = torch.zeros(
+            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
 
         # these two operations makes sure that all values
         # before the output lengths indices are attended to
@@ -618,7 +631,7 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             :obj:`past_key_values`).
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default. <<<<<<< HEAD
+            also be used by default.
 
             If you want to change padding behavior, you should read
             :func:`modeling_speech_to_text._prepare_decoder_inputs` and modify to your needs. See diagram 1 in `the
@@ -710,7 +723,9 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         self.layers = nn.ModuleList([Speech2TextEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -758,16 +773,16 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if attention_mask is not None:
-            attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
-
         inputs_embeds = self.conv(input_features)
         inputs_embeds = self.embed_scale * inputs_embeds
 
-        if attention_mask is None:
-            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
-        else:
+        # subsample attention mask if necessary
+        if attention_mask is not None:
+            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
             padding_mask = attention_mask.ne(1).long()
+        else:
+            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
+
         embed_pos = self.embed_positions(padding_mask)
 
         hidden_states = inputs_embeds + embed_pos
@@ -795,7 +810,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
 
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -857,10 +872,14 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             config.d_model,
             self.padding_idx,
         )
+
         self.layers = nn.ModuleList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
+
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -999,7 +1018,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            encoder_attention_mask = self._get_subsampled_encoder_attn_mask(encoder_attention_mask)
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
@@ -1031,11 +1049,11 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
+                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
                     )
                     use_cache = False
 
@@ -1114,7 +1132,8 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         self.encoder = Speech2TextEncoder(config)
         self.decoder = Speech2TextDecoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.decoder.embed_tokens
@@ -1130,7 +1149,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1176,12 +1195,20 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        # downsample encoder attention mask
+        if attention_mask is not None:
+            encoder_attention_mask = self._get_feature_vector_attention_mask(
+                encoder_outputs[0].shape[1], attention_mask
+            )
+        else:
+            encoder_attention_mask = None
+
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -1229,7 +1256,8 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         self.model = Speech2TextModel(config)
         self.lm_head = nn.Linear(config.d_model, self.config.vocab_size, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1290,7 +1318,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
             >>>     batch["speech"] = speech
             >>>     return batch
 
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
             >>> input_features = processor(ds["speech"][0], sampling_rate=16000, return_tensors="pt").input_features  # Batch size 1

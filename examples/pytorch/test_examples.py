@@ -23,8 +23,9 @@ from unittest.mock import patch
 
 import torch
 
+from transformers import Wav2Vec2ForPreTraining
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, get_gpu_count, slow, torch_device
+from transformers.testing_utils import CaptureLogger, TestCasePlus, get_gpu_count, slow, torch_device
 
 
 SRC_DIRS = [
@@ -38,21 +39,30 @@ SRC_DIRS = [
         "question-answering",
         "summarization",
         "translation",
+        "image-classification",
+        "speech-recognition",
+        "audio-classification",
+        "speech-pretraining",
     ]
 ]
 sys.path.extend(SRC_DIRS)
 
 
 if SRC_DIRS is not None:
+    import run_audio_classification
     import run_clm
     import run_generation
     import run_glue
+    import run_image_classification
     import run_mlm
     import run_ner
     import run_qa as run_squad
+    import run_seq2seq_qa as run_squad_seq2seq
+    import run_speech_recognition_ctc
     import run_summarization
     import run_swag
     import run_translation
+    import run_wav2vec2_pretraining_no_trainer
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -147,6 +157,31 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 100)
 
+    def test_run_clm_config_overrides(self):
+        # test that config_overrides works, despite the misleading dumps of default un-updated
+        # config via tokenizer
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_clm.py
+            --model_type gpt2
+            --tokenizer_name gpt2
+            --train_file ./tests/fixtures/sample_text.txt
+            --output_dir {tmp_dir}
+            --config_overrides n_embd=10,n_head=2
+            """.split()
+
+        if torch_device != "cuda":
+            testargs.append("--no_cuda")
+
+        logger = run_clm.logger
+        with patch.object(sys, "argv", testargs):
+            with CaptureLogger(logger) as cl:
+                run_clm.main()
+
+        self.assertIn('"n_embd": 10', cl.out)
+        self.assertIn('"n_head": 2', cl.out)
+
     def test_run_mlm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -231,6 +266,38 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             run_squad.main()
+            result = get_results(tmp_dir)
+            self.assertGreaterEqual(result["eval_f1"], 30)
+            self.assertGreaterEqual(result["eval_exact"], 30)
+
+    def test_run_squad_seq2seq(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_seq2seq_qa.py
+            --model_name_or_path t5-small
+            --context_column context
+            --question_column question
+            --answer_column answers
+            --version_2_with_negative
+            --train_file tests/fixtures/tests_samples/SQUAD/sample.json
+            --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --max_steps=10
+            --warmup_steps=2
+            --do_train
+            --do_eval
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --predict_with_generate
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            run_squad_seq2seq.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_f1"], 30)
             self.assertGreaterEqual(result["eval_exact"], 30)
@@ -340,3 +407,132 @@ class ExamplesTests(TestCasePlus):
             run_translation.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_bleu"], 30)
+
+    def test_run_image_classification(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_image_classification.py
+            --output_dir {tmp_dir}
+            --model_name_or_path google/vit-base-patch16-224-in21k
+            --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --do_train
+            --do_eval
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --remove_unused_columns False
+            --overwrite_output_dir True
+            --dataloader_num_workers 16
+            --metric_for_best_model accuracy
+            --max_steps 10
+            --train_val_split 0.1
+            --seed 42
+        """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_image_classification.main()
+            result = get_results(tmp_dir)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.8)
+
+    def test_run_speech_recognition_ctc(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_speech_recognition_ctc.py
+            --output_dir {tmp_dir}
+            --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
+            --dataset_config_name clean
+            --train_split_name validation
+            --eval_split_name validation
+            --do_train
+            --do_eval
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --remove_unused_columns False
+            --overwrite_output_dir True
+            --preprocessing_num_workers 16
+            --max_steps 10
+            --seed 42
+        """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_speech_recognition_ctc.main()
+            result = get_results(tmp_dir)
+            self.assertLess(result["eval_loss"], result["train_loss"])
+
+    def test_run_audio_classification(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_audio_classification.py
+            --output_dir {tmp_dir}
+            --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
+            --dataset_name anton-l/superb_demo
+            --dataset_config_name ks
+            --train_split_name test
+            --eval_split_name test
+            --audio_column_name audio
+            --label_column_name label
+            --do_train
+            --do_eval
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --remove_unused_columns False
+            --overwrite_output_dir True
+            --num_train_epochs 10
+            --max_steps 50
+            --seed 42
+        """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_audio_classification.main()
+            result = get_results(tmp_dir)
+            self.assertLess(result["eval_loss"], result["train_loss"])
+
+    def test_run_wav2vec2_pretraining(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_wav2vec2_pretraining_no_trainer.py
+            --output_dir {tmp_dir}
+            --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
+            --dataset_config_names clean
+            --dataset_split_names validation
+            --learning_rate 1e-4
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 2
+            --preprocessing_num_workers 16
+            --max_train_steps 5
+            --validation_split_percentage 5
+            --seed 42
+        """.split()
+
+        if is_cuda_and_apex_available():
+            testargs.append("--fp16")
+
+        with patch.object(sys, "argv", testargs):
+            run_wav2vec2_pretraining_no_trainer.main()
+            model = Wav2Vec2ForPreTraining.from_pretrained(tmp_dir)
+            self.assertIsNotNone(model)

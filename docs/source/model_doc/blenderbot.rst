@@ -81,6 +81,13 @@ BlenderbotTokenizer
     :members: build_inputs_with_special_tokens
 
 
+BlenderbotTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BlenderbotTokenizerFast
+    :members: build_inputs_with_special_tokens
+
+
 BlenderbotModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -118,3 +125,17 @@ TFBlenderbotForConditionalGeneration
 
 .. autoclass:: transformers.TFBlenderbotForConditionalGeneration
     :members: call
+
+
+FlaxBlenderbotModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBlenderbotModel
+    :members: __call__, encode, decode
+
+
+FlaxBlenderbotForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBlenderbotForConditionalGeneration
+    :members: __call__, encode, decode

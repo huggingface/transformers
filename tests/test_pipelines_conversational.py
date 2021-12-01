@@ -54,8 +54,11 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         else []
     )
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
+        return conversation_agent, [Conversation("Hi there!")]
+
+    def run_pipeline_test(self, conversation_agent, _):
         # Simple
         outputs = conversation_agent(Conversation("Hi there!"))
         self.assertEqual(outputs, Conversation(past_user_inputs=["Hi there!"], generated_responses=[ANY(str)]))
@@ -187,22 +190,13 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
 
         conversation_1 = Conversation("hello")
-        inputs = conversation_agent._parse_and_tokenize([conversation_1])
+        inputs = conversation_agent.preprocess(conversation_1)
         self.assertEqual(inputs["input_ids"].tolist(), [[31373, 50256]])
 
         conversation_2 = Conversation("how are you ?", past_user_inputs=["hello"], generated_responses=["Hi there!"])
-        inputs = conversation_agent._parse_and_tokenize([conversation_2])
+        inputs = conversation_agent.preprocess(conversation_2)
         self.assertEqual(
             inputs["input_ids"].tolist(), [[31373, 50256, 17250, 612, 0, 50256, 4919, 389, 345, 5633, 50256]]
-        )
-
-        inputs = conversation_agent._parse_and_tokenize([conversation_1, conversation_2])
-        self.assertEqual(
-            inputs["input_ids"].tolist(),
-            [
-                [31373, 50256, 50256, 50256, 50256, 50256, 50256, 50256, 50256, 50256, 50256],
-                [31373, 50256, 17250, 612, 0, 50256, 4919, 389, 345, 5633, 50256],
-            ],
         )
 
     @require_torch
@@ -214,7 +208,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         # test1
         conversation_1 = Conversation("hello")
-        inputs = conversation_agent._parse_and_tokenize([conversation_1])
+        inputs = conversation_agent.preprocess(conversation_1)
         self.assertEqual(inputs["input_ids"].tolist(), [[1710, 86, 2]])
 
         # test2
@@ -225,7 +219,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 " Do you like lasagne? It is a traditional Italian dish consisting of a shepherd's pie."
             ],
         )
-        inputs = conversation_agent._parse_and_tokenize([conversation_1])
+        inputs = conversation_agent.preprocess(conversation_1)
         self.assertEqual(
             inputs["input_ids"].tolist(),
             [
@@ -271,7 +265,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                     964,
                     21,
                     2,  # EOS
-                ]
+                ],
             ],
         )
 

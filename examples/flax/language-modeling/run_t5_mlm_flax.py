@@ -25,6 +25,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
+from itertools import chain
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -39,6 +40,7 @@ import optax
 from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
+from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
@@ -52,6 +54,7 @@ from transformers import (
     is_tensorboard_available,
     set_seed,
 )
+from transformers.file_utils import get_full_repo_name
 from transformers.models.t5.modeling_flax_t5 import shift_tokens_right
 
 
@@ -288,7 +291,7 @@ class FlaxDataCollatorForT5MLM:
         start_indices[:, 0] = mask_indices[:, 0]
 
         sentinel_ids = np.where(start_indices != 0, np.cumsum(start_indices, axis=-1), start_indices)
-        sentinel_ids = np.where(sentinel_ids != 0, (sentinel_ids + self.tokenizer.vocab_size - 1), 0)
+        sentinel_ids = np.where(sentinel_ids != 0, (len(self.tokenizer) - sentinel_ids), 0)
         sentinel_ids -= mask_indices - start_indices
 
         return sentinel_ids
@@ -438,6 +441,16 @@ if __name__ == "__main__":
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
+    # Handle the repository creation
+    if training_args.push_to_hub:
+        if training_args.hub_model_id is None:
+            repo_name = get_full_repo_name(
+                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
+            )
+        else:
+            repo_name = training_args.hub_model_id
+        repo = Repository(training_args.output_dir, clone_from=repo_name)
+
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
@@ -551,7 +564,7 @@ if __name__ == "__main__":
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of expanded_inputs_length.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
@@ -791,9 +804,7 @@ if __name__ == "__main__":
                 # save checkpoint after each epoch and push checkpoint to the hub
                 if jax.process_index() == 0:
                     params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
-                    model.save_pretrained(
-                        training_args.output_dir,
-                        params=params,
-                        push_to_hub=training_args.push_to_hub,
-                        commit_message=f"Saving weights and logs of step {cur_step}",
-                    )
+                    model.save_pretrained(training_args.output_dir, params=params)
+                    tokenizer.save_pretrained(training_args.output_dir)
+                    if training_args.push_to_hub:
+                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)

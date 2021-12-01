@@ -161,7 +161,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
             import rjieba
         except ImportError:
             raise ImportError(
-                "You need to install rjieba to use RoFormerTokenizer."
+                "You need to install rjieba to use RoFormerTokenizer. "
                 "See https://pypi.org/project/rjieba/ for installation."
             )
         self.jieba = rjieba

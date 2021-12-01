@@ -20,6 +20,7 @@ from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MBart50TokenizerFast,
+    MBartConfig,
     MBartForConditionalGeneration,
     TranslationPipeline,
     pipeline,
@@ -34,14 +35,16 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        translator = TranslationPipeline(model=model, tokenizer=tokenizer)
-        try:
-            outputs = translator("Some string")
-        except ValueError:
-            # Triggered by m2m langages
-            src_lang, tgt_lang = list(translator.tokenizer.lang_code_to_id.keys())[:2]
-            outputs = translator("Some string", src_lang=src_lang, tgt_lang=tgt_lang)
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if isinstance(model.config, MBartConfig):
+            src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
+            translator = TranslationPipeline(model=model, tokenizer=tokenizer, src_lang=src_lang, tgt_lang=tgt_lang)
+        else:
+            translator = TranslationPipeline(model=model, tokenizer=tokenizer)
+        return translator, ["Some string", "Some other text"]
+
+    def run_pipeline_test(self, translator, _):
+        outputs = translator("Some string")
         self.assertEqual(outputs, [{"translation_text": ANY(str)}])
 
     @require_torch
@@ -108,8 +111,8 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
 
         # but we do for this one
         translator = pipeline(task="translation_en_to_de")
-        self.assertEquals(translator.src_lang, "en")
-        self.assertEquals(translator.tgt_lang, "de")
+        self.assertEqual(translator._preprocess_params["src_lang"], "en")
+        self.assertEqual(translator._preprocess_params["tgt_lang"], "de")
 
     @require_torch
     @slow
@@ -137,8 +140,8 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
     def test_translation_on_odd_language(self):
         model = "patrickvonplaten/t5-tiny-random"
         translator = pipeline(task="translation_cn_to_ar", model=model)
-        self.assertEquals(translator.src_lang, "cn")
-        self.assertEquals(translator.tgt_lang, "ar")
+        self.assertEqual(translator._preprocess_params["src_lang"], "cn")
+        self.assertEqual(translator._preprocess_params["tgt_lang"], "ar")
 
     @require_torch
     def test_translation_default_language_selection(self):
@@ -146,8 +149,8 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
         with pytest.warns(UserWarning, match=r".*translation_en_to_de.*"):
             translator = pipeline(task="translation", model=model)
         self.assertEqual(translator.task, "translation_en_to_de")
-        self.assertEqual(translator.src_lang, "en")
-        self.assertEqual(translator.tgt_lang, "de")
+        self.assertEqual(translator._preprocess_params["src_lang"], "en")
+        self.assertEqual(translator._preprocess_params["tgt_lang"], "de")
 
     @require_torch
     def test_translation_with_no_language_no_model_fails(self):

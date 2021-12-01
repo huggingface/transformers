@@ -39,23 +39,26 @@ from .file_utils import (
     is_onnx_available,
     is_pandas_available,
     is_pytesseract_available,
+    is_pytorch_quantization_available,
     is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_soundfile_availble,
+    is_tensorflow_probability_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torch_bf16_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available
+from .integrations import is_optuna_available, is_ray_available, is_sigopt_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
-DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
+DUMMY_UNKNOWN_IDENTIFIER = "julien-c/dummy-unknown"
 DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
 # Used to test Auto{Config, Model, Tokenizer} model_type detection.
 
@@ -291,6 +294,19 @@ def require_torch_scatter(test_case):
         return test_case
 
 
+def require_tensorflow_probability(test_case):
+    """
+    Decorator marking a test that requires TensorFlow probability.
+
+    These tests are skipped when TensorFlow probability isn't installed.
+
+    """
+    if not is_tensorflow_probability_available():
+        return unittest.skip("test requires TensorFlow probability")(test_case)
+    else:
+        return test_case
+
+
 def require_torchaudio(test_case):
     """
     Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
@@ -367,6 +383,17 @@ def require_scatter(test_case):
     """
     if not is_scatter_available():
         return unittest.skip("test requires PyTorch Scatter")(test_case)
+    else:
+        return test_case
+
+
+def require_pytorch_quantization(test_case):
+    """
+    Decorator marking a test that requires PyTorch Quantization Toolkit. These tests are skipped when PyTorch
+    Quantization Toolkit isn't installed.
+    """
+    if not is_pytorch_quantization_available():
+        return unittest.skip("test requires PyTorch Quantization Toolkit")(test_case)
     else:
         return test_case
 
@@ -451,11 +478,26 @@ else:
 if is_tf_available():
     import tensorflow as tf
 
+if is_flax_available():
+    import jax
+
+    jax_device = jax.default_backend()
+else:
+    jax_device = None
+
 
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     if torch_device != "cuda":
         return unittest.skip("test requires CUDA")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_bf16(test_case):
+    """Decorator marking a test that requires CUDA hardware supporting bf16 and PyTorch >= 1.10."""
+    if not is_torch_bf16_available():
+        return unittest.skip("test requires CUDA hardware supporting bf16 and PyTorch >= 1.10")(test_case)
     else:
         return test_case
 
@@ -507,6 +549,19 @@ def require_ray(test_case):
     """
     if not is_ray_available():
         return unittest.skip("test requires Ray/tune")(test_case)
+    else:
+        return test_case
+
+
+def require_sigopt(test_case):
+    """
+    Decorator marking a test that requires SigOpt.
+
+    These tests are skipped when SigOpt isn't installed.
+
+    """
+    if not is_sigopt_available():
+        return unittest.skip("test requires SigOpt")(test_case)
     else:
         return test_case
 
@@ -597,34 +652,54 @@ class CaptureStd:
     """
     Context manager to capture:
 
-        - stdout, clean it up and make it available via obj.out
-        - stderr, and make it available via obj.err
+        - stdout: replay it, clean it up and make it available via ``obj.out``
+        - stderr: replay it and make it available via ``obj.err``
 
         init arguments:
 
-        - out - capture stdout: True/False, default True
-        - err - capture stdout: True/False, default True
+        - out - capture stdout:`` True``/``False``, default ``True``
+        - err - capture stdout: ``True``/``False``, default ``True``
+        - replay - whether to replay or not: ``True``/``False``, default ``True``. By default each
+        captured stream gets replayed back on context's exit, so that one can see what the test was doing. If this is a
+        not wanted behavior and the captured data shouldn't be replayed, pass ``replay=False`` to disable this feature.
 
         Examples::
 
+            # to capture stdout only with auto-replay
             with CaptureStdout() as cs:
                 print("Secret message")
-            print(f"captured: {cs.out}")
+            assert "message" in cs.out
 
+            # to capture stderr only with auto-replay
             import sys
             with CaptureStderr() as cs:
                 print("Warning: ", file=sys.stderr)
-            print(f"captured: {cs.err}")
+            assert "Warning" in cs.err
 
-            # to capture just one of the streams, but not the other
+            # to capture both streams with auto-replay
+            with CaptureStd() as cs:
+                print("Secret message")
+                print("Warning: ", file=sys.stderr)
+            assert "message" in cs.out
+            assert "Warning" in cs.err
+
+            # to capture just one of the streams, and not the other, with auto-replay
             with CaptureStd(err=False) as cs:
                 print("Secret message")
-            print(f"captured: {cs.out}")
+            assert "message" in cs.out
             # but best use the stream-specific subclasses
+
+            # to capture without auto-replay
+            with CaptureStd(replay=False) as cs:
+                print("Secret message")
+            assert "message" in cs.out
 
     """
 
-    def __init__(self, out=True, err=True):
+    def __init__(self, out=True, err=True, replay=True):
+
+        self.replay = replay
+
         if out:
             self.out_buf = StringIO()
             self.out = "error: CaptureStd context is unfinished yet, called too early"
@@ -653,11 +728,17 @@ class CaptureStd:
     def __exit__(self, *exc):
         if self.out_buf:
             sys.stdout = self.out_old
-            self.out = apply_print_resets(self.out_buf.getvalue())
+            captured = self.out_buf.getvalue()
+            if self.replay:
+                sys.stdout.write(captured)
+            self.out = apply_print_resets(captured)
 
         if self.err_buf:
             sys.stderr = self.err_old
-            self.err = self.err_buf.getvalue()
+            captured = self.err_buf.getvalue()
+            if self.replay:
+                sys.stderr.write(captured)
+            self.err = captured
 
     def __repr__(self):
         msg = ""
@@ -677,15 +758,15 @@ class CaptureStd:
 class CaptureStdout(CaptureStd):
     """Same as CaptureStd but captures only stdout"""
 
-    def __init__(self):
-        super().__init__(err=False)
+    def __init__(self, replay=True):
+        super().__init__(err=False, replay=replay)
 
 
 class CaptureStderr(CaptureStd):
     """Same as CaptureStd but captures only stderr"""
 
-    def __init__(self):
-        super().__init__(out=False)
+    def __init__(self, replay=True):
+        super().__init__(out=False, replay=replay)
 
 
 class CaptureLogger:
@@ -1342,6 +1423,8 @@ def nested_simplify(obj, decimals=3):
     elif isinstance(obj, (dict, BatchEncoding)):
         return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
     elif isinstance(obj, (str, int, np.int64)):
+        return obj
+    elif obj is None:
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist(), decimals)

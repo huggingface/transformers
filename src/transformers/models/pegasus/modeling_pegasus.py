@@ -66,7 +66,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -156,9 +157,12 @@ class PegasusAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -184,7 +188,8 @@ class PegasusAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -270,7 +275,10 @@ class PegasusAttention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -466,6 +474,7 @@ class PegasusDecoderLayer(nn.Module):
 class PegasusPreTrainedModel(PreTrainedModel):
     config_class = PegasusConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -480,16 +489,9 @@ class PegasusPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    @property
-    def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
-        dummy_inputs = {
-            "attention_mask": input_ids.ne(pad_token),
-            "input_ids": input_ids,
-            "decoder_input_ids": input_ids,
-        }
-        return dummy_inputs
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (PegasusDecoder, PegasusEncoder)):
+            module.gradient_checkpointing = value
 
 
 PEGASUS_START_DOCSTRING = r"""
@@ -656,7 +658,38 @@ class PegasusEncoder(PegasusPreTrainedModel):
         self.layers = nn.ModuleList([PegasusEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        """
+        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        config.max_position_embeddings`.
+
+        Arguments:
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
+        """
+        logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
+        self.config.max_position_embeddings = new_num_position_embeddings
+
+        self.embed_positions = PegasusSinusoidalPositionalEmbedding(
+            self.config.max_position_embeddings,
+            self.config.d_model,
+            self.padding_idx,
+        )
+        self.embed_positions.to(self.device)
+
+    def get_position_embeddings(self) -> nn.Embedding:
+        """
+        Returns the position embeddings matrix
+        """
+        return self.embed_positions
 
     def forward(
         self,
@@ -752,7 +785,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if self.gradient_checkpointing and self.training:
 
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
@@ -821,7 +854,9 @@ class PegasusDecoder(PegasusPreTrainedModel):
         self.layers = nn.ModuleList([PegasusDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -847,6 +882,35 @@ class PegasusDecoder(PegasusPreTrainedModel):
             )
 
         return combined_attention_mask
+
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        """
+        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        config.max_position_embeddings`.
+
+        Arguments:
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
+        """
+        logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
+        self.config.max_position_embeddings = new_num_position_embeddings
+
+        self.embed_positions = PegasusSinusoidalPositionalEmbedding(
+            self.config.max_position_embeddings,
+            self.config.d_model,
+            self.padding_idx,
+        )
+        self.embed_positions.to(self.device)
+
+    def get_position_embeddings(self) -> nn.Embedding:
+        """
+        Returns the position embeddings matrix
+        """
+        return self.embed_positions
 
     def forward(
         self,
@@ -993,12 +1057,11 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -1081,7 +1144,8 @@ class PegasusModel(PegasusPreTrainedModel):
         self.encoder = PegasusEncoder(config, self.shared)
         self.decoder = PegasusDecoder(config, self.shared)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.shared
@@ -1096,6 +1160,29 @@ class PegasusModel(PegasusPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        """
+        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        config.max_position_embeddings`.
+
+        Arguments:
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
+        """
+        self.config.max_position_embeddings = new_num_position_embeddings
+        self.encoder.resize_position_embeddings(new_num_position_embeddings)
+        self.decoder.resize_position_embeddings(new_num_position_embeddings)
+
+    def get_position_embeddings(self) -> Tuple[nn.Embedding]:
+        """
+        Returns the position embeddings matrix
+        """
+        return (self.encoder.get_position_embeddings(), self.decoder.get_position_embeddings())
 
     @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1209,7 +1296,8 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1236,6 +1324,29 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        """
+        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        config.max_position_embeddings`.
+
+        Arguments:
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
+        """
+        self.config.max_position_embeddings = new_num_position_embeddings
+        self.model.encoder.resize_position_embeddings(new_num_position_embeddings)
+        self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
+
+    def get_position_embeddings(self) -> Tuple[nn.Embedding]:
+        """
+        Returns the position embeddings matrix
+        """
+        return (self.model.encoder.get_position_embeddings(), self.model.decoder.get_position_embeddings())
 
     @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1373,7 +1484,6 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Pegasus
 class PegasusForCausalLM(PegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1384,7 +1494,8 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens
@@ -1404,7 +1515,30 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
+    def get_position_embeddings(self) -> nn.Embedding:
+        """
+        Returns the position embeddings matrix
+        """
+        return self.model.decoder.get_position_embeddings()
+
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        """
+        Resizes position embeddings matrix of the model if :obj:`new_num_position_embeddings !=
+        config.max_position_embeddings`.
+
+        Arguments:
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embeddings. If position embeddings are learned, increasing the size will add
+                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
+                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
+                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
+                will remove vectors from the end.
+        """
+        self.config.max_position_embeddings = new_num_position_embeddings
+        self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
+
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus
     def forward(
         self,
         input_ids=None,

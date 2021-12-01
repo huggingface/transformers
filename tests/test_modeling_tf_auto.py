@@ -17,16 +17,20 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_tf_available
-from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_tf, slow
+from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, T5Config, TapasConfig, is_tf_available
+from transformers.testing_utils import (
+    DUMMY_UNKNOWN_IDENTIFIER,
+    SMALL_MODEL_IDENTIFIER,
+    require_tensorflow_probability,
+    require_tf,
+    slow,
+)
+
+from .test_modeling_bert import BertModelTester
 
 
 if is_tf_available():
     from transformers import (
-        AutoConfig,
-        BertConfig,
-        GPT2Config,
-        T5Config,
         TFAutoModel,
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
@@ -34,6 +38,8 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
+        TFAutoModelForTableQuestionAnswering,
+        TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
         TFBertForMaskedLM,
         TFBertForPreTraining,
@@ -45,6 +51,7 @@ if is_tf_available():
         TFGPT2LMHeadModel,
         TFRobertaForMaskedLM,
         TFT5ForConditionalGeneration,
+        TFTapasForQuestionAnswering,
     )
     from transformers.models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -53,6 +60,7 @@ if is_tf_available():
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
@@ -60,6 +68,17 @@ if is_tf_available():
     from transformers.models.bert.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.gpt2.modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.t5.modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.tapas.modeling_tf_tapas import TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+class NewModelConfig(BertConfig):
+    model_type = "new-model"
+
+
+if is_tf_available():
+
+    class TFNewModel(TFBertModel):
+        config_class = NewModelConfig
 
 
 @require_tf
@@ -167,6 +186,21 @@ class TFAutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForQuestionAnswering)
 
+    @slow
+    @require_tensorflow_probability
+    def test_table_question_answering_model_from_pretrained(self):
+        for model_name in TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
+            config = AutoConfig.from_pretrained(model_name)
+            self.assertIsNotNone(config)
+            self.assertIsInstance(config, TapasConfig)
+
+            model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_name)
+            model, loading_info = TFAutoModelForTableQuestionAnswering.from_pretrained(
+                model_name, output_loading_info=True
+            )
+            self.assertIsNotNone(model)
+            self.assertIsInstance(model, TFTapasForQuestionAnswering)
+
     def test_from_pretrained_identifier(self):
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, TFBertForMaskedLM)
@@ -174,7 +208,7 @@ class TFAutoModelTest(unittest.TestCase):
         self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_identifier_from_model_type(self):
-        model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
+        model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
         self.assertIsInstance(model, TFRobertaForMaskedLM)
         self.assertEqual(model.num_parameters(), 14410)
         self.assertEqual(model.num_parameters(only_trainable=True), 14410)
@@ -201,6 +235,7 @@ class TFAutoModelTest(unittest.TestCase):
             TF_MODEL_MAPPING,
             TF_MODEL_FOR_PRETRAINING_MAPPING,
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
@@ -224,3 +259,53 @@ class TFAutoModelTest(unittest.TestCase):
 
                     for child, parent in [(a, b) for a in child_model for b in parent_model]:
                         assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
+
+    def test_new_model_registration(self):
+        try:
+            AutoConfig.register("new-model", NewModelConfig)
+
+            auto_classes = [
+                TFAutoModel,
+                TFAutoModelForCausalLM,
+                TFAutoModelForMaskedLM,
+                TFAutoModelForPreTraining,
+                TFAutoModelForQuestionAnswering,
+                TFAutoModelForSequenceClassification,
+                TFAutoModelForTokenClassification,
+            ]
+
+            for auto_class in auto_classes:
+                with self.subTest(auto_class.__name__):
+                    # Wrong config class will raise an error
+                    with self.assertRaises(ValueError):
+                        auto_class.register(BertConfig, TFNewModel)
+                    auto_class.register(NewModelConfig, TFNewModel)
+                    # Trying to register something existing in the Transformers library will raise an error
+                    with self.assertRaises(ValueError):
+                        auto_class.register(BertConfig, TFBertModel)
+
+                    # Now that the config is registered, it can be used as any other config with the auto-API
+                    tiny_config = BertModelTester(self).get_config()
+                    config = NewModelConfig(**tiny_config.to_dict())
+                    model = auto_class.from_config(config)
+                    self.assertIsInstance(model, TFNewModel)
+
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        model.save_pretrained(tmp_dir)
+                        new_model = auto_class.from_pretrained(tmp_dir)
+                        self.assertIsInstance(new_model, TFNewModel)
+
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+            for mapping in (
+                TF_MODEL_MAPPING,
+                TF_MODEL_FOR_PRETRAINING_MAPPING,
+                TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+                TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+                TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+                TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_MASKED_LM_MAPPING,
+            ):
+                if NewModelConfig in mapping._extra_content:
+                    del mapping._extra_content[NewModelConfig]

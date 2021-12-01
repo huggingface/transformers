@@ -98,13 +98,13 @@ class FlaxT5DenseReluDense(nn.Module):
         self.wi = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
         self.wo = nn.Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -128,19 +128,19 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
         self.wi_0 = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
         self.wi_1 = nn.Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
         self.wo = nn.Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -200,25 +200,25 @@ class FlaxT5Attention(nn.Module):
         self.q = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(q_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(q_init_std),
             dtype=self.dtype,
         )
         self.k = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
         )
         self.v = nn.Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
         )
         self.o = nn.Dense(
             self.d_model,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(o_init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(o_init_std),
             dtype=self.dtype,
         )
 
@@ -226,8 +226,7 @@ class FlaxT5Attention(nn.Module):
             self.relative_attention_bias = nn.Embed(
                 self.relative_attention_num_buckets,
                 self.n_heads,
-                embedding_init=jax.nn.initializers.normal(kv_init_std, self.dtype),
-                dtype=self.dtype,
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
             )
 
     @staticmethod
@@ -500,10 +499,13 @@ class FlaxT5LayerSelfAttention(nn.Module):
 
 class FlaxT5LayerCrossAttention(nn.Module):
     config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.EncDecAttention = FlaxT5Attention(self.config, has_relative_attention_bias=False, causal=False)
-        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon)
+        self.EncDecAttention = FlaxT5Attention(
+            self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
+        )
+        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(
@@ -537,15 +539,18 @@ class FlaxT5Block(nn.Module):
         self.causal = self.config.causal
         self.layer = (
             FlaxT5LayerSelfAttention(
-                self.config, has_relative_attention_bias=self.has_relative_attention_bias, name=str(0)
+                self.config,
+                has_relative_attention_bias=self.has_relative_attention_bias,
+                name=str(0),
+                dtype=self.dtype,
             ),
         )
         feed_forward_index = 1
         if self.causal:
-            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1)),)
+            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype),)
             feed_forward_index += 1
 
-        self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index)),)
+        self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),)
 
     def __call__(
         self,
@@ -714,11 +719,10 @@ class FlaxT5Stack(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 self.config.d_model,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
-        self.block = FlaxT5BlockCollection(self.config)
+        self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype)
         self.final_layer_norm = FlaxT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
         )
@@ -1059,11 +1063,11 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
             >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=512, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1118,19 +1122,20 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         Example::
 
             >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+            >>> import jax.numpy as jnp
 
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=512, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
             >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
             >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1224,6 +1229,18 @@ T5_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
+        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
+            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
+            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given ``dtype``.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see
+            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
 """
 
 
@@ -1245,8 +1262,7 @@ class FlaxT5Module(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
         )
 
         encoder_config = copy.deepcopy(self.config)
@@ -1329,8 +1345,9 @@ FLAX_T5_MODEL_DOCSTRING = """
 
         >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="np").input_ids
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
+        >>> # forward pass
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
 """
 
@@ -1356,25 +1373,25 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor, self.dtype),
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor),
         )
 
         encoder_config = copy.deepcopy(self.config)
         encoder_config.causal = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxT5Stack(encoder_config, self.shared)
+        self.encoder = FlaxT5Stack(encoder_config, self.shared, dtype=self.dtype)
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxT5Stack(decoder_config, self.shared)
+        self.decoder = FlaxT5Stack(decoder_config, self.shared, dtype=self.dtype)
 
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_factor, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_factor),
             dtype=self.dtype,
         )
 
@@ -1469,19 +1486,20 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         Example::
 
             >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+            >>> import jax.numpy as jnp
 
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> text = "summarize: My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=512, return_tensors='jax')
+            >>> inputs = tokenizer(text, return_tensors='np')
             >>> encoder_outputs = model.encode(**inputs)
 
             >>> decoder_start_token_id = model.config.decoder_start_token_id
             >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
             >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1617,15 +1635,15 @@ FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
 
         >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
 
         >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=512, return_tensors='jax')
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors='np')
 
         >>> # Generate Summary
         >>> summary_ids = model.generate(inputs['input_ids']).sequences
-        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False))
 """
 
 

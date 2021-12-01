@@ -712,7 +712,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
@@ -981,7 +981,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
@@ -1159,7 +1159,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if max_length is not None and len(input_ids) > max_length:
             raise ValueError(
-                "Could not encode the query and table header given the maximum length. Encoding the query and table"
+                "Could not encode the query and table header given the maximum length. Encoding the query and table "
                 f"header results in a length of {len(input_ids)} which is higher than the max_length of {max_length}"
             )
 
@@ -1819,11 +1819,15 @@ class TapasTokenizer(PreTrainedTokenizer):
             padding_strategy != PaddingStrategy.DO_NOT_PAD and len(encoded_inputs["input_ids"]) != max_length
         )
 
+        # Initialize attention mask if not present.
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
+
         if needs_to_be_padded:
             difference = max_length - len(encoded_inputs["input_ids"])
             if self.padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"]) + [0] * difference
+                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [[self.pad_token_type_id] * 7] * difference
@@ -1841,7 +1845,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + [1] * len(encoded_inputs["input_ids"])
+                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = [[self.pad_token_type_id] * 7] * difference + encoded_inputs[
                         "token_type_ids"
@@ -1859,9 +1863,6 @@ class TapasTokenizer(PreTrainedTokenizer):
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        else:
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
 
         return encoded_inputs
 
@@ -1896,9 +1897,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             data (:obj:`dict`):
                 Dictionary mapping features to actual values. Should be created using
                 :class:`~transformers.TapasTokenizer`.
-            logits (:obj:`np.ndarray` of shape ``(batch_size, sequence_length)``):
+            logits (:obj:`torch.Tensor` or :obj:`tf.Tensor` of shape ``(batch_size, sequence_length)``):
                 Tensor containing the logits at the token level.
-            logits_agg (:obj:`np.ndarray` of shape ``(batch_size, num_aggregation_labels)``, `optional`):
+            logits_agg (:obj:`torch.Tensor` or :obj:`tf.Tensor` of shape ``(batch_size, num_aggregation_labels)``, `optional`):
                 Tensor containing the aggregation logits.
             cell_classification_threshold (:obj:`float`, `optional`, defaults to 0.5):
                 Threshold to be used for cell selection. All table cells for which their probability is larger than
@@ -1914,6 +1915,11 @@ class TapasTokenizer(PreTrainedTokenizer):
             - predicted_aggregation_indices (``List[int]``of length ``batch_size``, `optional`, returned when
               ``logits_aggregation`` is provided): Predicted aggregation operator indices of the aggregation head.
         """
+        # converting to numpy arrays to work with PT/TF
+        logits = logits.numpy()
+        if logits_agg is not None:
+            logits_agg = logits_agg.numpy()
+        data = {key: value.numpy() for key, value in data.items() if key != "training"}
         # input data is of type float32
         # np.log(np.finfo(np.float32).max) = 88.72284
         # Any value over 88.72284 will overflow when passed through the exponential, sending a warning
@@ -1974,7 +1980,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         output = (predicted_answer_coordinates,)
 
         if logits_agg is not None:
-            predicted_aggregation_indices = logits_agg.argmax(dim=-1)
+            predicted_aggregation_indices = logits_agg.argmax(axis=-1)
             output = (predicted_answer_coordinates, predicted_aggregation_indices.tolist())
 
         return output

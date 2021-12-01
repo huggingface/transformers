@@ -148,19 +148,16 @@ class FlaxElectraEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.embedding_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -196,17 +193,17 @@ class FlaxElectraSelfAttention(nn.Module):
         self.query = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
     def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
@@ -265,7 +262,7 @@ class FlaxElectraSelfOutput(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
@@ -313,7 +310,7 @@ class FlaxElectraIntermediate(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.intermediate_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.activation = ACT2FN[self.config.hidden_act]
@@ -332,7 +329,7 @@ class FlaxElectraOutput(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -570,7 +567,7 @@ class FlaxElectraModule(nn.Module):
     def setup(self):
         self.embeddings = FlaxElectraEmbeddings(self.config, dtype=self.dtype)
         if self.config.embedding_size != self.config.hidden_size:
-            self.embeddings_project = nn.Dense(self.config.hidden_size)
+            self.embeddings_project = nn.Dense(self.config.hidden_size, dtype=self.dtype)
         self.encoder = FlaxElectraEncoder(self.config, dtype=self.dtype)
 
     def __call__(
@@ -620,17 +617,19 @@ class FlaxElectraTiedDense(nn.Module):
     bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        bias = self.param("bias", self.bias_init, (self.embedding_size,))
-        self.bias = jnp.asarray(bias, dtype=self.dtype)
+        self.bias = self.param("bias", self.bias_init, (self.embedding_size,))
 
     def __call__(self, x, kernel):
+        x = jnp.asarray(x, self.dtype)
+        kernel = jnp.asarray(kernel, self.dtype)
         y = lax.dot_general(
             x,
             kernel,
             (((x.ndim - 1,), (0,)), ((), ())),
             precision=self.precision,
         )
-        return y + self.bias
+        bias = jnp.asarray(self.bias, self.dtype)
+        return y + bias
 
 
 class FlaxElectraForMaskedLMModule(nn.Module):
@@ -639,7 +638,7 @@ class FlaxElectraForMaskedLMModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(config=self.config, dtype=self.dtype)
-        self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config)
+        self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config, dtype=self.dtype)
         if self.config.tie_word_embeddings:
             self.generator_lm_head = FlaxElectraTiedDense(self.config.vocab_size, dtype=self.dtype)
         else:
@@ -788,7 +787,7 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
             else self.config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Dense(self.config.num_labels)
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
         self,

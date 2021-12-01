@@ -261,7 +261,7 @@ class BigBirdEmbeddings(nn.Module):
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
                 "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
+                torch.zeros(self.position_ids.size(), dtype=torch.long),
                 persistent=False,
             )
         # End copy
@@ -1555,6 +1555,7 @@ class BigBirdEncoder(nn.Module):
         self.layer = nn.ModuleList(
             [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.gradient_checkpointing = False
 
     def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:
@@ -1598,12 +1599,11 @@ class BigBirdEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -1756,6 +1756,7 @@ class BigBirdPreTrainedModel(PreTrainedModel):
     config_class = BigBirdConfig
     load_tf_weights = load_tf_weights_in_big_bird
     base_model_prefix = "bert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -1773,6 +1774,10 @@ class BigBirdPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, BigBirdEncoder):
+            module.gradient_checkpointing = value
 
 
 BIG_BIRD_START_DOCSTRING = r"""
@@ -1948,7 +1953,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
             )
             self.set_attention_type("original_full")
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1969,7 +1975,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -2061,7 +2067,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
                 "+ additional buffer: config.num_random_blocks * config.block_size "
                 f"= {max_tokens_to_attend} with config.block_size "
                 f"= {self.config.block_size}, config.num_random_blocks "
-                f"= {self.config.num_random_blocks}."
+                f"= {self.config.num_random_blocks}. "
                 "Changing attention type to 'original_full'..."
             )
             self.set_attention_type("original_full")
@@ -2257,7 +2263,8 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config, add_pooling_layer=True)
         self.cls = BigBirdPreTrainingHeads(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -2365,7 +2372,8 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config)
         self.cls = BigBirdOnlyMLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -2375,7 +2383,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2467,7 +2475,8 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config)
         self.cls = BigBirdOnlyMLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -2637,11 +2646,12 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config)
         self.classifier = BigBirdClassificationHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2732,13 +2742,14 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(
         BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2829,11 +2840,12 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2937,11 +2949,12 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         self.bert = BigBirdModel(config, add_pooling_layer=add_pooling_layer)
         self.qa_classifier = BigBirdForQuestionAnsweringHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/bigbird-base-trivia-itc",
         output_type=BigBirdForQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2987,6 +3000,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).long()
             logits_mask = logits_mask
+            logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
 
         outputs = self.bert(

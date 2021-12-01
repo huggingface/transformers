@@ -53,6 +53,7 @@ Software:
 - Tensor Parallelism
 - Low-memory Optimizers
 - fp16/bf16 (smaller data)
+- Gradient checkpointing
 
 
 
@@ -163,10 +164,49 @@ Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 ### Anatomy of Model's Memory
 
 The components on GPU memory are the following:
-- the model weights
-- the forward activations saved for gradient computation
-- the gradients
-- the optimizer state
+1. model weights
+2. optimizer states
+3. gradients
+4. forward activations saved for gradient computation
+5. temporary buffers
+6. functionality-specific memory
+
+A typical model trained in mixed precision with AdamW requires 18 bytes per model parameter plus activation memory.
+
+For inference there are no optimizer states and gradients, so we can subtract those. And thus we end up with 6 bytes per model parameter for mixed precision inference, plus activation memory.
+
+Let's look at the details.
+
+#### Model Weights
+
+- 4 bytes * number of parameters for fp32 training
+- 6 bytes * number of parameters for mixed precision training
+
+#### Optimizer States
+
+- 8 bytes * number of parameters for normal AdamW (maintains 2 states)
+- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/facebookresearch/bitsandbytes)
+- 4 bytes * number of parameters for optimizers like SGD (maintains only 1 state)
+
+#### Gradients
+
+- 4 bytes * number of parameters for either fp32 or mixed precision training
+
+#### Forward Activations
+
+- size depends on many factors, the key ones being sequence length, hidden size and batch size.
+
+There are the input and output that are being passed and returned by the forward and the backward functions and the forward activations saved for gradient computation.
+
+#### Temporary Memory
+
+Additionally there are all kinds of temporary variables which get released once the calculation is done, but in the moment these could require additional memory and could push to OOM. Therefore when coding it's crucial to think strategically about such temporary variables and sometimes to explicitly free those as soon as they are no longer needed.
+
+#### Functionality-specific memory
+
+Then your software could have special memory needs. For example, when generating text using beam search, the software needs to maintain multiple copies of inputs and outputs.
+
+
 
 ### `forward` vs `backward` Execution Speed
 
@@ -224,7 +264,22 @@ Some amazing tutorials to read on mixed precision:
 
 pytorch `autocast` which performs AMP include a caching feature, which speed things up by caching fp16-converted values. Here is the full description from this [comment](https://discuss.pytorch.org/t/autocast-and-torch-no-grad-unexpected-behaviour/93475/3):
 
-Autocast maintains a cache of the FP16 casts of model params (leaves). This helps streamline parameter reuse: if the same FP32 param is used in several different FP16list ops, like several matmuls, instead of re-casting the param to FP16 on entering each matmul, the cast will occur on the first matmul, the casted FP16 copy will be cached, and for all later matmuls the FP16 copy will be reused. The cache is maintained only within a particular outermost autocast context. When you exit the autocast context the cache is dropped. For recommended usage, in which autocast wraps the forward pass, and then you exit the context before calling backward(), this means the cache only lasts the duration of the forward pass each iteration, and will be rebuilt next iteration. (The cache of FP16-casted copies MUST be rebuilt each iteration. The FP32 params get updated by the optimizer, so the FP16 copies must be recreated, otherwise the FP16 values will be stale.)
+Autocast maintains a cache of the FP16 casts of model parameters (leaves). This helps streamline parameter reuse: if the same FP32 param is used in several different FP16list ops, like several matmuls, instead of re-casting the param to FP16 on entering each matmul, the cast will occur on the first matmul, the casted FP16 copy will be cached, and for all later matmuls the FP16 copy will be reused. The cache is maintained only within a particular outermost autocast context. When you exit the autocast context the cache is dropped. For recommended usage, in which autocast wraps the forward pass, and then you exit the context before calling backward(), this means the cache only lasts the duration of the forward pass each iteration, and will be rebuilt next iteration. (The cache of FP16-casted copies MUST be rebuilt each iteration. The FP32 parameters get updated by the optimizer, so the FP16 copies must be recreated, otherwise the FP16 values will be stale.)
+
+
+### Gradient Checkpointing
+
+One way to use significantly less GPU memory is to enabled "Gradient Checkpointing" (also known as "activation checkpointing"). When enabled, a lot of memory can be freed at the cost of small decrease in the training speed due to recomputing parts of the graph during back-propagation.
+
+This technique was first shared in the paper: [Training Deep Nets with Sublinear Memory Cost](https://arxiv.org/abs/1604.06174). The paper will also give you the exact details on the savings, but it's in the ballpark of `O(sqrt(n))`, where `n` is the number of feed-forward layers.
+
+To activate this feature in 🤗 Transformers for models that support it, use:
+
+```python
+model.gradient_checkpointing_enable()
+```
+or add `--gradient_checkpointing` to the Trainer arguments.
+
 
 ### Batch sizes
 

@@ -524,7 +524,11 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
 
     def build(self, input_shape):
         if not self.built:
+            input_shape = input_shape.as_list()
+            # Conv1D output shapes are checked at build time since TF 2.7, so we need to account for padding
+            input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
+
             self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
             self.weight_v = self.kernel
 
@@ -1406,7 +1410,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
             >>>     batch["speech"] = speech
             >>>     return batch
 
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
@@ -1516,7 +1520,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             >>>     batch["speech"] = speech
             >>>     return batch
 
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values # Batch size 1
