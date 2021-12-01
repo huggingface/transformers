@@ -30,7 +30,7 @@ def main():
 
     transformers.logging.set_verbosity_error()
     # enables code execution in code_eval metric
-    os.environ["HF_ALLOW_CODE_EVAL"] = args.HF_ALLOW_CODE_EVAL 
+    os.environ["HF_ALLOW_CODE_EVAL"] = args.HF_ALLOW_CODE_EVAL
     # make sure tokenizer plays nice with multiprocessing
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
