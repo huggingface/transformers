@@ -47,7 +47,7 @@ Implementation Notes
 - Available checkpoints can be found in the `model hub <https://huggingface.co/models?search=blenderbot>`__.
 - This is the `default` Blenderbot model class. However, some smaller checkpoints, such as
   ``facebook/blenderbot_small_90M``, have a different architecture and consequently should be used with
-  `BlenderbotSmall <https://huggingface.co/transformers/master/model_doc/blenderbot_small.html>`__.
+  `BlenderbotSmall <blenderbot_small>`__.
 
 
 Usage
