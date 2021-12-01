@@ -56,10 +56,9 @@ is its ``__call__``: you just need to feed your sentence to your tokenizer objec
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
-This returns a dictionary string to list of ints. The `input_ids <glossary.html#input-ids>`__ are the indices
-corresponding to each token in our sentence. We will see below what the `attention_mask
-<glossary.html#attention-mask>`__ is used for and in :ref:`the next section <sentence-pairs>` the goal of
-`token_type_ids <glossary.html#token-type-ids>`__.
+This returns a dictionary string to list of ints. The `input_ids <glossary#input-ids>`__ are the indices corresponding
+to each token in our sentence. We will see below what the `attention_mask <glossary#attention-mask>`__ is used for and
+in :ref:`the next section <preprocessing-pairs-of-sentences>` the goal of `token_type_ids <glossary#token-type-ids>`__.
 
 The tokenizer can decode a list of token ids in a proper sentence:
 
@@ -132,8 +131,8 @@ You can do all of this by using the following options when feeding your list of 
                                [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
 
 It returns a dictionary with string keys and tensor values. We can now see what the `attention_mask
-<glossary.html#attention-mask>`__ is all about: it points out which tokens the model should pay attention to and which
-ones it should not (because they represent padding in this case).
+<glossary#attention-mask>`__ is all about: it points out which tokens the model should pay attention to and which ones
+it should not (because they represent padding in this case).
 
 
 Note that if your model does not have a maximum length associated to it, the command above will throw a warning. You
@@ -166,8 +165,8 @@ This will once again return a dict string to list of ints:
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
-This shows us what the `token_type_ids <glossary.html#token-type-ids>`__ are for: they indicate to the model which part
-of the inputs correspond to the first sentence and which part corresponds to the second sentence. Note that
+This shows us what the `token_type_ids <glossary#token-type-ids>`__ are for: they indicate to the model which part of
+the inputs correspond to the first sentence and which part corresponds to the second sentence. Note that
 `token_type_ids` are not required or handled by all models. By default, a tokenizer will only return the inputs that
 its associated model expects. You can force the return (or the non-return) of any of those special arguments by using
 ``return_input_ids`` or ``return_token_type_ids``.

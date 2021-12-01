@@ -85,4 +85,4 @@ You can open any page of the documentation as a notebook in colab (there is a bu
 
 ## Community notebooks:
 
-More notebooks developed by the community are available [here](https://huggingface.co/transformers/master/community.html#community-notebooks).
+More notebooks developed by the community are available [here](community#community-notebooks).
