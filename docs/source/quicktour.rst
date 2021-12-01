@@ -199,8 +199,7 @@ To apply these steps on a given text, we can just feed it to our tokenizer:
 
 This returns a dictionary string to list of ints. It contains the `ids of the tokens <glossary#input-ids>`__, as
 mentioned before, but also additional arguments that will be useful to the model. Here for instance, we also have an
-`attention mask <glossary#attention-mask>`__ that the model will use to have a better understanding of the
-sequence:
+`attention mask <glossary#attention-mask>`__ that the model will use to have a better understanding of the sequence:
 
 
 .. code-block::

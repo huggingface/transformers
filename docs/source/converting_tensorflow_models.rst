@@ -31,9 +31,9 @@ You can convert any TensorFlow checkpoint for BERT (in particular `the pre-train
 <src/transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py>` script.
 
 This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``) and the associated
-configuration file (``bert_config.json``), and creates a PyTorch model for this configuration, loads the weights
-from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that
-can be imported using ``from_pretrained()`` (see example in :doc:`quicktour` , :prefix_link:`run_glue.py
+configuration file (``bert_config.json``), and creates a PyTorch model for this configuration, loads the weights from
+the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can
+be imported using ``from_pretrained()`` (see example in :doc:`quicktour` , :prefix_link:`run_glue.py
 <examples/pytorch/text-classification/run_glue.py>` ).
 
 You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow
@@ -65,8 +65,8 @@ Convert TensorFlow model checkpoints of ALBERT to PyTorch using the
 <src/transformers/models/albert/convert_albert_original_tf_checkpoint_to_pytorch.py>` script.
 
 The CLI takes as input a TensorFlow checkpoint (three files starting with ``model.ckpt-best``) and the accompanying
-configuration file (``albert_config.json``), then creates and saves a PyTorch model. To run this conversion you
-will need to have TensorFlow and PyTorch installed.
+configuration file (``albert_config.json``), then creates and saves a PyTorch model. To run this conversion you will
+need to have TensorFlow and PyTorch installed.
 
 Here is an example of the conversion process for the pre-trained ``ALBERT Base`` model:
 
