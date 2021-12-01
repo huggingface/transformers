@@ -339,18 +339,20 @@ In 🤗 Transformers the full bf16 inference is enabled by passing `--bf16_full_
 
 #### tf32
 
-The Ampere hardware uses a magical data type called tf32. It's similar to fp32, but instead of 23 bits precision it has only 10 bits (same as fp16). So it uses 19 bits.
+The Ampere hardware uses a magical data type called tf32. It has the same numerical range as fp32 (8-bits), but instead of 23 bits precision it has only 10 bits (same as fp16). In total it uses only 19 bits.
 
-It's magical in a sense that you can use normal fp32 training or inference and by enabling this mode you can get up to 3x throughput improvement. All you need to do is to add this to your code:
+It's magical in a sense that you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput improvement. All you need to do is to add this to your code:
 
 ```
 import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 ```
 
-CUDA will automatically switch to using tf32 instead of fp32 where it's possible.
+When this is done CUDA will automatically switch to using tf32 instead of fp32 where it's possible. This, of course, assumes that the used GPU is from the Ampere series.
 
 Like all cases with reduced precision this may or may not be satisfactory for your needs, so you have to experiment and see. According to [NVIDIA research](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/) the majority of machine learning training shouldn't be impacted and showed the same perplexity and convergence as the fp32 training.
+
+If you're already using fp16 or bf16 mixed precision it may help with the throughput as well.
 
 Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exit.
 
