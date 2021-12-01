@@ -27,8 +27,6 @@
     title: Multi-lingual models
   title: "Using 🤗 Transformers"
 - sections:
-  - local: pretrained_models
-    title: Pretrained models
   - local: examples
     title: Examples
   - local: troubleshooting
