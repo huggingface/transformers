@@ -68,6 +68,10 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
+    tokenizer_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to pretrained tokenizer or tokenizer identifier from huggingface.co/models"},
+    )
     cache_dir: Optional[str] = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
@@ -445,12 +449,20 @@ def main():
     unk_token = data_args.unk_token
     pad_token = data_args.pad_token
 
-    # 3. Next, if no tokenizer file is defined,
+    # 3. Next, let's load the config as we might need it to create
+    # the tokenizer
+    # load config
+    config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+    )
+
+    # 4. Next, if no tokenizer file is defined,
     # we create the vocabulary of the model by extracting all unique characters from
     # the training and evaluation datasets
     # We need to make sure that only first rank saves vocabulary
     # make sure all processes wait until vocab is created
     tokenizer_name_or_path = model_args.tokenizer_name_or_path
+    tokenizer_type_hints = {}
     if tokenizer_name_or_path is None:
         # save vocab in training output dir
         tokenizer_name_or_path = training_args.output_dir
@@ -475,28 +487,25 @@ def main():
                 with open(vocab_file, "w") as file:
                     json.dump(vocab_dict, file)
 
-        # 4. Now we can instantiate the configuration, feature extractor, tokenizer and model
-        # Note for distributed training, the .from_pretrained methods guarantee that only
-        # one local process can concurrently download model & vocab.
+        # if tokenizer has just been created
+        # it is defined by `tokenizer_class` if present in config else by `model_type`
+        tokenizer_type_hints = {
+            "config": config if config.tokenizer_class is not None else None,
+            "tokenizer_type": config.model_type if config.tokenizer_class is None else None
+        }
 
-        # load config
-        config = AutoConfig.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
-        )
-
-        # tokenizer is defined by `tokenizer_class` if present in config else by `model_type`
-    config_for_tokenizer = config if config.tokenizer_class is not None else None
-    tokenizer_type = config.model_type if config.tokenizer_class is None else None
+    # 5. Now we can instantiate the feature extractor, tokenizer and model
+    # Note for distributed training, the .from_pretrained methods guarantee that only
+    # one local process can concurrently download model & vocab.
 
     # load feature_extractor, tokenizer and create processor
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
-        config=config_for_tokenizer,
-        tokenizer_type=tokenizer_type,
         unk_token=unk_token,
         pad_token=pad_token,
         word_delimiter_token=word_delimiter_token,
         use_auth_token=data_args.use_auth_token,
+        **tokenizer_type_hints
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
@@ -535,7 +544,7 @@ def main():
     if model_args.freeze_feature_extractor:
         model.freeze_feature_extractor()
 
-    # 5. Now we preprocess the datasets including loading the audio, resampling and normalization
+    # 6. Now we preprocess the datasets including loading the audio, resampling and normalization
     # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
     # so that we just need to set the correct target sampling rate and normalize the input
     # via the `feature_extractor`
@@ -592,7 +601,7 @@ def main():
 
         vectorized_datasets = vectorized_datasets.remove_columns("input_length")
 
-    # 6. Next, we can prepare the training.
+    # 7. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
     # instantiate a data collator and the trainer
 
@@ -636,7 +645,7 @@ def main():
         tokenizer=processor.feature_extractor,
     )
 
-    # 7. Finally, we can start training
+    # 8. Finally, we can start training
 
     # Training
     if training_args.do_train:
