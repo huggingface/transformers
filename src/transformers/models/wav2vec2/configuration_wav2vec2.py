@@ -101,29 +101,30 @@ class Wav2Vec2Config(PretrainedConfig):
             `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
             <https://arxiv.org/abs/1904.08779>`__.
         mask_time_prob (:obj:`float`, `optional`, defaults to 0.05):
-            Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
-            masked. At most ``ceil(mask_time_prob * sequence_length) * mask_time_length`` feature vectors will be
-            masked along the time axis. Note that overlap may decrease the total amount of masked vectors. This is only
-            relevant if ``apply_spec_augment is True``.
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independ masks over the axis. If
+            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            masked, `mask_time_prob` should be ``prob_vector_start*mask_time_length`` Note that overlap may decrease
+            the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment is True``.
         mask_time_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the time axis.
         mask_time_min_masks (:obj:`int`, `optional`, defaults to 2),:
-            The minimum number of feature vectors along the time axis which will be masked each time step,
-            irrespectively of ``mask_time_prob``. Note that 1 mask is of length ``mask_time_length`` and therefore
-            setting ``mask_time_min_masks=n`` will cause at minimum approximately ``n*mask_time_length`` feature
-            vectors to be masked (assuming no overlap).
+            The minimum number of masks of length ``mask_feature_length`` generated along the time axis, each time
+            step, irrespectively of ``mask_feature_prob``. Only relevant if
+            ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''
         mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
-            Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
-            be masked. At most ``ceil(mask_feature_prob * sequence_length) * mask_feature_length`` feature vectors will
-            be masked along the feature axis. Note that overlap may decrease the total amount of masked vectors. This
-            is only relevant if ``apply_spec_augment is True``.
+            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independ masks over
+            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            span to be masked, `mask_feature_prob` should be ``prob_vector_start*mask_feature_length`` Note that
+            overlap may decrease the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment
+            is True``.
         mask_feature_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the feature axis.
         mask_feature_min_masks (:obj:`int`, `optional`, defaults to 0),:
-            The minimum number of feature vectors along the feature axis which will be masked each time step,
-            irrespectively of ``mask_feature_prob``. Note that 1 mask is of length ``mask_feature_length`` and
-            therefore setting ``mask_feature_min_masks=n`` will cause at minimum approximately
-            ``n*mask_feature_length`` feature vectors to be masked (assuming no overlap).
+            The minimum number of masks of length ``mask_feature_length`` generated along the feature axis, each time
+            step, irrespectively of ``mask_feature_prob``. Only relevant if
+            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
         num_codevectors_per_group (:obj:`int`, `optional`, defaults to 320):
             Number of entries in each quantization codebook (group).
         num_codevector_groups (:obj:`int`, `optional`, defaults to 2):

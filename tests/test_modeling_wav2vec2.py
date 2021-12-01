@@ -855,26 +855,34 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
 
     def test_compute_mask_indices_low_prob(self):
-        # with these settings there's a 0.001*100)=10% chance a dimension is padded
-        # (due to probabilistic rounding)
-        batch_size = 1000
+        # with these settings num_masked_spans=0.5, which means probabilistic rounding
+        # ensures that in 5 out of 10 method calls, num_masked_spans=0, and in
+        # the other 5 out of 10, cases num_masked_spans=1
+        n_trials = 100
+        batch_size = 4
         sequence_length = 100
-        mask_prob = 0.001
+        mask_prob = 0.05
         mask_length = 10
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
-        mask = torch.from_numpy(mask).to(torch_device)
+        count_dimensions_masked = 0
+        count_dimensions_not_masked = 0
 
-        num_masks = torch.sum(mask, dim=1)
-        num_dimensions_masked = torch.where(num_masks >= 1)[0].shape[0]
-        num_dimensions_non_masked = batch_size - num_dimensions_masked
+        for _ in range(n_trials):
+            mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+            mask = torch.from_numpy(mask).to(torch_device)
 
-        # as we test for at least 1 masked dimension and at least 1 non-masked dimension
-        # this test could fail with probability:
-        #   p(no_mask)^batch_size + p(mask)^batch_size
-        # = .9^1000 + .1^1000 = 1.75-46
-        self.assertGreater(num_dimensions_masked, 0)
-        self.assertGreater(num_dimensions_non_masked, 0)
+            num_masks = torch.sum(mask).item()
+
+            if num_masks > 0:
+                count_dimensions_masked += 1
+            else:
+                count_dimensions_not_masked += 1
+
+        # as we test for at least 10 masked dimension and at least
+        # 10 non-masked dimension, this test could fail with probability:
+        # P(100 coin flips, at most 9 heads) = 1.66e-18
+        self.assertGreater(count_dimensions_masked, int(n_trials * 0.1))
+        self.assertGreater(count_dimensions_not_masked, int(n_trials * 0.1))
 
     def test_compute_mask_indices_overlap(self):
         batch_size = 4
@@ -885,11 +893,9 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
         mask = torch.from_numpy(mask).to(torch_device)
 
-        # According to the settings above we would expect ceil(0.5 * 80) * 4 = 160
-        # masked vectors. Because of overlap, total number of masked vectors will not
-        # have to add up to that number, and we also will not exceed the sequence length.
+        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in mask.sum(axis=-1):
-            self.assertTrue(int(batch_sum) <= sequence_length)
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
     def test_compute_mask_indices_attn_mask_overlap(self):
         batch_size = 4
@@ -906,7 +912,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask = torch.from_numpy(mask).to(torch_device)
 
         for batch_sum in mask.sum(axis=-1):
-            self.assertTrue(int(batch_sum) <= sequence_length)
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
         self.assertTrue(mask[:2, sequence_length // 2 :].sum() == 0)
 
