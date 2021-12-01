@@ -577,7 +577,7 @@ def main():
 
         # region Optimizer, loss and LR scheduling
         # Scheduler and math around the number of training steps.
-        num_update_steps_per_epoch = len(train_dataset) // training_args.per_device_train_batch_size
+        num_update_steps_per_epoch = len(train_dataset) // total_train_batch_size
         num_train_steps = training_args.num_train_epochs * num_update_steps_per_epoch
         optimizer, lr_schedule = create_optimizer(
             init_lr=training_args.learning_rate, num_train_steps=num_train_steps, num_warmup_steps=0

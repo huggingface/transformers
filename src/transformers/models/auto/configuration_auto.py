@@ -30,10 +30,13 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("imagegpt", "ImageGPTConfig"),
+        ("qdqbert", "QDQBertConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
         ("trocr", "TrOCRConfig"),
         ("fnet", "FNetConfig"),
         ("segformer", "SegformerConfig"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoderConfig"),
         ("gptj", "GPTJConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("beit", "BeitConfig"),
@@ -111,6 +114,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -182,10 +187,13 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("imagegpt", "ImageGPT"),
+        ("qdqbert", "QDQBert"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
         ("trocr", "TrOCR"),
         ("fnet", "FNet"),
         ("segformer", "SegFormer"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoder"),
         ("gptj", "GPT-J"),
         ("beit", "BEiT"),
         ("rembert", "RemBERT"),

@@ -97,7 +97,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.3",
+    "deepspeed>=0.5.7",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
@@ -144,6 +144,7 @@ _deps = [
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "librosa",
+    "markdown!=3.3.5",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -279,7 +280,7 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8")
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
 
 extras["all"] = (
     extras["tf"]
@@ -296,6 +297,7 @@ extras["all"] = (
 
 extras["docs_specific"] = deps_list(
     "docutils",
+    "markdown",
     "recommonmark",
     "sphinx",
     "sphinx-markdown-tables",

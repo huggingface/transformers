@@ -102,7 +102,7 @@ def get_angles(pos, i, d_model):
     return pos * angle_rates
 
 
-def positional_encoding(position, d_model, dtype):
+def positional_encoding(position, d_model):
     # create the sinusoidal pattern for the positional encoding
     angle_rads = get_angles(np.arange(position)[:, np.newaxis], np.arange(d_model)[np.newaxis, :], d_model)
 
@@ -114,8 +114,7 @@ def positional_encoding(position, d_model, dtype):
 
     pos_encoding = angle_rads[np.newaxis, ...]
 
-    # cast to dtype
-    return jnp.array(pos_encoding, dtype=dtype)
+    return jnp.array(pos_encoding)
 
 
 class FlaxEmbeddings(nn.Module):
@@ -129,17 +128,15 @@ class FlaxEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.dim,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         if not self.config.sinusoidal_pos_embds:
             self.position_embeddings = nn.Embed(
                 self.config.max_position_embeddings,
                 self.config.dim,
                 embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-                dtype=self.dtype,
             )
         else:
-            self.pos_encoding = positional_encoding(self.config.max_position_embeddings, self.config.dim, self.dtype)
+            self.pos_encoding = positional_encoding(self.config.max_position_embeddings, self.config.dim)
         self.LayerNorm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.dropout)
 
@@ -153,6 +150,8 @@ class FlaxEmbeddings(nn.Module):
             position_embeds = self.position_embeddings(position_ids.astype("i4"))
         else:
             position_embeds = self.pos_encoding[:, :seq_length, :]
+            # explictly cast the positions here, since self.embed_positions are not registered as parameters
+            position_embeds = position_embeds.astype(inputs_embeds.dtype)
 
         # Sum all embeddings
         hidden_states = inputs_embeds + position_embeds
@@ -289,10 +288,10 @@ class FlaxTransformerBlock(nn.Module):
         ), f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
 
         self.attention = FlaxMultiHeadSelfAttention(self.config, dtype=self.dtype)
-        self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12)
+        self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
 
         self.ffn = FlaxFFN(self.config, dtype=self.dtype)
-        self.output_layer_norm = nn.LayerNorm(epsilon=1e-12)
+        self.output_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
 
     def __call__(
         self,
@@ -412,8 +411,11 @@ class FlaxDistilBertLMDecoder(nn.Module):
         self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
     def __call__(self, inputs, kernel):
+        inputs = jnp.asarray(inputs, self.dtype)
+        kernel = jnp.asarray(kernel, self.dtype)
         y = lax.dot_general(inputs, kernel, (((inputs.ndim - 1,), (0,)), ((), ())))
-        y = y + self.bias
+        bias = jnp.asarray(self.bias, self.dtype)
+        y = y + bias
         return y
 
 

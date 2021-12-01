@@ -170,27 +170,44 @@ With `chunks=1` you end up with the naive MP, which is very inefficient. With a 
 
 While the diagram shows that there is a bubble of "dead" time that can't be parallelized because the last `forward` stage has to wait for `backward` to complete the pipeline, the purpose of finding the best value for `chunks` is to enable a high concurrent GPU utilization across all participating GPUs which translates to minimizing the size of the bubble.
 
-Problems:
+There are 2 groups of solutions - the traditional Pipeline API and the more modern solutions that make things much easier for the end user.
+
+Traditional Pipeline API solutions:
+- PyTorch
+- FairScale
+- DeepSpeed
+- Megatron-LM
+
+Modern solutions:
+- Varuna
+- Sagemaker
+
+Problems with traditional Pipeline API solutions:
 - have to modify the model quite heavily, because Pipeline requires one to rewrite the normal flow of modules into a `nn.Sequential` sequence of the same, which may require changes to the design of the model.
 - currently the Pipeline API is very restricted. If you had a bunch of python variables being passed in the very first stage of the Pipeline, you will have to find a way around it. Currently, the pipeline interface requires either a single Tensor or a tuple of Tensors as the only input and output. These tensors must have a batch size as the very first dimension, since pipeline is going to chunk the mini batch into micro-batches. Possible improvements are being discussed here https://github.com/pytorch/pytorch/pull/50693
-- have to arrange each layer so that the output of one model becomes an input to the other model
+- conditional control flow at the level of pipe stages is not possible - e.g., Encoder-Decoder models like T5 require special workarounds to handle a conditional encoder stage.
+- have to arrange each layer so that the output of one model becomes an input to the other model.
+
+We are yet to experiment with Varuna and SageMaker but their papers report that they have overcome the list of problems mentioned above and that they require much smaller changes to the user's model.
 
 Implementations:
 - [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
 - [FairScale](https://fairscale.readthedocs.io/en/latest/tutorials/pipe.html)
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 
 🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive PP support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
 
 Other approaches:
 
-DeepSpeed and SageMaker use the concept of an [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
+DeepSpeed, Varuna and SageMaker use the concept of an [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
 ![interleaved-pipeline-execution](imgs/parallelism-sagemaker-interleaved-pipeline.png)
 
 Here the bubble (idle time) is further minimized by prioritizing backward passes.
 
-According to [the same document](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html), it might be able to automate the non `nn.Sequential` model conversion to pipeline. The only problem is that this is currently only available at AWS, so you can't run it on your own hardware.
+Varuna further tries to improve the schedule by using simulations to discover the most efficient scheduling.
 
 
 ## Tensor Parallelism
@@ -220,12 +237,15 @@ Special considerations: TP requires very fast network, and therefore it's not ad
 This section is based on the original much more [detailed TP overview](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
 by [@anton-l](https://github.com/anton-l).
 
+SageMaker combines TP with DP for a more efficient processing.
+
 Alternative names:
 - DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
 
 Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 
 🤗 Transformers status:
 - core: not yet implemented in the core
@@ -247,6 +267,8 @@ Since each dimension requires at least 2 GPUs, here you'd need at least 4 GPUs.
 Implementations:
 - [DeepSpeed](https://github.com/microsoft/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
 
 🤗 Transformers status: not yet implemented
 
@@ -264,6 +286,8 @@ Since each dimension requires at least 2 GPUs, here you'd need at least 8 GPUs.
 Implementations:
 - [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
 
