@@ -118,63 +118,63 @@ PerceiverFeatureExtractor
 PerceiverTextPreprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverTextPreprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverTextPreprocessor
     :members: 
 
 
 PerceiverImagePreprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverImagePreprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor
     :members: 
 
 
 PerceiverOneHotPreprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverOneHotPreprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverOneHotPreprocessor
     :members: 
 
 
 PerceiverAudioPreprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverAudioPreprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverAudioPreprocessor
     :members: 
 
 
 PerceiverMultimodalPreprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverMultimodalPreprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor
     :members: 
 
 
 PerceiverProjectionPostprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverProjectionPostprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverProjectionPostprocessor
     :members: 
 
 
 PerceiverAudioPostprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverAudioPostprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverAudioPostprocessor
     :members: 
 
 
 PerceiverClassificationPostprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverClassificationPostprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverClassificationPostprocessor
     :members: 
 
 
 PerceiverMultimodalPostprocessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverMultimodalPostprocessor
+.. autoclass:: transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPostprocessor
     :members: 
 
 
