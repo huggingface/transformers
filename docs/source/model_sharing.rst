@@ -71,7 +71,7 @@ Transformers:
 
 .. code-block:: bash
 
-    transformers-cli login
+    huggingface-cli login
 
 It will store your access token in the Hugging Face cache folder (by default :obj:`~/.cache/`).
 
@@ -178,27 +178,27 @@ users to clone it and you (and your organization members) to push to it.
 
 You can create a model repo directly from `the /new page on the website <https://huggingface.co/new>`__.
 
-Alternatively, you can use the ``transformers-cli``. The next steps describe that process:
+Alternatively, you can use the ``huggingface-cli``. The next steps describe that process:
 
 Go to a terminal and run the following command. It should be in the virtual environment where you installed 🤗
-Transformers, since that command :obj:`transformers-cli` comes from the library.
+Transformers, since that command :obj:`huggingface-cli` comes from the library.
 
 .. code-block:: bash
 
-    transformers-cli login
+    huggingface-cli login
 
 
 Once you are logged in with your model hub credentials, you can start building your repositories. To create a repo:
 
 .. code-block:: bash
 
-    transformers-cli repo create your-model-name
+    huggingface-cli repo create your-model-name
 
 If you want to create a repo under a specific organization, you should add a `--organization` flag:
 
 .. code-block:: bash
 
-    transformers-cli repo create your-model-name --organization your-org-name
+    huggingface-cli repo create your-model-name --organization your-org-name
 
 This creates a repo on the model hub, which can be cloned.
 
@@ -389,13 +389,13 @@ First you need to install `git-lfs` in the environment used by the notebook:
     sudo apt-get install git-lfs
 
 Then you can use either create a repo directly from `huggingface.co <https://huggingface.co/>`__ , or use the
-:obj:`transformers-cli` to create it:
+:obj:`huggingface-cli` to create it:
 
 
 .. code-block:: bash
 
-    transformers-cli login
-    transformers-cli repo create your-model-name
+    huggingface-cli login
+    huggingface-cli repo create your-model-name
 
 Once it's created, you can clone it and configure it (replace username by your username on huggingface.co):
 
