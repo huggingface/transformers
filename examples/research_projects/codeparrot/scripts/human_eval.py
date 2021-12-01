@@ -29,7 +29,9 @@ def main():
     args = parser.parse_args()
 
     transformers.logging.set_verbosity_error()
-    os.environ["HF_ALLOW_CODE_EVAL"] = args.HF_ALLOW_CODE_EVAL
+    # enables code execution in code_eval metric
+    os.environ["HF_ALLOW_CODE_EVAL"] = args.HF_ALLOW_CODE_EVAL 
+    # make sure tokenizer plays nice with multiprocessing
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     if args.num_workers is None:
