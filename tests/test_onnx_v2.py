@@ -11,6 +11,7 @@ from transformers import (  # LongformerConfig,; T5Config,
     GPT2Config,
     GPTNeoConfig,
     LayoutLMConfig,
+    MarianConfig,
     MBartConfig,
     RobertaConfig,
     XLMRobertaConfig,
@@ -25,6 +26,7 @@ from transformers.models.distilbert import DistilBertOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.gpt_neo import GPTNeoOnnxConfig
 from transformers.models.layoutlm import LayoutLMOnnxConfig
+from transformers.models.marian import MarianOnnxConfig
 from transformers.models.mbart import MBartOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
 
@@ -196,6 +198,7 @@ if is_torch_available():
         GPT2Model,
         GPTNeoModel,
         LayoutLMModel,
+        MarianModel,
         MBartModel,
         RobertaModel,
         XLMRobertaModel,
@@ -214,6 +217,7 @@ if is_torch_available():
         ("LayoutLM", "microsoft/layoutlm-base-uncased", LayoutLMModel, LayoutLMConfig, LayoutLMOnnxConfig),
         ("MBart", "sshleifer/tiny-mbart", MBartModel, MBartConfig, MBartOnnxConfig),
         # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
+        ("Marian", "Helsinki-NLP/opus-mt-en-de", MarianModel, MarianConfig, MarianOnnxConfig),
     }
 
     PYTORCH_EXPORT_WITH_PAST_MODELS = {
