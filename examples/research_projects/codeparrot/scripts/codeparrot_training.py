@@ -18,6 +18,17 @@ from transformers import AdamW, AutoModelForCausalLM, AutoTokenizer, HfArgumentP
 
 
 class ConstantLengthDataset(IterableDataset):
+    """
+    Iterable dataset that returns constant length chunks of tokens from stream of text files.
+        Args:
+            tokenizer (Tokenizer): The processor used for proccessing the data.
+            dataset (dataset.Dataset): Dataset with text files.
+            infinite (bool): If True the iterator is reset after dataset reaches end else stops.
+            seq_length (int): Length of token sequences to return.
+            num_of_sequences: Number of token sequences to keep in buffer.
+            chars_per_token: Number of characters per token used to estimate number of tokens in text buffer.
+    """
+
     def __init__(
         self, tokenizer, dataset, infinite=False, seq_length=1024, num_of_sequences=1024, chars_per_token=3.6
     ):
@@ -141,10 +152,9 @@ def evaluate(args):
 accelerator = Accelerator()
 acc_state = {str(k): str(v) for k, v in accelerator.state.__dict__.items()}
 
-# Hyperparameters (codeparrot-small configs are in comments)
+# Settings
 parser = HfArgumentParser(TrainingArguments)
 args = parser.parse_args()
-# args.save_dir = Path(args.save_dir)
 
 args = Namespace(**vars(args), **acc_state)
 samples_per_step = accelerator.state.num_processes * args.train_batch_size
