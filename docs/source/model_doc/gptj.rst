@@ -119,3 +119,17 @@ GPTJForSequenceClassification
 
 .. autoclass:: transformers.GPTJForSequenceClassification
     :members: forward
+
+
+FlaxGPTJModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxGPTJModel
+    :members: __call__
+
+
+FlaxGPTJForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxGPTJForCausalLM
+    :members: __call__

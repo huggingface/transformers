@@ -39,6 +39,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("bart", "FlaxBartModel"),
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
+        ("gptj", "FlaxGPTJModel"),
         ("electra", "FlaxElectraModel"),
         ("clip", "FlaxCLIPModel"),
         ("vit", "FlaxViTModel"),
@@ -114,6 +115,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
+        ("gptj", "FlaxGPTJForCausalLM"),
     ]
 )
 
