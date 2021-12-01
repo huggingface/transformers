@@ -242,9 +242,10 @@ class T5LayerNorm(nn.Module):
         variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
-        # convert into float16 if necessary
-        if self.weight.dtype == torch.float16:
-            hidden_states = hidden_states.to(torch.float16)
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
         return self.weight * hidden_states
 
 

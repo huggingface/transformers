@@ -53,6 +53,7 @@ from transformers.testing_utils import (
     require_sigopt,
     require_tokenizers,
     require_torch,
+    require_torch_bf16,
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
@@ -475,6 +476,21 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(trainer.model.a, a))
         self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
+
+    @require_torch_gpu
+    @require_torch_bf16
+    def test_mixed_bf16(self):
+
+        # very basic test
+        trainer = get_regression_trainer(learning_rate=0.1, bf16=True)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # --bf16 --half_precision_backend apex can't be used together
+        with self.assertRaises(ValueError):
+            trainer = get_regression_trainer(learning_rate=0.1, bf16=True, half_precision_backend="apex")
+
+        # will add more specific tests once there are some bugs to fix
 
 
 @require_torch
@@ -1322,6 +1338,66 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+
+    @require_torch_gpu
+    @require_torch_bf16
+    def test_bf16_full_eval(self):
+        # note: most of the logic is the same as test_fp16_full_eval
+
+        # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
+        # it's using pretty large safety margins, but small enough to detect broken functionality.
+        debug = 0
+        n_gpus = get_gpu_count()
+
+        bs = 8
+        eval_len = 16 * n_gpus
+        # make the params somewhat big so that there will be enough RAM consumed to be able to
+        # measure things. We should get about 64KB for a+b in fp32
+        a = torch.ones(1000, bs) + 0.001
+        b = torch.ones(1000, bs) - 0.001
+
+        # 1. with mem metrics enabled
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
+        metrics = trainer.evaluate()
+        del trainer
+        gc.collect()
+
+        fp32_init = metrics["init_mem_gpu_alloc_delta"]
+        fp32_eval = metrics["eval_mem_gpu_alloc_delta"]
+
+        if debug:
+            print(f"fp32_init {fp32_init}")
+            print(f"fp32_eval {fp32_eval}")
+
+        # here we expect the model to be preloaded in trainer.__init__ and consume around 64K gpu ram.
+        # perfect world: fp32_init == 64<<10
+        self.assertGreater(fp32_init, 59_000)
+        # after eval should be no extra memory allocated - with a small margin (other than the peak
+        # memory consumption for the forward calculation that gets recovered)
+        # perfect world: fp32_eval == close to zero
+        self.assertLess(fp32_eval, 5_000)
+
+        # 2. with mem metrics disabled
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, bf16_full_eval=True, skip_memory_metrics=False)
+        metrics = trainer.evaluate()
+        bf16_init = metrics["init_mem_gpu_alloc_delta"]
+        bf16_eval = metrics["eval_mem_gpu_alloc_delta"]
+
+        if debug:
+            print(f"bf16_init {bf16_init}")
+            print(f"bf16_eval {bf16_eval}")
+
+        # here we expect the model to not be preloaded in trainer.__init__, so with a small margin it should be close to 0
+        # perfect world: bf16_init == close to zero
+        self.assertLess(bf16_init, 5_000)
+        # here we put the model on device in eval and only `half()` of it, i.e. about 32K,(again we ignore the peak margin which gets returned back)
+        # perfect world: fp32_init == 32<<10
+        self.assertGreater(bf16_eval, 27_000)
+
+        # 3. relative comparison fp32 vs full bf16
+        # should be about half of bf16_init
+        # perfect world: fp32_init/2 == bf16_eval
+        self.assertAlmostEqual(bf16_eval, fp32_init / 2, delta=5_000)
 
     def test_no_wd_param_group(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
