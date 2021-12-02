@@ -21,7 +21,7 @@ import os
 import sys
 from unittest.mock import patch
 
-from transformers.testing_utils import CaptureLogger, TestCasePlus, get_gpu_count, slow
+from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
 
 
 SRC_DIRS = [
@@ -44,6 +44,7 @@ if SRC_DIRS is not None:
     import run_mlm_flax
     import run_qa
     import run_summarization_flax
+    import run_t5_mlm_flax
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -125,7 +126,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["eval_perplexity"], 100)
 
-    # @slow
+    @slow
     def test_run_summarization(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -180,6 +181,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 42)
 
+    @slow
     def test_run_t5_mlm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -206,9 +208,9 @@ class ExamplesTests(TestCasePlus):
         # return
 
         with patch.object(sys, "argv", testargs):
-            run_clm_flax.main()
+            run_t5_mlm_flax.main()
             result = get_results(tmp_dir)
-            self.assertLess(result["eval_accuracy"], 100)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.42)
 
     def test_run_ner(self):
         stream_handler = logging.StreamHandler(sys.stdout)

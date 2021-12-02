@@ -523,9 +523,7 @@ def main():
             model_args.config_name, cache_dir=model_args.cache_dir, vocab_size=len(tokenizer)
         )
     elif model_args.model_name_or_path:
-        config = T5Config.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, vocab_size=len(tokenizer)
-        )
+        config = T5Config.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
