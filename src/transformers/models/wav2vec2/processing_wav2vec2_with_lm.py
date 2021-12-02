@@ -20,11 +20,11 @@ from contextlib import contextmanager
 from multiprocessing import Pool
 from typing import Optional
 
+from ...feature_extraction_utils import FeatureExtractionMixin
+from ...file_utils import is_pyctcdecode_available, requires_backends
+from ...tokenization_utils import PreTrainedTokenizer
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
-from ...file_utils import is_pyctcdecode_available, requires_backends
-from ...feature_extraction_utils import FeatureExtractionMixin
-from ...tokenization_utils import PreTrainedTokenizer
 
 
 if is_pyctcdecode_available():
@@ -33,8 +33,8 @@ if is_pyctcdecode_available():
 
 class Wav2Vec2ProcessorWithLM:
     r"""
-    Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor, a Wav2Vec2 CTC tokenizer and a language model into a single
-    processor for language model boosted speech recognition decoding.
+    Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor, a Wav2Vec2 CTC tokenizer and a language
+    model into a single processor for language model boosted speech recognition decoding.
 
     :class:`~transformers.Wav2Vec2Processor` offers all the functionalities of
     :class:`~transformers.Wav2Vec2FeatureExtractor` and :class:`~transformers.Wav2Vec2CTCTokenizer`. See the docstring
@@ -48,7 +48,9 @@ class Wav2Vec2ProcessorWithLM:
             An instance of :class:`~transformers.Wav2Vec2CTCTokenizer`. The tokenizer is a required input.
     """
 
-    def __init__(self, feature_extractor: FeatureExtractionMixin, tokenizer: PreTrainedTokenizer, decoder: BeamSearchDecoderCTC):
+    def __init__(
+        self, feature_extractor: FeatureExtractionMixin, tokenizer: PreTrainedTokenizer, decoder: BeamSearchDecoderCTC
+    ):
         if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
             raise ValueError(
                 f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
@@ -59,9 +61,7 @@ class Wav2Vec2ProcessorWithLM:
                 f"`tokenizer` has to be of type {Wav2Vec2CTCTokenizer.__class__}, but is {type(tokenizer)}"
             )
         if not isinstance(decoder, BeamSearchDecoderCTC):
-            raise ValueError(
-                f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}"
-            )
+            raise ValueError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
@@ -77,7 +77,9 @@ class Wav2Vec2ProcessorWithLM:
 
             This class method is simply calling
             :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained,`
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained` and pyctcdecode's :meth:`BeamSearchDecoderCTC.save_to_dir`. Please refer to the docstrings of the methods above for more information.
+            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained` and pyctcdecode's
+            :meth:`BeamSearchDecoderCTC.save_to_dir`. Please refer to the docstrings of the methods above for more
+            information.
 
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
