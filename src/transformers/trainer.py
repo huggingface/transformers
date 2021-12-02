@@ -2164,7 +2164,9 @@ class Trainer:
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
+
         self._memory_tracker.stop_and_update_metrics(output.metrics)
+        
         return output.metrics
 
     def predict(
