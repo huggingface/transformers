@@ -344,7 +344,8 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     from .integrations import is_wandb_available
 
-    assert is_wandb_available(), "This function needs wandb installed: `pip " "install wandb`"
+    if not is_wandb_available():
+        raise ImportError("This function needs wandb installed: `pip install wandb`")
     import wandb
 
     # add WandbCallback if not already added in trainer callbacks
@@ -361,7 +362,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
     project = kwargs.pop("project", None)
     name = kwargs.pop("name", None)
     entity = kwargs.pop("entity", None)
-    metric = kwargs.pop("metric", None) or "eval/loss"
+    metric = kwargs.pop("metric", "eval/loss")
 
     sweep_config = trainer.hp_space(None)
     sweep_config["metric"]["goal"] = direction

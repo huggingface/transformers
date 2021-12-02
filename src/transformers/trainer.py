@@ -865,6 +865,7 @@ class Trainer:
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """HP search setup code"""
         self._trial = trial
+
         if self.hp_search_backend is None or trial is None:
             return
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
@@ -2151,6 +2152,7 @@ class Trainer:
         )
 
         self.log(output.metrics)
+
         if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
