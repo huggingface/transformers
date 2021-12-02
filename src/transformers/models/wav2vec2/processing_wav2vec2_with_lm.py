@@ -17,6 +17,8 @@ Speech processor class for Wav2Vec2
 """
 import os
 from contextlib import contextmanager
+from multiprocessing import Pool
+from typing import Optional
 
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
@@ -143,7 +145,6 @@ class Wav2Vec2ProcessorWithLM:
         # get tokens that are present in tokenizer, but not in decoder
         tokenizer_extra_tokens = tokenizer_vocab - set(decoder._alphabet.labels)
 
-        import ipdb; ipdb.set_trace()
         # are any of the extra tokens no special tokenizer tokens?
         if len(tokenizer_extra_tokens - tokenizer_special_tokens) > 0:
             return False
@@ -170,9 +171,11 @@ class Wav2Vec2ProcessorWithLM:
         """
         return self.current_processor.pad(*args, **kwargs)
 
-    def batch_decode(self, logits, **kwargs):
+    def batch_decode(self, logits, num_processes: Optional[str] = None, **kwargs):
         logits_list = [array for array in logits.numpy()]
-        return self.decoder.decode_batch(logits_list=logits_list, **kwargs)
+        pool = Pool(num_processes)
+
+        return self.decoder.decode_batch(pool, logits_list=logits_list, **kwargs)
 
     def decode(self, logits, **kwargs):
         return self.decoder.decode(logits.numpy(), **kwargs)
