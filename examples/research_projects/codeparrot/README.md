@@ -4,7 +4,7 @@
 </p>
 
 ## What is this about?
-This is an open-source effort to train and evaluate code generation models. CodeParrot 🦜 is a GPT-2 model trained from scratch on Python code. The highlights of this repo are:
+This is an open-source effort to train and evaluate code generation models. CodeParrot 🦜 is a GPT-2 model trained from scratch on Python code. The highlights of this project are:
 - initialize and train a GPT-2 language model from scratch for code generation
 - train a custom tokenizer adapted for Python code
 - clean and deduplicate a large (>100GB) dataset with `datasets`
