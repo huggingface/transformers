@@ -105,6 +105,7 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 5
             --per_device_eval_batch_size 5
             --num_train_epochs 2
+            --logging_steps 2 --eval_steps 2
             --output_dir {tmp_dir}
             --overwrite_output_dir
             """.split()
