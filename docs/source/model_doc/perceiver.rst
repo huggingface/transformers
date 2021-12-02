@@ -45,7 +45,7 @@ performance on Sintel optical flow estimation.*
 Here's a TLDR explaining how Perceiver works:
 
 The main problem with the self-attention mechanism of the Transformer is that the time and memory requirements scale
-quadratically in the sequence length. Hence, models like BERT and RoBERTa are limited to a max sequence length of 512
+quadratically with the sequence length. Hence, models like BERT and RoBERTa are limited to a max sequence length of 512
 tokens. Perceiver aims to solve this issue by, instead of performing self-attention on the inputs, perform it on a set
 of latent variables, and only use the inputs for cross-attention. In this way, the time and memory requirements don't
 depend on the length of the inputs anymore, as one uses a fixed amount of latent variables, like 256 or 512. These are

@@ -35,7 +35,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutputWithCrossAttentions, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
@@ -113,7 +113,7 @@ class PerceiverDecoderOutput(ModelOutput):
 
 
 @dataclass
-class PerceiverMaskedLMOutput(MaskedLMOutput):
+class PerceiverMaskedLMOutput(ModelOutput):
     """
     Base class for Perceiver's masked language model outputs.
 
@@ -136,11 +136,15 @@ class PerceiverMaskedLMOutput(MaskedLMOutput):
             attention softmax, used to compute the weighted average in the cross-attention heads.
     """
 
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class PerceiverClassifierOutput(SequenceClassifierOutput):
+class PerceiverClassifierOutput(ModelOutput):
     """
     Base class for Perceiver's outputs of sequence/image classification models, optical flow and multimodal
     autoencoding.
@@ -164,6 +168,10 @@ class PerceiverClassifierOutput(SequenceClassifierOutput):
             attention softmax, used to compute the weighted average in the cross-attention heads.
     """
 
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -940,7 +948,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1060,7 +1068,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1178,7 +1186,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1311,7 +1319,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
@@ -1490,7 +1498,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         inputs=None,
