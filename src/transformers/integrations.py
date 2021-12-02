@@ -387,7 +387,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
                 logger.warning(
-                    f"Provided metric {metric} not found. This might result in expected sweeps charts. The available metrics are {format_metrics.keys()}"
+                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available metrics are {format_metrics.keys()}"
                 )
         best_score = False
         if best_trial["run_id"] is not None:
