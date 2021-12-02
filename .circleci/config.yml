@@ -102,7 +102,7 @@ jobs:
     run_tests_torch_and_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
