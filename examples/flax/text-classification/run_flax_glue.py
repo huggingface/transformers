@@ -15,6 +15,7 @@
 # limitations under the License.
 """ Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
 import argparse
+import json
 import logging
 import os
 import random
@@ -257,6 +258,13 @@ def glue_eval_data_collator(dataset: Dataset, batch_size: int):
         batch = shard(batch)
 
         yield batch
+
+
+def save_metrics(split, output_dir, metrics):
+    metrics = {f"{split}_{metric_name}": value for metric_name, value in metrics.items()}
+    path = os.path.join(output_dir, f"{split}_results.json")
+    with open(path, "w") as f:
+        json.dump(metrics, f, indent=4, sort_keys=True)
 
 
 def main():
@@ -521,6 +529,10 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+
+    # save the eval metrics in json
+    if jax.process_index() == 0:
+        save_metrics("eval", args.output_dir, eval_metric)
 
 
 if __name__ == "__main__":
