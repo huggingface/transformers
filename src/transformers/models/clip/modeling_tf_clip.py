@@ -138,6 +138,17 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
 
         self.config = config
 
+        self.patch_embedding = tf.keras.layers.Conv2D(
+            filters=self.embed_dim,
+            kernel_size=self.patch_size,
+            strides=self.patch_size,
+            padding="valid",
+            data_format="channels_last",
+            use_bias=False,
+            kernel_initializer=get_initializer(self.config.initializer_range),
+            name="patch_embedding",
+        )
+
     def build(self, input_shape: tf.TensorShape):
 
         # Q: should we use normal initializer?
@@ -147,19 +158,6 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         self.class_embedding = self.add_weight(
             shape=(self.embed_dim,), initializer=initializer, trainable=True, name="class_embedding"
         )
-
-        with tf.name_scope("patch_embedding"):
-
-            # shape = (kernel_size[1], kernel_size[0], in_channels, out_channels)
-            # This is in the inverse order of `torch.nn.Conv2d.weight` format, which is necessary to make weight loading (PT->TF) work.
-            # See `transformers.modeling_tf_pytorch_utils.load_pytorch_weights_in_tf2_model` for more details (places involving `transpose`).
-            # In TensorFlow, `Conv2D.kernel` expects (kernel_size[0], kernel_size[1], in_channels, out_channels),
-            # so we need to perform a transpose (1st & 2nd axes) before using `tf.nn.conv2d` in `self.call`.
-            self.conv_kernel = self.add_weight(
-                shape=(self.patch_size, self.patch_size, 3, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_range),
-                name="kernel",
-            )
 
         with tf.name_scope("position_embedding"):
             self.position_embedding = self.add_weight(
@@ -180,19 +178,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
-        # shape = (kernel_size[0], kernel_size[1], in_channels=num_channels, out_channels=embed_dim)
-        # This is the format `tf.nn.conv2d` expects.
-        filters = tf.transpose(self.conv_kernel, perm=(1, 0, 2, 3))
-
-        # Conv2D
-        # shape = (batch_size, out_height, out_width, out_channels=embed_dim)
-        patch_embeds = tf.nn.conv2d(
-            input=pixel_values,
-            filters=filters,
-            strides=self.patch_size,
-            padding="VALID",
-            data_format="NHWC",
-        )
+        patch_embeds = self.patch_embedding(pixel_values)
 
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
