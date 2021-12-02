@@ -656,6 +656,38 @@ PERCEIVER_START_DOCSTRING = r"""
             weights.
 """
 
+PERCEIVER_MODEL_START_DOCSTRING = r"""
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config (:class:`~transformers.PerceiverConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
+        decoder (`DecoderType`, `optional`):
+            Optional decoder to use to decode the latent representation of the encoder. Examples include
+            `transformers.models.perceiver.modeling_perceiver.PerceiverBasicDecoder`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`.
+        input_preprocessor (`PreprocessorType`, `optional`):
+            Optional input preprocessor to use. Examples include
+            `transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverAudioPreprocessor`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverTextPreprocessor`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor`.
+        output_postprocessor (`PostprocessorType`, `optional`):
+            Optional output postprocessor to use. Examples include
+            `transformers.models.perceiver.modeling_perceiver.PerceiverImagePostprocessor`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverAudioPostprocessor`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationPostprocessor`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverProjectionPostprocessor`,
+            `transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPostprocessor`.
+
+        Note that you can define your own decoders, preprocessors and/or postprocessors to fit your use-case.
+"""
+
 PERCEIVER_INPUTS_DOCSTRING = r"""
     Args:
         inputs (:obj:`torch.FloatTensor`):
@@ -686,10 +718,16 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     """The Perceiver: a scalable, fully attentional architecture.""",
-    PERCEIVER_START_DOCSTRING,
+    PERCEIVER_MODEL_START_DOCSTRING,
 )
 class PerceiverModel(PerceiverPreTrainedModel):
-    def __init__(self, config, decoder=None, input_preprocessor=None, output_postprocessor=None):
+    def __init__(
+        self,
+        config,
+        decoder=None,
+        input_preprocessor: PreprocessorType = None,
+        output_postprocessor: PostprocessorType = None,
+    ):
         super().__init__(config)
         self.config = config
 
