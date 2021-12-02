@@ -11,7 +11,7 @@ This is an open-source effort to train and evaluate code generation models. Code
 - train with `accelerate` on multiple GPUs using data parallelism and mixed precision
 - continuously push checkpoints to the hub with `huggingface_hub`
 - stream the dataset with `datasets` during training to avoid disk bottlenecks
-- apply `code_eval` metric in `datasets` to evaluate on OpenAI's HumanEval benchmark
+- apply the `code_eval` metric in `datasets` to evaluate on [OpenAI's _HumanEval_ benchmark](https://huggingface.co/datasets/openai_humaneval)
 
 ## Installation
 To install the dependencies simply run the following command:
@@ -35,7 +35,7 @@ huggingface-cli login
 The source of the dataset is the GitHub dump available on Google's [BigQuery](https://cloud.google.com/blog/topics/public-datasets/github-on-bigquery-analyze-all-the-open-source-code). The database was queried for all Python files with less than 1MB in size resulting in a 180GB dataset with over 20M files. The dataset is available on the Hugging Face Hub [here](https://huggingface.co/datasets/transformersbook/codeparrot).
 
 ### Preprocessing
-The raw dataset contains many duplications therefore it was deduplicated and filtered using the heuristics proposed in the Codex [paper](https://arxiv.org/abs/2107.03374):
+The raw dataset contains many duplicates. We deduplicated and filtered the dataset using the heuristics proposed in OpenAI's Codex [paper](https://arxiv.org/abs/2107.03374):
 
 - exact deduplication using each file's hash
 - filtering files with max line length > 1000
@@ -49,9 +49,9 @@ To execute the preprocessing run the following command:
 ```bash
 python scripts/preprocessing.py \
 --dataset_name lvwerra/codeparrot \
---output_dir codeparrot-clean \
+--output_dir codeparrot-clean
 ```
-During preprocessing the dataset is downloaded and stored locally as well as caches of the computations. Make sure you have enough free disk space to execute it.
+During preprocessing the dataset is downloaded and stored locally as well as caches of the computations. Make sure you have more than 500GB free disk space to execute it.
 
 ## Tokenizer
 Before training a new model for code we create a new tokenizer that is efficient at code tokenization. To train the tokenizer you can run the following command: 
@@ -71,13 +71,13 @@ python scripts/initialize_model.py \
 --config_name gpt2-large \
 --tokenizer_name lvwerra/codeparrot \
 --model_name codeparrot \
---push_to_hub True\
+--push_to_hub True
 ```
 This will initialize a new model with the architecture and configuration of `gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the the hub.
 
 Now that the dataset, tokenizer, and model are ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/lvwerra/codeparrot-small/) and [1.5B](https://huggingface.co/lvwerra/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.
 
-First you need to configure `accelerate` and login to Weights&Biases:
+First you need to configure `accelerate` and login to Weights & Biases:
 
 ```bash
 acclerate config
@@ -105,7 +105,7 @@ accelerate launch scripts/codeparrot_training.py \
 --save_checkpoint_steps 15000
 ```
 
-Reminder that you can see the full set of possible options with descriptions (for all scripts) by running:
+Recall that you can see the full set of possible options with descriptions (for all scripts) by running:
 
 ```bash
 python scripts/codeparrot_training.py --help
