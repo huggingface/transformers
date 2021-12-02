@@ -618,7 +618,7 @@ class CometCallback(TrainerCallback):
                 logger.info("Automatic Comet.ml online logging enabled")
             elif comet_mode == "OFFLINE":
                 args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
-                experiment = comet_ml.OfflineExperiment(**args)
+                experiment = comet_ml.OfflineExperiment(**experiment_kwargs)
                 logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
             if experiment is not None:
                 experiment._set_model_graph(model, framework="transformers")
