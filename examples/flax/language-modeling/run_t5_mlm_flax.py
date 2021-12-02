@@ -20,6 +20,7 @@ Here is the full list of checkpoints on the hub that can be pretrained by this s
 https://huggingface.co/models?filter=t5
 """
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
+import json
 import logging
 import os
 import sys
@@ -401,7 +402,7 @@ def write_eval_metric(summary_writer, eval_metrics, step):
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
 
-if __name__ == "__main__":
+def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -808,3 +809,33 @@ if __name__ == "__main__":
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
                         repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+
+    # Eval after training
+    if training_args.do_eval:
+        num_eval_samples = len(tokenized_datasets["validation"])
+        eval_samples_idx = jnp.arange(num_eval_samples)
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+
+        eval_metrics = []
+        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+            samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples)
+
+            # Model forward
+            model_inputs = shard(model_inputs.data)
+            metrics = p_eval_step(state.params, model_inputs)
+            eval_metrics.append(metrics)
+
+        # get eval metrics
+        eval_metrics = get_metrics(eval_metrics)
+        eval_metrics = jax.tree_map(lambda metric: jnp.mean(metric).item(), eval_metrics)
+
+        if jax.process_index() == 0:
+            eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}
+            path = os.path.join(training_args.output_dir, "eval_results.json")
+            with open(path, "w") as f:
+                json.dump(eval_metrics, f, indent=4, sort_keys=True)
+
+
+if __name__ == "__main__":
+    main()

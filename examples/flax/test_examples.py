@@ -180,6 +180,36 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 42)
 
+    def test_run_t5_mlm(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_t5_mlm_flax.py
+            --model_name_or_path t5-small
+            --train_file ./tests/fixtures/sample_text.txt
+            --validation_file ./tests/fixtures/sample_text.txt
+            --do_train
+            --do_eval
+            --max_seq_length 128
+            --per_device_train_batch_size 4
+            --per_device_eval_batch_size 4
+            --num_train_epochs 2
+            --logging_steps 2 --eval_steps 2
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            """.split()
+
+        # if torch.cuda.device_count() > 1:
+        # Skipping because there are not enough batches to train the model + would need a drop_last to work.
+        # return
+
+        with patch.object(sys, "argv", testargs):
+            run_clm_flax.main()
+            result = get_results(tmp_dir)
+            self.assertLess(result["eval_accuracy"], 100)
+
     def test_run_ner(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
