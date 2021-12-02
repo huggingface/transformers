@@ -612,8 +612,9 @@ class CometCallback(TrainerCallback):
         if state.is_world_process_zero:
             comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
             experiment = None
+            experiment_kwargs = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
             if comet_mode == "ONLINE":
-                experiment = comet_ml.Experiment(**args)
+                experiment = comet_ml.Experiment(**experiment_kwargs)
                 logger.info("Automatic Comet.ml online logging enabled")
             elif comet_mode == "OFFLINE":
                 args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
