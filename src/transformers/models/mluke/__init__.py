@@ -21,12 +21,12 @@ from typing import TYPE_CHECKING
 from ...file_utils import _LazyModule
 
 
-_import_structure = {
-    "tokenization_mluke": ["MLukeTokenizer"],
-}
+if is_sentencepiece_available():
+    _import_structure["tokenization_mluke"]: ["MLukeTokenizer"]
 
 if TYPE_CHECKING:
-    from .tokenization_mluke import MLukeTokenizer
+    if is_sentencepiece_available():
+        from .tokenization_mluke import MLukeTokenizer
 
 
 else:
