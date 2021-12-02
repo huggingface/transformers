@@ -1974,13 +1974,15 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
         return PerceiverDecoderOutput(logits=logits, cross_attentions=decoder_outputs.cross_attentions)
 
 
-def restructure(modality_sizes, inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
+def restructure(modality_sizes: ModalitySizeType, inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
     """
     Partitions a [B, N, C] tensor into tensors for each modality.
 
     Args:
-        modality_sizes: dict specifying the size of the modality
-        inputs: input tensor
+        modality_sizes
+            dict specifying the size of the modality
+        inputs:
+            input tensor
 
     Returns:
         dict mapping name of modality to its associated tensor.
@@ -2143,11 +2145,6 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
         )
 
 
-#  ------------------------------------------------------------
-#  -------------------  Up/down-sampling  ---------------------
-#  ------------------------------------------------------------
-
-
 class Conv2dSamePadding(nn.Conv2d):
     """
     Conv2d layer with padding="same" support. Source:
@@ -2178,9 +2175,12 @@ class Conv2DDownsample(nn.Module):
         Constructs a Conv2DDownsample model.
 
         Args:
-          in_channels: The number of input channels.
-          out_channels: The number of conv output channels.
-          use_batchnorm: Whether to use batchnorm.
+          in_channels (:obj:`int`, `optional`, defaults to 3):
+            The number of input channels.
+          out_channels (:obj:`int`, `optional`, defaults to 64):
+            The number of conv output channels.
+          use_batchnorm (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to use batchnorm.
         """
         super().__init__()
 
@@ -2191,7 +2191,7 @@ class Conv2DDownsample(nn.Module):
         self.relu = nn.ReLU()
         self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2)
 
-    def forward(self, inputs):
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         out = self.conv(inputs)
         out = self.batchnorm(out)
         out = self.relu(out)
@@ -2413,7 +2413,7 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
 
 
 class PerceiverEmbeddingDecoder(nn.Module):
-    """Module to decode embeddings."""
+    """Module to decode embeddings (for masked language modeling)."""
 
     def __init__(self, config):
         """Constructs the module."""
@@ -2431,19 +2431,18 @@ class PerceiverEmbeddingDecoder(nn.Module):
 
 
 class PerceiverMultimodalPostprocessor(nn.Module):
-    """Multimodal postprocessing for Perceiver."""
+    """
+    Multimodal postprocessing for Perceiver.
 
-    def __init__(self, modalities: Mapping[str, PostprocessorType], input_is_dict: bool = False):
-        """
-        Constructor.
-
-        Args:
-          modalities (:obj:`Dict[str, PostprocessorType]`):`):
+    Args:
+          modalities (:obj:`Dict[str, PostprocessorType]`):
             Dictionary mapping modality name to postprocessor class for that modality.
           input_is_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, input is assumed to be dictionary structured, and outputs keep the same dictionary shape. If
             False, input is a tensor which is sliced up during postprocessing by `modality_sizes`.
-        """
+    """
+
+    def __init__(self, modalities: Mapping[str, PostprocessorType], input_is_dict: bool = False):
         super().__init__()
         self.modalities = nn.ModuleDict(modalities)
         self.input_is_dict = input_is_dict
@@ -2465,7 +2464,15 @@ class PerceiverMultimodalPostprocessor(nn.Module):
 
 
 class PerceiverClassificationPostprocessor(nn.Module):
-    """Classification postprocessing for Perceiver."""
+    """
+    Classification postprocessing for Perceiver. Can be used to convert the decoder output to classification logits.
+
+    Args:
+        config (:obj:`PerceiverConfig`):
+            Model configuration.
+        in_channels (:obj:`int`):
+            Number of channels in the input.
+    """
 
     def __init__(self, config, in_channels):
         super().__init__()
@@ -2477,7 +2484,17 @@ class PerceiverClassificationPostprocessor(nn.Module):
 
 
 class PerceiverAudioPostprocessor(nn.Module):
-    """Audio postprocessing for Perceiver."""
+    """
+    Audio postprocessing for Perceiver. Can be used to convert the decoder output to audio features.
+
+    Args:
+        config (:obj:`PerceiverConfig`):
+            Model configuration.
+        in_channels (:obj:`int`):
+            Number of channels in the input.
+        postproc_type (:obj:`str`, `optional`, defaults to :obj:`"patches"`):
+            Postprocessor type to use. Currently, only "patches" is supported.
+    """
 
     def __init__(self, config, in_channels, postproc_type: str = "patches"):
         super().__init__()
@@ -2495,7 +2512,16 @@ class PerceiverAudioPostprocessor(nn.Module):
 
 
 class PerceiverProjectionPostprocessor(nn.Module):
-    """Projection postprocessing for Perceiver."""
+    """
+    Projection postprocessing for Perceiver. Can be used to convert the project the channels of the decoder output to a
+    lower dimension.
+
+    Args:
+        in_channels (:obj:`int`):
+            Number of channels in the input.
+        out_channels (:obj:`int`):
+            Number of channels in the output.
+    """
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -2514,6 +2540,33 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
     "conv1x1" or "conv". If one adds absolute position embeddings, one must make sure the `num_channels` of the
     position encoding kwargs are set equal to the `out_channels`.
 
+    Args:
+        config (:obj:`PerceiverConfig`):
+            Model configuration.
+        prep_type (:obj:`str`, `optional`, defaults to :obj:`"conv"`):
+            Preprocessing type. Can be "conv1x1", "conv", "patches", "pixels".
+        spatial_downsample (:obj:`int`, `optional`, defaults to 4):
+            Spatial downsampling factor.
+        temporal_downsample (:obj:`int`, `optional`, defaults to 1):
+            Temporal downsampling factor (only relevant in case a time dimension is present).
+        position_encoding_type (:obj:`str`, `optional`, defaults to :obj:`"fourier"`):
+            Position encoding type. Can be "fourier" or "trainable".
+        in_channels (:obj:`int`, `optional`, defaults to 3):
+            Number of channels in the input.
+        out_channels (:obj:`int`, `optional`, defaults to 64):
+            Number of channels in the output.
+        conv_after_patching (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to apply a convolutional layer after patching.
+        conv_after_patching_in_channels (:obj:`int`, `optional`, defaults to 54):
+            Number of channels in the input of the convolutional layer after patching.
+        conv2d_use_batchnorm (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to use batch normalization in the convolutional layer.
+        concat_or_add_pos (:obj:`str`, `optional`, defaults to :obj:`"concat"`):
+            How to concatenate the position encoding to the input. Can be "concat" or "add".
+        project_pos_dim (:obj:`int`, `optional`, defaults to -1):
+            Dimension of the position encoding to project to. If -1, no projection is applied.
+        **position_encoding_kwargs (:obj:`Dict`, `optional`):
+            Keyword arguments for the position encoding.
     """
 
     def __init__(
@@ -2711,7 +2764,13 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
 
 class PerceiverOneHotPreprocessor(AbstractPreprocessor):
-    """One-hot preprocessor for Perceiver Encoder."""
+    """
+    One-hot preprocessor for Perceiver Encoder. Can be used to add a dummy index dimension to the input.
+
+    Args:
+        config (:obj:`PerceiverConfig`):
+            Model configuration.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -2731,7 +2790,27 @@ class PerceiverOneHotPreprocessor(AbstractPreprocessor):
 
 
 class PerceiverAudioPreprocessor(AbstractPreprocessor):
-    """Audio preprocessing for Perceiver Encoder."""
+    """
+    Audio preprocessing for Perceiver Encoder.
+
+    Args:
+        config (:obj:`PerceiverConfig`):
+            Model configuration.
+        prep_type (:obj:`str`, `optional`, defaults to :obj:`"patches"`):
+            Preprocessor type to use. Only "patches" is supported.
+        samples_per_patch (:obj:`int`, `optional`, defaults to 96):
+            Number of samples per patch.
+        position_encoding_type (:obj:`str`, `optional`, defaults to :obj:`"fourier"`):
+            Type of position encoding to use. Can be "trainable" or "fourier".
+        concat_or_add_pos (:obj:`str`, `optional`, defaults to :obj:`"concat"`):
+            How to concatenate the position encoding to the input. Can be "concat" or "add".
+        out_channels (:obj:`int`, `optional`, defaults to 64):
+            Number of channels in the output.
+        project_pos_dim (:obj:`int`, `optional`, defaults to -1):
+            Dimension of the position encoding to project to. If -1, no projection is applied.
+        **position_encoding_kwargs (:obj:`Dict`, `optional`):
+            Keyword arguments for the position encoding.
+    """
 
     def __init__(
         self,
@@ -2813,21 +2892,23 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
 
     Inputs for each modality are preprocessed, then padded with trainable position embeddings to have the same number
     of channels.
+
+    Args:
+        modalities (:obj:`Dict[str, PreprocessorType]`):
+            Dict mapping modality name to preprocessor.
+        mask_probs (:obj:`Dict[str, float]`):
+            Dict mapping modality name to masking probability of that modality.
+        min_padding_size (:obj:`int`, `optional`, defaults to 2):
+            The minimum padding size for all modalities. The final output will have num_channels equal to the maximum
+            channels across all modalities plus min_padding_size.
     """
 
-    def __init__(self, modalities, mask_probs=None, min_padding_size=2):
-        """
-        Constructor.
-
-        Args:
-            modalities (:obj:`Dict[str, PreprocessorType]`):`):
-                Dict mapping modality name to preprocessor.
-            mask_prob (:obj:`Dict[str, float]`):`):
-                Dict mapping modality name to masking probability of that modality.
-            min_padding_size (:obj:`int`, `optional`, defaults to 2):
-                The minimum padding size for all modalities. The final output will have num_channels equal to the
-                maximum channels across all modalities plus min_padding_size.
-        """
+    def __init__(
+        self,
+        modalities: Mapping[str, PreprocessorType],
+        mask_probs: Optional[Mapping[str, float]] = None,
+        min_padding_size: int = 2,
+    ):
         super().__init__()
         self.modalities = modalities
         self.min_padding_size = min_padding_size
@@ -2850,7 +2931,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
 
     def forward(
         self, inputs: Mapping[str, torch.Tensor], pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True
-    ):
+    ) -> PreprocessorOutputType:
         padded = {}
         modality_sizes = {}
         inputs_without_pos = {}
