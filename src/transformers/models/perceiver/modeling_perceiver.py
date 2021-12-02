@@ -915,7 +915,20 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings(
+    """
+Example use of Perceiver for image classification, for tasks such as ImageNet.
+
+This model uses learned position embeddings. In other words, this model is not given any privileged information about
+the structure of images. As shown in the paper, this model can achieve a top-1 accuracy of 72.7 on ImageNet.
+
+`PerceiverForImageClassificationLearned` uses
+`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "conv1x1") to
+preprocess the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to
+decode the latent representation of `~transformers.PerceiverModel` into classification logits.
+""",
+    PERCEIVER_START_DOCSTRING,
+)
 class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1035,7 +1048,17 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Example use of Perceiver for image classification, with Fourier position embeddings. """,
+    """
+Example use of Perceiver for image classification, for tasks such as ImageNet.
+
+This model uses fixed 2D Fourier position embeddings. As shown in the paper, this model can achieve a top-1 accuracy of
+79.0 on ImageNet, and 84.5 when pre-trained on a large-scale dataset (i.e. JFT).
+
+`PerceiverForImageClassificationLearned` uses
+`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "pixels") to
+preprocess the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to
+decode the latent representation of `~transformers.PerceiverModel` into classification logits.
+""",
     PERCEIVER_START_DOCSTRING,
 )
 class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
@@ -1154,7 +1177,20 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings(
+    """
+Example use of Perceiver for image classification, for tasks such as ImageNet.
+
+This model uses a 2D conv+maxpool preprocessing network. As shown in the paper, this model can achieve a top-1 accuracy
+of 82.1 on ImageNet.
+
+`PerceiverForImageClassificationLearned` uses
+`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "conv") to preprocess
+the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to decode the
+latent representation of `~transformers.PerceiverModel` into classification logits.
+""",
+    PERCEIVER_START_DOCSTRING,
+)
 class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1272,7 +1308,20 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for optical flow. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings(
+    """
+Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI. `PerceiverForOpticalFlow` uses
+`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "patches") to
+preprocess the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder` to
+decode the latent representation of `~transformers.PerceiverModel`.
+
+As input, one concatenates 2 subsequent frames along the channel dimension and extract a 3 x 3 patch around each pixel
+(leading to 3 x 3 x 3 x 2 = 54 values for each pixel). Fixed Fourier position encodings are used to encode the position
+of each pixel in the patch. Next, one applies the Perceiver encoder. To decode, one queries the latent representation
+using the same encoding used for the input.
+""",
+    PERCEIVER_START_DOCSTRING,
+)
 class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1332,9 +1381,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the optical flow loss. Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
 
         Returns:
 
@@ -1345,6 +1392,9 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
 
             >>> model = PerceiverForOpticalFlow.from_pretrained('deepmind/optical-flow-perceiver')
 
+            >>> # in the Perceiver IO paper, the authors extract a 3x3 patch around each pixel,
+            >>> # leading to 3 x 3 x 3 = 27 values for each pixel
+            >>> # patches have shape (batch_size, num_frames, num_channels, height, width)
             >>> patches = torch.randn(1, 2, 27, 368, 496)
             >>> outputs = model(inputs=patches)
             >>> logits = outputs.logits
@@ -1378,7 +1428,36 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for multimodal autoencoding. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings(
+    """
+Example use of Perceiver for multimodal (video) autoencoding, for tasks such as Kinetics-700.
+
+`PerceiverForMultimodalAutoencoding` uses
+`transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor` to preprocess the 3 modalities:
+images, audio and class labels. This preprocessor uses modality-specific preprocessors to preprocess every modality
+separately, after which they are concatenated. Trainable position embeddings are used to pad each modality to the same
+number of channels to make concatenation along the time dimension possible. Next, one applies the Perceiver encoder.
+
+`transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` is used to decode the latent
+representation of `~transformers.PerceiverModel`. This decoder uses each modality-specific decoder to construct
+queries. The decoder queries are created based on the inputs after preprocessing. However, autoencoding an entire video
+in a single forward pass is computationally infeasible, hence one only uses parts of the decoder queries to do
+cross-attention with the latent representation. This is determined by the subsampled indices for each modality, which
+can be provided as additional input to the forward pass of `PerceiverForMultimodalAutoencoding`.
+
+`transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` also pads the decoder queries of the
+different modalities to the same number of channels, in order to concatenate them along the time dimension. Next,
+cross-attention is performed with the latent representation of `PerceiverModel`.
+
+Finally, `transformers.models.perceiver.modeling_perceiver.PerceiverMultiModalPostprocessor` is used to turn this
+tensor into an actual video. It first splits up the output into the different modalities, and then applies the
+respective postprocessor for each modality.
+
+Note that, by masking the classification label during evaluation (i.e. simply providing a tensor of zeros for the
+"label" modality), this auto-encoding model becomes a Kinetics 700 video classifier.
+""",
+    PERCEIVER_START_DOCSTRING,
+)
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2009,6 +2088,8 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
     Space to depth transform. Rearranges blocks of spatial data, into depth.
 
     This function assumes the channels to be first, but will place the channels last after transformation.
+
+    Based on https://discuss.pytorch.org/t/is-there-any-layer-like-tensorflows-space-to-depth-function/3487/15.
     """
     if len(frames.shape) == 4:
         batch_size, num_channels, height, width = frames.shape
