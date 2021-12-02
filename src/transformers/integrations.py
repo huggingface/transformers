@@ -611,7 +611,7 @@ class CometCallback(TrainerCallback):
         self._initialized = True
         if state.is_world_process_zero:
             comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
-            args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
+            args["project_name"] = os.getenv("COMET_PROJECT_NAME", "huggingface")
             experiment = None
             if comet_mode == "ONLINE":
                 experiment = comet_ml.Experiment(**args)
