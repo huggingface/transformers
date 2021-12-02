@@ -679,7 +679,7 @@ def main():
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
                         repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
-    
+
     # Eval after training
     if training_args.do_eval:
         eval_metrics = []
@@ -699,7 +699,7 @@ def main():
             eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
         except OverflowError:
             eval_metrics["perplexity"] = float("inf")
-        
+
         if jax.process_index() == 0:
             save_metrics("eval", training_args.output_dir, eval_metrics)
 

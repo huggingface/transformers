@@ -29,14 +29,16 @@ SRC_DIRS = [
     for dirname in [
         "text-classification",
         "language-modeling",
+        "summarization",
     ]
 ]
 sys.path.extend(SRC_DIRS)
 
 
 if SRC_DIRS is not None:
-    import run_flax_glue
     import run_clm_flax
+    import run_flax_glue
+    import run_summarization_flax
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -51,9 +53,9 @@ def get_setup_file():
     return args.f
 
 
-def get_results(output_dir):
+def get_results(output_dir, split="eval"):
     results = {}
-    path = os.path.join(output_dir, "eval_results.json")
+    path = os.path.join(output_dir, f"{split}_results.json")
     if os.path.exists(path):
         with open(path, "r") as f:
             results = json.load(f)
@@ -87,7 +89,6 @@ class ExamplesTests(TestCasePlus):
             run_flax_glue.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
-    
 
     def test_run_clm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -111,10 +112,43 @@ class ExamplesTests(TestCasePlus):
             """.split()
 
         # if torch.cuda.device_count() > 1:
-            # Skipping because there are not enough batches to train the model + would need a drop_last to work.
-            # return
+        # Skipping because there are not enough batches to train the model + would need a drop_last to work.
+        # return
 
         with patch.object(sys, "argv", testargs):
             run_clm_flax.main()
             result = get_results(tmp_dir)
             self.assertLess(result["eval_perplexity"], 100)
+
+    # @slow
+    def test_run_summarization(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_summarization.py
+            --model_name_or_path t5-small
+            --train_file tests/fixtures/tests_samples/xsum/sample.json
+            --validation_file tests/fixtures/tests_samples/xsum/sample.json
+            --test_file tests/fixtures/tests_samples/xsum/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --max_steps=50
+            --warmup_steps=8
+            --do_train
+            --do_eval
+            --do_predict
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --predict_with_generate
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            run_summarization_flax.main()
+            result = get_results(tmp_dir, split="test")
+            self.assertGreaterEqual(result["test_rouge1"], 10)
+            self.assertGreaterEqual(result["test_rouge2"], 2)
+            self.assertGreaterEqual(result["test_rougeL"], 7)
+            self.assertGreaterEqual(result["test_rougeLsum"], 7)
