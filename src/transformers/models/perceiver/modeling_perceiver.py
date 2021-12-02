@@ -916,7 +916,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
 
 
 @add_start_docstrings("""Example use of Perceiver for image classification. """, PERCEIVER_START_DOCSTRING)
-class PerceiverForImageClassification(PerceiverPreTrainedModel):
+class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -969,7 +969,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassification
+            >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationLearned
             >>> from PIL import Image
             >>> import requests
 
@@ -977,7 +977,7 @@ class PerceiverForImageClassification(PerceiverPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver')
-            >>> model = PerceiverForImageClassification.from_pretrained('deepmind/vision-perceiver')
+            >>> model = PerceiverForImageClassificationLearned.from_pretrained('deepmind/vision-perceiver')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)

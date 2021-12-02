@@ -1134,9 +1134,9 @@ if is_torch_available():
     _import_structure["models.perceiver"].extend(
         [
             "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PerceiverForImageClassification",
             "PerceiverForImageClassificationConvProcessing",
             "PerceiverForImageClassificationFourier",
+            "PerceiverForImageClassificationLearned",
             "PerceiverForMaskedLM",
             "PerceiverForMultimodalAutoencoding",
             "PerceiverForOpticalFlow",
@@ -3002,9 +3002,9 @@ if TYPE_CHECKING:
         )
         from .models.perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PerceiverForImageClassification,
             PerceiverForImageClassificationConvProcessing,
             PerceiverForImageClassificationFourier,
+            PerceiverForImageClassificationLearned,
             PerceiverForMaskedLM,
             PerceiverForMultimodalAutoencoding,
             PerceiverForOpticalFlow,

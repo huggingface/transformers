@@ -43,9 +43,9 @@ if is_torch_available():
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
-        PerceiverForImageClassification,
         PerceiverForImageClassificationConvProcessing,
         PerceiverForImageClassificationFourier,
+        PerceiverForImageClassificationLearned,
         PerceiverForMaskedLM,
         PerceiverForMultimodalAutoencoding,
         PerceiverForOpticalFlow,
@@ -144,7 +144,7 @@ class PerceiverModelTester:
             # input mask is only relevant for text inputs
             if self.use_input_mask:
                 input_mask = random_attention_mask([self.batch_size, self.seq_length])
-        elif model_class.__name__ == "PerceiverForImageClassification":
+        elif model_class.__name__ == "PerceiverForImageClassificationLearned":
             config.d_model = 512
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForImageClassificationFourier":
@@ -233,7 +233,7 @@ class PerceiverModelTester:
         # set d_model and num_labels
         config.d_model = 512
         config.num_labels = self.num_labels
-        model = PerceiverForImageClassification(config=config)
+        model = PerceiverForImageClassificationLearned(config=config)
         model.to(torch_device)
         model.eval()
         result = model(inputs, attention_mask=input_mask, labels=image_labels)
@@ -260,7 +260,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         (
             PerceiverModel,
             PerceiverForMaskedLM,
-            PerceiverForImageClassification,
+            PerceiverForImageClassificationLearned,
             PerceiverForImageClassificationConvProcessing,
             PerceiverForImageClassificationFourier,
             PerceiverForOpticalFlow,
@@ -847,7 +847,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         # TODO replace by deepmind/vision-perceiver
         feature_extractor = PerceiverFeatureExtractor()
-        model = PerceiverForImageClassification.from_pretrained("nielsr/vision-perceiver")
+        model = PerceiverForImageClassificationLearned.from_pretrained("nielsr/vision-perceiver")
         model.to(torch_device)
 
         # prepare inputs

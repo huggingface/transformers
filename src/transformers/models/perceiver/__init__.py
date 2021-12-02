@@ -31,9 +31,9 @@ if is_vision_available():
 if is_torch_available():
     _import_structure["modeling_perceiver"] = [
         "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PerceiverForImageClassification",
         "PerceiverForImageClassificationConvProcessing",
         "PerceiverForImageClassificationFourier",
+        "PerceiverForImageClassificationLearned",
         "PerceiverForMaskedLM",
         "PerceiverForMultimodalAutoencoding",
         "PerceiverForOpticalFlow",
@@ -53,9 +53,9 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PerceiverForImageClassification,
             PerceiverForImageClassificationConvProcessing,
             PerceiverForImageClassificationFourier,
+            PerceiverForImageClassificationLearned,
             PerceiverForMaskedLM,
             PerceiverForMultimodalAutoencoding,
             PerceiverForOpticalFlow,

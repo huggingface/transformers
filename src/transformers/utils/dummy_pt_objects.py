@@ -3732,17 +3732,17 @@ class PegasusPreTrainedModel:
 PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class PerceiverForImageClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PerceiverForImageClassificationConvProcessing:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
 class PerceiverForImageClassificationFourier:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverForImageClassificationLearned:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

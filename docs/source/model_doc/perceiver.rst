@@ -192,10 +192,10 @@ PerceiverForMaskedLM
     :members: forward
 
 
-PerceiverForImageClassification
+PerceiverForImageClassificationLearned
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PerceiverForImageClassification
+.. autoclass:: transformers.PerceiverForImageClassificationLearned
     :members: forward
 
 
