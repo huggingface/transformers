@@ -101,17 +101,30 @@ class UniSpeechSatConfig(PretrainedConfig):
             `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
             <https://arxiv.org/abs/1904.08779>`__.
         mask_time_prob (:obj:`float`, `optional`, defaults to 0.05):
-            Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
-            masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature vectors will be
-            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            masked, `mask_time_prob` should be ``prob_vector_start*mask_time_length``. Note that overlap may decrease
+            the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment is True``.
         mask_time_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the time axis.
+        mask_time_min_masks (:obj:`int`, `optional`, defaults to 2),:
+            The minimum number of masks of length ``mask_feature_length`` generated along the time axis, each time
+            step, irrespectively of ``mask_feature_prob``. Only relevant if
+            ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''
         mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
-            Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
-            be masked. Approximately ``mask_time_prob * hidden_size // mask_time_length`` feature vectors will be
-            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            span to be masked, `mask_feature_prob` should be ``prob_vector_start*mask_feature_length``. Note that
+            overlap may decrease the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment
+            is True``.
         mask_feature_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the feature axis.
+        mask_feature_min_masks (:obj:`int`, `optional`, defaults to 0),:
+            The minimum number of masks of length ``mask_feature_length`` generated along the feature axis, each time
+            step, irrespectively of ``mask_feature_prob``. Only relevant if
+            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
         num_codevectors_per_group (:obj:`int`, `optional`, defaults to 320):
             Number of entries in each quantization codebook (group).
         num_codevector_groups (:obj:`int`, `optional`, defaults to 2):
@@ -185,8 +198,10 @@ class UniSpeechSatConfig(PretrainedConfig):
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
+        mask_time_min_masks=2,
         mask_feature_prob=0.0,
         mask_feature_length=10,
+        mask_feature_min_masks=0,
         num_codevectors_per_group=320,
         num_codevector_groups=2,
         contrastive_logits_temperature=0.1,
@@ -249,8 +264,10 @@ class UniSpeechSatConfig(PretrainedConfig):
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
 
         # parameters for pretraining with codevector quantized representations
         self.num_codevectors_per_group = num_codevectors_per_group
