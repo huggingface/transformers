@@ -715,6 +715,9 @@ class TFCLIPModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFCLIPPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -723,6 +726,9 @@ class TFCLIPPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFCLIPTextModel:
@@ -733,6 +739,9 @@ class TFCLIPTextModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFCLIPVisionModel:
     def __init__(self, *args, **kwargs):
@@ -741,6 +750,9 @@ class TFCLIPVisionModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
