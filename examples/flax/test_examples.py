@@ -199,6 +199,7 @@ class ExamplesTests(TestCasePlus):
             --do_eval
             --warmup_steps=2
             --learning_rate=2e-4
+            --logging_steps 2 --eval_steps 2
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=2
             --num_train_epochs={epochs}
@@ -209,7 +210,7 @@ class ExamplesTests(TestCasePlus):
             run_flax_ner.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
-            self.assertLess(result["eval_loss"], 0.5)
+            self.assertGreaterEqual(result["eval_f1"], 0.3)
 
     def test_run_qa(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -228,6 +229,7 @@ class ExamplesTests(TestCasePlus):
             --warmup_steps=2
             --do_train
             --do_eval
+            --logging_steps 2 --eval_steps 2
             --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
