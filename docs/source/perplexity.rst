@@ -42,7 +42,7 @@ Calculating PPL with fixed-length models
 If we weren't limited by a model's context size, we would evaluate the model's perplexity by autoregressively
 factorizing a sequence and conditioning on the entire preceding subsequence at each step, as shown below.
 
-.. image:: imgs/ppl_full.gif
+.. image:: /imgs/ppl_full.gif
     :width: 600
     :alt: Full decomposition of a sequence with unlimited context length
 
@@ -56,7 +56,7 @@ input size is :math:`k`, we then approximate the likelihood of a token :math:`x_
 sequence, a tempting but suboptimal approach is to break the sequence into disjoint chunks and add up the decomposed
 log-likelihoods of each segment independently.
 
-.. image:: imgs/ppl_chunked.gif
+.. image:: /imgs/ppl_chunked.gif
     :width: 600
     :alt: Suboptimal PPL not taking advantage of full available context
 
@@ -67,7 +67,7 @@ have less context at most of the prediction steps.
 Instead, the PPL of fixed-length models should be evaluated with a sliding-window strategy. This involves repeatedly
 sliding the context window so that the model has more context when making each prediction.
 
-.. image:: imgs/ppl_sliding.gif
+.. image:: /imgs/ppl_sliding.gif
     :width: 600
     :alt: Sliding window PPL taking advantage of all available context
 

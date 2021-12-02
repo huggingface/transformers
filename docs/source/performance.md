@@ -225,7 +225,7 @@ Here are the commonly used floating point data types choice of which impacts bot
 
 Here is a diagram that shows how these data types correlate to each other.
 
-![data types](/transformers/_images/tf32-bf16-fp16-fp32.png)
+![data types](/imgs/tf32-bf16-fp16-fp32.png)
 
 (source: [NVIDIA Blog](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/))
 
