@@ -43,6 +43,7 @@ jobs:
         run: |
           git config --global user.name "Hugging Face"
           git config --global user.email transformers@huggingface.co
+          git pull origin main
 
       - name: Make documentation
         run: |
