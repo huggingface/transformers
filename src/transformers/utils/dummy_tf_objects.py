@@ -394,6 +394,9 @@ class TFAutoModelForVision2Seq:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAutoModelWithLMHead:
     def __init__(self, *args, **kwargs):
@@ -2726,6 +2729,9 @@ class TFViTPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
