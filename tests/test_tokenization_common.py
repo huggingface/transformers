@@ -620,7 +620,7 @@ class TokenizerTesterMixin:
         self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
 
     def test_added_tokens_do_lower_case(self):
-        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
+        tokenizers = self.get_tokenizers(do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if not hasattr(tokenizer, "do_lower_case") or not tokenizer.do_lower_case:
@@ -639,10 +639,9 @@ class TokenizerTesterMixin:
                 toks_after_adding = tokenizer.tokenize(text)
                 toks_after_adding2 = tokenizer.tokenize(text2)
 
-                if not isinstance(tokenizer, PreTrainedTokenizerFast):
-                    # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
-                    # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
-                    self.assertEqual(added, 2)
+                # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
+                # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
+                self.assertIn(added, [2, 4])
 
                 self.assertListEqual(toks_after_adding, toks_after_adding2)
                 self.assertTrue(
