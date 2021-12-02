@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import inspect
+import json
 import os
 import re
 from contextlib import contextmanager
@@ -1371,11 +1373,53 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             else:
                                 raise ValueError from e
                     except (UnicodeDecodeError, ValueError):
-                        raise OSError(
-                            f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                            f"at '{resolved_archive_file}'. "
-                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
-                        )
+                        # Check sha256
+                        def sha256(filename, block_size=4096 * 1024):
+                            # Python program to find SHA256 hash string of a file
+
+                            sha256_hash = hashlib.sha256()
+                            with open(filename, "rb") as f:
+                                # Read and update hash string value in blocks of 4Mo
+                                for byte_block in iter(lambda: f.read(block_size), b""):
+                                    sha256_hash.update(byte_block)
+
+                            return sha256_hash.hexdigest()
+
+                        actual_sha = sha256(resolved_archive_file)
+                        metafilename = f"{resolved_archive_file}.json"
+                        try:
+                            with open(metafilename, "r", encoding="utf-8") as f:
+                                data = json.load(f)
+                                # For some reason etag contains quotes, we just want the sha.
+                                expected_sha = data["etag"][1:-1]
+                        except Exception:
+                            expected_sha = None
+
+                        if actual_sha != expected_sha:
+                            logger.warning(
+                                f"Look like a corrupted file is on disk ({actual_sha}!={expected_sha}), attempting to recover by downloading again."
+                            )
+
+                            # Remove corrupted file
+                            os.remove(resolved_archive_file)
+                            # Redownload file
+                            resolved_archive_file = cached_path(
+                                archive_file,
+                                cache_dir=cache_dir,
+                                force_download=force_download,
+                                proxies=proxies,
+                                resume_download=resume_download,
+                                local_files_only=local_files_only,
+                                use_auth_token=use_auth_token,
+                                user_agent=user_agent,
+                            )
+                            state_dict = torch.load(resolved_archive_file, map_location="cpu")
+                        else:
+                            raise OSError(
+                                f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                                f"at '{resolved_archive_file}'. "
+                                "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
+                            )
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
