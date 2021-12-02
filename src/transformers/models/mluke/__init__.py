@@ -24,7 +24,7 @@ _import_structure = {}
 
 
 if is_sentencepiece_available():
-    _import_structure["tokenization_mluke"]: ["MLukeTokenizer"]
+    _import_structure["tokenization_mluke"] = ["MLukeTokenizer"]
 
 if TYPE_CHECKING:
     if is_sentencepiece_available():
