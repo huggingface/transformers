@@ -36,6 +36,7 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -105,6 +106,7 @@ jobs:
           pip install --upgrade pip
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -144,6 +146,7 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -239,6 +242,7 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -294,6 +298,7 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -388,6 +393,7 @@ jobs:
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[testing,deepspeed]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -430,6 +436,7 @@ jobs:
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[testing,deepspeed,fairscale]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
