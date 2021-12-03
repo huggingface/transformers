@@ -51,7 +51,7 @@ To create the package for pypi.
    pip install -i https://testpypi.python.org/pypi transformers
 
    Check you can run the following commands:
-   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))" 
+   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
 
 9. Upload the final version to actual pypi:
@@ -59,7 +59,7 @@ To create the package for pypi.
 
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release, 
+11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
     you need to go back to master before executing this.
 """
 
@@ -275,7 +275,7 @@ extras["codecarbon"] = deps_list("codecarbon")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-timeout", "black", "sacrebleu", "rouge-score", "nltk", "GitPython"
+        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-timeout", "black", "sacrebleu", "rouge-score", "nltk", "GitPython", "pyctcdecode"
     )
     + extras["retrieval"]
     + extras["modelcreation"]

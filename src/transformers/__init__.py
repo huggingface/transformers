@@ -44,6 +44,7 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
+    is_pyctcdecode_available,
     is_pytorch_quantization_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -53,7 +54,6 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
-    is_pyctcdecode_available,
 )
 from .utils import logging
 
@@ -472,7 +472,7 @@ else:
 if is_pyctcdecode_available():
     _import_structure["models.wav2vec2"].append("Wav2Vec2ProcessorWithLM")
 else:
-    from .utils import dummy_pyctcdecode_objects 
+    from .utils import dummy_pyctcdecode_objects
 
     _import_structure["utils.dummy_pyctcdecode_objects"] = [
         name for name in dir(dummy_pyctcdecode_objects) if not name.startswith("_")
