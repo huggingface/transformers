@@ -16,8 +16,6 @@
 
 import copy
 import inspect
-import os
-import random
 import tempfile
 import unittest
 from typing import Dict, List, Tuple
@@ -25,12 +23,12 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 from transformers import PerceiverConfig
-from transformers.file_utils import WEIGHTS_NAME, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -668,81 +666,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                     max_diff = np.amax(np.abs(out_1 - out_2))
                     self.assertLessEqual(max_diff, 1e-5)
 
-    def test_save_load_keys_to_ignore_on_save(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
-            if _keys_to_ignore_on_save is None:
-                continue
-
-            # check the keys are in the original state_dict
-            for k in _keys_to_ignore_on_save:
-                self.assertIn(k, model.state_dict().keys(), "\n".join(model.state_dict().keys()))
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
-                state_dict_saved = torch.load(output_model_file)
-                for k in _keys_to_ignore_on_save:
-                    self.assertNotIn(k, state_dict_saved.keys(), "\n".join(state_dict_saved.keys()))
-
-                # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
-                load_result = model.load_state_dict(state_dict_saved, strict=False)
-                self.assertTrue(
-                    len(load_result.missing_keys) == 0
-                    or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
-                )
-                self.assertTrue(len(load_result.unexpected_keys) == 0)
-
-    def test_save_load_fast_init_to_base(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = MODEL_MAPPING[config.__class__]
-
-        if isinstance(base_class, tuple):
-            base_class = base_class[0]
-
-        for model_class in self.all_model_classes:
-
-            if model_class == base_class:
-                continue
-
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(base_class):
-                pass
-
-            base_class_copy = CopyClass
-
-            # make sure that all keys are expected for test
-            base_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            base_class_copy._init_weights = self._mock_init_weights
-
-            model = model_class(config)
-            state_dict = model.state_dict()
-
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.config.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-
-                for key in model_fast_init.state_dict().keys():
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
             return
@@ -767,19 +690,9 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                     with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
+    def test_save_load_fast_init_from_base(self):
+        pass
 
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):

@@ -855,7 +855,10 @@ class PerceiverModel(PerceiverPreTrainedModel):
                 logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
 
         if not return_dict:
-            return (logits, sequence_output) + encoder_outputs[1:]
+            if logits is not None:
+                return (logits, sequence_output) + encoder_outputs[1:]
+            else:
+                return (sequence_output,) + encoder_outputs[1:]
 
         return PerceiverModelOutput(
             logits=logits,
