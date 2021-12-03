@@ -20,7 +20,7 @@
 import torch
 
 
-print("Torch:", torch.__version__)
+print("Torch version:", torch.__version__)
 print("Cuda available:", torch.cuda.is_available())
 print("Cuda version:", torch.version.cuda)
 print("CuDNN version:", torch.backends.cudnn.version())
