@@ -57,7 +57,7 @@ limitations under the License.
 
 🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as language, vision, and audio. 
 
-These models can perform tasks on texts such as text classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. They can perform tasks on images such as image classification, object detection, segmentation. They can perform tasks on audio such as speech recognition, audio classification and speech-to-text. They can perform tasks on several modalities combined, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, visual question answering, ...
+These models can perform tasks on texts such as text classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. They can perform tasks on images such as image classification, object detection, segmentation. They can perform tasks on audio such as speech recognition and audio classification. They can perform tasks on several modalities combined, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, visual question answering.
 
 🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture is fully standalone and can be modified to enable quick research experiments.
 
