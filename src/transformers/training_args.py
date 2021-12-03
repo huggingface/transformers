@@ -228,7 +228,7 @@ class TrainingArguments:
         fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
-        tf32 (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        tf32 (:obj:`bool`, `optional`):
             Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API
             and it may change.
         local_rank (:obj:`int`, `optional`, defaults to -1):
