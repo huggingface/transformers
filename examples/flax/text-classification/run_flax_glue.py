@@ -260,13 +260,6 @@ def glue_eval_data_collator(dataset: Dataset, batch_size: int):
         yield batch
 
 
-def save_metrics(split, output_dir, metrics):
-    metrics = {f"{split}_{metric_name}": value for metric_name, value in metrics.items()}
-    path = os.path.join(output_dir, f"{split}_results.json")
-    with open(path, "w") as f:
-        json.dump(metrics, f, indent=4, sort_keys=True)
-
-
 def main():
     args = parse_args()
 
@@ -532,7 +525,10 @@ def main():
 
     # save the eval metrics in json
     if jax.process_index() == 0:
-        save_metrics("eval", args.output_dir, eval_metric)
+        eval_metric = {f"eval_{metric_name}": value for metric_name, value in eval_metric.items()}
+        path = os.path.join(args.output_dir, "eval_results.json")
+        with open(path, "w") as f:
+            json.dump(eval_metric, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":

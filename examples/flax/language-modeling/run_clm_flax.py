@@ -220,13 +220,6 @@ def write_eval_metric(summary_writer, eval_metrics, step):
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
 
-def save_metrics(split, output_dir, metrics):
-    metrics = {f"{split}_{metric_name}": value for metric_name, value in metrics.items()}
-    path = os.path.join(output_dir, f"{split}_results.json")
-    with open(path, "w") as f:
-        json.dump(metrics, f, indent=4, sort_keys=True)
-
-
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
 ) -> Callable[[int], jnp.array]:
@@ -701,7 +694,10 @@ def main():
             eval_metrics["perplexity"] = float("inf")
 
         if jax.process_index() == 0:
-            save_metrics("eval", training_args.output_dir, eval_metrics)
+            eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}
+            path = os.path.join(training_args.output_dir, "eval_results.json")
+            with open(path, "w") as f:
+                json.dump(eval_metrics, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":
