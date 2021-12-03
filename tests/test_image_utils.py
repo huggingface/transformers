@@ -15,6 +15,7 @@
 
 import unittest
 
+import datasets
 import numpy as np
 
 from transformers import is_torch_available, is_vision_available
@@ -28,6 +29,7 @@ if is_vision_available():
     import PIL.Image
 
     from transformers import ImageFeatureExtractionMixin
+    from transformers.image_utils import load_image
 
 
 def get_random_image(height, width):
@@ -367,3 +369,68 @@ class ImageFeatureExtractionTester(unittest.TestCase):
             # Check result is consistent with PIL.Image.crop
             cropped_image = feature_extractor.center_crop(image, size)
             self.assertTrue(torch.equal(cropped_tensor, torch.tensor(feature_extractor.to_numpy_array(cropped_image))))
+
+
+@require_vision
+class LoadImageTester(unittest.TestCase):
+    def test_load_img_local(self):
+        img = load_image("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        img_arr = np.array(img)
+
+        self.assertEqual(
+            img_arr.shape,
+            (480, 640, 3),
+        )
+
+    def test_load_img_rgba(self):
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+
+        img = load_image(dataset[0]["file"])  # img with mode RGBA
+        img_arr = np.array(img)
+
+        self.assertEqual(
+            img_arr.shape,
+            (512, 512, 3),
+        )
+
+    def test_load_img_la(self):
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+
+        img = load_image(dataset[1]["file"])  # img with mode LA
+        img_arr = np.array(img)
+
+        self.assertEqual(
+            img_arr.shape,
+            (512, 768, 3),
+        )
+
+    def test_load_img_l(self):
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+
+        img = load_image(dataset[2]["file"])  # img with mode L
+        img_arr = np.array(img)
+
+        self.assertEqual(
+            img_arr.shape,
+            (381, 225, 3),
+        )
+
+    def test_load_img_exif_transpose(self):
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        img_file = dataset[3]["file"]
+
+        img_without_exif_transpose = PIL.Image.open(img_file)
+        img_arr_without_exif_transpose = np.array(img_without_exif_transpose)
+
+        self.assertEqual(
+            img_arr_without_exif_transpose.shape,
+            (333, 500, 3),
+        )
+
+        img_with_exif_transpose = load_image(img_file)
+        img_arr_with_exif_transpose = np.array(img_with_exif_transpose)
+
+        self.assertEqual(
+            img_arr_with_exif_transpose.shape,
+            (500, 333, 3),
+        )

@@ -23,7 +23,7 @@ import re
 PATH_TO_TRANSFORMERS = "src/transformers"
 
 # Matches is_xxx_available()
-_re_backend = re.compile(r"is\_([a-z]*)_available()")
+_re_backend = re.compile(r"is\_([a-z_]*)_available()")
 # Matches from xxx import bla
 _re_single_line_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
 _re_test_backend = re.compile(r"^\s+if\s+is\_[a-z]*\_available\(\)")
@@ -42,6 +42,30 @@ class {0}:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, {1})
 """
+
+PT_DUMMY_PRETRAINED_CLASS = (
+    DUMMY_PRETRAINED_CLASS
+    + """
+    def forward(self, *args, **kwargs):
+        requires_backends(self, {1})
+"""
+)
+
+TF_DUMMY_PRETRAINED_CLASS = (
+    DUMMY_PRETRAINED_CLASS
+    + """
+    def call(self, *args, **kwargs):
+        requires_backends(self, {1})
+"""
+)
+
+FLAX_DUMMY_PRETRAINED_CLASS = (
+    DUMMY_PRETRAINED_CLASS
+    + """
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, {1})
+"""
+)
 
 DUMMY_CLASS = """
 class {0}:
@@ -102,26 +126,36 @@ def read_init():
 
 def create_dummy_object(name, backend_name):
     """Create the code for the dummy object corresponding to `name`."""
-    _pretrained = [
-        "Config",
+    _models = [
         "ForCausalLM",
         "ForConditionalGeneration",
         "ForMaskedLM",
         "ForMultipleChoice",
+        "ForNextSentencePrediction",
         "ForObjectDetection",
         "ForQuestionAnswering",
         "ForSegmentation",
         "ForSequenceClassification",
         "ForTokenClassification",
         "Model",
-        "Tokenizer",
-        "Processor",
     ]
+    _pretrained = ["Config", "Tokenizer", "Processor"]
     if name.isupper():
         return DUMMY_CONSTANT.format(name)
     elif name.islower():
         return DUMMY_FUNCTION.format(name, backend_name)
     else:
+        is_model = False
+        for part in _models:
+            if part in name:
+                is_model = True
+                break
+        if is_model:
+            if name.startswith("TF"):
+                return TF_DUMMY_PRETRAINED_CLASS.format(name, backend_name)
+            if name.startswith("Flax"):
+                return FLAX_DUMMY_PRETRAINED_CLASS.format(name, backend_name)
+            return PT_DUMMY_PRETRAINED_CLASS.format(name, backend_name)
         is_pretrained = False
         for part in _pretrained:
             if part in name:

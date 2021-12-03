@@ -235,14 +235,14 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
-                    "words must of type `List[str]` (single pretokenized example), "
+                    "Words must be of type `List[str]` (single pretokenized example), "
                     "or `List[List[str]]` (batch of pretokenized examples)."
                 )
         else:
             # in case only text is provided => must be words
             if not isinstance(text, (list, tuple)):
                 raise ValueError(
-                    "Words must of type `List[str]` (single pretokenized example), "
+                    "Words must be of type `List[str]` (single pretokenized example), "
                     "or `List[List[str]]` (batch of pretokenized examples)."
                 )
 
@@ -746,7 +746,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 if "bbox" in encoded_inputs:
                     encoded_inputs["bbox"] = [self.pad_token_box] * difference + encoded_inputs["bbox"]
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["bbox"]
+                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input

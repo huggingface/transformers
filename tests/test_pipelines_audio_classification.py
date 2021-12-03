@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_datasets,
     require_tf,
     require_torch,
+    require_torchaudio,
     slow,
 )
 
@@ -35,15 +36,16 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
-    @require_datasets
-    @slow
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        import datasets
-
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=feature_extractor)
 
         # test with a raw waveform
         audio = np.zeros((34000,))
+        audio2 = np.zeros((14000,))
+        return audio_classifier, [audio2, audio]
+
+    def run_pipeline_test(self, audio_classifier, examples):
+        audio2, audio = examples
         output = audio_classifier(audio)
         # by default a model is initialized with num_labels=2
         self.assertEqual(
@@ -61,10 +63,17 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             ],
         )
 
+        self.run_torchaudio(audio_classifier)
+
+    @require_datasets
+    @require_torchaudio
+    def run_torchaudio(self, audio_classifier):
+        import datasets
+
         # test with a local file
         dataset = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        filename = dataset[0]["file"]
-        output = audio_classifier(filename)
+        audio = dataset[0]["audio"]["array"]
+        output = audio_classifier(audio)
         self.assertEqual(
             output,
             [
@@ -84,10 +93,10 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output, decimals=4),
             [
-                {"score": 0.0843, "label": "on"},
-                {"score": 0.0840, "label": "left"},
-                {"score": 0.0837, "label": "off"},
-                {"score": 0.0835, "label": "yes"},
+                {"score": 0.0842, "label": "no"},
+                {"score": 0.0838, "label": "up"},
+                {"score": 0.0837, "label": "go"},
+                {"score": 0.0834, "label": "right"},
             ],
         )
 
@@ -105,12 +114,12 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         audio = np.array(dataset[3]["speech"], dtype=np.float32)
         output = audio_classifier(audio, top_k=4)
         self.assertEqual(
-            nested_simplify(output, decimals=4),
+            nested_simplify(output, decimals=3),
             [
-                {"score": 0.9809, "label": "go"},
-                {"score": 0.0073, "label": "up"},
-                {"score": 0.0064, "label": "_unknown_"},
-                {"score": 0.0015, "label": "down"},
+                {"score": 0.981, "label": "go"},
+                {"score": 0.007, "label": "up"},
+                {"score": 0.006, "label": "_unknown_"},
+                {"score": 0.001, "label": "down"},
             ],
         )
 

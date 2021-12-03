@@ -25,6 +25,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
+from itertools import chain
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -290,7 +291,7 @@ class FlaxDataCollatorForT5MLM:
         start_indices[:, 0] = mask_indices[:, 0]
 
         sentinel_ids = np.where(start_indices != 0, np.cumsum(start_indices, axis=-1), start_indices)
-        sentinel_ids = np.where(sentinel_ids != 0, (sentinel_ids + self.tokenizer.vocab_size - 1), 0)
+        sentinel_ids = np.where(sentinel_ids != 0, (len(self.tokenizer) - sentinel_ids), 0)
         sentinel_ids -= mask_indices - start_indices
 
         return sentinel_ids
@@ -563,7 +564,7 @@ if __name__ == "__main__":
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of expanded_inputs_length.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.

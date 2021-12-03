@@ -24,7 +24,7 @@ from typing import Optional, Tuple
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu_new, silu
 from ...file_utils import (
@@ -83,13 +83,16 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     # del init_params[1]
     init_params = [arr.squeeze() for arr in init_params]
 
-    try:
-        assert model.tokens_embed.weight.shape == init_params[1].shape
-        assert model.positions_embed.weight.shape == init_params[0].shape
-    except AssertionError as e:
-        e.args += (model.tokens_embed.weight.shape, init_params[1].shape)
-        e.args += (model.positions_embed.weight.shape, init_params[0].shape)
-        raise
+    # Check that the token and position embeddings weight dimensions map those of the init parameters.
+    if model.tokens_embed.weight.shape != init_params[1].shape:
+        raise ValueError(
+            f"tokens_embed.weight.shape: {model.tokens_embed.weight.shape} does not match init_param[1].shape: {init_params[1].shape}"
+        )
+
+    if model.positions_embed.weight.shape != init_params[0].shape:
+        raise ValueError(
+            f"positions_embed.weight.shape: {model.positions_embed.weight.shape} does not match init_param[0].shape: {init_params[0].shape}"
+        )
 
     model.tokens_embed.weight.data = torch.from_numpy(init_params[1])
     model.positions_embed.weight.data = torch.from_numpy(init_params[0])
@@ -100,7 +103,8 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
 
     for name, array in zip(names, init_params):  # names[1:n_transfer], init_params[1:n_transfer]):
         name = name[6:]  # skip "model/"
-        assert name[-2:] == ":0"
+        if name[-2:] != ":0":
+            raise ValueError(f"Layer {name} does not end with :0")
         name = name[:-2]
         name = name.split("/")
         pointer = model
@@ -120,20 +124,11 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
                 pointer = pointer[num]
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
+
+        # Ensure that the pointer and array have compatible shapes.
+        if pointer.shape != array.shape:
+            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+
         logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
@@ -143,12 +138,15 @@ ACT_FNS = {"relu": nn.ReLU, "silu": silu, "gelu": gelu_new, "swish": silu}
 
 
 class Attention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False):
+    def __init__(self, nx, n_positions, config, scale=False):
         super().__init__()
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
-        assert n_state % config.n_head == 0
-        self.register_buffer("bias", torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
+        if n_state % config.n_head != 0:
+            raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
+        self.register_buffer(
+            "bias", torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions)
+        )
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -187,7 +185,7 @@ class Attention(nn.Module):
             # Apply the attention mask
             w = w + attention_mask
 
-        w = nn.Softmax(dim=-1)(w)
+        w = nn.functional.softmax(w, dim=-1)
         w = self.attn_dropout(w)
 
         # Mask heads if we want to
@@ -246,10 +244,10 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, config, scale=False):
+    def __init__(self, n_positions, config, scale=False):
         super().__init__()
         nx = config.n_embd
-        self.attn = Attention(nx, n_ctx, config, scale)
+        self.attn = Attention(nx, n_positions, config, scale)
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
@@ -413,10 +411,11 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.tokens_embed = nn.Embedding(config.vocab_size, config.n_embd)
         self.positions_embed = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
+        self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
 
         self.register_buffer("position_ids", torch.arange(config.n_positions))
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.tokens_embed
@@ -542,7 +541,8 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         self.transformer = OpenAIGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -631,7 +631,8 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -752,7 +753,8 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         self.transformer = OpenAIGPTModel(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -802,9 +804,10 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        # Ensure the batch size is > 1 if there is no padding.
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
@@ -821,14 +824,26 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(pooled_logits.view(-1), labels.to(self.dtype).view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output

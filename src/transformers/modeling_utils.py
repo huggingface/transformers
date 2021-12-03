@@ -233,7 +233,7 @@ class ModuleUtilsMixin:
 
         if self.dtype == torch.float16:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
-        elif self.dtype == torch.float32:
+        elif self.dtype in [torch.bfloat16, torch.float32]:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             raise ValueError(
@@ -479,7 +479,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        if getattr(self.config, "gradient_checkpointing", False):
+
+    def post_init(self):
+        """
+        A method executed at the end of each Transformer model initialization, to execute code that needs the model's
+        modules properly initialized (such as weight initialization).
+        """
+        self.init_weights()
+        self._backward_compatibility_gradient_checkpointing()
+
+    def _backward_compatibility_gradient_checkpointing(self):
+        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()
             # Remove the attribute now that is has been consumed, so it's no saved in the config.
             delattr(self.config, "gradient_checkpointing")
@@ -1049,7 +1059,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
-            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
+            for ignore_key in self._keys_to_ignore_on_save:
+                if ignore_key in state_dict.keys():
+                    del state_dict[ignore_key]
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)

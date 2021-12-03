@@ -103,8 +103,8 @@ Here is the code to see all available pretrained models on the hub:
 
 .. code-block:: python
 
-    from huggingface_hub.hf_api import HfApi
-    model_list = HfApi().list_models()
+    from huggingface_hub import list_models
+    model_list = list_models()
     org = "Helsinki-NLP"
     model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
     suffix = [x.split('/')[1] for x in model_ids]

@@ -103,9 +103,9 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
-            Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            :class:`~transformers.PreTrainedTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            For training, :obj:`decoder_input_ids` are automatically created by the model by shifting the :obj:`labels`
+            to the right, replacing -100 by the :obj:`pad_token_id` and prepending them with the
+            :obj:`decoder_start_token_id`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -223,7 +223,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
-        if self.encoder.config.hidden_size != self.decoder.config.hidden_size:
+        # get encoder output hidden size
+        self.encoder_output_dim = getattr(config.encoder, "output_hidden_size", config.encoder.hidden_size)
+        if self.encoder_output_dim != self.decoder.config.hidden_size:
             # encoder outputs might need to be projected to different dimension for decoder
             self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
@@ -424,25 +426,19 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         Examples::
 
             >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2Processor
+            >>> from datasets import load_dataset
             >>> import torch
 
             >>> processor = Speech2Text2Processor.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
             >>> model = SpeechEncoderDecoderModel.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
 
-            >>> # process dataset
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
-
             >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
             >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
             >>> outputs = model(input_values=input_values, decoder_input_ids=decoder_input_ids)
 
-            >>> # generation
+            >>> # inference (generation)
             >>> generated = model.generate(input_values)
             >>> translation = processor.batch_decode(generated)
 
@@ -477,7 +473,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         encoder_hidden_states = encoder_outputs[0]
 
         # project encoder_hidden_states
-        if self.encoder.config.hidden_size != self.decoder.config.hidden_size:
+        if self.encoder_output_dim != self.decoder.config.hidden_size:
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         # compute correct encoder attention mask
