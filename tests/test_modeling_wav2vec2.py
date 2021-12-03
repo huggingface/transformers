@@ -1275,6 +1275,5 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             logits = model(input_values.to(torch_device)).logits
 
         transcription = processor.batch_decode(logits.cpu().numpy()).text
-        import ipdb
 
-        ipdb.set_trace()
+        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
