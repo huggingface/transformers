@@ -19,9 +19,10 @@
 
 import torch
 
-print('Torch:', torch.__version__)
-print('Cuda available:', torch.cuda.is_available())
-print('Cuda version:', torch.version.cuda)
-print('CuDNN version:', torch.backends.cudnn.version())
-print('Number of GPUs available:', torch.cuda.device_count())
-print('NCCL version:', torch.cuda.nccl.version())
+
+print("Torch:", torch.__version__)
+print("Cuda available:", torch.cuda.is_available())
+print("Cuda version:", torch.version.cuda)
+print("CuDNN version:", torch.backends.cudnn.version())
+print("Number of GPUs available:", torch.cuda.device_count())
+print("NCCL version:", torch.cuda.nccl.version())
