@@ -46,7 +46,7 @@ Most users with just 2 GPUs already enjoy the increased training speed up thanks
 ## ZeRO Data Parallel
 
 ZeRO-powered data parallelism (ZeRO-DP) is described on the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
-![DeepSpeed-Image-1](imgs/parallelism-zero.png)
+![DeepSpeed-Image-1](/imgs/parallelism-zero.png)
 
 It can be difficult to wrap one's head around it, but in reality the concept is quite simple. This is just the usual DataParallel (DP), except, instead of replicating the full model params, gradients and optimizer states, each GPU stores only a slice of it.  And then at run-time when the full layer params are needed just for the given layer, all GPUs synchronize to give each other parts that they miss - this is it.
 
@@ -122,7 +122,7 @@ Implementations:
 
 - [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
 - [Fairscale](https://github.com/facebookresearch/fairscale/#optimizer-state-sharding-zero) ZeRO-DP stages 1+2+3
-- [`transformers` integration](https://huggingface.co/transformers/master/main_classes/trainer.html#trainer-integrations)
+- [`transformers` integration](main_classes/trainer#trainer-integrations)
 
 ## Naive Model Parallel (Vertical) and Pipeline Parallel
 
@@ -150,7 +150,7 @@ Pipeline Parallel (PP) is almost identical to a naive MP, but it solves the GPU 
 
 The following illustration from the [GPipe paper](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.html) shows the naive MP on the top, and PP on the bottom:
 
-![mp-pp](imgs/parallelism-gpipe-bubble.png)
+![mp-pp](/imgs/parallelism-gpipe-bubble.png)
 
 It's easy to see from the bottom diagram how PP has less dead zones, where GPUs are idle. The idle parts are referred to as the "bubble".
 
@@ -170,27 +170,44 @@ With `chunks=1` you end up with the naive MP, which is very inefficient. With a 
 
 While the diagram shows that there is a bubble of "dead" time that can't be parallelized because the last `forward` stage has to wait for `backward` to complete the pipeline, the purpose of finding the best value for `chunks` is to enable a high concurrent GPU utilization across all participating GPUs which translates to minimizing the size of the bubble.
 
-Problems:
+There are 2 groups of solutions - the traditional Pipeline API and the more modern solutions that make things much easier for the end user.
+
+Traditional Pipeline API solutions:
+- PyTorch
+- FairScale
+- DeepSpeed
+- Megatron-LM
+
+Modern solutions:
+- Varuna
+- Sagemaker
+
+Problems with traditional Pipeline API solutions:
 - have to modify the model quite heavily, because Pipeline requires one to rewrite the normal flow of modules into a `nn.Sequential` sequence of the same, which may require changes to the design of the model.
 - currently the Pipeline API is very restricted. If you had a bunch of python variables being passed in the very first stage of the Pipeline, you will have to find a way around it. Currently, the pipeline interface requires either a single Tensor or a tuple of Tensors as the only input and output. These tensors must have a batch size as the very first dimension, since pipeline is going to chunk the mini batch into micro-batches. Possible improvements are being discussed here https://github.com/pytorch/pytorch/pull/50693
-- have to arrange each layer so that the output of one model becomes an input to the other model
+- conditional control flow at the level of pipe stages is not possible - e.g., Encoder-Decoder models like T5 require special workarounds to handle a conditional encoder stage.
+- have to arrange each layer so that the output of one model becomes an input to the other model.
+
+We are yet to experiment with Varuna and SageMaker but their papers report that they have overcome the list of problems mentioned above and that they require much smaller changes to the user's model.
 
 Implementations:
 - [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
 - [FairScale](https://fairscale.readthedocs.io/en/latest/tutorials/pipe.html)
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 
 🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive PP support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
 
 Other approaches:
 
-DeepSpeed and SageMaker use the concept of an [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
-![interleaved-pipeline-execution](imgs/parallelism-sagemaker-interleaved-pipeline.png)
+DeepSpeed, Varuna and SageMaker use the concept of an [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
+![interleaved-pipeline-execution](/imgs/parallelism-sagemaker-interleaved-pipeline.png)
 
 Here the bubble (idle time) is further minimized by prioritizing backward passes.
 
-According to [the same document](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html), it might be able to automate the non `nn.Sequential` model conversion to pipeline. The only problem is that this is currently only available at AWS, so you can't run it on your own hardware.
+Varuna further tries to improve the schedule by using simulations to discover the most efficient scheduling.
 
 
 ## Tensor Parallelism
@@ -204,21 +221,23 @@ The main building block of any transformer is a fully connected `nn.Linear` foll
 Following the Megatron's paper notation, we can write the dot-product part of it as `Y = GeLU(XA)`, where `X` and `Y` are the input and output vectors, and `A` is the weight matrix.
 
 If we look at the computation in matrix form, it's easy to see how the matrix multiplication can be split between multiple GPUs:
-![Parallel GEMM](imgs/parallelism-tp-parallel_gemm.png)
+![Parallel GEMM](/imgs/parallelism-tp-parallel_gemm.png)
 
 If we split the weight matrix `A` column-wise across `N` GPUs and perform matrix multiplications `XA_1` through `XA_n` in parallel, then we will end up with `N` output vectors `Y_1, Y_2, ..., Y_n` which can be fed into `GeLU` independently:
-![independent GeLU](imgs/parallelism-tp-independent-gelu.png)
+![independent GeLU](/imgs/parallelism-tp-independent-gelu.png)
 
 Using this principle, we can update an MLP of arbitrary depth, without the need for any synchronization between GPUs until the very end, where we need to reconstruct the output vector from shards. The Megatron-LM paper authors provide a helpful illustration for that:
-![parallel shard processing](imgs/parallelism-tp-parallel_shard_processing.png)
+![parallel shard processing](/imgs/parallelism-tp-parallel_shard_processing.png)
 
 Parallelizing the multi-headed attention layers is even simpler, since they are already inherently parallel, due to having multiple independent heads!
-![parallel self-attention](imgs/parallelism-tp-parallel_self_attention.png)
+![parallel self-attention](/imgs/parallelism-tp-parallel_self_attention.png)
 
 Special considerations: TP requires very fast network, and therefore it's not advisable to do TP across more than one node. Practically, if a node has 4 GPUs, the highest TP degree is therefore 4. If you need a TP degree of 8, you need to use nodes that have at least 8 GPUs.
 
 This section is based on the original much more [detailed TP overview](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530).
 by [@anton-l](https://github.com/anton-l).
+
+SageMaker combines TP with DP for a more efficient processing.
 
 Alternative names:
 - DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
@@ -226,6 +245,7 @@ Alternative names:
 Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 
 🤗 Transformers status:
 - core: not yet implemented in the core
@@ -238,7 +258,7 @@ Implementations:
 
 The following diagram from the DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/) demonstrates how one combines DP with PP.
 
-![dp-pp-2d](imgs/parallelism-zero-dp-pp.png)
+![dp-pp-2d](/imgs/parallelism-zero-dp-pp.png)
 
 Here it's important to see how DP rank 0 doesn't see GPU2 and DP rank 1 doesn't see GPU3. To DP there is just GPUs 0 and 1 where it feeds data as if there were just 2 GPUs. GPU0 "secretly" offloads some of its load to GPU2 using PP. And GPU1 does the same by enlisting GPU3 to its aid.
 
@@ -247,6 +267,8 @@ Since each dimension requires at least 2 GPUs, here you'd need at least 4 GPUs.
 Implementations:
 - [DeepSpeed](https://github.com/microsoft/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
 
 🤗 Transformers status: not yet implemented
 
@@ -255,7 +277,7 @@ Implementations:
 
 To get an even more efficient training a 3D parallelism is used where PP is combined with TP and DP. This can be seen in the following diagram.
 
-![dp-pp-tp-3d](imgs/parallelism-deepspeed-3d.png)
+![dp-pp-tp-3d](/imgs/parallelism-deepspeed-3d.png)
 
 This diagram is from a blog post [3D parallelism: Scaling to trillion-parameter models](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/), which is a good read as well.
 
@@ -264,6 +286,8 @@ Since each dimension requires at least 2 GPUs, here you'd need at least 8 GPUs.
 Implementations:
 - [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
 
@@ -318,7 +342,7 @@ We have 10 batches of 512 length. If we parallelize them by attribute dimension 
 
 It is similar with tensor model parallelism or naive layer-wise model parallelism.
 
-![flex-flow-soap](imgs/parallelism-flexflow.jpeg)
+![flex-flow-soap](/imgs/parallelism-flexflow.jpeg)
 
 The significance of this framework is that it takes resources like (1) GPU/TPU/CPU vs. (2) RAM/DRAM vs. (3) fast-intra-connect/slow-inter-connect and it automatically optimizes all these  algorithmically deciding which parallelisation to use where.
 

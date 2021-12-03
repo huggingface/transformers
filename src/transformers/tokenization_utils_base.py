@@ -1747,6 +1747,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             init_configuration,
             *init_inputs,
             use_auth_token=use_auth_token,
+            cache_dir=cache_dir,
             **kwargs,
         )
 
@@ -1758,6 +1759,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_configuration,
         *init_inputs,
         use_auth_token=None,
+        cache_dir=None,
         **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -1784,6 +1786,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
+            init_kwargs.pop("auto_map", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -1796,7 +1799,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
             try:
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, use_auth_token=use_auth_token)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    use_auth_token=use_auth_token,
+                    cache_dir=cache_dir,
+                )
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
                 # skip if an error occurred.
@@ -2028,6 +2035,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_class.endswith("Fast") and tokenizer_class != "PreTrainedTokenizerFast":
             tokenizer_class = tokenizer_class[:-4]
         tokenizer_config["tokenizer_class"] = tokenizer_class
+        if getattr(self, "_auto_map", None) is not None:
+            tokenizer_config["auto_map"] = self._auto_map
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
@@ -2730,11 +2739,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         first_element = required_input[0]
         if isinstance(first_element, (list, tuple)):
             # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
-            index = 0
-            while len(required_input[index]) == 0:
-                index += 1
-            if index < len(required_input):
-                first_element = required_input[index][0]
+            for item in required_input:
+                if len(item) != 0:
+                    first_element = item[0]
+                    break
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and _is_tensorflow(first_element):
@@ -3012,7 +3020,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Returns:
             :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
-            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing_tokens if
+            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing tokens if
             a pair of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:

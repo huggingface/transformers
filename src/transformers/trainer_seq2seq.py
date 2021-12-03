@@ -196,9 +196,12 @@ class Seq2SeqTrainer(Trainer):
         if self.args.prediction_loss_only:
             return (loss, None, None)
 
-        labels = inputs["labels"]
-        if labels.shape[-1] < gen_kwargs["max_length"]:
-            labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
+        if has_labels:
+            labels = inputs["labels"]
+            if labels.shape[-1] < gen_kwargs["max_length"]:
+                labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
+        else:
+            labels = None
 
         return (loss, generated_tokens, labels)
 

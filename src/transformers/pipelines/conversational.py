@@ -243,7 +243,7 @@ class ConversationalPipeline(Pipeline):
             return outputs[0]
         return outputs
 
-    def preprocess(self, conversation: Conversation) -> Dict[str, Any]:
+    def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
         if not isinstance(conversation, Conversation):
             raise ValueError("ConversationalPipeline, expects Conversation as inputs")
         if conversation.new_user_input is None:
@@ -274,18 +274,18 @@ class ConversationalPipeline(Pipeline):
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"][:, -trim:]
         conversation = model_inputs.pop("conversation")
-        model_inputs["max_length"] = max_length
+        generate_kwargs["max_length"] = max_length
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1
         else:
             start_position = n
-        return {"output_ids": output_ids[0, start_position:], "conversation": conversation}
+        return {"output_ids": output_ids[:, start_position:], "conversation": conversation}
 
     def postprocess(self, model_outputs, clean_up_tokenization_spaces=True):
         output_ids = model_outputs["output_ids"]
         answer = self.tokenizer.decode(
-            output_ids,
+            output_ids[0],
             skip_special_tokens=True,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )

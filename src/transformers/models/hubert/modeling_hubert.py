@@ -40,7 +40,7 @@ from .configuration_hubert import HubertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "HubertConfig"
-_CHECKPOINT_FOR_DOC = "facebook/hubert-base-ls960"
+_CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 _SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
@@ -69,13 +69,16 @@ def _compute_mask_indices(
     on CPU as part of the preprocessing during training.
 
     Args:
-        shape: the the shape for which to compute masks.
-            should be of size 2 where first element is batch size and 2nd is timesteps
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
-            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
-            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
+        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
+               the first element is the batch size and the second element is the length of the axis to span.
+        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
+                    independently generated mask spans of length `mask_length` is computed by
+                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
+                    actual percentage will be smaller.
         mask_length: size of the mask
         min_masks: minimum number of masked spans
+        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
+                        each batch dimension.
     """
     batch_size, sequence_length = shape
 
@@ -84,9 +87,11 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
+            f" and `sequence_length`: {sequence_length}`"
         )
 
+    # epsilon is used for probabilistic rounding
     epsilon = np.random.rand(1).item()
 
     def compute_num_masked_span(input_length):
@@ -113,15 +118,21 @@ def _compute_mask_indices(
 
     max_num_masked_span = compute_num_masked_span(sequence_length)
 
+    if max_num_masked_span == 0:
+        return spec_aug_mask
+
     for input_length in input_lengths:
         # compute num of masked spans for this input
         num_masked_span = compute_num_masked_span(input_length)
+
         # get random indices to mask
         spec_aug_mask_idx = np.random.choice(
             np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
         )
 
         # pick first sampled index that will serve as a dummy index to pad vector
+        # to ensure same dimension for all batches due to probabilistic rounding
+        # Picking first sample just pads those vectors twice.
         dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
@@ -137,6 +148,7 @@ def _compute_mask_indices(
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
 
+    # add offset to the starting indexes so that that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
     offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
         batch_size, max_num_masked_span * mask_length
@@ -291,20 +303,22 @@ class HubertFeatureExtractor(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
+        self._requires_grad = True
 
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
+        self._requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
-        if self.training:
+        if self._requires_grad and self.training:
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self.gradient_checkpointing and self.training:
+            if self._requires_grad and self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -388,7 +402,8 @@ class HubertAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -474,7 +489,10 @@ class HubertAttention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -893,7 +911,8 @@ class HubertModel(HubertPreTrainedModel):
         else:
             self.encoder = HubertEncoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
@@ -923,7 +942,7 @@ class HubertModel(HubertPreTrainedModel):
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 attention_mask=attention_mask,
-                min_masks=2,
+                min_masks=self.config.mask_time_min_masks,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -934,6 +953,7 @@ class HubertModel(HubertPreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
+                min_masks=self.config.mask_feature_min_masks,
             )
             mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
             mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
@@ -1033,7 +1053,8 @@ class HubertForCTC(HubertPreTrainedModel):
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
@@ -1141,7 +1162,8 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
