@@ -12,12 +12,21 @@ specific language governing permissions and limitations under the License.
 
 # 🤗 Transformers
 
-State-of-the-art Natural Language Processing for Jax, Pytorch and TensorFlow
+State-of-the-art Machine Learning for Jax, Pytorch and TensorFlow
 
-🤗 Transformers (formerly known as _pytorch-transformers_ and _pytorch-pretrained-bert_) provides general-purpose
-architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural
-Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between Jax,
-PyTorch and TensorFlow.
+🤗 Transformers (formerly known as _pytorch-transformers_ and _pytorch-pretrained-bert_) provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio.
+
+These models can applied on:
+
+* 📝 Text, for tasks like text classification, information extraction, question answering, summarization, translation, text generation, in over 100 languages.
+* 🖼️ Images, for tasks like image classification, object detection, and segmentation.
+* 🗣️ Audio, for tasks like speech recognition and audio classification.
+
+Transformer models can also perform tasks on **several modalities combined**, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
+
+🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture is fully standalone and can be modified to enable quick research experiments.
+
+🤗 Transformers is backed by the three most popular deep learning libraries — [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) and [TensorFlow](https://www.tensorflow.org/) — with a seamless integration between them. It's straightforward to train your models with one before loading them for inference with the other.
 
 This is the documentation of our repository [transformers](https://github.com/huggingface/transformers). You can
 also follow our [online course](https://huggingface.co/course) that teaches how to use this library, as well as the
@@ -31,29 +40,26 @@ other libraries developed by Hugging Face and the Hub.
 
 ## Features
 
-- High performance on NLU and NLG tasks
-- Low barrier to entry for educators and practitioners
+1. Easy-to-use state-of-the-art models:
+    - High performance on natural language understanding & generation, computer vision, and audio tasks.
+    - Low barrier to entry for educators and practitioners.
+    - Few user-facing abstractions with just three classes to learn.
+    - A unified API for using all our pretrained models.
 
-State-of-the-art NLP for everyone:
+1. Lower compute costs, smaller carbon footprint:
+    - Researchers can share trained models instead of always retraining.
+    - Practitioners can reduce compute time and production costs.
+    - Dozens of architectures with over 20,000 pretrained models, some in more than 100 languages.
 
-- Deep learning researchers
-- Hands-on practitioners
-- AI/ML/NLP teachers and educators
+1. Choose the right framework for every part of a model's lifetime:
+    - Train state-of-the-art models in 3 lines of code.
+    - Move a single model between TF2.0/PyTorch/JAX frameworks at will.
+    - Seamlessly pick the right framework for training, evaluation and production.
 
-Lower compute costs, smaller carbon footprint:
-
-- Researchers can share trained models instead of always retraining
-- Practitioners can reduce compute time and production costs
-- 8 architectures with over 30 pretrained models, some in more than 100 languages
-
-Choose the right framework for every part of a model's lifetime:
-
-- Train state-of-the-art models in 3 lines of code
-- Deep interoperability between Jax, Pytorch and TensorFlow models
-- Move a single model between Jax/PyTorch/TensorFlow frameworks at will
-- Seamlessly pick the right framework for training, evaluation, production
-
-The support for Jax is still experimental (with a few models right now), expect to see it grow in the coming months!
+1. Easily customize a model or an example to your needs:
+    - We provide examples for each architecture to reproduce the results published by its original authors.
+    - Model internals are exposed as consistently as possible.
+    - Model files can be used independently of the library for quick experiments.
 
 [All the model checkpoints](https://huggingface.co/models) are seamlessly integrated from the huggingface.co [model
 hub](https://huggingface.co) where they are uploaded directly by [users](https://huggingface.co/users) and
