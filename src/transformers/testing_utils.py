@@ -504,9 +504,9 @@ def require_torch_bf16(test_case):
 
 
 def require_torch_tf32(test_case):
-    """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.9."""
+    """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7."""
     if not is_torch_tf32_available():
-        return unittest.skip("test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.9")(test_case)
+        return unittest.skip("test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")(test_case)
     else:
         return test_case
 

@@ -361,7 +361,7 @@ def is_torch_tf32_available():
             return False
         if int(torch.version.cuda.split(".")[0]) < 11:
             return False
-        if not version.parse(torch.__version__) >= version.parse("1.9"):
+        if not version.parse(torch.__version__) >= version.parse("1.7"):
             return False
 
         return True
