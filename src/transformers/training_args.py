@@ -229,7 +229,7 @@ class TrainingArguments:
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
         tf32 (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to enable tf32 mode, available in Ampere and newer GPU architectures.
+            Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API and it may change.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         xpu_backend (:obj:`str`, `optional`):
@@ -553,7 +553,7 @@ class TrainingArguments:
     )
     tf32: bool = field(
         default=True,
-        metadata={"help": "Whether to enable tf32 mode, available in Ampere and newer GPU architectures"},
+        metadata={"help": "Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API and it may change."},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
     xpu_backend: str = field(
