@@ -956,6 +956,115 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
+@add_start_docstrings("""Example use of Perceiver for text classification. """, PERCEIVER_START_DOCSTRING)
+class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+
+        self.num_labels = config.num_labels
+        self.perceiver = PerceiverModel(
+            config,
+            input_preprocessor=PerceiverTextPreprocessor(config),
+            decoder=PerceiverClassificationDecoder(
+                config,
+                num_channels=config.d_latents,
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
+                use_query_residual=True,
+            ),
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=PerceiverClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import PerceiverTokenizer, PerceiverForSequenceClassification
+
+            >>> tokenizer = PerceiverTokenizer.from_pretrained('deepmind/vision-perceiver')
+            >>> model = PerceiverForSequenceClassification.from_pretrained('deepmind/vision-perceiver')
+
+            >>> text = "hello world"
+            >>> inputs = tokenizer(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return PerceiverClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+
 @add_start_docstrings(
     """
 Example use of Perceiver for image classification, for tasks such as ImageNet.

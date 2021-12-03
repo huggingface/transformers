@@ -25,6 +25,7 @@ import numpy as np
 from transformers import PerceiverConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
+from transformers.models.perceiver.modeling_perceiver import PerceiverForSequenceClassification
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -137,7 +138,7 @@ class PerceiverModelTester:
         if model_class is None or model_class.__name__ == "PerceiverModel":
             inputs = floats_tensor([self.batch_size, self.seq_length, config.d_model], self.vocab_size)
             return config, inputs, input_mask, sequence_labels, token_labels
-        elif model_class.__name__ == "PerceiverForMaskedLM":
+        elif model_class.__name__ in ["PerceiverForMaskedLM", "PerceiverForSequenceClassification"]:
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
             # input mask is only relevant for text inputs
             if self.use_input_mask:
@@ -171,33 +172,33 @@ class PerceiverModelTester:
 
         return config, inputs, input_mask, sequence_labels, token_labels
 
-    def prepare_config_and_inputs_masked_lm(self):
-        inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+    # def prepare_config_and_inputs_masked_lm(self):
+    #     inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+    #     input_mask = None
+    #     if self.use_input_mask:
+    #         input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        token_labels = None
-        if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+    #     token_labels = None
+    #     if self.use_labels:
+    #         token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
-        config = self.get_config()
+    #     config = self.get_config()
 
-        return config, inputs, input_mask, token_labels
+    #     return config, inputs, input_mask, token_labels
 
-    def prepare_config_and_inputs_image_classification(self):
-        inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+    # def prepare_config_and_inputs_classification(self):
+    #     inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        input_mask = None
+    #     input_mask = None
 
-        image_labels = None
-        if self.use_labels:
-            image_labels = ids_tensor([self.batch_size], self.num_labels)
+    #     classification_labels = None
+    #     if self.use_labels:
+    #         classification_labels = ids_tensor([self.batch_size], self.num_labels)
 
-        config = self.get_config()
+    #     config = self.get_config()
 
-        return config, inputs, input_mask, image_labels
+    #     return config, inputs, input_mask, classification_labels
 
     def get_config(self):
         return PerceiverConfig(
@@ -220,21 +221,56 @@ class PerceiverModelTester:
             num_labels=self.num_labels,
         )
 
-    def create_and_check_for_masked_lm(self, config, inputs, input_mask, token_labels):
+    def create_and_check_for_masked_lm(self, config, inputs, input_mask, sequence_labels, token_labels):
         model = PerceiverForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(inputs, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_for_image_classification(self, config, inputs, input_mask, image_labels):
+    def create_and_check_for_sequence_classification(self, config, inputs, input_mask, sequence_labels, token_labels):
+        # set num_labels
+        config.num_labels = self.num_labels
+        model = PerceiverForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_image_classification_learned(
+        self, config, inputs, input_mask, sequence_labels, token_labels
+    ):
         # set d_model and num_labels
         config.d_model = 512
         config.num_labels = self.num_labels
         model = PerceiverForImageClassificationLearned(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(inputs, attention_mask=input_mask, labels=image_labels)
+        result = model(inputs, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_image_classification_fourier(
+        self, config, inputs, input_mask, sequence_labels, token_labels
+    ):
+        # set d_model and num_labels
+        config.d_model = 261
+        config.num_labels = self.num_labels
+        model = PerceiverForImageClassificationFourier(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_image_classification_conv(
+        self, config, inputs, input_mask, sequence_labels, token_labels
+    ):
+        # set d_model and num_labels
+        config.d_model = 322
+        config.num_labels = self.num_labels
+        model = PerceiverForImageClassificationConvProcessing(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
@@ -263,6 +299,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             PerceiverForImageClassificationFourier,
             PerceiverForOpticalFlow,
             PerceiverForMultimodalAutoencoding,
+            PerceiverForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -309,12 +346,30 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
 
     def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_masked_lm()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class=PerceiverForMaskedLM)
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_image_classification()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class=PerceiverForSequenceClassification)
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_for_image_classification_learned(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            model_class=PerceiverForImageClassificationLearned
+        )
+        self.model_tester.create_and_check_for_image_classification_learned(*config_and_inputs)
+
+    def test_for_image_classification_fourier(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            model_class=PerceiverForImageClassificationFourier
+        )
+        self.model_tester.create_and_check_for_image_classification_fourier(*config_and_inputs)
+
+    def test_for_image_classification_conv(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            model_class=PerceiverForImageClassificationConvProcessing
+        )
+        self.model_tester.create_and_check_for_image_classification_conv(*config_and_inputs)
 
     def test_model_common_attributes(self):
         for model_class in self.all_model_classes:
@@ -676,6 +731,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             if model_class in [
                 PerceiverForOpticalFlow,
                 PerceiverForMultimodalAutoencoding,
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
             ]:
                 continue
