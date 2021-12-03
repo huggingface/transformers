@@ -48,16 +48,16 @@ limitations under the License.
 </h4>
 
 <h3 align="center">
-    <p>State-of-the-art Machine Learning for Jax, PyTorch and TensorFlow</p>
+    <p>State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow</p>
 </h3>
 
 <h3 align="center">
     <a href="https://hf.co/course"><img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/course_banner.png"></a>
 </h3>
 
-🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as Natural Language Processing, Computer Vision, and Audio. 
+🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as language, vision, and audio. 
 
-These models can perform tasks on texts such as classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. They can perform tasks on images such as object detection, image segmentation, optical character recognition. They can perform tasks on audio such as speech recognition, audio classification and speech to text.
+These models can perform tasks on texts such as text classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. They can perform tasks on images such as image classification, object detection, segmentation. They can perform tasks on audio such as speech recognition, audio classification and speech-to-text. They can perform tasks on several modalities combined, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, visual question answering, ...
 
 🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture is fully standalone and can be modified to enable quick research experiments.
 
@@ -67,7 +67,9 @@ These models can perform tasks on texts such as classification, information extr
 
 You can test most of our models directly on their pages from the [model hub](https://huggingface.co/models). We also offer [private model hosting, versioning, & an inference API](https://huggingface.co/pricing) for public and private models.
 
-Here are a few examples, in NLP:
+Here are a few examples:
+
+ in NLP:
 - [Masked word completion with BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
 - [Name Entity Recognition with Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [Text generation with GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
@@ -83,7 +85,7 @@ In Computer Vision:
 
 In Audio:
 - [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
-- [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-sid)
+- [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
 
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team, is the official demo of this repo’s text generation capabilities.
 
@@ -165,7 +167,7 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 
 1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
-    - Move a single model between TF2.0/PyTorch/Jax frameworks at will.
+    - Move a single model between TF2.0/PyTorch/JAX frameworks at will.
     - Seamlessly pick the right framework for training, evaluation and production.
 
 1. Easily customize a model or an example to your needs:
