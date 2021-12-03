@@ -56,23 +56,23 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
 
 class Wav2Vec2ProcessorWithLM:
     r"""
-    Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor, a Wav2Vec2 CTC tokenizer and a language
-    model into a single processor for language model boosted speech recognition decoding.
-
-    :class:`~transformers.Wav2Vec2Processor` offers all the functionalities of
-    :class:`~transformers.Wav2Vec2FeatureExtractor` and :class:`~transformers.Wav2Vec2CTCTokenizer`. See the docstring
-    of :meth:`~transformers.Wav2Vec2Processor.__call__` and :meth:`~transformers.Wav2Vec2Processor.decode` for more
-    information.
+    Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor, a Wav2Vec2 CTC tokenizer and a decoder
+    with language model support into a single processor for language model boosted speech recognition decoding.
 
     Args:
         feature_extractor (:obj:`Wav2Vec2FeatureExtractor`):
             An instance of :class:`~transformers.Wav2Vec2FeatureExtractor`. The feature extractor is a required input.
         tokenizer (:obj:`Wav2Vec2CTCTokenizer`):
             An instance of :class:`~transformers.Wav2Vec2CTCTokenizer`. The tokenizer is a required input.
+        decoder (:obj:`BeamSearchDecoderCTC`):
+            An instance of :class:`pyctcdecode.BeamSearchDecoderCTC`. The decoder is a required input.
     """
 
     def __init__(
-        self, feature_extractor: FeatureExtractionMixin, tokenizer: PreTrainedTokenizer, decoder: "BeamSearchDecoderCTC"
+        self,
+        feature_extractor: FeatureExtractionMixin,
+        tokenizer: PreTrainedTokenizer,
+        decoder: "BeamSearchDecoderCTC",
     ):
         if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
             raise ValueError(
@@ -110,8 +110,9 @@ class Wav2Vec2ProcessorWithLM:
             This class method is simply calling
             :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained,`
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained` and pyctcdecode's
-            :meth:`BeamSearchDecoderCTC.save_to_dir`. Please refer to the docstrings of the methods above for more
-            information.
+            :meth:`BeamSearchDecoderCTC.save_to_dir` and :meth:`pyctcdecode.BeamSearchDecoderCTC.save_to_dir`.
+
+            Please refer to the docstrings of the methods above for more information.
 
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
@@ -130,8 +131,10 @@ class Wav2Vec2ProcessorWithLM:
         .. note::
 
             This class method is simply calling Wav2Vec2FeatureExtractor's
-            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` and
-            Wav2Vec2CTCTokenizer's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`.
+            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained`,
+            Wav2Vec2CTCTokenizer's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`,
+            and :meth:`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`.
+
             Please refer to the docstrings of the methods above for more information.
 
         Args:
@@ -236,6 +239,36 @@ class Wav2Vec2ProcessorWithLM:
         hotwords: Optional[Iterable[str]] = None,
         hotword_weight: Optional[float] = None,
     ):
+        """
+        Batch decode output logits to audio transcription with language model support.
+
+        .. note::
+
+            This function makes use of Python's multiprocessing.
+
+        Args:
+            logits (:obj:`np.ndarray`):
+                The logits output vector of the model representing the log probabilities for each token.
+            num_processes (:obj:`int`, `optional`):
+                Number of processes on which the function should be parallelized over. Defaults to the number of
+                available CPUs.
+            beam_width (:obj:`int`, `optional`):
+                Maximum number of beams at each step in decoding. Defaults to pyctcdecode's DEFAULT_BEAM_WIDTH.
+            beam_prune_logp (:obj:`int`, `optional`):
+                Beams that are much worse than best beam will be pruned Defaults to pyctcdecode's DEFAULT_PRUNE_LOGP.
+            token_min_logp (:obj:`int`, `optional`):
+                Tokens below this logp are skipped unless they are argmax of frame Defaults to pyctcdecode's
+                DEFAULT_MIN_TOKEN_LOGP.
+            hotwords (:obj:`List[str]`, `optional`):
+                List of words with extra importance, can be OOV for LM
+            hotword_weight (:obj:`int`, `optional`):
+                Weight factor for hotword importance Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
+
+        Returns:
+            :class:`~transformers.models.wav2vec2.Wav2Vec2DecoderWithLMOutput` or :obj:`tuple`.
+
+        """
+
         # set defaults
         beam_width = beam_width if beam_width is not None else DEFAULT_BEAM_WIDTH
         beam_prune_logp = beam_prune_logp if beam_prune_logp is not None else DEFAULT_PRUNE_LOGP
@@ -272,6 +305,29 @@ class Wav2Vec2ProcessorWithLM:
         hotwords: Optional[Iterable[str]] = None,
         hotword_weight: Optional[float] = None,
     ):
+        """
+        Decode output logits to audio transcription with language model support.
+
+        Args:
+            logits (:obj:`np.ndarray`):
+                The logits output vector of the model representing the log probabilities for each token.
+            beam_width (:obj:`int`, `optional`):
+                Maximum number of beams at each step in decoding. Defaults to pyctcdecode's DEFAULT_BEAM_WIDTH.
+            beam_prune_logp (:obj:`int`, `optional`):
+                Beams that are much worse than best beam will be pruned Defaults to pyctcdecode's DEFAULT_PRUNE_LOGP.
+            token_min_logp (:obj:`int`, `optional`):
+                Tokens below this logp are skipped unless they are argmax of frame Defaults to pyctcdecode's
+                DEFAULT_MIN_TOKEN_LOGP.
+            hotwords (:obj:`List[str]`, `optional`):
+                List of words with extra importance, can be OOV for LM
+            hotword_weight (:obj:`int`, `optional`):
+                Weight factor for hotword importance Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
+
+        Returns:
+            :class:`~transformers.models.wav2vec2.Wav2Vec2DecoderWithLMOutput` or :obj:`tuple`.
+
+        """
+
         # set defaults
         beam_width = beam_width if beam_width is not None else DEFAULT_BEAM_WIDTH
         beam_prune_logp = beam_prune_logp if beam_prune_logp is not None else DEFAULT_PRUNE_LOGP
