@@ -282,6 +282,7 @@ class TFModelTesterMixin:
             for module in (import_module(model_class.__module__),)
             for module_member_name in dir(module)
             if module_member_name.endswith("MainLayer")
+            # This condition is required, since `modeling_tf_clip.py` has 3 classes whose names end with `MainLayer`.
             and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
