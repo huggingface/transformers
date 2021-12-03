@@ -99,11 +99,11 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
             image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
                 The image to resize.
         """
-        image = self.to_numpy_array(image, rescale=False, channel_first=False)
-        shape = image.shape
 
-        image_height = shape[0]
-        image_width = shape[1]
+        if isinstance(image, Image.Image):
+            image = self.to_numpy_array(image)
+
+        image_height, image_width = image.shape[-2:]
 
         padded_center_crop_size = (
             (self.size / (self.crop_size)) * np.minimum(image_height, image_width).astype(np.float32)
@@ -114,7 +114,7 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         crop_window = [offset_height, offset_width, padded_center_crop_size, padded_center_crop_size]
 
         image = image[
-            crop_window[0] : crop_window[0] + crop_window[2], crop_window[1] : crop_window[1] + crop_window[3]
+            :, crop_window[0] : crop_window[0] + crop_window[2], crop_window[1] : crop_window[1] + crop_window[3]
         ]
 
         return image
