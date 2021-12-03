@@ -40,7 +40,7 @@ jobs:
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-          utils/print_env_pt.py
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               run: |
@@ -107,7 +107,7 @@ jobs:
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-          utils/print_env_pt.py
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               env:
@@ -160,7 +160,7 @@ jobs:
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-          utils/print_env_pt.py
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               run: |
@@ -202,7 +202,7 @@ jobs:
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-          utils/print_env_pt.py
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               run: |
