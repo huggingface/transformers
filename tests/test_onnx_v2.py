@@ -3,6 +3,7 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
+from parameterized import parameterized
 from transformers import AutoConfig, AutoTokenizer, is_torch_available
 
 # from transformers.models.t5 import T5OnnxConfig
@@ -168,19 +169,19 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 
 if is_torch_available():
     PYTORCH_EXPORT_MODELS = {
-        #("albert", "hf-internal-testing/tiny-albert"),
-        ## ("bart", "facebook/bart-base"),
-        #("bert", "bert-base-cased"),
-        #("camembert", "camembert-base"),
-        #("distilbert", "distilbert-base-cased"),
-        # ("gpt2", "gpt2"),
-        # ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+        ("albert", "hf-internal-testing/tiny-albert"),
+        # ("bart", "facebook/bart-base"),
+        ("bert", "bert-base-cased"),
+        ("camembert", "camembert-base"),
+        ("distilbert", "distilbert-base-cased"),
+        ("gpt2", "gpt2"),
+        ("gpt-neo", "EleutherAI/gpt-neo-125M"),
         # ("longFormer", "longformer-base-4096"),
         ("roberta", "roberta-base"),
-        # ("xlm-roberta", "xlm-roberta-base"),
-        # ("layoutlm", "microsoft/layoutlm-base-uncased"),
+        ("xlm-roberta", "xlm-roberta-base"),
+        ("layoutlm", "microsoft/layoutlm-base-uncased"),
         # # ("mbart", "sshleifer/tiny-mbart"),
-        # ("t5", "t5-small"),
+        ("t5", "t5-small"),
     }
 
     PYTORCH_EXPORT_WITH_PAST_MODELS = {
@@ -195,40 +196,45 @@ class OnnxExportTestCaseV2(TestCase):
     Integration tests ensuring supported models are correctly exported
     """
 
+    MODELS_TO_TEST = []
+    for (name, model) in PYTORCH_EXPORT_MODELS:
+        for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
+            name
+        ).items():
+            MODELS_TO_TEST.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
+
+    @parameterized.expand(MODELS_TO_TEST)
     @slow
     @require_torch
-    def test_pytorch_export(self):
+    def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         from transformers.onnx import export
 
-        for name, model in PYTORCH_EXPORT_MODELS:
-            supported_features = FeaturesManager.get_supported_features_for_model_type(name)
-            with self.subTest(name):
-                tokenizer = AutoTokenizer.from_pretrained(model)
-                config = AutoConfig.from_pretrained(model)
-                # Useful for causal lm models that do not use pad tokens.
-                if not getattr(config, "pad_token_id", None):
-                    config.pad_token_id = tokenizer.eos_token_id
-                for feature, onnx_config_class_constructor in supported_features.items():
-                    with self.subTest(feature):
-                        model_class = FeaturesManager.get_model_class_for_feature(feature)
-                        model = model_class.from_config(config)
-                        onnx_config = onnx_config_class_constructor(model.config)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        config = AutoConfig.from_pretrained(model_name)
 
-                        with NamedTemporaryFile("w") as output:
-                            onnx_inputs, onnx_outputs = export(
-                                tokenizer, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
-                            )
-                            try:
-                                validate_model_outputs(
-                                    onnx_config,
-                                    tokenizer,
-                                    model,
-                                    Path(output.name),
-                                    onnx_outputs,
-                                    onnx_config.atol_for_validation,
-                                )
-                            except ValueError as ve:
-                                self.fail(f"{name}, {feature} -> {ve}")
+        # Useful for causal lm models that do not use pad tokens.
+        if not getattr(config, "pad_token_id", None):
+            config.pad_token_id = tokenizer.eos_token_id
+
+        model_class = FeaturesManager.get_model_class_for_feature(feature)
+        model = model_class.from_config(config)
+        onnx_config = onnx_config_class_constructor(model.config)
+
+        with NamedTemporaryFile("w") as output:
+            onnx_inputs, onnx_outputs = export(
+                tokenizer, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
+            )
+            try:
+                validate_model_outputs(
+                    onnx_config,
+                    tokenizer,
+                    model,
+                    Path(output.name),
+                    onnx_outputs,
+                    onnx_config.atol_for_validation,
+                )
+            except ValueError as ve:
+                self.fail(f"{name}, {feature} -> {ve}")
 
     @slow
     @require_torch

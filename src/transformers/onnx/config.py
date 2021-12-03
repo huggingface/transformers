@@ -465,15 +465,6 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 self._config.hidden_size // num_decoder_attention_heads,
             )
 
-            # if "attention_mask" in common_inputs:
-            #     common_inputs["attention_mask"] = torch.cat(
-            #         [common_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
-            #     )
-            # if "decoder_attention_mask" in common_inputs:
-            #     common_inputs["decoder_attention_mask"] = torch.cat(
-            #         [common_inputs["decoder_attention_mask"], torch.ones(batch, 1)], dim=1
-            #     )
-
             common_inputs["past_key_values"] = []
             # If the number of encoder and decoder layers are present in the model configuration, both are considered
             num_encoder_layers, num_decoder_layers = self.num_layers
