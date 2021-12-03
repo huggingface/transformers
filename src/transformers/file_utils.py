@@ -351,6 +351,24 @@ def is_torch_bf16_available():
         return False
 
 
+def is_torch_tf32_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available() or torch.version.cuda is None:
+            return False
+        if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+            return False
+        if int(torch.version.cuda.split(".")[0]) < 11:
+            return False
+        if not version.parse(torch.__version__) >= version.parse("1.9"):
+            return False
+
+        return True
+    else:
+        return False
+
+
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))

@@ -360,6 +360,9 @@ If you're already using fp16 or bf16 mixed precision it may help with the throug
 
 Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exit.
 
+The 🤗 Trainer has this mode disabled by default but can be enabled automatically by passing the `--tf32` argument.
+
+
 
 ### Gradient Checkpointing
 
