@@ -2,7 +2,6 @@ from functools import partial, reduce
 from typing import Callable, Dict, Optional, Tuple
 
 from .. import is_torch_available
-from .config import OnnxConfig
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
@@ -16,6 +15,7 @@ from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
+from .config import OnnxConfig
 
 
 if is_torch_available():
@@ -69,20 +69,20 @@ class FeaturesManager:
             # "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls=AlbertOnnxConfig
+            onnx_config_cls=AlbertOnnxConfig,
         ),
         "bart": supported_features_mapping(
-            "default",
-            "causal-lm",
-            "seq2seq-lm",
-            "sequence-classification",
-            "question-answering",
+            # "default",
+            # "causal-lm",
+            # "seq2seq-lm",
+            # "sequence-classification",
+            # "question-answering",
             "default-with-past",
             "causal-lm-with-past",
             "seq2seq-lm-with-past",
             "sequence-classification-with-past",
             "question-answering-with-past",
-            onnx_config_cls=BartOnnxConfig
+            onnx_config_cls=BartOnnxConfig,
         ),
         "mbart": supported_features_mapping(
             "default",
@@ -95,7 +95,7 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             "sequence-classification-with-past",
             "question-answering-with-past",
-            onnx_config_cls=MBartOnnxConfig
+            onnx_config_cls=MBartOnnxConfig,
         ),
         "bert": supported_features_mapping(
             "default",
@@ -105,7 +105,7 @@ class FeaturesManager:
             # "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls=BertOnnxConfig
+            onnx_config_cls=BertOnnxConfig,
         ),
         "camembert": supported_features_mapping(
             "default",
@@ -124,7 +124,7 @@ class FeaturesManager:
             # "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls=DistilBertOnnxConfig
+            onnx_config_cls=DistilBertOnnxConfig,
         ),
         "longformer": supported_features_mapping(
             "default",
@@ -133,7 +133,7 @@ class FeaturesManager:
             # "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls=LongformerOnnxConfig
+            onnx_config_cls=LongformerOnnxConfig,
         ),
         "roberta": supported_features_mapping(
             "default",
@@ -143,7 +143,7 @@ class FeaturesManager:
             # "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls=RobertaOnnxConfig
+            onnx_config_cls=RobertaOnnxConfig,
         ),
         "t5": supported_features_mapping(
             "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=T5OnnxConfig
@@ -156,7 +156,7 @@ class FeaturesManager:
             # "multiple-choice",
             "token-classification",
             "question-answering",
-            onnx_config_cls=XLMRobertaOnnxConfig
+            onnx_config_cls=XLMRobertaOnnxConfig,
         ),
         "gpt2": supported_features_mapping(
             "default",
@@ -167,7 +167,7 @@ class FeaturesManager:
             "causal-lm-with-past",
             "sequence-classification-with-past",
             "token-classification-with-past",
-            onnx_config_cls=GPT2OnnxConfig
+            onnx_config_cls=GPT2OnnxConfig,
         ),
         "gpt-neo": supported_features_mapping(
             "default",
@@ -190,7 +190,9 @@ class FeaturesManager:
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
 
     @staticmethod
-    def get_supported_features_for_model_type(model_type: str, model_name: Optional[str] = None) -> Dict[str, OnnxConfig]:
+    def get_supported_features_for_model_type(
+        model_type: str, model_name: Optional[str] = None
+    ) -> Dict[str, OnnxConfig]:
         model_type = model_type.lower()
         if model_type not in FeaturesManager._SUPPORTED_MODEL_TYPE:
             model_type_and_model_name = f"{model_type} ({model_name})" if model_name else model_type

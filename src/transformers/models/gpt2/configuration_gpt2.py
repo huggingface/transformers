@@ -15,12 +15,12 @@
 # limitations under the License.
 """ OpenAI GPT-2 configuration """
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
 from transformers import PreTrainedTokenizer, TensorType, is_torch_available
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
+from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
 
@@ -194,23 +194,36 @@ class GPT2Config(PretrainedConfig):
 
 
 class GPT2OnnxConfig(OnnxConfigWithPast):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        task: str = "default",
+        patching_specs: List[PatchingSpec] = None,
+        use_past: bool = False,
+    ):
+        super().__init__(config, task=task, patching_specs=patching_specs)
+        if not getattr(self._config, "pad_token_id", None):
+            # TODO: how to do that better?
+            self._config.pad_token_id = 0
+
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch"}})
         if self.use_past:
-            for i in range(self.num_layers):
-                common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "sequence"}
-                common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "sequence"}
-
-            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
+            self.fill_with_past_key_values_(common_inputs, direction="inputs")
+            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
 
         return common_inputs
 
     @property
-    def num_layers(self):
+    def num_layers(self) -> int:
         return self._config.n_layer
+
+    @property
+    def num_attention_heads(self) -> int:
+        return self._config.n_head
 
     def generate_dummy_inputs(
         self,
@@ -220,7 +233,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+        common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+            tokenizer, batch_size, seq_length, is_pair, framework
+        )
 
         # We need to order the input in the way they appears in the forward()
         ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
@@ -235,11 +250,24 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
                 batch = common_inputs["input_ids"].shape[0]
                 ordered_inputs["past_key_values"] = [
                     (
-                        torch.zeros((batch, self._config.n_head, 1, self._config.hidden_size // self._config.n_head)),
-                        torch.zeros((batch, self._config.n_head, 1, self._config.hidden_size // self._config.n_head)),
+                        torch.zeros(
+                            (batch, self.num_attention_heads, 1, self._config.hidden_size // self.num_attention_heads)
+                        ),
+                        torch.zeros(
+                            (batch, self.num_attention_heads, 1, self._config.hidden_size // self.num_attention_heads)
+                        ),
                     )
-                    for _ in range(self._config.n_layer)
+                    for _ in range(self.num_layers)
                 ]
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
+        if self.use_past:
+            ordered_inputs["attention_mask"] = torch.cat(
+                [ordered_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+            )
+
         return ordered_inputs
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 12

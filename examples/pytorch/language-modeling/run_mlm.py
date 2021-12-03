@@ -109,11 +109,11 @@ class ModelArguments:
         },
     )
 
-    def __post_init__(self):
-        if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
-            raise ValueError(
-                "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
-            )
+    # def __post_init__(self):
+    # if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+    #     raise ValueError(
+    #         "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+    #     )
 
 
 @dataclass
@@ -323,9 +323,13 @@ def main():
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
-        if model_args.config_overrides is not None:
-            logger.info(f"Overriding config: {model_args.config_overrides}")
-            config.update_from_string(model_args.config_overrides)
+    if model_args.config_overrides is not None:
+        logger.info(f"Overriding config: {model_args.config_overrides}")
+        config.update_from_string(model_args.config_overrides)
+
+    import pdb
+
+    pdb.set_trace()
 
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
@@ -356,6 +360,9 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForMaskedLM.from_config(config)
 
+    import pdb
+
+    pdb.set_trace()
     model.resize_token_embeddings(len(tokenizer))
 
     # Preprocessing the datasets.

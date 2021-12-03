@@ -18,7 +18,7 @@ from collections import OrderedDict
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
+from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
 
@@ -180,31 +180,121 @@ class BartConfig(PretrainedConfig):
             )
 
 
-class BartOnnxConfig(OnnxConfigWithPast):
-    IS_ENCODER_DECODER = True
-
+class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-            ]
-        )
+        if self.task in ["default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past"]:
+            common_inputs = OrderedDict(
+                [
+                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ]
+            )
 
-        if self.task in ["seq2seq-lm", "seq2seq-lm-with-past"]:
             if self.use_past:
-                axes_info = {0: "batch"}
+                common_inputs["decoder_input_ids"] = {0: "batch"}
+                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
             else:
-                axes_info = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_inputs_ids"] = axes_info
-            common_inputs["decoder_attention_mask"] = axes_info
+                common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
+                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
 
-        if self.use_past:
-            for i in range(self.num_layers):
-                common_inputs[f"past_key_values.{i}.decoder.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.decoder.value"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.encoder.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.encoder.value"] = {0: "batch", 2: "past_sequence"}
+            if self.use_past:
+                self.fill_with_past_key_values_(common_inputs, direction="inputs")
+        elif self.task in ["causal-lm", "causal-lm-with-past"]:
+            # TODO: figure this case out.
+            common_inputs = OrderedDict(
+                [
+                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ]
+            )
+
+            if self.use_past:
+                common_inputs["encoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+            else:
+                common_inputs["encoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
+
+            if self.use_past:
+                self.fill_with_past_key_values_(common_inputs, direction="inputs")
+        else:
+            common_inputs = OrderedDict(
+                [
+                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                    ("decoder_input_ids", {0: "batch", 1: "decoder_sequence"}),
+                    ("decoder_attention_mask", {0: "batch", 1: "decoder_sequence"}),
+                ]
+            )
 
         return common_inputs
+
+    # def generate_dummy_inputs(
+    #     self,
+    #     tokenizer: PreTrainedTokenizer,
+    #     batch_size: int = -1,
+    #     seq_length: int = -1,
+    #     is_pair: bool = False,
+    #     framework: Optional[TensorType] = None,
+    # ) -> Mapping[str, Any]:
+
+    #     if self.task in ["default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past"]:
+    #         encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+    #         # Generate decoder inputs
+    #         decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(tokenizer, batch_size, 1, is_pair, framework)
+    #         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+    #         common_inputs = dict(**encoder_inputs, **decoder_inputs)
+
+    #         if self.use_past:
+    #             if not is_torch_available():
+    #                 raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+    #             else:
+    #                 import torch
+    #             batch = common_inputs["input_ids"].shape[0]
+    #             encoder_seq_length = common_inputs["input_ids"].shape[1]
+    #             # decoder_seq_length = ordered_inputs["decoder_input_ids"].shape[1]
+    #             num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
+    #             encoder_shape = (
+    #                 batch,
+    #                 num_encoder_attention_heads,
+    #                 encoder_seq_length,
+    #                 self._config.hidden_size // num_encoder_attention_heads,
+    #             )
+    #             decoder_shape = (batch, num_decoder_attention_heads, 1, self._config.hidden_size // num_decoder_attention_heads)
+
+    #             # if "attention_mask" in common_inputs:
+    #             #     common_inputs["attention_mask"] = torch.cat(
+    #             #         [common_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+    #             #     )
+    #             # if "decoder_attention_mask" in common_inputs:
+    #             #     common_inputs["decoder_attention_mask"] = torch.cat(
+    #             #         [common_inputs["decoder_attention_mask"], torch.ones(batch, 1)], dim=1
+    #             #     )
+
+    #             common_inputs["past_key_values"] = []
+    #             # If the number of encoder and decoder layers are present in the model configuration, both are considered
+    #             num_encoder_layers, num_decoder_layers = self.num_layers
+    #             min_num_layers = min(num_encoder_layers, num_decoder_layers)
+    #             max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
+    #             remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+
+    #             for _ in range(min_num_layers):
+    #                 common_inputs["past_key_values"].append(
+    #                     (
+    #                         torch.zeros(decoder_shape),
+    #                         torch.zeros(decoder_shape),
+    #                         torch.zeros(encoder_shape),
+    #                         torch.zeros(encoder_shape),
+    #                     )
+    #                 )
+
+    #             # TODO: test this.
+    #             shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
+    #             for _ in range(min_num_layers, max_num_layers):
+    #                 common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+
+    #     return common_inputs
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-2
