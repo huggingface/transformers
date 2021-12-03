@@ -1130,7 +1130,6 @@ class FlaxBigBirdAttention(nn.Module):
 
         self.output = FlaxBigBirdSelfOutput(self.config, dtype=self.dtype)
 
-    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention.__call__ with Bert->BigBird
     def __call__(
         self,
         hidden_states,
