@@ -83,7 +83,7 @@ In Computer Vision:
 
 In Audio:
 - [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
-- [Keyword Spotting](https://huggingface.co/superb/wav2vec2-base-superb-sid)
+- [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-sid)
 
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team, is the official demo of this repo’s text generation capabilities.
 
