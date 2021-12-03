@@ -2444,15 +2444,15 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_speech_objects import *
 
-    if is_speech_available() and is_sentencepiece_available():
-        from .models.speech_to_text import Speech2TextProcessor
-    else:
-        from .utils.dummy_sentencepiece_and_speech_objects import *
-
     if is_pyctcdecode_available():
         from .models.wav2vec2 import Wav2Vec2ProcessorWithLM
     else:
         from .utils.dummy_pyctcdecode_objects import *
+
+    if is_speech_available() and is_sentencepiece_available():
+        from .models.speech_to_text import Speech2TextProcessor
+    else:
+        from .utils.dummy_sentencepiece_and_speech_objects import *
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
