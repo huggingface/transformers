@@ -52,6 +52,7 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
+    is_pyctcdecode_available,
 )
 from .utils import logging
 
@@ -298,7 +299,6 @@ _import_structure = {
         "Wav2Vec2CTCTokenizer",
         "Wav2Vec2FeatureExtractor",
         "Wav2Vec2Processor",
-        "Wav2Vec2ProcessorWithLM",
         "Wav2Vec2Tokenizer",
     ],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
@@ -456,6 +456,15 @@ else:
 
     _import_structure["utils.dummy_speech_objects"] = [
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
+    ]
+
+if is_pyctcdecode_available():
+    _import_structure["models.wav2vec2"].append("Wav2Vec2ProcessorWithLM")
+else:
+    from .utils import dummy_pyctcdecode_objects 
+
+    _import_structure["utils.dummy_pyctcdecode_objects"] = [
+        name for name in dir(dummy_pyctcdecode_objects) if not name.startswith("_")
     ]
 
 if is_sentencepiece_available() and is_speech_available():
@@ -2192,7 +2201,6 @@ if TYPE_CHECKING:
         Wav2Vec2CTCTokenizer,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
-        Wav2Vec2ProcessorWithLM,
         Wav2Vec2Tokenizer,
     )
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
@@ -2338,6 +2346,11 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextProcessor
     else:
         from .utils.dummy_sentencepiece_and_speech_objects import *
+
+    if is_pyctcdecode_available():
+        from .models.wav2vec2 import Wav2Vec2ProcessorWithLM
+    else:
+        from .utils.dummy_pyctcdecode_objects import *
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
