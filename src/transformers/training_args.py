@@ -29,6 +29,7 @@ from .file_utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
+    is_torch_tf32_available,
     is_torch_tpu_available,
     torch_required,
 )
@@ -227,6 +228,9 @@ class TrainingArguments:
         fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
+        tf32 (:obj:`bool`, `optional`):
+            Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API
+            and it may change.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         xpu_backend (:obj:`str`, `optional`):
@@ -548,6 +552,12 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether to use full float16 evaluation instead of 32-bit"},
     )
+    tf32: bool = field(
+        default=None,
+        metadata={
+            "help": "Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API and it may change."
+        },
+    )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
     xpu_backend: str = field(
         default=None,
@@ -801,6 +811,17 @@ class TrainingArguments:
             raise ValueError(
                 "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
             )
+
+        if is_torch_available() and self.tf32 is not None:
+            if self.tf32:
+                if is_torch_tf32_available():
+                    torch.backends.cuda.matmul.allow_tf32 = True
+                else:
+                    raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
+            else:
+                if is_torch_tf32_available():
+                    torch.backends.cuda.matmul.allow_tf32 = False
+                # no need to assert on else
 
         if self.report_to is None:
             logger.info(
