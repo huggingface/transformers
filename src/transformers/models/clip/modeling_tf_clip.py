@@ -1125,12 +1125,11 @@ CLIP_INPUTS_DOCSTRING = r"""
 
 class TFCLIPTextModel(TFCLIPPreTrainedModel):
     config_class = CLIPTextConfig
-    base_model_prefix = "clip_text"
 
     def __init__(self, config: CLIPTextConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.clip_text = TFCLIPTextMainLayer(config, name="clip_text")
+        self.clip = TFCLIPTextMainLayer(config, name="clip")
 
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPTextConfig)
@@ -1173,7 +1172,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.clip_text(
+        outputs = self.clip(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             position_ids=inputs["position_ids"],
@@ -1199,12 +1198,11 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
 class TFCLIPVisionModel(TFCLIPPreTrainedModel):
     config_class = CLIPVisionConfig
-    base_model_prefix = "clip_vision"
 
     def __init__(self, config: CLIPVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.clip_vision = TFCLIPVisionMainLayer(config, name="clip_vision")
+        self.clip = TFCLIPVisionMainLayer(config, name="clip")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1286,7 +1284,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         if "input_ids" in inputs:
             inputs["pixel_values"] = inputs.pop("input_ids")
 
-        outputs = self.clip_vision(
+        outputs = self.clip(
             pixel_values=inputs["pixel_values"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
@@ -1311,7 +1309,6 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
 @add_start_docstrings(CLIP_START_DOCSTRING)
 class TFCLIPModel(TFCLIPPreTrainedModel):
     config_class = CLIPConfig
-    base_model_prefix = "clip"
 
     def __init__(self, config: CLIPConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
