@@ -821,7 +821,7 @@ class TrainingArguments:
             else:
                 if is_torch_tf32_available():
                     torch.backends.cuda.matmul.allow_tf32 = False
-                # nothing need to assert on else
+                # no need to assert on else
 
         if self.report_to is None:
             logger.info(
