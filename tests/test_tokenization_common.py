@@ -314,7 +314,7 @@ class TokenizerTesterMixin:
     # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""
-        tokenizers = self.get_tokenizers(fast=True)
+        tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
@@ -620,8 +620,7 @@ class TokenizerTesterMixin:
         self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
 
     def test_added_tokens_do_lower_case(self):
-        # TODO(thom) activate fast tokenizer tests once Rust tokenizers accepts white spaces in added tokens.
-        tokenizers = [self.get_tokenizer(do_lower_case=True)] if self.test_slow_tokenizer else []
+        tokenizers = self.get_tokenizers(do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if not hasattr(tokenizer, "do_lower_case") or not tokenizer.do_lower_case:
@@ -632,30 +631,34 @@ class TokenizerTesterMixin:
                 text = special_token + " aaaaa bbbbbb low cccccccccdddddddd l " + special_token
                 text2 = special_token + " AAAAA BBBBBB low CCCCCCCCCDDDDDDDD l " + special_token
 
-                toks0 = tokenizer.tokenize(text)  # toks before adding new_toks
+                toks_before_adding = tokenizer.tokenize(text)  # toks before adding new_toks
 
                 new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd", "AAAAA BBBBBB", "CCCCCCCCCDDDDDDDD"]
-                added = tokenizer.add_tokens(new_toks)
-                self.assertEqual(added, 2)
+                added = tokenizer.add_tokens([AddedToken(tok, lstrip=True, rstrip=True) for tok in new_toks])
 
-                toks = tokenizer.tokenize(text)
-                toks2 = tokenizer.tokenize(text2)
+                toks_after_adding = tokenizer.tokenize(text)
+                toks_after_adding2 = tokenizer.tokenize(text2)
 
-                self.assertEqual(len(toks), len(toks2))
-                self.assertListEqual(toks, toks2)
-                if not isinstance(tokenizer, PreTrainedTokenizerFast):
-                    # Python tokenizers can have added tokens with spaces inside them
-                    # cf https://github.com/huggingface/tokenizers/issues/302
-                    self.assertNotEqual(len(toks), len(toks0))  # toks0 should be longer
+                # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
+                # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
+                self.assertIn(added, [2, 4])
+
+                self.assertListEqual(toks_after_adding, toks_after_adding2)
+                self.assertTrue(
+                    len(toks_before_adding) > len(toks_after_adding),  # toks_before_adding should be longer
+                )
 
                 # Check that none of the special tokens are lowercased
                 sequence_with_special_tokens = "A " + " yEs ".join(tokenizer.all_special_tokens) + " B"
-                tokenized_sequence = tokenizer.tokenize(sequence_with_special_tokens)
+                # Convert the tokenized list to str as some special tokens are tokenized like normal tokens
+                # which have a prefix spacee e.g. the mask token of Albert, and cannot match the original
+                # special tokens exactly.
+                tokenized_sequence = "".join(tokenizer.tokenize(sequence_with_special_tokens))
 
                 for special_token in tokenizer.all_special_tokens:
                     self.assertTrue(special_token in tokenized_sequence)
 
-        tokenizers = [self.get_tokenizer(do_lower_case=True)] if self.test_slow_tokenizer else []
+        tokenizers = self.get_tokenizers(do_lower_case=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if hasattr(tokenizer, "do_lower_case") and tokenizer.do_lower_case:
@@ -666,22 +669,22 @@ class TokenizerTesterMixin:
                 text = special_token + " aaaaa bbbbbb low cccccccccdddddddd l " + special_token
                 text2 = special_token + " AAAAA BBBBBB low CCCCCCCCCDDDDDDDD l " + special_token
 
+                toks_before_adding = tokenizer.tokenize(text)  # toks before adding new_toks
+
                 new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd", "AAAAA BBBBBB", "CCCCCCCCCDDDDDDDD"]
-
-                toks0 = tokenizer.tokenize(text)  # toks before adding new_toks
-
-                added = tokenizer.add_tokens(new_toks)
+                added = tokenizer.add_tokens([AddedToken(tok, lstrip=True, rstrip=True) for tok in new_toks])
                 self.assertIn(added, [2, 4])
 
-                toks = tokenizer.tokenize(text)
-                toks2 = tokenizer.tokenize(text2)
+                toks_after_adding = tokenizer.tokenize(text)
+                toks_after_adding2 = tokenizer.tokenize(text2)
 
-                self.assertEqual(len(toks), len(toks2))  # Length should still be the same
-                self.assertNotEqual(toks[1], toks2[1])  # But at least the first non-special tokens should differ
-                if not isinstance(tokenizer, PreTrainedTokenizerFast):
-                    # Python tokenizers can have added tokens with spaces inside them
-                    # cf https://github.com/huggingface/tokenizers/issues/302
-                    self.assertNotEqual(len(toks), len(toks0))  # toks0 should be longer
+                self.assertEqual(len(toks_after_adding), len(toks_after_adding2))  # Length should still be the same
+                self.assertNotEqual(
+                    toks_after_adding[1], toks_after_adding2[1]
+                )  # But at least the first non-special tokens should differ
+                self.assertTrue(
+                    len(toks_before_adding) > len(toks_after_adding),  # toks_before_adding should be longer
+                )
 
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -780,12 +783,15 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
-                # new_toks = ["[ABC]", "[DEF]"]  # TODO(thom) add this one back when Rust toks are ready: , "GHI IHG"]
-                new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
+                new_toks = [
+                    AddedToken("[ABC]", normalized=False),
+                    AddedToken("[DEF]", normalized=False),
+                    AddedToken("GHI IHG", normalized=False),
+                ]
                 tokenizer.add_tokens(new_toks)
-                input = "[ABC][DEF][ABC][DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
+                input = "[ABC][DEF][ABC]GHI IHG[DEF]"
                 if self.space_between_special_tokens:
-                    output = "[ABC] [DEF] [ABC] [DEF]"
+                    output = "[ABC] [DEF] [ABC] GHI IHG [DEF]"
                 else:
                     output = input
                 encoded = tokenizer.encode(input, add_special_tokens=False)
