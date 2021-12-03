@@ -819,8 +819,8 @@ def main():
 
         # save final metrics in json
         if jax.process_index() == 0:
-            rouge_metrics = {f"eval_{metric_name}": value for metric_name, value in rouge_metrics.items()}
-            path = os.path.join(training_args.output_dir, "eval_results.json")
+            rouge_metrics = {f"test_{metric_name}": value for metric_name, value in rouge_metrics.items()}
+            path = os.path.join(training_args.output_dir, "test_results.json")
             with open(path, "w") as f:
                 json.dump(rouge_metrics, f, indent=4, sort_keys=True)
 
