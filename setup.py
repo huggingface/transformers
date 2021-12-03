@@ -151,6 +151,7 @@ _deps = [
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0,<1.10",
     "torchaudio",
+    "pyctcdecode>=0.2.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -256,7 +257,7 @@ extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa")
 extras["speech"] = deps_list("torchaudio") + extras["audio"]  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
-extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
+extras["torch-speech"] = deps_list("torchaudio", "pyctcdecode") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")

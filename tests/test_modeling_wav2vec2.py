@@ -19,12 +19,14 @@ import unittest
 
 import numpy as np
 import pytest
+from datasets import load_dataset
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_datasets,
+    require_pyctcdecode,
     require_soundfile,
     require_torch,
     slow,
@@ -46,6 +48,7 @@ if is_torch_available():
         Wav2Vec2ForSequenceClassification,
         Wav2Vec2Model,
         Wav2Vec2Processor,
+        Wav2Vec2ProcessorWithLM,
     )
     from transformers.models.wav2vec2.modeling_wav2vec2 import (
         Wav2Vec2GumbelVectorQuantizer,
@@ -916,8 +919,6 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
@@ -927,8 +928,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
@@ -1255,3 +1254,27 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+
+    @require_pyctcdecode
+    def test_wav2vec2_with_lm(self):
+        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        sample = next(iter(ds))
+
+        import torchaudio.functional as F
+
+        resampled_audio = F.resample(torch.tensor(sample["audio"]["array"]), 48_000, 16_000).numpy()
+
+        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
+            torch_device
+        )
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(resampled_audio, return_tensors="pt").input_values
+
+        with torch.no_grad():
+            logits = model(input_values.to(torch_device)).logits
+
+        transcription = processor.batch_decode(logits.cpu().numpy()).text
+        import ipdb
+
+        ipdb.set_trace()

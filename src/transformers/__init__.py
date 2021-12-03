@@ -298,6 +298,7 @@ _import_structure = {
         "Wav2Vec2CTCTokenizer",
         "Wav2Vec2FeatureExtractor",
         "Wav2Vec2Processor",
+        "Wav2Vec2ProcessorWithLM",
         "Wav2Vec2Tokenizer",
     ],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
@@ -2191,6 +2192,7 @@ if TYPE_CHECKING:
         Wav2Vec2CTCTokenizer,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
+        Wav2Vec2ProcessorWithLM,
         Wav2Vec2Tokenizer,
     )
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer

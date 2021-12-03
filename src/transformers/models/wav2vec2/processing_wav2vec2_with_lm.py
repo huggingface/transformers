@@ -17,11 +17,14 @@ Speech processor class for Wav2Vec2
 """
 import os
 from contextlib import contextmanager
+from dataclasses import dataclass
 from multiprocessing import Pool
-from typing import Optional
+from typing import Iterable, List, Optional, Union
+
+import numpy as np
 
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import is_pyctcdecode_available, requires_backends
+from ...file_utils import ModelOutput, is_pyctcdecode_available, requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
@@ -29,6 +32,26 @@ from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 if is_pyctcdecode_available():
     from pyctcdecode import BeamSearchDecoderCTC
+    from pyctcdecode.alphabet import BLANK_TOKEN_PTN, UNK_TOKEN, UNK_TOKEN_PTN
+    from pyctcdecode.constants import (
+        DEFAULT_BEAM_WIDTH,
+        DEFAULT_HOTWORD_WEIGHT,
+        DEFAULT_MIN_TOKEN_LOGP,
+        DEFAULT_PRUNE_LOGP,
+    )
+
+
+@dataclass
+class Wav2Vec2DecoderWithLMOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.Wav2Vec2DecoderWith`, with transcription.
+
+    Args:
+        text (:obj:`list(str)`):
+            Decoded logits in text from. Usually the speech transcription.
+    """
+
+    text: Union[List[str], str]
 
 
 class Wav2Vec2ProcessorWithLM:
@@ -62,6 +85,15 @@ class Wav2Vec2ProcessorWithLM:
             )
         if not isinstance(decoder, BeamSearchDecoderCTC):
             raise ValueError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
+
+        # make sure that decoder's alphabet and tokenizer's vocab match in content
+        missing_decoder_tokens = self.get_missing_alphabet_tokens(decoder, tokenizer)
+        if len(missing_decoder_tokens) > 0:
+            raise ValueError(
+                f"The tokens {missing_decoder_tokens} are defined in the tokenizer's "
+                "vocabulary, but not in the decoder's alphabet. "
+                f"Make sure to include {missing_decoder_tokens} in the decoder's alphabet."
+            )
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
@@ -127,31 +159,52 @@ class Wav2Vec2ProcessorWithLM:
         else:
             decoder = BeamSearchDecoderCTC.load_from_hf_hub(pretrained_model_name_or_path, **kwargs)
 
-        # make sure that decoder's alphabet and tokenizer's vocab match
-        if not cls.decoder_matches_vocab(decoder, tokenizer):
-            raise ValueError("...")
+        # set language model attributes
+        for attribute in ["alpha", "beta", "unk_score_offset", "score_boundary"]:
+            value = kwargs.pop(attribute, None)
+
+            if value is not None:
+                cls._set_language_model_attribute(decoder, attribute, value)
+
+        # make sure that decoder's alphabet and tokenizer's vocab match in content
+        missing_decoder_tokens = cls.get_missing_alphabet_tokens(decoder, tokenizer)
+        if len(missing_decoder_tokens) > 0:
+            raise ValueError(
+                f"The tokens {missing_decoder_tokens} are defined in the tokenizer's "
+                "vocabulary, but not in the decoder's alphabet. "
+                f"Make sure to include {missing_decoder_tokens} in the decoder's alphabet."
+            )
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer, decoder=decoder)
 
     @staticmethod
-    def decoder_matches_vocab(decoder, tokenizer):
+    def _set_language_model_attribute(decoder: BeamSearchDecoderCTC, attribute: str, value: float):
+        setattr(decoder.model_container[decoder._model_key], attribute, value)
+
+    @property
+    def language_model(self):
+        return self.decoder.model_container[self.decoder._model_key]
+
+    @staticmethod
+    def get_missing_alphabet_tokens(decoder, tokenizer):
         # we need to make sure that all of the tokenizer's except the special tokens
-        # are present in the decoder's alphabet
-        tokenizer_vocab = set([t.lower() for t in tokenizer.get_vocab().keys()])
+        # are present in the decoder's alphabet. Retrieve missing alphabet token
+        # from decoder
+        tokenizer_vocab_list = [t.lower() for t in tokenizer.get_vocab().keys()]
 
-        # special tokens consist of special_tokens_map & word delimiter token
-        tokenizer_special_tokens = set(list(tokenizer.special_tokens_map.values()))
-        if hasattr(tokenizer, "word_delimiter_token"):
-            tokenizer_special_tokens.add(tokenizer.word_delimiter_token)
-
-        # get tokens that are present in tokenizer, but not in decoder
-        tokenizer_extra_tokens = tokenizer_vocab - set(decoder._alphabet.labels)
+        # replace special tokens
+        for i, token in enumerate(tokenizer_vocab_list):
+            if BLANK_TOKEN_PTN.match(token):
+                tokenizer_vocab_list[i] = ""
+            if token == tokenizer.word_delimiter_token:
+                tokenizer_vocab_list[i] = " "
+            if UNK_TOKEN_PTN.match(token):
+                tokenizer_vocab_list[i] = UNK_TOKEN
 
         # are any of the extra tokens no special tokenizer tokens?
-        if len(tokenizer_extra_tokens - tokenizer_special_tokens) > 0:
-            return False
+        missing_tokens = set(tokenizer_vocab_list) - set(decoder._alphabet.labels)
 
-        return True
+        return missing_tokens
 
     def __call__(self, *args, **kwargs):
         """
@@ -173,14 +226,70 @@ class Wav2Vec2ProcessorWithLM:
         """
         return self.current_processor.pad(*args, **kwargs)
 
-    def batch_decode(self, logits, num_processes: Optional[str] = None, **kwargs):
-        logits_list = [array for array in logits.numpy()]
+    def batch_decode(
+        self,
+        logits: np.ndarray,
+        num_processes: Optional[int] = None,
+        beam_width: Optional[int] = None,
+        beam_prune_logp: Optional[float] = None,
+        token_min_logp: Optional[float] = None,
+        hotwords: Optional[Iterable[str]] = None,
+        hotword_weight: Optional[float] = None,
+    ):
+        # set defaults
+        beam_width = beam_width if beam_width is not None else DEFAULT_BEAM_WIDTH
+        beam_prune_logp = beam_prune_logp if beam_prune_logp is not None else DEFAULT_PRUNE_LOGP
+        token_min_logp = token_min_logp if token_min_logp is not None else DEFAULT_MIN_TOKEN_LOGP
+        hotword_weight = hotword_weight if hotword_weight is not None else DEFAULT_HOTWORD_WEIGHT
+
+        # create multiprocessing pool and list numpy arrays
+        logits_list = [array for array in logits]
         pool = Pool(num_processes)
 
-        return self.decoder.decode_batch(pool, logits_list=logits_list, **kwargs)
+        # pyctcdecode
+        decoded_beams = self.decoder.decode_beams_batch(
+            pool,
+            logits_list=logits_list,
+            beam_width=beam_width,
+            beam_prune_logp=beam_prune_logp,
+            token_min_logp=token_min_logp,
+            hotwords=hotwords,
+            hotword_weight=hotword_weight,
+        )
 
-    def decode(self, logits, **kwargs):
-        return self.decoder.decode(logits.numpy(), **kwargs)
+        # extract text
+        batch_texts = [d[0][0] for d in decoded_beams]
+
+        # more output features will be added in the future
+        return Wav2Vec2DecoderWithLMOutput(text=batch_texts)
+
+    def decode(
+        self,
+        logits: np.ndarray,
+        beam_width: Optional[int] = None,
+        beam_prune_logp: Optional[float] = None,
+        token_min_logp: Optional[float] = None,
+        hotwords: Optional[Iterable[str]] = None,
+        hotword_weight: Optional[float] = None,
+    ):
+        # set defaults
+        beam_width = beam_width if beam_width is not None else DEFAULT_BEAM_WIDTH
+        beam_prune_logp = beam_prune_logp if beam_prune_logp is not None else DEFAULT_PRUNE_LOGP
+        token_min_logp = token_min_logp if token_min_logp is not None else DEFAULT_MIN_TOKEN_LOGP
+        hotword_weight = hotword_weight if hotword_weight is not None else DEFAULT_HOTWORD_WEIGHT
+
+        # pyctcdecode
+        decoded_beams = self.decoder.decode_beams(
+            logits,
+            beam_width=beam_width,
+            beam_prune_logp=beam_prune_logp,
+            token_min_logp=token_min_logp,
+            hotwords=hotwords,
+            hotword_weight=hotword_weight,
+        )
+
+        # more output features will be added in the future
+        return Wav2Vec2DecoderWithLMOutput(text=decoded_beams[0][0])
 
     @contextmanager
     def as_target_processor(self):

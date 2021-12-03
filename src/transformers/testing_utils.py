@@ -38,6 +38,7 @@ from .file_utils import (
     is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
+    is_pyctcdecode_available,
     is_pytesseract_available,
     is_rjieba_available,
     is_scatter_available,
@@ -543,6 +544,16 @@ def require_deepspeed(test_case):
     """
     if not is_deepspeed_available():
         return unittest.skip("test requires deepspeed")(test_case)
+    else:
+        return test_case
+
+
+def require_pyctcdecode(test_case):
+    """
+    Decorator marking a test that requires pyctcdecode
+    """
+    if not is_pyctcdecode_available():
+        return unittest.skip("test requires pyctcdecode")(test_case)
     else:
         return test_case
 

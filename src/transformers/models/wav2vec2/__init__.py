@@ -24,6 +24,7 @@ _import_structure = {
     "configuration_wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config"],
     "feature_extraction_wav2vec2": ["Wav2Vec2FeatureExtractor"],
     "processing_wav2vec2": ["Wav2Vec2Processor"],
+    "processing_wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
 }
 
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
     from .configuration_wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config
     from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
     from .processing_wav2vec2 import Wav2Vec2Processor
+    from .processing_wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2Tokenizer
 
     if is_torch_available():
