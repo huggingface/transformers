@@ -55,7 +55,7 @@ limitations under the License.
     <a href="https://hf.co/course"><img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/course_banner.png"></a>
 </h3>
 
-🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as language, vision, and audio. 
+🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio. 
 
 These models can perform tasks on texts such as text classification, information extraction, question answering, summarization, translation, text generation and more in over 100 languages. They can perform tasks on images such as image classification, object detection, segmentation. They can perform tasks on audio such as speech recognition and audio classification. They can perform tasks on several modalities combined, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, visual question answering.
 
@@ -69,7 +69,7 @@ You can test most of our models directly on their pages from the [model hub](htt
 
 Here are a few examples:
 
- in NLP:
+ In Natural Language Processing:
 - [Masked word completion with BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
 - [Name Entity Recognition with Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [Text generation with GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
