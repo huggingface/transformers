@@ -92,6 +92,7 @@ _import_structure = {
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
         "DataCollatorWithPadding",
+        "DefaultDataCollator",
         "default_data_collator",
     ],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
@@ -2086,6 +2087,7 @@ if TYPE_CHECKING:
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
         DataCollatorWithPadding,
+        DefaultDataCollator,
         default_data_collator,
     )
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
