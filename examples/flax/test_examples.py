@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc..
+# Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -109,17 +109,13 @@ class ExamplesTests(TestCasePlus):
             --do_train
             --do_eval
             --block_size 128
-            --per_device_train_batch_size 5
-            --per_device_eval_batch_size 5
+            --per_device_train_batch_size 4
+            --per_device_eval_batch_size 4
             --num_train_epochs 2
             --logging_steps 2 --eval_steps 2
             --output_dir {tmp_dir}
             --overwrite_output_dir
             """.split()
-
-        # if torch.cuda.device_count() > 1:
-        # Skipping because there are not enough batches to train the model + would need a drop_last to work.
-        # return
 
         with patch.object(sys, "argv", testargs):
             run_clm_flax.main()
@@ -171,6 +167,10 @@ class ExamplesTests(TestCasePlus):
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
             --overwrite_output_dir
+            --max_seq_length 128
+            --per_device_train_batch_size 4
+            --per_device_eval_batch_size 4
+            --logging_steps 2 --eval_steps 2
             --do_train
             --do_eval
             --num_train_epochs=1
@@ -179,7 +179,7 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_mlm_flax.main()
             result = get_results(tmp_dir)
-            self.assertLess(result["perplexity"], 42)
+            self.assertLess(result["eval_perplexity"], 42)
 
     @slow
     def test_run_t5_mlm(self):
@@ -202,10 +202,6 @@ class ExamplesTests(TestCasePlus):
             --output_dir {tmp_dir}
             --overwrite_output_dir
             """.split()
-
-        # if torch.cuda.device_count() > 1:
-        # Skipping because there are not enough batches to train the model + would need a drop_last to work.
-        # return
 
         with patch.object(sys, "argv", testargs):
             run_t5_mlm_flax.main()

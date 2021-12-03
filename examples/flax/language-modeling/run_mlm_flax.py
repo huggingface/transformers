@@ -726,7 +726,7 @@ def main():
         eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
         try:
-            perplexity = math.exp(metrics["loss"])
+            perplexity = math.exp(eval_metrics["loss"])
         except OverflowError:
             perplexity = float("inf")
         eval_metrics["perplexity"] = perplexity
