@@ -228,7 +228,7 @@ class TrainingArguments:
         fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
-        tf32 (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        tf32 (:obj:`bool`, `optional`, defaults to :obj:`None`):
             Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API
             and it may change.
         local_rank (:obj:`int`, `optional`, defaults to -1):
@@ -553,7 +553,7 @@ class TrainingArguments:
         metadata={"help": "Whether to use full float16 evaluation instead of 32-bit"},
     )
     tf32: bool = field(
-        default=True,
+        default=None,
         metadata={
             "help": "Whether to enable tf32 mode, available in Ampere and newer GPU architectures. This is an experimental API and it may change."
         },
@@ -812,8 +812,16 @@ class TrainingArguments:
                 "Mixed precision training with AMP or APEX (`--fp16` or `--bf16`) and half precision evaluation (`--fp16_full_eval` or `--bf16_full_eval`) can only be used on CUDA devices."
             )
 
-        if is_torch_available() and is_torch_tf32_available():
-            torch.backends.cuda.matmul.allow_tf32 = True if self.tf32 else False
+        if is_torch_available() and self.tf32 is not None:
+            if self.tf32:
+                if is_torch_tf32_available():
+                    torch.backends.cuda.matmul.allow_tf32 = True
+                else:
+                    raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
+            else:
+                if is_torch_tf32_available():
+                    torch.backends.cuda.matmul.allow_tf32 = False
+                # nothing need to assert on else
 
         if self.report_to is None:
             logger.info(
