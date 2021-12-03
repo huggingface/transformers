@@ -327,10 +327,6 @@ def main():
             logger.info(f"Overriding config: {model_args.config_overrides}")
             config.update_from_string(model_args.config_overrides)
 
-    import pdb
-
-    pdb.set_trace()
-
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
         "use_fast": model_args.use_fast_tokenizer,
@@ -360,9 +356,6 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForMaskedLM.from_config(config)
 
-    import pdb
-
-    pdb.set_trace()
     model.resize_token_embeddings(len(tokenizer))
 
     # Preprocessing the datasets.
