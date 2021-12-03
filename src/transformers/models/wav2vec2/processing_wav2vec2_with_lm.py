@@ -72,7 +72,7 @@ class Wav2Vec2ProcessorWithLM:
     """
 
     def __init__(
-        self, feature_extractor: FeatureExtractionMixin, tokenizer: PreTrainedTokenizer, decoder: BeamSearchDecoderCTC
+        self, feature_extractor: FeatureExtractionMixin, tokenizer: PreTrainedTokenizer, decoder: "BeamSearchDecoderCTC"
     ):
         if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
             raise ValueError(
@@ -178,7 +178,7 @@ class Wav2Vec2ProcessorWithLM:
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer, decoder=decoder)
 
     @staticmethod
-    def _set_language_model_attribute(decoder: BeamSearchDecoderCTC, attribute: str, value: float):
+    def _set_language_model_attribute(decoder: "BeamSearchDecoderCTC", attribute: str, value: float):
         setattr(decoder.model_container[decoder._model_key], attribute, value)
 
     @property
