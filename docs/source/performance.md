@@ -358,7 +358,12 @@ Like all cases with reduced precision this may or may not be satisfactory for yo
 
 If you're already using fp16 or bf16 mixed precision it may help with the throughput as well.
 
+You can enable this mode in the 🤗 Trainer with `--tf32`, or disable it with `--tf32 0` or `--no_tf32`.
+By default the PyTorch default is used.
+
 Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exit.
+
+Note: you need `torch>=1.7` to enjoy this feature.
 
 
 ### Gradient Checkpointing
