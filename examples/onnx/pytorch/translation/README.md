@@ -19,7 +19,7 @@ limitations under the License.
 
 This folder contains an example of exporting Bart + Beam Search generation (`BartForConditionalGeneration`) to ONNX.
 
-Beam Search contains a for-loop workflow, so we need to make them TorchScript-compatible for exporting to ONNX. This example shows how to make a Bart model to be TorchScript-compatible by wrapping up it into a new model. In addition, some changes were made to the beam_search() function for making it TorchScript-compatible.
+Beam Search contains a for-loop workflow, so we need to make them TorchScript-compatible for exporting to ONNX. This example shows how to make a Bart model be TorchScript-compatible by wrapping up it into a new model. In addition, some changes were made to the `beam_search()` function to make it TorchScript-compatible.
 
 
 ## How to run the example
