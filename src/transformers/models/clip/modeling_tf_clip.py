@@ -1158,7 +1158,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
             >>> outputs = model(**inputs)
             >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooled_output # pooled (EOS token) states
+            >>> pooled_output = outputs.pooler_output # pooled (EOS token) states
         """
         inputs = input_processing(
             func=self.call,
@@ -1268,7 +1268,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
 
             >>> outputs = model(**inputs)
             >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooled_output # pooled CLS states
+            >>> pooled_output = outputs.pooler_output # pooled CLS states
         """
         inputs = input_processing(
             func=self.call,
@@ -1478,6 +1478,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
 
         Examples::
 
+            >>> import tensorflow as tf
             >>> from PIL import Image
             >>> import requests
             >>> from transformers import CLIPProcessor, TFCLIPModel
