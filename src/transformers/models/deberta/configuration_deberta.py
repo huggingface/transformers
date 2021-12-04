@@ -82,8 +82,8 @@ class DebertaConfig(PretrainedConfig):
         position_biased_input (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether add absolute position embedding to content embedding.
         pos_att_type (:obj:`List[str]`, `optional`):
-            The type of relative position attention, it can be a combination of :obj:`["p2c", "c2p", "p2p"]`, e.g.
-            :obj:`["p2c"]`, :obj:`["p2c", "c2p"]`, :obj:`["p2c", "c2p", 'p2p"]`.
+            The type of relative position attention, it can be a combination of :obj:`["p2c", "c2p"]`, e.g.
+            :obj:`["p2c"]`, :obj:`["p2c", "c2p"]`, :obj:`["p2c", "c2p"]`.
         layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
     """
