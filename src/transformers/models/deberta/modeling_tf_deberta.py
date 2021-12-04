@@ -680,6 +680,7 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
 
         score = 0
 
+        # content->position
         if "c2p" in self.pos_att_type:
             pos_key_layer = self.pos_proj(rel_embeddings)
             pos_key_layer = self.transpose_for_scores(pos_key_layer)
