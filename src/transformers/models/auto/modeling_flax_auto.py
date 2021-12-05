@@ -28,7 +28,9 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("blenderbot-small", "FlaxBlenderbotSmallModel"),
         ("pegasus", "FlaxPegasusModel"),
+        ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("distilbert", "FlaxDistilBertModel"),
         ("albert", "FlaxAlbertModel"),
         ("roberta", "FlaxRobertaModel"),
@@ -38,6 +40,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("bart", "FlaxBartModel"),
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
+        ("gptj", "FlaxGPTJModel"),
         ("electra", "FlaxElectraModel"),
         ("clip", "FlaxCLIPModel"),
         ("vit", "FlaxViTModel"),
@@ -46,6 +49,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5Model"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
         ("marian", "FlaxMarianModel"),
+        ("blenderbot", "FlaxBlenderbotModel"),
     ]
 )
 
@@ -82,6 +86,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("blenderbot-small", "FlaxBlenderbotSmallForConditionalGeneration"),
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("bart", "FlaxBartForConditionalGeneration"),
         ("mbart", "FlaxMBartForConditionalGeneration"),
@@ -89,6 +94,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("marian", "FlaxMarianMTModel"),
         ("encoder-decoder", "FlaxEncoderDecoderModel"),
+        ("blenderbot", "FlaxBlenderbotForConditionalGeneration"),
     ]
 )
 
@@ -111,6 +117,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
+        ("gptj", "FlaxGPTJForCausalLM"),
     ]
 )
 
