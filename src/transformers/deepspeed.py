@@ -239,23 +239,32 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match("fp16.enabled", fp16_backend == "amp", "fp16|fp16_full_eval+fp16_backend(amp)")
+        self.fill_match(
+            "fp16.enabled",
+            ((args.fp16 or args.fp16_full_eval) and fp16_backend == "amp"),
+            "fp16|fp16_full_eval+fp16_backend(amp)",
+        )
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features
         self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
 
-        self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
+        self.fill_match("bfloat16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
-        if self.is_false("fp16.enabled"):
-            if self.is_true("bfloat16.enabled"):
-                self._dtype = torch.bfloat16
-            else:
-                self._dtype = torch.float32
+        if self.is_true("bfoat16.enabled"):
+            self._dtype = torch.bfloat16
+        elif self.is_false("fp16.enabled"):
+            self._dtype = torch.float32
         else:
             self._dtype = torch.float16
+
+        # print(self._dtype)
+        # print(self.get_value("fp16.enabled"))
+        # print(self.get_value("bf16.enabled"))
+        # print(self.config)
+        # die
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """

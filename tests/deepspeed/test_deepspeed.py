@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     get_gpu_count,
     mockenv_context,
     require_deepspeed,
+    require_torch_bf16,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -140,7 +141,10 @@ ZERO2_BF16 = "zero2_bf16"
 ZERO3_BF16 = "zero3_bf16"
 
 stages_fp16 = [ZERO2_FP16, ZERO3_FP16]
-stages_bf16 = [ZERO2_BF16, ZERO3_BF16]
+
+# XXX: for now only zero2 is supported
+# stages_bf16 = [ZERO2_BF16, ZERO3_BF16]
+stages_bf16 = [ZERO2_BF16]
 
 stages_all = stages_fp16 + stages_bf16
 
@@ -734,7 +738,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     #
 
     @require_torch_multi_gpu
-    @parameterized.expand(stages_fp16)
+    @parameterized.expand(stages_all)
     def test_basic_distributed(self, stage_dtype):
         self.run_and_check(stage_dtype=stage_dtype, distributed=True)
 
@@ -748,7 +752,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             do_eval=True,
         )
 
-    @parameterized.expand(stages_fp16)
+    @parameterized.expand(stages_all)
     def test_fp32_non_distributed(self, stage_dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
@@ -763,7 +767,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @require_torch_multi_gpu
-    @parameterized.expand(stages_fp16)
+    @parameterized.expand(stages_all)
     def test_fp32_distributed(self, stage_dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
@@ -777,7 +781,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             fp32=True,
         )
 
-    @parameterized.expand(stages_fp16)
+    @parameterized.expand(stages_all)
     def test_resume_train_not_from_ds_checkpoint(self, stage_dtype):
         # do normal training and then resume not from the deepspeed checkpoint but explicitly from
         # the saved model dir
@@ -943,7 +947,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         return output_dir
 
-    @parameterized.expand(stages_fp16)
+    @parameterized.expand(stages_all)
     def test_clm(self, stage_dtype):
         # this test exercises model.resize_token_embeddings() which requires param gathering outside
         # of forward - it's not used by `run_translation.py`, but it is in `run_clm.py`
