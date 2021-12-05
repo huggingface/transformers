@@ -9,10 +9,12 @@ from transformers import BartConfig
 from transformers.generation_utils import GenerationMixin
 
 
-def _convert_past_list_to_tuple(past):
+def _convert_past_list_to_tuple(past_key_values):
     """
-    The type of past_key_values is tuple(tuple(torch.FloatTensor)) which is not TorchScript-compatible.
-    This will convert past values from a list to tuple(tuple(torch.FloatTensor)) for the inner decoder.
+    In Bart model, the type of past_key_values is tuple(tuple(torch.FloatTensor)) which is not
+    TorchScript-compatible. To support this, we have to convert it during the export process.
+    This function will convert past values from a list to tuple(tuple(torch.FloatTensor)) for
+    the inner decoder.
 
     According to the definition of past_key_values, each inner tuple(torch.FloatTensor) has 4 tensors,
     so we convert every 4 elements in the list as a tuple(torch.FloatTensor).
@@ -20,10 +22,10 @@ def _convert_past_list_to_tuple(past):
     count_of_each_inner_tuple = 4
     results = ()
     temp_result = ()
-    count_n = len(past) // count_of_each_inner_tuple
+    count_n = len(past_key_values) // count_of_each_inner_tuple
     for idx in range(count_n):
         real_idx = idx * count_of_each_inner_tuple
-        temp_result = tuple(past[real_idx : real_idx + count_of_each_inner_tuple])
+        temp_result = tuple(past_key_values[real_idx : real_idx + count_of_each_inner_tuple])
         results += ((temp_result),)
 
     return results
