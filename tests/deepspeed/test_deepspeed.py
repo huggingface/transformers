@@ -64,6 +64,16 @@ def load_json(path):
         return json.load(f)
 
 
+def stage_dtype_to_dtype(stage_dtype):
+    stage, dtype = stage_dtype.split("_")
+    return dtype
+
+
+def stage_dtype_to_dtype_kwargs(stage_dtype):
+    stage, dtype = stage_dtype.split("_")
+    return dtype, True
+
+
 def get_master_port(real_launcher=False):
     """
     When using a single gpu launcher emulation (i.e. not deepspeed or python -m torch.distributed)
@@ -131,6 +141,8 @@ ZERO3_BF16 = "zero3_bf16"
 
 stages_fp16 = [ZERO2_FP16, ZERO3_FP16]
 stages_bf16 = [ZERO2_BF16, ZERO3_BF16]
+
+stages_all = stages_fp16 + stages_bf16
 
 stages = [ZERO2, ZERO3]
 dtypes = [FP16, BF16]
@@ -257,9 +269,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             zero3_bf16=config_zero3_bf16,
         )
 
-    def get_config_dict(self, stage):
+    def get_config_dict(self, stage_dtype):
         # As some tests modify the dict, always make a copy
-        return deepcopy(self.ds_config_dict[stage])
+        return deepcopy(self.ds_config_dict[stage_dtype])
 
     # --- These tests are enough to run on one of zero stages --- #
 
@@ -376,9 +388,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     # --- These tests need to run on both zero stages --- #
 
     @parameterized.expand(stages_fp16)
-    def test_hf_optimizer_with_offload(self, stage):
+    def test_hf_optimizer_with_offload(self, stage_dtype):
         # non-DS optimizers can be used with ZERO-offload (as long as they have both CPU and GPU implementation (except LAMB))
-        ds_config_dict = self.get_config_dict(stage)
+        ds_config_dict = self.get_config_dict(stage_dtype)
         del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
         # force cpu offload
         ds_config_dict["zero_optimization"]["offload_optimizer"]["device"] = "cpu"
@@ -389,7 +401,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(stages_fp16)
-    def test_fake_notebook_no_launcher(self, stage):
+    def test_fake_notebook_no_launcher(self, stage_dtype):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
 
         # note that unittest resets sys.stdout each test, so `CaptureStd` will work here to capture
@@ -397,13 +409,13 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
         # to reset `deepspeed_logger.handlers[0].setStream(sys.stdout)` or directly capture from the deepspeed_logger.
         with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=self.get_config_dict(stage))
+            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=self.get_config_dict(stage_dtype))
             with CaptureLogger(deepspeed_logger) as cl:
                 trainer.train()
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(stages_fp16)
-    def test_early_get_last_lr(self, stage):
+    def test_early_get_last_lr(self, stage_dtype):
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
         # not run for the first few dozen steps while loss scale is too large, and thus during
         # that time `get_last_lr` will fail if called during that warm up stage,
@@ -418,7 +430,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 local_rank=0,
                 train_len=8,
                 fp16=True,
-                deepspeed=self.get_config_dict(stage),
+                deepspeed=self.get_config_dict(stage_dtype),
                 per_device_train_batch_size=8,
                 logging_steps=1,
             )
@@ -431,7 +443,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             # print(trainer.model.a.item())
             # print(trainer.model.b.item())
             # need to investigate at some point
-            if stage == ZERO3_FP16:
+            if stage_dtype == ZERO3_FP16:
                 return
 
             # it's enough that train didn't fail for this test, but we must check that
@@ -439,7 +451,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(post_train_a, a)
 
     @parameterized.expand(stages_fp16)
-    def test_gradient_accumulation(self, stage):
+    def test_gradient_accumulation(self, stage_dtype):
         # this test measures that we get identical weights and similar loss with:
         # 1. per_device_train_batch_size=8, gradient_accumulation_steps=1
         # 2. per_device_train_batch_size=4, gradient_accumulation_steps=2
@@ -460,9 +472,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             b=b,
             local_rank=0,
             train_len=train_len,
-            fp16=True,
-            deepspeed=self.get_config_dict(stage),
+            deepspeed=self.get_config_dict(stage_dtype),
         )
+        kwargs[stage_dtype_to_dtype(stage_dtype)] = True
 
         with mockenv_context(**self.dist_env_1_gpu):
             no_grad_accum_trainer = get_regression_trainer(
@@ -497,17 +509,17 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # see the note above how to get identical loss on a small bs
         self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=2)
 
-    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage):
+    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage_dtype):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
 
         file_list = [WEIGHTS_NAME, "training_args.bin", "trainer_state.json", "config.json"]
 
-        if stage == ZERO2_FP16:
+        if stage_dtype == ZERO2_FP16:
             ds_file_list = ["mp_rank_00_model_states.pt"]
-        elif stage == ZERO3_FP16:
+        elif stage_dtype == ZERO3_FP16:
             ds_file_list = ["zero_pp_rank_0_mp_rank_00_model_states.pt"]
         else:
-            raise ValueError(f"unknown stage {stage}")
+            raise ValueError(f"unknown stage_dtype {stage_dtype}")
 
         # XXX: this can be recoded and then removed once we require deepspeed>0.3.13
         from packaging import version
@@ -521,12 +533,12 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
         for step in range(freq, total, freq):
             checkpoint = os.path.join(output_dir, f"checkpoint-{step}")
-            self.assertTrue(os.path.isdir(checkpoint), f"[{stage}] {checkpoint} dir is not found")
+            self.assertTrue(os.path.isdir(checkpoint), f"[{stage_dtype}] {checkpoint} dir is not found")
 
             # common files
             for filename in file_list:
                 path = os.path.join(checkpoint, filename)
-                self.assertTrue(os.path.isfile(path), f"[{stage}] {path} is not found")
+                self.assertTrue(os.path.isfile(path), f"[{stage_dtype}] {path} is not found")
 
             # ds files
             ds_path = os.path.join(checkpoint, f"global_step{step}")
@@ -534,39 +546,42 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 # filename = os.path.join(path, filename)
                 # print(filename)
                 path = os.path.join(ds_path, filename)
-                self.assertTrue(os.path.isfile(path), f"[{stage}] {path} is not found")
+                self.assertTrue(os.path.isfile(path), f"[{stage_dtype}] {path} is not found")
 
     @parameterized.expand(stages_fp16)
-    def test_save_checkpoints(self, stage):
+    def test_save_checkpoints(self, stage_dtype):
         # adapted from  TrainerIntegrationTest.test_save_checkpoints
 
         freq = 5
         output_dir = self.get_auto_remove_tmp_dir()
-        ds_config_dict = self.get_config_dict(stage)
+        ds_config_dict = self.get_config_dict(stage_dtype)
         ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-        if stage == ZERO3_FP16:
+        if stage_dtype == ZERO3_FP16:
             ds_config_dict["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = True
 
         # save checkpoints
         with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(
+            kwargs = dict(
                 output_dir=output_dir,
                 save_steps=freq,
-                fp16=True,
                 deepspeed=ds_config_dict,
             )
+            kwargs[stage_dtype_to_dtype(stage_dtype)] = True
+            trainer = get_regression_trainer(**kwargs)
             trainer.train()
 
         total = int(self.n_epochs * 64 / self.batch_size)
-        self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage)
+        self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage_dtype)
 
     @parameterized.expand(stages_fp16)
-    def test_can_resume_training_errors(self, stage):
+    def test_can_resume_training_errors(self, stage_dtype):
 
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_dict = self.get_config_dict(stage)
+            ds_config_dict = self.get_config_dict(stage_dtype)
             output_dir = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(output_dir=output_dir, fp16=True, deepspeed=ds_config_dict)
+            kwargs = dict(output_dir=output_dir, deepspeed=ds_config_dict)
+            kwargs[stage_dtype_to_dtype(stage_dtype)] = True
+            trainer = get_regression_trainer(**kwargs)
 
             # 1. fail to find any checkpoint - due a fresh output_dir
             with self.assertRaises(Exception) as context:
@@ -585,18 +600,17 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             )
 
     @parameterized.expand(stages_fp16)
-    def test_can_resume_training_normal(self, stage):
+    def test_can_resume_training_normal(self, stage_dtype):
         # adapted from TrainerIntegrationTest.test_can_resume_training
         # test normal resume for each stage separately, error-handling is tested in a different test
         output_dir = self.get_auto_remove_tmp_dir()
-        ds_config_dict = self.get_config_dict(stage)
+        ds_config_dict = self.get_config_dict(stage_dtype)
         ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-        if stage == ZERO3_FP16:
+        if stage_dtype == ZERO3_FP16:
             ds_config_dict["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = True
 
-        kwargs = dict(
-            output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, fp16=True, deepspeed=ds_config_dict
-        )
+        kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
+        kwargs[stage_dtype_to_dtype(stage_dtype)] = True
 
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
@@ -630,12 +644,12 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.check_trainer_state_are_the_same(state, state1)
 
     @parameterized.expand(stages_fp16)
-    def test_load_state_dict_from_zero_checkpoint(self, stage):
+    def test_load_state_dict_from_zero_checkpoint(self, stage_dtype):
         # test that we can load fp32 weights directly from the zero checkpoint into the current model
 
         output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False, before=False)
 
-        ds_config_dict = self.get_config_dict(stage)
+        ds_config_dict = self.get_config_dict(stage_dtype)
 
         kwargs = dict(
             output_dir=output_dir,
@@ -645,9 +659,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             save_strategy="steps",
             save_steps=1,
             learning_rate=0.1,
-            fp16=True,
             deepspeed=ds_config_dict,
         )
+        kwargs[stage_dtype_to_dtype(stage_dtype)] = True
 
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
@@ -670,8 +684,8 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         output_dir = self.get_auto_remove_tmp_dir()
         kwargs = dict(output_dir=output_dir, train_len=8, fp16=True)
 
-        ds_config_zero3_fp16_dict = self.get_config_dict("zero3_fp16")
-        ds_config_zero2_fp16_dict = self.get_config_dict("zero2_fp16")
+        ds_config_zero3_fp16_dict = self.get_config_dict(ZERO3_FP16)
+        ds_config_zero2_fp16_dict = self.get_config_dict(ZERO2_FP16)
 
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(deepspeed=ds_config_zero3_fp16_dict, **kwargs)
@@ -721,13 +735,13 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @require_torch_multi_gpu
     @parameterized.expand(stages_fp16)
-    def test_basic_distributed(self, stage):
-        self.run_and_check(stage=stage, distributed=True)
+    def test_basic_distributed(self, stage_dtype):
+        self.run_and_check(stage_dtype=stage_dtype, distributed=True)
 
     def test_do_eval_no_train(self):
         # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
-            stage=ZERO3_FP16,
+            stage_dtype=ZERO3_FP16,
             eval_steps=1,
             distributed=False,
             do_train=False,
@@ -735,42 +749,42 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     @parameterized.expand(stages_fp16)
-    def test_fp32_non_distributed(self, stage):
+    def test_fp32_non_distributed(self, stage_dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
         self.run_and_check(
-            stage=stage,
+            stage_dtype=stage_dtype,
             model_name=T5_TINY,
             distributed=False,
             do_train=True,
             do_eval=True,
             quality_checks=False,
-            fp16=False,
+            fp32=True,
         )
 
     @require_torch_multi_gpu
     @parameterized.expand(stages_fp16)
-    def test_fp32_distributed(self, stage):
+    def test_fp32_distributed(self, stage_dtype):
         # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
         # therefore no quality checks, just basic completion checks are done
         self.run_and_check(
-            stage=stage,
+            stage_dtype=stage_dtype,
             model_name=T5_TINY,
             distributed=True,
             do_train=True,
             do_eval=True,
             quality_checks=False,
-            fp16=False,
+            fp32=True,
         )
 
     @parameterized.expand(stages_fp16)
-    def test_resume_train_not_from_ds_checkpoint(self, stage):
+    def test_resume_train_not_from_ds_checkpoint(self, stage_dtype):
         # do normal training and then resume not from the deepspeed checkpoint but explicitly from
         # the saved model dir
 
         do_train = True
         do_eval = False
-        kwargs = dict(stage=stage, eval_steps=1, distributed=True, do_train=do_train, do_eval=do_eval)
+        kwargs = dict(stage_dtype=stage_dtype, eval_steps=1, distributed=True, do_train=do_train, do_eval=do_eval)
 
         # 1. normal training
         output_dir = self.run_and_check(**kwargs)
@@ -786,15 +800,15 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_inference(self, dtype):
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
-        fp16 = True if dtype == "fp16" else False
+        fp32 = True if dtype == "fp32" else False
         self.run_and_check(
-            stage=ZERO3_FP16,
+            stage_dtype=ZERO3_FP16,
             model_name=T5_TINY,
             distributed=True,
             do_train=False,
             do_eval=True,
             quality_checks=False,
-            fp16=fp16,
+            fp32=fp32,
         )
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
@@ -814,28 +828,28 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     # XXX: need to do better validation beyond just that the run was successful
     def run_and_check(
         self,
-        stage,
+        stage_dtype,
         model_name: str = T5_SMALL,
         eval_steps: int = 10,
         distributed: bool = True,
         do_train: bool = True,
         do_eval: bool = True,
         quality_checks: bool = True,
-        fp16: bool = True,
+        fp32: bool = False,
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
 
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
-            stage=stage,
+            stage_dtype=stage_dtype,
             model_name=model_name,
             eval_steps=eval_steps,
             num_train_epochs=1,
             do_train=do_train,
             do_eval=do_eval,
             distributed=distributed,
-            fp16=fp16,
+            fp32=fp32,
             extra_args_str=extra_args_str,
             remove_args_str=remove_args_str,
         )
@@ -846,14 +860,14 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     def run_trainer(
         self,
-        stage: str,
+        stage_dtype: str,
         model_name: str,
         eval_steps: int = 10,
         num_train_epochs: int = 1,
         do_train: bool = False,
         do_eval: bool = True,
         distributed: bool = True,
-        fp16: bool = True,
+        fp32: bool = False,
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
@@ -881,8 +895,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         """.split()
         args.extend(["--source_prefix", '"translate English to Romanian: "'])
 
-        if fp16:
-            args.extend(["--fp16"])
+        if not fp32:
+            dtype = stage_dtype_to_dtype(stage_dtype)
+            args.extend([f"--{dtype}"])
 
         actions = 0
         if do_train:
@@ -917,7 +932,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             remove_args = remove_args_str.split()
             args = [x for x in args if x not in remove_args]
 
-        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage_dtype}.json".split()
         script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
         launcher = get_launcher(distributed)
 
@@ -929,7 +944,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         return output_dir
 
     @parameterized.expand(stages_fp16)
-    def test_clm(self, stage):
+    def test_clm(self, stage_dtype):
         # this test exercises model.resize_token_embeddings() which requires param gathering outside
         # of forward - it's not used by `run_translation.py`, but it is in `run_clm.py`
 
@@ -954,7 +969,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --report_to none
             """.split()
 
-        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage_dtype}.json".split()
         script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
         launcher = get_launcher(distributed=True)
 
