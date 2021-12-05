@@ -73,7 +73,7 @@ class HfDeepSpeedConfig:
 
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
-        # during ``zero.Init()`` which needs whether fp16 is enabled, dtype, etc.
+        # during ``zero.Init()`` which needs to know the dtype, and some other hparams.
         self._stage = self.get_value("zero_optimization.stage", -1)
 
         # offload
@@ -171,10 +171,12 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     def __init__(self, config_file_or_dict):
         super().__init__(config_file_or_dict)
-        self._dtype = torch.float16
+        self._dtype = None
         self.mismatches = []
 
     def dtype(self):
+        if self._dtype is None:
+            raise ValueError("trainer_config_process() wasn't called yet to tell dtype")
         return self._dtype
 
     def fill_match(self, ds_key_long, hf_val, hf_key=None, must_match=True):
@@ -230,19 +232,21 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # total_num_steps - will get set in trainer_config_finalize
 
         # fp16
-        if args.fp16:
+        if args.fp16 or args.fp16_full_eval:
             fp16_backend = "apex" if args.fp16_backend == "apex" else "amp"
         else:
             fp16_backend = None
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match("fp16.enabled", fp16_backend == "amp", "fp16+fp16_backend(amp)")
+        self.fill_match("fp16.enabled", fp16_backend == "amp", "fp16|fp16_full_eval+fp16_backend(amp)")
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features
         self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
+
+        self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_false("fp16.enabled"):

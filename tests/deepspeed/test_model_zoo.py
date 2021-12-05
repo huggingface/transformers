@@ -203,7 +203,20 @@ task_cmds = make_task_cmds()
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
+
+FP16 = "fp16"
+BF16 = "bf16"
+
+ZERO2_FP16 = "zero2_fp16"
+ZERO3_FP16 = "zero3_fp16"
+ZERO2_BF16 = "zero2_bf16"
+ZERO3_BF16 = "zero3_bf16"
+
+stages_fp16 = [ZERO2_FP16, ZERO3_FP16]
+stages_bf16 = [ZERO2_BF16, ZERO3_BF16]
+
 stages = [ZERO2, ZERO3]
+dtypes = [FP16, BF16]
 
 
 def parameterized_custom_name_func(func, param_num, param):
@@ -214,7 +227,7 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 # Cartesian-product of zero stages with models to test
-params = list(itertools.product(stages, task_cmds.keys()))
+params = list(itertools.product(stages_fp16, task_cmds.keys()))
 
 
 @slow
