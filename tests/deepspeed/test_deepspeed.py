@@ -22,7 +22,7 @@ from copy import deepcopy
 from parameterized import parameterized
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
-from transformers.file_utils import WEIGHTS_NAME
+from transformers.file_utils import WEIGHTS_NAME, is_torch_bf16_available
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStderr,
@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     get_gpu_count,
     mockenv_context,
     require_deepspeed,
-    require_torch_bf16,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -142,9 +141,12 @@ ZERO3_BF16 = "zero3_bf16"
 
 stages_fp16 = [ZERO2_FP16, ZERO3_FP16]
 
-# XXX: for now only zero2 is supported
-# stages_bf16 = [ZERO2_BF16, ZERO3_BF16]
-stages_bf16 = [ZERO2_BF16]
+if is_torch_bf16_available():
+    # XXX: for now only zero2 is supported
+    # stages_bf16 = [ZERO2_BF16, ZERO3_BF16]
+    stages_bf16 = [ZERO2_BF16]
+else:
+    stages_bf16 = []
 
 stages_all = stages_fp16 + stages_bf16
 
