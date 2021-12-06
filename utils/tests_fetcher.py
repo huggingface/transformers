@@ -431,6 +431,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
             # Example files are tested separately
             elif f.startswith("examples/pytorch"):
                 test_files_to_run.append("examples/pytorch/test_examples.py")
+            elif f.startswith("examples/flax"):
+                test_files_to_run.append("examples/flax/test_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:
