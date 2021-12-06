@@ -629,11 +629,12 @@ class MLukeTokenizer(PreTrainedTokenizer):
             entity_spans, entity_spans_pair = None, None
             if batch_entity_spans_or_entity_spans_pairs is not None:
                 entity_spans_or_entity_spans_pairs = batch_entity_spans_or_entity_spans_pairs[index]
-                if entity_spans_or_entity_spans_pairs:
-                    if isinstance(entity_spans_or_entity_spans_pairs[0][0], int):
-                        entity_spans, entity_spans_pair = entity_spans_or_entity_spans_pairs, None
-                    else:
-                        entity_spans, entity_spans_pair = entity_spans_or_entity_spans_pairs
+                if len(entity_spans_or_entity_spans_pairs) > 0 and isinstance(
+                    entity_spans_or_entity_spans_pairs[0], list
+                ):
+                    entity_spans, entity_spans_pair = entity_spans_or_entity_spans_pairs
+                else:
+                    entity_spans, entity_spans_pair = entity_spans_or_entity_spans_pairs, None
 
             (
                 first_ids,

@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch, slow
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
+class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MLukeTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
@@ -119,6 +119,21 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertSequenceEqual(
                     tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
+
+    def test_padding_entity_inputs(self):
+        tokenizer = self.get_tokenizer()
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        spans = [(15, 34)]
+        pad_id = tokenizer.entity_vocab["[PAD]"]
+        mask_id = tokenizer.entity_vocab["[MASK]"]
+
+        encoding = tokenizer([sentence, sentence], entity_spans=[[spans], [spans, spans]], padding=True)
+        self.assertEqual(encoding["entity_ids"], [[mask_id, pad_id], [mask_id, mask_id]])
+
+        # test with a sentence with no entity
+        encoding = tokenizer([sentence, sentence], entity_spans=[[], [spans, spans]], padding=True)
+        self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
 
     def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
         tokenizer = self.get_tokenizer()
