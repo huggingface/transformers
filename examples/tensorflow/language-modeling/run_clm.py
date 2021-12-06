@@ -18,7 +18,7 @@ Fine-tuning the library models for causal language modeling (GPT-2, GPT-Neo...)
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=causal-lm
+https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own clm task. Pointers for this are left as comments.
 
