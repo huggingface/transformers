@@ -592,7 +592,7 @@ class CometCallback(TrainerCallback):
         if not _has_comet:
             raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
         self._initialized = False
-        self._log_artifacts = False
+        self._log_checkpoints = False
 
     def setup(self, args, state, model):
         """
@@ -614,7 +614,7 @@ class CometCallback(TrainerCallback):
         self._initialized = True
         log_artifacts = os.getenv("COMET_LOG_MODEL", "FALSE").upper()
         if log_artifacts in {"TRUE", "1"}:
-            self._log_artifacts = True
+            self._log_checkpoints = True
         if state.is_world_process_zero:
             comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
             experiment = None
@@ -626,6 +626,7 @@ class CometCallback(TrainerCallback):
             elif comet_mode == "OFFLINE":
                 experiment_kwargs["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
                 experiment = comet_ml.OfflineExperiment(**experiment_kwargs)
+                experiment.log_other("Created from", "transformers")
                 logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
             if experiment is not None:
                 experiment._set_model_graph(model, framework="transformers")
@@ -648,9 +649,10 @@ class CometCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
             experiment = comet_ml.config.get_global_experiment()
-            if (experiment is not None) and (self._log_artifacts is True):
-                logger.info("Logging artifacts. This may take time.")
-                experiment.log_asset(args.output_dir)
+            if (experiment is not None) and (self._log_checkpoints is True):
+                logger.info("Logging checkpoints. This may take time.")
+                checkpoint_path = os.path.join(args.output_dir, "checkpoints")
+                experiment.log_asset_folder(checkpoint_path, step=state.global_step)
 
 
 class AzureMLCallback(TrainerCallback):
