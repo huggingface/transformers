@@ -164,14 +164,14 @@ def convert_json(json_report):
         for file_path in json_report:
             fp.write(file_path + "\n")
             fp.write("=" * len(file_path) + "\n")
-            for docstring, error in json_report[file_path].items():
+            for docstring, info in json_report[file_path].items():
                 fp.write("\n")
                 fp.write(docstring)
                 fp.write("\n")
                 indent = get_indent(docstring)
                 fp.write(indent + "Errors:\n\n")
-                error = "\n".join([" " * 4 + indent + x for x in error.split("\n")])
-                fp.write(error + "\n")
+                outputs = "\n".join([" " * 4 + indent + x for x in info["outputs"].split("\n")])
+                fp.write(outputs + "\n")
                 fp.write("-" * len(file_path) + "\n")
             fp.write("\n")
 
