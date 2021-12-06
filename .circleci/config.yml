@@ -319,8 +319,8 @@ jobs:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -384,8 +384,8 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install .[flax,testing,sentencepiece,vision,flax-speech]
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
