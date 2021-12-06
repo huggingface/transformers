@@ -154,7 +154,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
+        Classify the sequence(s) given as inputs. See the :class:`~transformers.ZeroShotClassificationPipeline`
         documentation for more information.
 
         Args:
