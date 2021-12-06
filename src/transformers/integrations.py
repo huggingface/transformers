@@ -651,8 +651,7 @@ class CometCallback(TrainerCallback):
             experiment = comet_ml.config.get_global_experiment()
             if (experiment is not None) and (self._log_checkpoints is True):
                 logger.info("Logging checkpoints. This may take time.")
-                checkpoint_path = os.path.join(args.output_dir, "checkpoints")
-                experiment.log_asset_folder(checkpoint_path, step=state.global_step)
+                experiment.log_asset_folder(args.output_dir, step=state.global_step)
 
 
 class AzureMLCallback(TrainerCallback):
