@@ -32,6 +32,7 @@ if is_torch_available():
         GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         GPTJForCausalLM,
+        GPTJForQuestionAnswering,
         GPTJForSequenceClassification,
         GPTJModel,
     )
@@ -356,7 +357,11 @@ class GPTJModelTester:
 @require_torch
 class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification, GPTJForQuestionAnswering)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
     fx_ready_model_classes = all_model_classes
     test_pruning = False
