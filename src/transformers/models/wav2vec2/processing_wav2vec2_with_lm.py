@@ -100,15 +100,14 @@ class Wav2Vec2ProcessorWithLM:
 
     def save_pretrained(self, save_directory):
         """
-        Save a Wav2Vec2 feature_extractor object and Wav2Vec2 tokenizer object to the directory ``save_directory``, so
-        that it can be re-loaded using the :func:`~transformers.Wav2Vec2Processor.from_pretrained` class method.
+        Save the Wav2Vec2 feature_extractor, a tokenizer object and a pyctcdecode decoder to the directory ``save_directory``, so
+        that they can be re-loaded using the :func:`~transformers.Wav2Vec2ProcessorWithLM.from_pretrained` class method.
 
         .. note::
 
             This class method is simply calling
             :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained,`
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained` and pyctcdecode's
-            :meth:`pyctcdecode.BeamSearchDecoderCTC.save_to_dir` and
             :meth:`pyctcdecode.BeamSearchDecoderCTC.save_to_dir`.
 
             Please refer to the docstrings of the methods above for more information.
@@ -125,7 +124,7 @@ class Wav2Vec2ProcessorWithLM:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.Wav2Vec2Processor` from a pretrained Wav2Vec2 processor.
+        Instantiate a :class:`~transformers.Wav2Vec2ProcessorWithLM` from a pretrained Wav2Vec2 processor.
 
         .. note::
 
@@ -212,7 +211,7 @@ class Wav2Vec2ProcessorWithLM:
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` and returns its output. If used in the context
-        :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
+        :meth:`~transformers.Wav2Vec2ProcessorWithLM.as_target_processor` this method forwards all its arguments to
         Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.__call__`. Please refer to the docstring of
         the above two methods for more information.
         """
@@ -222,7 +221,7 @@ class Wav2Vec2ProcessorWithLM:
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.pad` and returns its output. If used in the context
-        :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
+        :meth:`~transformers.Wav2Vec2ProcessorWithLM.as_target_processor` this method forwards all its arguments to
         Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.pad`. Please refer to the docstring of the
         above two methods for more information.
         """
@@ -313,14 +312,14 @@ class Wav2Vec2ProcessorWithLM:
             beam_width (:obj:`int`, `optional`):
                 Maximum number of beams at each step in decoding. Defaults to pyctcdecode's DEFAULT_BEAM_WIDTH.
             beam_prune_logp (:obj:`int`, `optional`):
-                Beams that are much worse than best beam will be pruned Defaults to pyctcdecode's DEFAULT_PRUNE_LOGP.
+                A threshold to prune beams with log-probs less than best_beam_logp + beam_prune_logp. The value should be <= 0. Defaults to pyctcdecode's DEFAULT_PRUNE_LOGP.
             token_min_logp (:obj:`int`, `optional`):
-                Tokens below this logp are skipped unless they are argmax of frame Defaults to pyctcdecode's
+                Tokens with log-probs below token_min_logp are skipped unless they are have the maximum log-prob for an utterance. Defaults to pyctcdecode's
                 DEFAULT_MIN_TOKEN_LOGP.
             hotwords (:obj:`List[str]`, `optional`):
-                List of words with extra importance, can be OOV for LM
+                List of words with extra importance which can be missing from the LM's vocabulary, e.g. ["huggingface"]
             hotword_weight (:obj:`int`, `optional`):
-                Weight factor for hotword importance Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
+                Weight multiplier that boosts hotword scores. Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
 
         Returns:
             :class:`~transformers.models.wav2vec2.Wav2Vec2DecoderWithLMOutput` or :obj:`tuple`.
