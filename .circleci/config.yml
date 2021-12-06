@@ -943,6 +943,7 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - run_examples_torch
+            - run_examples_flax
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
             - run_tests_torch_and_flax
@@ -964,6 +965,7 @@ workflows:
                             - master
         jobs:
             - run_examples_torch_all
+            - run_examples_flax_all
             - run_tests_torch_and_tf_all
             - run_tests_torch_and_flax_all
             - run_tests_torch_all
