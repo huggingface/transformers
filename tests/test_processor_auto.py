@@ -17,8 +17,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, BeitFeatureExtractor, BertTokenizerFast, Wav2Vec2Config, Wav2Vec2Processor
-from transformers.testing_utils import require_torch
+from transformers import AutoProcessor, Wav2Vec2Config, Wav2Vec2Processor
 
 
 SAMPLE_PROCESSOR_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -45,12 +44,3 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor = AutoProcessor.from_pretrained(tmpdirname)
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
-
-    def test_auto_processor_reverts_to_tokenizer(self):
-        processor = AutoProcessor.from_pretrained("bert-base-cased")
-        self.assertIsInstance(processor, BertTokenizerFast)
-
-    @require_torch
-    def test_auto_processor_reverts_to_feature_extractor(self):
-        processor = AutoProcessor.from_pretrained("microsoft/beit-base-patch16-224")
-        self.assertIsInstance(processor, BeitFeatureExtractor)
