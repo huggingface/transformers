@@ -21,6 +21,16 @@ jobs:
       - name: Clone transformers
         run: |
           git clone https://github.com/huggingface/transformers
+      
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.cache/pip
+          key: v1-test_build_doc
+          restore-keys: |
+            v1-test_build_doc-${{ hashFiles('setup.py') }}
+            v1-test_build_doc
 
       - name: Setup environment
         run: |
