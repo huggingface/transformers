@@ -201,7 +201,6 @@ class Luke(TokenizerTesterMixin, unittest.TestCase):
 
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         # head and tail information
-        spans = [(0, 8), (84, 89)]
 
         with self.assertRaises(ValueError):
             tokenizer(sentence, entity_spans=[])
@@ -213,14 +212,12 @@ class Luke(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer(task="entity_span_classification")
 
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        spans = [(0, 8), (15, 34), (84, 89)]
 
         with self.assertRaises(ValueError):
             tokenizer(sentence, entity_spans=[])
 
         with self.assertRaises(ValueError):
             tokenizer(sentence, entity_spans=[0, 0, 0])
-
 
 
 @require_torch

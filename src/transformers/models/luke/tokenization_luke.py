@@ -577,7 +577,6 @@ class LukeTokenizer(RobertaTokenizer):
 
         return BatchEncoding(batch_outputs)
 
-
     def _check_entity_input_format(self, entities: Optional[EntityInput], entity_spans: Optional[EntitySpanInput]):
         if not isinstance(entity_spans, list):
             raise ValueError("entity_spans should be given as a list")
@@ -596,7 +595,6 @@ class LukeTokenizer(RobertaTokenizer):
 
             if len(entities) != len(entity_spans):
                 raise ValueError("If you specify entities, entities and entity_spans must be the same length")
-
 
     def _create_input_sequence(
         self,
