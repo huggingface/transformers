@@ -31,7 +31,8 @@ class Text2TextGenerationPipeline(Pipeline):
     following task identifier: :obj:`"text2text-generation"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
-    up-to-date list of available models on `huggingface.co/models <https://huggingface.co/models?filter=seq2seq>`__.
+    up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=text2text-generation>`__.
 
     Usage::
 
