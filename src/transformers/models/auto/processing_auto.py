@@ -19,7 +19,7 @@ from collections import OrderedDict
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME
+from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_list_of_files
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -39,6 +39,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("trocr", "TrOCRProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
     ]
 )
 
@@ -138,11 +139,17 @@ class AutoProcessor:
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
-        # First, look for a processor_type in the preprocessor_config
-        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
-        if "processor_class" in config_dict:
-            processor_class = processor_class_from_name(config_dict["processor_class"])
-            return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        # First, let's see if we have a preprocessor config.
+        # get_list_of_files only takes three of the kwargs we have, so we filter them.
+        get_list_of_files_kwargs = {
+            key: kwargs[key] for key in ["revision", "use_auth_token", "local_files_only"] if key in kwargs
+        }
+        model_files = get_list_of_files(pretrained_model_name_or_path, **get_list_of_files_kwargs)
+        if FEATURE_EXTRACTOR_NAME in model_files:
+            config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+            if "processor_class" in config_dict:
+                processor_class = processor_class_from_name(config_dict["processor_class"])
+                return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         # Otherwise, load config, if it can be loaded.
         if not isinstance(config, PretrainedConfig):
@@ -150,7 +157,7 @@ class AutoProcessor:
 
         model_type = config_class_to_model_type(type(config).__name__)
 
-        if getattr(config_dict, "processor_class", None) is not None:
+        if getattr(config, "processor_class", None) is not None:
             processor_class = config.processor_class
             return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 

@@ -32,10 +32,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
-    def test_processor_from_local_directory_from_key(self):
-        processor = AutoProcessor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
-        self.assertIsInstance(processor, Wav2Vec2Processor)
-
     def test_processor_from_local_directory_from_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = Wav2Vec2Config()
