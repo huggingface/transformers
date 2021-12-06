@@ -28,6 +28,7 @@ if is_torch_available():
     _import_structure["modeling_gptj"] = [
         "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTJForCausalLM",
+        "GPTJForQuestionAnswering",
         "GPTJForSequenceClassification",
         "GPTJModel",
         "GPTJPreTrainedModel",
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
         from .modeling_gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
+            GPTJForQuestionAnswering,
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
