@@ -30,9 +30,9 @@ from huggingface_hub import cached_download, hf_hub_url
 from transformers import (
     PerceiverConfig,
     PerceiverFeatureExtractor,
-    PerceiverForImageClassification,
     PerceiverForImageClassificationConvProcessing,
     PerceiverForImageClassificationFourier,
+    PerceiverForImageClassificationLearned,
     PerceiverForMaskedLM,
     PerceiverForMultimodalAutoencoding,
     PerceiverForOpticalFlow,
@@ -324,7 +324,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         config.label2id = {v: k for k, v in id2label.items()}
         if architecture == "image_classification":
             config.image_size = 224
-            model = PerceiverForImageClassification(config)
+            model = PerceiverForImageClassificationLearned(config)
         elif architecture == "image_classification_fourier":
             config.d_model = 261
             model = PerceiverForImageClassificationFourier(config)

@@ -2759,7 +2759,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             convnet_num_layers_is_int = convnet_num_layers == np.round(convnet_num_layers)
             if not convnet_num_layers_is_int or temporal_downsample != 1:
                 raise ValueError(
-                    "Only powers of 4 expected for spatial " "and 1 expected for temporal " "downsampling with conv."
+                    "Only powers of 4 expected for spatial and 1 expected for temporal downsampling with conv."
                 )
             self.convnet = Conv2DDownsample(
                 in_channels=in_channels,
@@ -2855,12 +2855,10 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             # if the network takes non-1D inputs
             sh = inputs.shape
             pos_enc = torch.reshape(pos_enc, list(sh)[:-1] + [-1])
-
         if self.concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
         elif self.concat_or_add_pos == "add":
             inputs_with_pos = inputs + pos_enc
-
         return inputs_with_pos, inputs
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
