@@ -15,6 +15,7 @@
 # limitations under the License.
 """ Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
 import argparse
+import json
 import logging
 import os
 import random
@@ -521,6 +522,13 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+
+    # save the eval metrics in json
+    if jax.process_index() == 0:
+        eval_metric = {f"eval_{metric_name}": value for metric_name, value in eval_metric.items()}
+        path = os.path.join(args.output_dir, "eval_results.json")
+        with open(path, "w") as f:
+            json.dump(eval_metric, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":
