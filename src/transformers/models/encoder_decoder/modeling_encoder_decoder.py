@@ -18,6 +18,7 @@ import warnings
 from typing import Optional
 
 import torch
+from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
@@ -25,6 +26,8 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_outputs import Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
+from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_encoder_decoder import EncoderDecoderConfig
 
 
@@ -181,13 +184,23 @@ class EncoderDecoderModel(PreTrainedModel):
         encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[PreTrainedModel] = None,
     ):
-        assert config is not None or (
-            encoder is not None and decoder is not None
-        ), "Either a configuration or an Encoder and a decoder has to be provided"
+        if config is None and (encoder is None or decoder is None):
+            raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
         if config is None:
             config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
-            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
+            if not isinstance(config, self.config_class):
+                raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
+                raise ValueError(
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    "it has to be equal to the encoder's `hidden_size`. "
+                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
+                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                )
+
         # initialize with config
         super().__init__(config)
 
@@ -218,9 +231,17 @@ class EncoderDecoderModel(PreTrainedModel):
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
-        assert (
-            self.encoder.get_output_embeddings() is None
-        ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
+        # encoder outputs might need to be projected to different dimension for decoder
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
+
+        if self.encoder.get_output_embeddings() is not None:
+            raise ValueError(
+                f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
+            )
 
         # tie encoder, decoder weights if config set accordingly
         self.tie_weights()
@@ -251,8 +272,12 @@ class EncoderDecoderModel(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported
-        # for composite models
+        # At the moment fast initialization is not supported for composite models
+        if kwargs.get("_fast_init", False):
+            logger.warning(
+                "Fast initialization is currently not supported for EncoderDecoderModel. "
+                "Falling back to slow initialization..."
+            )
         kwargs["_fast_init"] = False
         return super().from_pretrained(*args, **kwargs)
 
@@ -343,19 +368,18 @@ class EncoderDecoderModel(PreTrainedModel):
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            assert (
-                encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
-            from ..auto.modeling_auto import AutoModel
+            if encoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `encoder_model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has "
+                    "to be defined."
+                )
 
             if "config" not in kwargs_encoder:
-                from ..auto.configuration_auto import AutoConfig
-
                 encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
-
                     logger.info(
-                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
+                        "from a decoder model. Cross-attention and casual mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
@@ -366,18 +390,20 @@ class EncoderDecoderModel(PreTrainedModel):
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            assert (
-                decoder_pretrained_model_name_or_path is not None
-            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-            from ..auto.modeling_auto import AutoModelForCausalLM
+            if decoder_pretrained_model_name_or_path is None:
+                raise ValueError(
+                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has "
+                    "to be defined."
+                )
 
             if "config" not in kwargs_decoder:
-                from ..auto.configuration_auto import AutoConfig
-
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
+                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
+                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
+                        "cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -386,7 +412,11 @@ class EncoderDecoderModel(PreTrainedModel):
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
+                    f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
+                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
+                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
@@ -463,6 +493,13 @@ class EncoderDecoderModel(PreTrainedModel):
             )
 
         encoder_hidden_states = encoder_outputs[0]
+
+        # optionally project encoder_hidden_states
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(
