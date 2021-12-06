@@ -275,7 +275,7 @@ extras["codecarbon"] = deps_list("codecarbon")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-timeout", "black", "sacrebleu", "rouge-score", "nltk", "GitPython", "pyctcdecode"
+        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-timeout", "black", "sacrebleu", "rouge-score", "nltk", "GitPython"
     )
     + extras["retrieval"]
     + extras["modelcreation"]

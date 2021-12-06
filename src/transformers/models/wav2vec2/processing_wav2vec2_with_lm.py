@@ -23,31 +23,29 @@ from typing import Iterable, List, Optional, Union
 
 import numpy as np
 
+from pyctcdecode import BeamSearchDecoderCTC
+from pyctcdecode.alphabet import BLANK_TOKEN_PTN, UNK_TOKEN, UNK_TOKEN_PTN
+from pyctcdecode.constants import (
+    DEFAULT_BEAM_WIDTH,
+    DEFAULT_HOTWORD_WEIGHT,
+    DEFAULT_MIN_TOKEN_LOGP,
+    DEFAULT_PRUNE_LOGP,
+)
+
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import ModelOutput, is_pyctcdecode_available, requires_backends
+from ...file_utils import ModelOutput, requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
-if is_pyctcdecode_available():
-    from pyctcdecode import BeamSearchDecoderCTC
-    from pyctcdecode.alphabet import BLANK_TOKEN_PTN, UNK_TOKEN, UNK_TOKEN_PTN
-    from pyctcdecode.constants import (
-        DEFAULT_BEAM_WIDTH,
-        DEFAULT_HOTWORD_WEIGHT,
-        DEFAULT_MIN_TOKEN_LOGP,
-        DEFAULT_PRUNE_LOGP,
-    )
-
-
 @dataclass
 class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.Wav2Vec2DecoderWith`, with transcription.
+    Output type of :class:`~transformers.Wav2Vec2DecoderWithLM`, with transcription.
 
     Args:
-        text (:obj:`list(str)`):
+        text (list of :obj:`str`):
             Decoded logits in text from. Usually the speech transcription.
     """
 
@@ -60,11 +58,11 @@ class Wav2Vec2ProcessorWithLM:
     with language model support into a single processor for language model boosted speech recognition decoding.
 
     Args:
-        feature_extractor (:obj:`Wav2Vec2FeatureExtractor`):
+        feature_extractor (:class:`~transformers.Wav2Vec2FeatureExtractor`):
             An instance of :class:`~transformers.Wav2Vec2FeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:obj:`Wav2Vec2CTCTokenizer`):
+        tokenizer (:class:`~transformers.Wav2Vec2CTCTokenizer`):
             An instance of :class:`~transformers.Wav2Vec2CTCTokenizer`. The tokenizer is a required input.
-        decoder (:obj:`BeamSearchDecoderCTC`):
+        decoder (:obj:`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of :class:`pyctcdecode.BeamSearchDecoderCTC`. The decoder is a required input.
     """
 
@@ -72,7 +70,7 @@ class Wav2Vec2ProcessorWithLM:
         self,
         feature_extractor: FeatureExtractionMixin,
         tokenizer: PreTrainedTokenizer,
-        decoder: "BeamSearchDecoderCTC",
+        decoder: BeamSearchDecoderCTC,
     ):
         if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
             raise ValueError(
@@ -110,7 +108,8 @@ class Wav2Vec2ProcessorWithLM:
             This class method is simply calling
             :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained,`
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained` and pyctcdecode's
-            :meth:`BeamSearchDecoderCTC.save_to_dir` and :meth:`pyctcdecode.BeamSearchDecoderCTC.save_to_dir`.
+            :meth:`pyctcdecode.BeamSearchDecoderCTC.save_to_dir` and
+            :meth:`pyctcdecode.BeamSearchDecoderCTC.save_to_dir`.
 
             Please refer to the docstrings of the methods above for more information.
 
@@ -181,7 +180,7 @@ class Wav2Vec2ProcessorWithLM:
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer, decoder=decoder)
 
     @staticmethod
-    def _set_language_model_attribute(decoder: "BeamSearchDecoderCTC", attribute: str, value: float):
+    def _set_language_model_attribute(decoder: BeamSearchDecoderCTC, attribute: str, value: float):
         setattr(decoder.model_container[decoder._model_key], attribute, value)
 
     @property

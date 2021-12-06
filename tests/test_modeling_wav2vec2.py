@@ -22,13 +22,14 @@ import pytest
 from datasets import load_dataset
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from transformers import Wav2Vec2Config, is_torch_available
+from transformers import Wav2Vec2Config, is_torch_available, is_torchaudio_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_datasets,
     require_pyctcdecode,
     require_soundfile,
     require_torch,
+    require_torchaudio,
     slow,
     torch_device,
 )
@@ -55,6 +56,10 @@ if is_torch_available():
         _compute_mask_indices,
         _sample_negative_indices,
     )
+
+
+if is_torchaudio_available():
+    import torchaudio
 
 
 class Wav2Vec2ModelTester:
@@ -1338,13 +1343,14 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     @require_pyctcdecode
+    @require_torchaudio
     def test_wav2vec2_with_lm(self):
         ds = load_dataset("common_voice", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
-        import torchaudio.functional as F
-
-        resampled_audio = F.resample(torch.tensor(sample["audio"]["array"]), 48_000, 16_000).numpy()
+        resampled_audio = torchaudio.functional.resample(
+            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
+        ).numpy()
 
         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
             torch_device
