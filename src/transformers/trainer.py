@@ -239,7 +239,7 @@ class Trainer:
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
+        callbacks (List of :class:`~transformers.TrainerCallback`, `optional`):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
             detailed in :doc:`here <callback>`.
 
