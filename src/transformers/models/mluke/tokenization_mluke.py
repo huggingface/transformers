@@ -1417,7 +1417,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
                 if entities_provided:
-                    encoded_inputs["entity_ids"] = encoded_inputs["entity_ids"] + [0] * entity_difference
+                    encoded_inputs["entity_ids"] = (
+                        encoded_inputs["entity_ids"] + [self.entity_vocab["[PAD]"]] * entity_difference
+                    )
                     encoded_inputs["entity_position_ids"] = (
                         encoded_inputs["entity_position_ids"] + [[-1] * self.max_mention_length] * entity_difference
                     )
@@ -1446,7 +1448,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
                 if entities_provided:
-                    encoded_inputs["entity_ids"] = [0] * entity_difference + encoded_inputs["entity_ids"]
+                    encoded_inputs["entity_ids"] = [self.entity_vocab["[PAD]"]] * entity_difference + encoded_inputs[
+                        "entity_ids"
+                    ]
                     encoded_inputs["entity_position_ids"] = [
                         [-1] * self.max_mention_length
                     ] * entity_difference + encoded_inputs["entity_position_ids"]

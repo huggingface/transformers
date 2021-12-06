@@ -124,15 +124,15 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        spans = [(15, 34)]
+        span = (15, 34)
         pad_id = tokenizer.entity_vocab["[PAD]"]
         mask_id = tokenizer.entity_vocab["[MASK]"]
 
-        encoding = tokenizer([sentence, sentence], entity_spans=[[spans], [spans, spans]], padding=True)
+        encoding = tokenizer([sentence, sentence], entity_spans=[[span], [span, span]], padding=True)
         self.assertEqual(encoding["entity_ids"], [[mask_id, pad_id], [mask_id, mask_id]])
 
         # test with a sentence with no entity
-        encoding = tokenizer([sentence, sentence], entity_spans=[[], [spans, spans]], padding=True)
+        encoding = tokenizer([sentence, sentence], entity_spans=[[], [span, span]], padding=True)
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
 
     def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
