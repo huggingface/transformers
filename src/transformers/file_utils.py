@@ -245,6 +245,14 @@ except importlib_metadata.PackageNotFoundError:
     _pyctcdecode_available = False
 
 
+_librosa_available = importlib.util.find_spec("librosa") is not None
+try:
+    _librosa_version = importlib_metadata.version("librosa")
+    logger.debug(f"Successfully imported librosa version {_librosa_version}")
+except importlib_metadata.PackageNotFoundError:
+    _librosa_available = False
+
+
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
@@ -321,6 +329,10 @@ def is_torch_available():
 
 def is_pyctcdecode_available():
     return _pyctcdecode_available
+
+
+def is_librosa_available():
+    return _librosa_available
 
 
 def is_torch_cuda_available():
