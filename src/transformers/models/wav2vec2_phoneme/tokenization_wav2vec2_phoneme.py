@@ -36,15 +36,15 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json",
+        "facebook/wav2vec2-lv-60-espeak-cv-ft": "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/vocab.json",
     },
     "tokenizer_config_file": {
-        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
+        "facebook/wav2vec2-lv-60-espeak-cv-ft": "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/tokenizer_config.json",
     },
 }
 
 # Wav2Vec2Phoneme has no max input length
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-base-960h": sys.maxsize}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-lv-60-espeak-cv-ft": sys.maxsize}
 
 WAV2VEC2_KWARGS_DOCSTRING = r"""
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
@@ -96,6 +96,14 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        do_phonemize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether the tokenizer should phonetize the input or not. Only if a sequence of phonemes is passed to the
+            tokenizer, :obj:`do_phonemize` should be set to ``False``.
+        phonemizer_lang (:obj:`str`, `optional`, defaults to :obj:`"en-us"`):
+            The language of the phoneme set to which the tokenizer should phonetize the input text to.
+        phonemizer_backend (:obj:`str`, `optional`. defaults to :obj:`"espeak"`):
+            The backend phonetization library that shall be used by the phonemizer library. Defaults to ``espeak-ng``.
+            See the `phonemizer package <https://github.com/bootphon/phonemizer#readme>`_. for more information.
 
         **kwargs
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
@@ -113,6 +121,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        do_phonemize=True,
         phonemizer_lang="en-us",
         phonemizer_backend="espeak",
         **kwargs
@@ -122,11 +131,13 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
+            do_phonemize=do_phonemize,
             phonemizer_lang=phonemizer_lang,
             phonemizer_backend=phonemizer_backend,
             **kwargs,
         )
 
+        self.do_phonemize = do_phonemize
         self.phonemizer_lang = phonemizer_lang
         self.phonemizer_backend = phonemizer_backend
 
@@ -142,7 +153,11 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return dict(self.encoder, **self.added_tokens_encoder)
 
     def prepare_for_tokenization(
-        self, text: str, is_split_into_words: bool = False, text_lang: Optional[str] = None
+        self,
+        text: str,
+        is_split_into_words: bool = False,
+        phonemizer_lang: Optional[str] = None,
+        do_phonemize: Optional[bool] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -156,8 +171,13 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
-                which it will tokenize. This is useful for NER or token classification. text_lang: Input language of
-                the transcription that is passed to the phonemizer.
+                which it will tokenize. This is useful for NER or token classification.
+            phonemizer_lang (:obj:`str`, `optional`):
+                The language of the phoneme set to which the tokenizer should phonetize the input text to.
+            do_phonemize (:obj:`bool`, `optional`):
+                Whether the tokenizer should phonetize the input text or not. Only if a sequence of phonemes is passed
+                to the tokenizer, :obj:`do_phonemize` should be set to ``False``.
+
 
         Returns:
             :obj:`Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
@@ -165,9 +185,13 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         if is_split_into_words:
             text = " " + text
 
+        # set whether tokenizer should phonemize or not
+        if do_phonemize is not None:
+            self.do_phonemize = do_phonemize
+
         # set the correct phonemizer language
-        if text_lang is not None:
-            self.phonemizer_lang = text_lang
+        if phonemizer_lang is not None:
+            self.phonemizer_lang = phonemizer_lang
 
         return (text, {})
 
@@ -175,29 +199,36 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         Converts a string in a sequence of tokens (string), using the tokenizer.
         """
-        text = text.lower()
 
-        # create list of phonemes
-        phonemes = self.phonemize(text, self.phonemizer_lang)
+        # make sure whitespace is stripped to prevent <unk>
+        text = text.strip()
+
+        # phonemize
+        if self.do_phonemize:
+            text = text.lower()
+
+            # create list of phonemes
+            text = self.phonemize(text, self.phonemizer_lang)
 
         # make sure ' ' is between phonemes
-        tokens = phonemes.split(" ")
+        tokens = text.split(" ")
         return tokens
 
-    def phonemize(self, text: str, text_lang: Optional[str] = None):
-        requires_backends("phonemizer")
+    def phonemize(self, text: str, phonemizer_lang: Optional[str] = None):
+        requires_backends(self, "phonemizer")
 
         from phonemizer import phonemize
         from phonemizer.separator import Separator
 
         # set the correct phonemizer language
-        if text_lang is None:
-            text_lang = self.phonemizer_lang
+        if phonemizer_lang is None:
+            phonemizer_lang = self.phonemizer_lang
 
         separator = Separator(phone=" ", word="", syllable="")
         phonemes = phonemize(
-            text, language=text_lang, backend=self.phonemizer_backend, strip=True, separator=separator
+            text, language=phonemizer_lang, backend=self.phonemizer_backend, strip=True, separator=separator
         )
+        phonemes = phonemes.strip()
 
         return phonemes
 
@@ -290,8 +321,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         Examples::
 
             # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained('facebook/wav2vec2-base-960h')
-            model = Wav2Vec2PhonemeForCTC.from_pretrained('facebook/wav2vec2-base-960h')
+            tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained('facebook/wav2vec2-lv-60-espeak-cv-ft')
+            model = Wav2Vec2PhonemeForCTC.from_pretrained('facebook/wav2vec2-lv-60-espeak-cv-ft')
 
             num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
             print('We have added', num_added_toks, 'tokens')

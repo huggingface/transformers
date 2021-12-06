@@ -15,9 +15,9 @@
 """Tests for the Wav2Vec2Phoneme tokenizer."""
 import json
 import os
-import random
 import tempfile
 import unittest
+from typing import Tuple
 
 from transformers import Wav2Vec2PhonemeCTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
@@ -34,7 +34,9 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
+        vocab = """<s> <pad> </s> <unk> n s t ə l a i k d m ɛ ɾ e ɪ p o ɐ z ð f j v b ɹ ʁ ʊ iː r w ʌ u ɡ æ aɪ ʃ h ɔ ɑː ŋ ɚ eɪ β uː y ɑ̃ oʊ ᵻ eː θ aʊ ts oː ɔ̃ ɣ ɜ ɑ dʒ əl x ɜː ç ʒ tʃ ɔː ɑːɹ ɛ̃ ʎ ɔːɹ ʋ aː ɕ œ ø oːɹ ɲ yː ʔ iə i5 s. tɕ ?? nʲ ɛː œ̃ ɭ ɔø ʑ tʲ ɨ ɛɹ ts. rʲ ɪɹ ɭʲ i.5 ɔɪ q sʲ u5 ʊɹ iɜ a5 iɛ5 øː ʕ ja əɜ th ɑ5 oɪ dʲ ə5 tɕh ts.h mʲ ɯ dʑ vʲ e̞ tʃʲ ei5 o5 onɡ5 ɑu5 iɑ5 ai5 aɪɚ kh ə1 ʐ i2 ʉ ħ t[ aɪə ʲ ju ə2 u2 oɜ pː iɛɜ ou5 y5 uɜ tː uo5 d[ uoɜ tsh ɑɜ ɵ i̪5 uei5 ɟ aɜ ɑɨ i.ɜ eʊ o2 ɐ̃ ä pʲ kʲ n̩ ɒ ph ɑu2 uɨ əɪ ɫ ɬ yɜ bʲ ɑ2 s̪ aiɜ χ ɐ̃ʊ̃ 1 ə4 yæɜ a2 ɨː t̪ iouɜ ũ onɡɜ aɨ iɛ2 ɔɨ ɑuɜ o̞ ei2 iou2 c kː y2 ɖ oe dˤ yɛɜ əʊ S ɡʲ onɡ2 u" eiɜ ʈ ɯᵝ iou5 dZ r̝̊ i.2 tS s^ ʝ yə5 iɑɜ uə5 pf ɨu iɑ2 ou2 ər2 fʲ ai2 r̝ uəɜ ɳ əɨ ua5 uɪ ɽ bː yu5 uo2 yɛ5 l̩ ɻ ərɜ ʂ i̪2 ouɜ uaɜ a. a.ː yæ5 dː r̩ ee ɪu ər5 i̪ ɜ æi u: i.ː t^ o1 ɪ^ ai ueiɜ æː ɛɪ eə i. ɴ ie ua2 ɑ1 o4 tʃː o: ɑ: u1 N i̪1 au yæ2 u. qː yəɜ y: kʰ tʃʰ iʊ sx õ uo tʰ uai5 bʰ u.ː uə2 ʊə d^ s̪ː yiɜ dʰ r. oe: i1 ɟː yu2 nʲʲ i̪4 uei2 tsʲ ɸ ĩ ɑ4 t̪ː eɑ u4 e: tsː ʈʰ ɡʰ ɯɯ dʒʲ ʂʲ X ɵː uaiɜ tɕʲ ã t^ː ẽː yɛ2 cː i.1 ɛʊ dˤdˤ dʒː i4 ɡː yi ɕʲ ɟʰ pʰ dʑʲ yuɜ ua1 ua4 æiː ɐɐ ui iou1 ʊː a1 iou4 cʰ iɛ1 yə2 ɖʰ ẽ ʒʲ ää ər4 iːː ɪː iɑ1 ər1 œː øi ɪuː cʰcʰ əː1 iː1 ũ kʰː o̞o̞ xʲ ou1 iɛ4 e̞e̞ y1 dzː dʲʲ dʰː ɯᵝɯᵝ lː uo1 i.4 i: yɛ5ʲ a4""".split(
+            " "
+        )
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
         self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
@@ -44,86 +46,103 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
+    # overwrite since phonemes require specific creation
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+        toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
+        toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1], do_phonemize=False), toks))
+        if max_length is not None and len(toks) > max_length:
+            toks = toks[:max_length]
+        if min_length is not None and len(toks) < min_length and len(toks) > 0:
+            while len(toks) < min_length:
+                toks = toks + toks
+        # toks_str = [t[1] for t in toks]
+        toks_ids = [t[0] for t in toks]
+
+        # Ensure consistency
+        output_txt = tokenizer.decode(toks_ids, clean_up_tokenization_spaces=False)
+        if " " not in output_txt and len(toks_ids) > 1:
+            output_txt = (
+                tokenizer.decode([toks_ids[0]], clean_up_tokenization_spaces=False)
+                + " "
+                + tokenizer.decode(toks_ids[1:], clean_up_tokenization_spaces=False)
+            )
+        if with_prefix_space:
+            output_txt = " " + output_txt
+        output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
+        return output_txt, output_ids
+
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return Wav2Vec2PhonemeCTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    def test_tokenizer_add_token_chars(self):
-        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
-
-        # check adding a single token
-        tokenizer.add_tokens("x")
-        token_ids = tokenizer("C x A").input_ids
-        self.assertEqual(token_ids, [19, 4, 32, 4, 7])
-
-        tokenizer.add_tokens(["a", "b", "c"])
-        token_ids = tokenizer("C a A c").input_ids
-        self.assertEqual(token_ids, [19, 4, 33, 4, 7, 4, 35])
-
-        tokenizer.add_tokens(["a", "b", "c"])
-        token_ids = tokenizer("CaA c").input_ids
-        self.assertEqual(token_ids, [19, 33, 7, 4, 35])
-
-    def test_tokenizer_add_token_words(self):
-        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
+    def test_tokenizer_add_new_tokens(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
         # check adding a single token
         tokenizer.add_tokens("xxx")
-        token_ids = tokenizer("C xxx A B").input_ids
-        self.assertEqual(token_ids, [19, 4, 32, 4, 7, 4, 24])
+        token_ids = tokenizer("m xxx ɪ", do_phonemize=False).input_ids
+        self.assertEqual(token_ids, [13, 392, 17])  # xxx should be last token
 
         tokenizer.add_tokens(["aaa", "bbb", "ccc"])
-        token_ids = tokenizer("C aaa A ccc B B").input_ids
-        self.assertEqual(token_ids, [19, 4, 33, 4, 7, 4, 35, 4, 24, 4, 24])
+        token_ids = tokenizer("m aaa ɪ ccc", do_phonemize=False).input_ids
+        self.assertEqual(token_ids, [13, 393, 17, 395])  # aaa and ccc should be after xxx and 2 after aaa
 
-        tokenizer.add_tokens(["aaa", "bbb", "ccc"])
-        token_ids = tokenizer("CaaaA ccc B B").input_ids
-        self.assertEqual(token_ids, [19, 33, 7, 4, 35, 4, 24, 4, 24])
+        token_ids = tokenizer("maɪ c", do_phonemize=False).input_ids
+        self.assertEqual(token_ids, [3, 200])  # mai should be <unk> (=3)
+
+    def test_phonemize(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+
+        input_text = "Hello how are you"
+        phonemes = tokenizer.phonemize(input_text)
+        self.assertEqual(phonemes, "h ə l oʊh aʊɑːɹj uː")
+
+    def test_encode(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+
+        input_text = "Hello how are you"
+        phonemes = tokenizer.phonemize(input_text)
+        self.assertEqual(tokenizer(input_text).input_ids, tokenizer(phonemes, do_phonemize=False).input_ids)
+
+    def test_change_phonemizer_lang(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+        input_text = "Hello how are you"
+
+        input_ids_en = tokenizer(input_text, phonemizer_lang="en-us").input_ids
+        input_ids_fr = tokenizer(input_text, phonemizer_lang="fr-fr").input_ids
+
+        self.assertNotEqual(input_ids_en, input_ids_fr)
+
+        text_en = tokenizer.decode(input_ids_en)
+        text_fr = tokenizer.decode(input_ids_fr)
+
+        self.assertEqual(text_en, "h ə l <unk> uː")
+        self.assertEqual(text_fr, "ɛ l <unk> h aʊ <unk> ʁ j u")  # <unk> is expected since input lang is en-us
+
+    def test_case_insensitive(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+        input_text_up = "Hello how Are you"
+        input_text_low = "hello how are you"
+
+        input_ids_up = tokenizer(input_text_up).input_ids
+        input_ids_low = tokenizer(input_text_low).input_ids
+
+        self.assertEqual(input_ids_up, input_ids_low)
 
     def test_tokenizer_decode(self):
-        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
         sample_ids = [
             [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77],
+            [24, 22, 5, 24, 22, 5, 77],
         ]
         tokens = tokenizer.decode(sample_ids[0])
         batch_tokens = tokenizer.batch_decode(sample_ids)
         self.assertEqual(tokens, batch_tokens[0])
-        self.assertEqual(batch_tokens, ["HELLO<unk>", "BYE BYE<unk>"])
-
-    def test_tokenizer_decode_special(self):
-        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
-
-        sample_ids = [
-            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77],
-        ]
-        sample_ids_2 = [
-            [11, 5, 5, 5, 5, 5, 15, 15, 15, tokenizer.pad_token_id, 15, 8, 98],
-            [
-                24,
-                22,
-                5,
-                tokenizer.pad_token_id,
-                tokenizer.pad_token_id,
-                tokenizer.pad_token_id,
-                tokenizer.word_delimiter_token_id,
-                24,
-                22,
-                5,
-                77,
-                tokenizer.word_delimiter_token_id,
-            ],
-        ]
-
-        batch_tokens = tokenizer.batch_decode(sample_ids)
-        batch_tokens_2 = tokenizer.batch_decode(sample_ids_2)
-        self.assertEqual(batch_tokens, batch_tokens_2)
-        self.assertEqual(batch_tokens, ["HELLO<unk>", "BYE BYE<unk>"])
+        self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ", "j ð s j ð s oːɹ"])
 
     def test_tokenizer_decode_added_tokens(self):
-        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
         tokenizer.add_tokens(["!", "?"])
         tokenizer.add_special_tokens({"cls_token": "$$$"})
 
@@ -136,47 +155,40 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 15,
                 8,
                 98,
-                32,
-                32,
-                33,
-                tokenizer.word_delimiter_token_id,
-                32,
-                32,
-                33,
-                34,
-                34,
+                392,
+                392,
+                393,
+                392,
+                392,
+                393,
+                394,
+                394,
             ],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34],
+            [24, 22, 5, 24, 22, 5, 77, tokenizer.pad_token_id, 394, 394],
         ]
         batch_tokens = tokenizer.batch_decode(sample_ids)
+        self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ!?!? $$$", "j ð s j ð s oːɹ $$$"])
 
-        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
+    # overwrite common test
+    def test_added_tokens_do_lower_case(self):
+        # Wav2Vec2PhonemeTokenizer always lower cases letters to correctly map to phonemes
+        pass
 
-    def test_special_characters_in_vocab(self):
-        sent = "ʈʰ æ æ̃ ˧ kʰ"
+    # overwrite common test
+    def test_encode_decode_with_spaces(self):
+        # Wav2Vec2PhonemeTokenizer always puts spaces between phonemes
+        pass
 
-        vocab_dict = {k: v for v, k in enumerate({phoneme for phoneme in sent.split()})}
-        vocab_file = os.path.join(self.tmpdirname, "vocab_special.json")
-
-        with open(vocab_file, "w") as f:
-            json.dump(vocab_dict, f)
-
-        tokenizer = Wav2Vec2PhonemeCTCTokenizer(vocab_file)
-
-        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
-        self.assertEqual(sent, expected_sent)
-
-        tokenizer.save_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
-        tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained(os.path.join(self.tmpdirname, "special_tokenizer"))
-
-        expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
-        self.assertEqual(sent, expected_sent)
+    # overwrite common test
+    def test_internal_consistency(self):
+        # encodes to text to ids, but decodes ids to phonemes -> not possible to have internal consistency
+        pass
 
     def test_pretrained_model_lists(self):
         # Wav2Vec2PhonemeModel has no max model length => no testing
         pass
 
-    # overwrite from test_tokenization_common
+    # overwrite common
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
