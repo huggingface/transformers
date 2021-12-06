@@ -359,8 +359,8 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
 def deepspeed_reinit(trainer):
     """
-        temp hack until Deepspeed fixes a bug where it can't resume from a checkpoint after it did some stepping
-        https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374
+    temp hack until Deepspeed fixes a bug where it can't resume from a checkpoint after it did some stepping
+    https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374
     """
     import deepspeed
 
