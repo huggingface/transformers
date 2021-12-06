@@ -654,7 +654,7 @@ class CometCallback(TrainerCallback):
                 experiment.log_asset_folder(
                     args.output_dir, recursive=True, log_file_name=True, step=state.global_step
                 )
-
+                experiment.end()
 
 class AzureMLCallback(TrainerCallback):
     """
