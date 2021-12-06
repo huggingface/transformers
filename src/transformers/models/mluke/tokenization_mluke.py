@@ -409,17 +409,15 @@ class MLukeTokenizer(PreTrainedTokenizer):
         # Input type checking for clearer error
         is_valid_single_text = isinstance(text, str)
         is_valid_batch_text = isinstance(text, (list, tuple)) and (len(text) == 0 or (isinstance(text[0], str)))
-        assert (
-            is_valid_single_text or is_valid_batch_text
-        ), "text input must be of type `str` (single example) or `List[str]` (batch)."
+        if not (is_valid_single_text or is_valid_batch_text):
+            raise ValueError("text input must be of type `str` (single example) or `List[str]` (batch).")
 
         is_valid_single_text_pair = isinstance(text_pair, str)
         is_valid_batch_text_pair = isinstance(text_pair, (list, tuple)) and (
             len(text_pair) == 0 or isinstance(text_pair[0], str)
         )
-        assert (
-            text_pair is None or is_valid_single_text_pair or is_valid_batch_text_pair
-        ), "text_pair input must be of type `str` (single example) or `List[str]` (batch)."
+        if not (text_pair is None or is_valid_single_text_pair or is_valid_batch_text_pair):
+            raise ValueError("text_pair input must be of type `str` (single example) or `List[str]` (batch).")
 
         is_batched = bool(isinstance(text, (list, tuple)))
 
@@ -676,6 +674,25 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs)
 
+    def _check_entity_input_format(self, entities: Optional[EntityInput], entity_spans: Optional[EntitySpanInput]):
+        if not isinstance(entity_spans, list):
+            raise ValueError("entity_spans should be given as a list")
+        elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
+            raise ValueError(
+                "entity_spans should be given as a list of tuples " "containing the start and end character indices"
+            )
+
+        if entities is not None:
+
+            if not isinstance(entities, list):
+                raise ValueError("If you specify entities, they should be given as a list")
+
+            if len(entities) > 0 and not isinstance(entities[0], str):
+                raise ValueError("If you specify entities, they should be given as a list of entity names")
+
+            if len(entities) != len(entity_spans):
+                raise ValueError("If you specify entities, entities and entity_spans must be the same length")
+
     def _create_input_sequence(
         self,
         text: Union[TextInput],
@@ -731,15 +748,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             if entity_spans is None:
                 first_ids = get_input_ids(text)
             else:
-                assert isinstance(entity_spans, list) and (
-                    len(entity_spans) == 0 or isinstance(entity_spans[0], tuple)
-                ), "entity_spans should be given as a list of tuples containing the start and end character indices"
-                assert entities is None or (
-                    isinstance(entities, list) and (len(entities) == 0 or isinstance(entities[0], str))
-                ), "If you specify entities, they should be given as a list of entity names"
-                assert entities is None or len(entities) == len(
-                    entity_spans
-                ), "If you specify entities, entities and entity_spans must be the same length"
+                self._check_entity_input_format(entities, entity_spans)
 
                 first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
                 if entities is None:
@@ -751,16 +760,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 if entity_spans_pair is None:
                     second_ids = get_input_ids(text_pair)
                 else:
-                    assert isinstance(entity_spans_pair, list) and (
-                        len(entity_spans_pair) == 0 or isinstance(entity_spans_pair[0], tuple)
-                    ), "entity_spans_pair should be given as a list of tuples containing the start and end character indices"
-                    assert entities_pair is None or (
-                        isinstance(entities_pair, list)
-                        and (len(entities_pair) == 0 or isinstance(entities_pair[0], str))
-                    ), "If you specify entities_pair, they should be given as a list of entity names"
-                    assert entities_pair is None or len(entities_pair) == len(
-                        entity_spans_pair
-                    ), "If you specify entities_pair, entities_pair and entity_spans_pair must be the same length"
+                    self._check_entity_input_format(entities_pair, entity_spans_pair)
 
                     second_ids, second_entity_token_spans = get_input_ids_and_entity_token_spans(
                         text_pair, entity_spans_pair
@@ -771,9 +771,12 @@ class MLukeTokenizer(PreTrainedTokenizer):
                         second_entity_ids = [self.entity_vocab.get(entity, unk_entity_id) for entity in entities_pair]
 
         elif self.task == "entity_classification":
-            assert (
-                isinstance(entity_spans, list) and len(entity_spans) == 1 and isinstance(entity_spans[0], tuple)
-            ), "Entity spans should be a list containing a single tuple containing the start and end character indices of an entity"
+
+            if not (isinstance(entity_spans, list) and len(entity_spans) == 1 and isinstance(entity_spans[0], tuple)):
+                raise ValueError(
+                    "Entity spans should be a list containing a single tuple "
+                    "containing the start and end character indices of an entity"
+                )
 
             first_entity_ids = [self.entity_vocab["[MASK]"]]
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
@@ -791,14 +794,17 @@ class MLukeTokenizer(PreTrainedTokenizer):
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
-            assert (
+            if not (
                 isinstance(entity_spans, list)
                 and len(entity_spans) == 2
                 and isinstance(entity_spans[0], tuple)
                 and isinstance(entity_spans[1], tuple)
-            ), "Entity spans should be provided as a list of tuples, each tuple containing the start and end character indices of an entity"
+            ):
+                raise ValueError(
+                    "Entity spans should be provided as a list of two tuples, "
+                    "each tuple containing the start and end character indices of an entity"
+                )
 
-            head_span, tail_span = entity_spans
             first_entity_ids = [self.entity_vocab["[MASK]"], self.entity_vocab["[MASK2]"]]
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
 
@@ -822,9 +828,11 @@ class MLukeTokenizer(PreTrainedTokenizer):
         elif self.task == "entity_span_classification":
             mask_entity_id = self.entity_vocab["[MASK]"]
 
-            assert isinstance(entity_spans, list) and isinstance(
-                entity_spans[0], tuple
-            ), "Entity spans should be provided as a list of tuples, each tuple containing the start and end character indices of an entity"
+            if not (isinstance(entity_spans, list) and len(entity_spans) > 0 and isinstance(entity_spans[0], tuple)):
+                raise ValueError(
+                    "Entity spans should be provided as a list of tuples, "
+                    "each tuple containing the start and end character indices of an entity"
+                )
 
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
             first_entity_ids = [mask_entity_id] * len(entity_spans)
@@ -1285,9 +1293,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
         batch_size = len(required_input)
-        assert all(
-            len(v) == batch_size for v in encoded_inputs.values()
-        ), "Some items in the output dictionary have a different batch size than others."
+        if any(len(v) != batch_size for v in encoded_inputs.values()):
+            raise ValueError("Some items in the output dictionary have a different batch size than others.")
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = max(len(inputs) for inputs in required_input)
