@@ -717,17 +717,18 @@ class LukePooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Entity, with config.hidden_size->config.entity_emb_size
 class EntityPredictionHeadTransform(nn.Module):
-    def __init__(self, config: LukeConfig):
+    def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.entity_emb_size)
+        self.dense = nn.Linear(config.entity_emb_size, config.entity_emb_size)
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.entity_emb_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -735,14 +736,14 @@ class EntityPredictionHeadTransform(nn.Module):
 
 
 class EntityPredictionHead(nn.Module):
-    def __init__(self, config: LukeConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.transform = EntityPredictionHeadTransform(config)
         self.decoder = nn.Linear(config.entity_emb_size, config.entity_vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.entity_vocab_size))
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states) + self.bias
 
