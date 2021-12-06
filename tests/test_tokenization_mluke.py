@@ -80,8 +80,8 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
-        assert encoded_sentence == encoded_text_from_decode
-        assert encoded_pair == encoded_pair_from_decode
+        self.assertEqual(encoded_sentence, encoded_text_from_decode)
+        self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
     def get_clean_sequence(self, tokenizer, max_length=20) -> Tuple[str, list]:
         txt = "Beyonce lives in Los Angeles"
@@ -107,9 +107,7 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
                 # attention_mask should put 1 everywhere, so sum over length should be 1
-                self.assertEqual(
-                    sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
-                )
+                self.assertEqual(sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),)
 
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
@@ -119,6 +117,68 @@ class MLukeTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertSequenceEqual(
                     tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
+
+    def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer()
+
+        sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and Afghanistan."
+        entities = ["en:ISO 639-3"]
+        spans = [(0, 9)]
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=[0], entity_spans=spans)
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=entities, entity_spans=[0])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=entities, entity_spans=spans + [(0, 9)])
+
+    def test_if_tokenize_entity_classification_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer(task="entity_classification")
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        span = (15, 34)
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[span, span])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[0])
+
+    def test_if_tokenize_entity_pair_classification_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer(task="entity_pair_classification")
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        # head and tail information
+        spans = [(0, 8), (84, 89)]
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[0, 0])
+
+    def test_if_tokenize_entity_span_classification_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer(task="entity_span_classification")
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        spans = [(0, 8), (15, 34), (84, 89)]
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[0, 0, 0])
 
 
 @require_torch
@@ -481,8 +541,7 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             "<s><ent>Japanese<ent>is an East Asian language spoken by about 128 million people, primarily in<ent2>Japan<ent2>.</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][1:4], spaces_between_special_tokens=False),
-            "<ent>Japanese<ent>",
+            tokenizer.decode(encoding["input_ids"][1:4], spaces_between_special_tokens=False), "<ent>Japanese<ent>",
         )
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"][20:23], spaces_between_special_tokens=False), "<ent2>Japan<ent2>"
