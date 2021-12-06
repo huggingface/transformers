@@ -93,7 +93,7 @@ class AudioClassificationPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :obj:`~transformers.AutomaticSpeechRecognitionPipeline`
+        Classify the sequence(s) given as inputs. See the :class:`~transformers.AutomaticSpeechRecognitionPipeline`
         documentation for more information.
 
         Args:
