@@ -100,8 +100,9 @@ class Wav2Vec2ProcessorWithLM:
 
     def save_pretrained(self, save_directory):
         """
-        Save the Wav2Vec2 feature_extractor, a tokenizer object and a pyctcdecode decoder to the directory ``save_directory``, so
-        that they can be re-loaded using the :func:`~transformers.Wav2Vec2ProcessorWithLM.from_pretrained` class method.
+        Save the Wav2Vec2 feature_extractor, a tokenizer object and a pyctcdecode decoder to the directory
+        ``save_directory``, so that they can be re-loaded using the
+        :func:`~transformers.Wav2Vec2ProcessorWithLM.from_pretrained` class method.
 
         .. note::
 
@@ -312,10 +313,11 @@ class Wav2Vec2ProcessorWithLM:
             beam_width (:obj:`int`, `optional`):
                 Maximum number of beams at each step in decoding. Defaults to pyctcdecode's DEFAULT_BEAM_WIDTH.
             beam_prune_logp (:obj:`int`, `optional`):
-                A threshold to prune beams with log-probs less than best_beam_logp + beam_prune_logp. The value should be <= 0. Defaults to pyctcdecode's DEFAULT_PRUNE_LOGP.
+                A threshold to prune beams with log-probs less than best_beam_logp + beam_prune_logp. The value should
+                be <= 0. Defaults to pyctcdecode's DEFAULT_PRUNE_LOGP.
             token_min_logp (:obj:`int`, `optional`):
-                Tokens with log-probs below token_min_logp are skipped unless they are have the maximum log-prob for an utterance. Defaults to pyctcdecode's
-                DEFAULT_MIN_TOKEN_LOGP.
+                Tokens with log-probs below token_min_logp are skipped unless they are have the maximum log-prob for an
+                utterance. Defaults to pyctcdecode's DEFAULT_MIN_TOKEN_LOGP.
             hotwords (:obj:`List[str]`, `optional`):
                 List of words with extra importance which can be missing from the LM's vocabulary, e.g. ["huggingface"]
             hotword_weight (:obj:`int`, `optional`):
