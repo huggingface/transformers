@@ -616,6 +616,7 @@ def main():
             model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
         )
     else:
+        config.vocab_size = len(tokenizer)
         model = FlaxT5ForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     # Data collator
