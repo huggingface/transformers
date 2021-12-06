@@ -491,7 +491,7 @@ def main():
         # it is defined by `tokenizer_class` if present in config else by `model_type`
         tokenizer_type_hints = {
             "config": config if config.tokenizer_class is not None else None,
-            "tokenizer_type": config.model_type if config.tokenizer_class is None else None
+            "tokenizer_type": config.model_type if config.tokenizer_class is None else None,
         }
 
     # 5. Now we can instantiate the feature extractor, tokenizer and model
@@ -505,7 +505,7 @@ def main():
         pad_token=pad_token,
         word_delimiter_token=word_delimiter_token,
         use_auth_token=data_args.use_auth_token,
-        **tokenizer_type_hints
+        **tokenizer_type_hints,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token

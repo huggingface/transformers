@@ -20,6 +20,7 @@ import sys
 from itertools import groupby
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from ...file_utils import requires_backends
 from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
 from ...tokenization_utils_base import AddedToken
 from ...utils import logging
@@ -184,11 +185,10 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return tokens
 
     def phonemize(self, text: str, text_lang: Optional[str] = None):
-        try:
-            from phonemizer import phonemize
-            from phonemizer.separator import Separator
-        except ImportError:
-            raise ImportError("...")
+        requires_backends("phonemizer")
+
+        from phonemizer import phonemize
+        from phonemizer.separator import Separator
 
         # set the correct phonemizer language
         if text_lang is None:
