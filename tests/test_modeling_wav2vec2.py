@@ -343,7 +343,7 @@ class Wav2Vec2ModelTester:
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
         labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
 
-        with self.assertRaises(ValueError):
+        with self.parent.assertRaises(ValueError):
             model(input_values, labels=labels)
 
     def prepare_config_and_inputs_for_common(self):
