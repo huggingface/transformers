@@ -227,14 +227,12 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Checks whether there might be something wrong with given input with regard to the model.
         """
         if max_length < min_length:
-            logger.warning(
-                f"Your min_length={min_length} must be inferior than you max_length={max_length}."
-            )
+            logger.warning(f"Your min_length={min_length} must be inferior than your max_length={max_length}.")
 
         if input_length < max_length:
             logger.warning(
                 f"Your max_length is set to {max_length}, but you input_length is only {input_length}. You might "
-                "consider decreasing max_length manually, e.g. summarizer('...', max_length=50)"
+                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
             )
 
 
