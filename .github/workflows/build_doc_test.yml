@@ -1,7 +1,7 @@
 name: Documentation test build
 
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - "src/**"
       - "docs/**"
@@ -23,7 +23,7 @@ jobs:
       - name: Clone transformers
         run: |
           git clone https://github.com/huggingface/transformers
-      
+
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
