@@ -79,10 +79,19 @@ def _check_docstring_example_blocks(text, file=None):
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     with open(os.path.join(tmpdirname, "tmp.py"), "w", encoding="UTF-8") as fp:
                         fp.write(code_block)
+                    import datetime
+                    s = datetime.datetime.now()
                     result = subprocess.run(f'python {os.path.join(tmpdirname, "tmp.py")}', shell=True, capture_output=True)
-                    if result.stderr:
-                        error = result.stderr.decode("utf-8").replace("\r\n", "\n")
-                        results[orig_code_block] = error
+                    e = datetime.datetime.now()
+                    elapsed = (e - s).total_seconds()
+                    print(f"seconds: {elapsed}")
+                    outputs = ""
+                    if result.returncode != 0 and result.stderr:
+                        outputs = result.stderr.decode("utf-8").replace("\r\n", "\n")
+                    results[orig_code_block] = {
+                        "outputs": outputs,
+                        "elapsed": elapsed,
+                    }
         else:
             idx += 1
 
