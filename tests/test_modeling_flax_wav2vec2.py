@@ -479,6 +479,6 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         logits = model(input_values).logits
 
-        transcription = processor.batch_decode(logits.numpy()).text
+        transcription = processor.batch_decode(np.array(logits)).text
 
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")

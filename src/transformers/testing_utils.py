@@ -36,6 +36,7 @@ from .file_utils import (
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
+    is_librosa_available,
     is_onnx_available,
     is_pandas_available,
     is_pyctcdecode_available,
@@ -596,6 +597,16 @@ def require_pyctcdecode(test_case):
     """
     if not is_pyctcdecode_available():
         return unittest.skip("test requires pyctcdecode")(test_case)
+    else:
+        return test_case
+
+
+def require_librosa(test_case):
+    """
+    Decorator marking a test that requires librosa
+    """
+    if not is_librosa_available():
+        return unittest.skip("test requires librosa")(test_case)
     else:
         return test_case
 
