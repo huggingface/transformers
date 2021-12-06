@@ -592,7 +592,7 @@ class CometCallback(TrainerCallback):
         if not _has_comet:
             raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
         self._initialized = False
-        self._log_checkpoints = False
+        self._log_assets = False
 
     def setup(self, args, state, model):
         """
@@ -612,9 +612,9 @@ class CometCallback(TrainerCallback):
         <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
         """
         self._initialized = True
-        log_artifacts = os.getenv("COMET_LOG_MODEL", "FALSE").upper()
-        if log_artifacts in {"TRUE", "1"}:
-            self._log_checkpoints = True
+        log_assets = os.getenv("COMET_LOG_MODEL", "FALSE").upper()
+        if log_assets in {"TRUE", "1"}:
+            self._log_assets = True
         if state.is_world_process_zero:
             comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
             experiment = None
