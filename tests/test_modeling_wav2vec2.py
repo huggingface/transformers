@@ -22,9 +22,10 @@ import pytest
 from datasets import load_dataset
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from transformers import Wav2Vec2Config, is_torch_available, is_torchaudio_available
+from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
+    is_torchaudio_available,
     require_datasets,
     require_pyctcdecode,
     require_soundfile,
