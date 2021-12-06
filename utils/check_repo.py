@@ -94,6 +94,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_tf_xlm_roberta.py",
     "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
+    "test_modeling_vision_text_dual_encoder.py",
+    "test_modeling_flax_vision_text_dual_encoder.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -457,6 +459,11 @@ def find_all_documented_objects():
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
+        documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
+            content = f.read()
+        raw_doc_objs = re.findall("\[\[autodoc\]\]\s+(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
     return documented_obj
 

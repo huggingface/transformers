@@ -92,9 +92,11 @@ _import_structure = {
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
         "DataCollatorWithPadding",
+        "DefaultDataCollator",
         "default_data_collator",
     ],
-    "feature_extraction_sequence_utils": ["BatchFeature", "SequenceFeatureExtractor"],
+    "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
+    "feature_extraction_utils": ["BatchFeature"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -296,6 +298,7 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
+    "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
@@ -618,6 +621,7 @@ if is_torch_available():
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
@@ -977,7 +981,7 @@ if is_torch_available():
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ImageGPTForCausalLM",
+            "ImageGPTForCausalImageModeling",
             "ImageGPTForImageClassification",
             "ImageGPTModel",
             "ImageGPTPreTrainedModel",
@@ -1306,6 +1310,7 @@ if is_torch_available():
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
+    _import_structure["models.vision_text_dual_encoder"].extend(["VisionTextDualEncoderModel"])
     _import_structure["models.visual_bert"].extend(
         [
             "VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1445,6 +1450,7 @@ if is_tf_available():
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "TF_MODEL_MAPPING",
             "TF_MODEL_WITH_LM_HEAD_MAPPING",
@@ -1457,6 +1463,7 @@ if is_tf_available():
             "TFAutoModelForQuestionAnswering",
             "TFAutoModelForSeq2SeqLM",
             "TFAutoModelForSequenceClassification",
+            "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
             "TFAutoModelWithLMHead",
         ]
@@ -1766,6 +1773,16 @@ if is_tf_available():
             "TFT5PreTrainedModel",
         ]
     )
+    _import_structure["models.tapas"].extend(
+        [
+            "TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFTapasForMaskedLM",
+            "TFTapasForQuestionAnswering",
+            "TFTapasForSequenceClassification",
+            "TFTapasModel",
+            "TFTapasPreTrainedModel",
+        ]
+    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1895,6 +1912,7 @@ if is_flax_available():
     )
 
     # Flax models structure
+
     _import_structure["models.bart"].extend(
         [
             "FlaxBartForConditionalGeneration",
@@ -1904,6 +1922,7 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
+
     _import_structure["models.beit"].extend(
         [
             "FlaxBeitForImageClassification",
@@ -1935,6 +1954,16 @@ if is_flax_available():
             "FlaxBigBirdForTokenClassification",
             "FlaxBigBirdModel",
             "FlaxBigBirdPreTrainedModel",
+        ]
+    )
+    _import_structure["models.blenderbot"].extend(
+        ["FlaxBlenderbotForConditionalGeneration", "FlaxBlenderbotModel", "FlaxBlenderbotPreTrainedModel"]
+    )
+    _import_structure["models.blenderbot_small"].extend(
+        [
+            "FlaxBlenderbotSmallForConditionalGeneration",
+            "FlaxBlenderbotSmallModel",
+            "FlaxBlenderbotSmallPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -1975,6 +2004,7 @@ if is_flax_available():
     _import_structure["models.gpt_neo"].extend(
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
+    _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.marian"].extend(
         [
             "FlaxMarianModel",
@@ -2012,6 +2042,7 @@ if is_flax_available():
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
+    _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
@@ -2058,11 +2089,13 @@ if TYPE_CHECKING:
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
         DataCollatorWithPadding,
+        DefaultDataCollator,
         default_data_collator,
     )
+    from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature, SequenceFeatureExtractor
+    from .feature_extraction_utils import BatchFeature
 
     # Files and general utilities
     from .file_utils import (
@@ -2251,6 +2284,7 @@ if TYPE_CHECKING:
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
+    from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
@@ -2520,6 +2554,7 @@ if TYPE_CHECKING:
         )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+            MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -2823,7 +2858,7 @@ if TYPE_CHECKING:
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ImageGPTForCausalLM,
+            ImageGPTForCausalImageModeling,
             ImageGPTForImageClassification,
             ImageGPTModel,
             ImageGPTPreTrainedModel,
@@ -3094,6 +3129,7 @@ if TYPE_CHECKING:
             UniSpeechSatPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
+        from .models.vision_text_dual_encoder import VisionTextDualEncoderModel
         from .models.visual_bert import (
             VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VisualBertForMultipleChoice,
@@ -3223,6 +3259,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
@@ -3235,6 +3272,7 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelWithLMHead,
         )
@@ -3481,6 +3519,14 @@ if TYPE_CHECKING:
             TFT5Model,
             TFT5PreTrainedModel,
         )
+        from .models.tapas import (
+            TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFTapasForMaskedLM,
+            TFTapasForQuestionAnswering,
+            TFTapasForSequenceClassification,
+            TFTapasModel,
+            TFTapasPreTrainedModel,
+        )
         from .models.transfo_xl import (
             TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAdaptiveEmbedding,
@@ -3541,6 +3587,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
+
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
@@ -3623,6 +3670,16 @@ if TYPE_CHECKING:
             FlaxBigBirdModel,
             FlaxBigBirdPreTrainedModel,
         )
+        from .models.blenderbot import (
+            FlaxBlenderbotForConditionalGeneration,
+            FlaxBlenderbotModel,
+            FlaxBlenderbotPreTrainedModel,
+        )
+        from .models.blenderbot_small import (
+            FlaxBlenderbotSmallForConditionalGeneration,
+            FlaxBlenderbotSmallModel,
+            FlaxBlenderbotSmallPreTrainedModel,
+        )
         from .models.clip import (
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,
@@ -3653,6 +3710,7 @@ if TYPE_CHECKING:
         from .models.encoder_decoder import FlaxEncoderDecoderModel
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
         from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
+        from .models.gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
         from .models.marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
         from .models.mbart import (
             FlaxMBartForConditionalGeneration,
@@ -3674,6 +3732,7 @@ if TYPE_CHECKING:
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
+        from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,

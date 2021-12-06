@@ -39,10 +39,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         run: |
@@ -143,7 +140,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -242,10 +239,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         env:
@@ -293,7 +287,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev git
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -391,10 +385,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         run: |
@@ -429,14 +420,12 @@ jobs:
         run: |
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
+          rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
           pip install .[testing,deepspeed,fairscale]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         run: |

@@ -78,6 +78,7 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
+        TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
     )
 
@@ -170,7 +171,7 @@ SUPPORTED_TASKS = {
     "table-question-answering": {
         "impl": TableQuestionAnsweringPipeline,
         "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
-        "tf": (),
+        "tf": (TFAutoModelForTableQuestionAnswering,) if is_tf_available() else (),
         "default": {
             "model": {
                 "pt": "google/tapas-base-finetuned-wtq",

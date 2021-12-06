@@ -65,7 +65,7 @@ jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
@@ -82,6 +82,7 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install tensorflow_probability
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -101,7 +102,7 @@ jobs:
     run_tests_torch_and_tf_all:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
             RUN_PT_TF_CROSS_TESTS: yes
@@ -118,6 +119,7 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
+            - run: pip install tensorflow_probability
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -277,7 +279,8 @@ jobs:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
+            - run: pip install tensorflow_probability
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -310,7 +313,8 @@ jobs:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
+            - run: pip install tensorflow_probability
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -468,6 +472,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - run: pip install tensorflow_probability
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -502,6 +507,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - run: pip install tensorflow_probability
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
@@ -604,6 +610,69 @@ jobs:
                   TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_examples_flax:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - v0.4-flax_examples-{{ checksum "setup.py" }}
+                    - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install -r examples/flax/_tests_requirements.txt
+            - save_cache:
+                  key: v0.4-flax_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/flax_examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_examples_flax_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - v0.4-flax_examples-{{ checksum "setup.py" }}
+                    - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: sudo pip install .[flax,testing,sentencepiece]
+            - run: pip install -r examples/flax/_tests_requirements.txt
+            - save_cache:
+                  key: v0.4-flax_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/flax_examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
 
@@ -738,53 +807,6 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-
-    build_doc:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: large
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-build_doc-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
-            - run: pip install ."[docs]"
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
-            - run: pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
-            - save_cache:
-                  key: v0.4-build_doc-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: cd docs && make html SPHINXOPTS="-W -j 4"
-            - store_artifacts:
-                path: ./docs/_build
-
-    deploy_doc:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.6
-        resource_class: large
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-deploy_doc-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
-            - run: pip install ."[docs]"
-            - save_cache:
-                  key: v0.4-deploy_doc-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: ./.circleci/deploy.sh
 
     check_code_quality:
         working_directory: ~/transformers
@@ -931,9 +953,7 @@ workflows:
             - run_tests_pipelines_tf
             - run_tests_onnxruntime
             - run_tests_hub
-            - build_doc
             - run_tests_layoutlmv2
-            - deploy_doc: *workflow_filters
     nightly:
         triggers:
             - schedule:
