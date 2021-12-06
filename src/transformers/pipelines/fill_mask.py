@@ -40,7 +40,7 @@ class FillMaskPipeline(Pipeline):
 
     The models that this pipeline can use are models that have been trained with a masked language modeling objective,
     which includes the bi-directional models in the library. See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=masked-lm>`__.
+    `huggingface.co/models <https://huggingface.co/models?filter=fill-mask>`__.
 
     .. note::
 
