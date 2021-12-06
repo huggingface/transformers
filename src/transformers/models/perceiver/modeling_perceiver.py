@@ -1007,12 +1007,12 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
 
             >>> from transformers import PerceiverTokenizer, PerceiverForSequenceClassification
 
-            >>> tokenizer = PerceiverTokenizer.from_pretrained('deepmind/vision-perceiver')
-            >>> model = PerceiverForSequenceClassification.from_pretrained('deepmind/vision-perceiver')
+            >>> tokenizer = PerceiverTokenizer.from_pretrained('deepmind/language-perceiver')
+            >>> model = PerceiverForSequenceClassification.from_pretrained('deepmind/language-perceiver')
 
             >>> text = "hello world"
-            >>> inputs = tokenizer(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = tokenizer(images=image, return_tensors="pt").input_ids
+            >>> outputs = model(inputs=inputs)
             >>> logits = outputs.logits
         """
 
@@ -1139,11 +1139,11 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver')
-            >>> model = PerceiverForImageClassificationLearned.from_pretrained('deepmind/vision-perceiver')
+            >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-learned')
+            >>> model = PerceiverForImageClassificationLearned.from_pretrained('deepmind/vision-perceiver-learned')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+            >>> outputs = model(inputs=inputs)
             >>> logits = outputs.logits
             >>> # model predicts one of the 1000 ImageNet classes
             >>> predicted_class_idx = logits.argmax(-1).item()
@@ -1272,8 +1272,8 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-fourier')
             >>> model = PerceiverForImageClassificationFourier.from_pretrained('deepmind/vision-perceiver-fourier')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+            >>> outputs = model(inputs=inputs)
             >>> logits = outputs.logits
             >>> # model predicts one of the 1000 ImageNet classes
             >>> predicted_class_idx = logits.argmax(-1).item()
@@ -1403,8 +1403,8 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-conv')
             >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained('deepmind/vision-perceiver-conv')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+            >>> outputs = model(inputs=inputs)
             >>> logits = outputs.logits
             >>> # model predicts one of the 1000 ImageNet classes
             >>> predicted_class_idx = logits.argmax(-1).item()
@@ -1542,9 +1542,10 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
 
             >>> model = PerceiverForOpticalFlow.from_pretrained('deepmind/optical-flow-perceiver')
 
-            >>> # in the Perceiver IO paper, the authors extract a 3x3 patch around each pixel,
-            >>> # leading to 3 x 3 x 3 = 27 values for each pixel
+            >>> # in the Perceiver IO paper, the authors extract a 3 x 3 patch around each pixel,
+            >>> # leading to 3 x 3 x 3 = 27 values for each pixel (as each pixel also has 3 color channels)
             >>> # patches have shape (batch_size, num_frames, num_channels, height, width)
+            >>> # the authors train on resolutions of 368 x 496
             >>> patches = torch.randn(1, 2, 27, 368, 496)
             >>> outputs = model(inputs=patches)
             >>> logits = outputs.logits

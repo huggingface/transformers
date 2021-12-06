@@ -18,6 +18,7 @@ import copy
 import inspect
 import tempfile
 import unittest
+import warnings
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -746,6 +747,51 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                     with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
+    def test_problem_types(self):
+        problem_types = [
+            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
+            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+            {"title": "regression", "num_labels": 1, "dtype": torch.float},
+        ]
+
+        for model_class in self.all_model_classes:
+            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                continue
+
+            config, inputs, input_mask, _, _ = self.model_tester.prepare_config_and_inputs(model_class=model_class)
+            inputs_dict = dict(inputs=inputs, attention_mask=input_mask)
+
+            for problem_type in problem_types:
+                with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
+                    config.problem_type = problem_type["title"]
+                    config.num_labels = problem_type["num_labels"]
+
+                    model = model_class(config)
+                    model.to(torch_device)
+                    model.train()
+
+                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                    if problem_type["num_labels"] > 1:
+                        inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+
+                    inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                    # This tests that we do not trigger the warning form PyTorch "Using a target size that is different
+                    # to the input size. This will likely lead to incorrect results due to broadcasting. Please ensure
+                    # they have the same size." which is a symptom something in wrong for the regression problem.
+                    # See https://github.com/huggingface/transformers/issues/11780
+                    with warnings.catch_warnings(record=True) as warning_list:
+                        loss = model(**inputs).loss
+                    for w in warning_list:
+                        if "Using a target size that is different to the input size" in str(w.message):
+                            raise ValueError(
+                                f"Something is going wrong in the regression problem: intercepted {w.message}"
+                            )
+
+                    loss.backward()
+
     @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -760,6 +806,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Perceiver doesn't support inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Perceiver doesn't support the AutoModel API")
+    def test_load_with_mismatched_shapes(self):
         pass
 
     @slow
@@ -780,9 +830,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
 
-        # TODO replace by deepmind/language-perceiver
-        tokenizer = PerceiverTokenizer.from_pretrained("nielsr/language-perceiver")
-        model = PerceiverForMaskedLM.from_pretrained("nielsr/language-perceiver")
+        tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
         model.to(torch_device)
 
         # prepare inputs
@@ -814,9 +863,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
 
-        # TODO replace by deepmind/vision-perceiver
         feature_extractor = PerceiverFeatureExtractor()
-        model = PerceiverForImageClassificationLearned.from_pretrained("nielsr/vision-perceiver")
+        model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
 
         # prepare inputs
@@ -839,9 +887,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_fourier(self):
 
-        # TODO replace by deepmind/vision-perceiver-fourier
         feature_extractor = PerceiverFeatureExtractor()
-        model = PerceiverForImageClassificationFourier.from_pretrained("nielsr/vision-perceiver-fourier")
+        model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
         model.to(torch_device)
 
         # prepare inputs
@@ -864,9 +911,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_conv(self):
 
-        # TODO replace by deepmind/vision-perceiver-conv
         feature_extractor = PerceiverFeatureExtractor()
-        model = PerceiverForImageClassificationConvProcessing.from_pretrained("nielsr/vision-perceiver-conv")
+        model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
         model.to(torch_device)
 
         # prepare inputs
