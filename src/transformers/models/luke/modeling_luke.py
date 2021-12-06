@@ -1230,13 +1230,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
                 loss = loss + mep_loss
 
         if not return_dict:
-            output = (
-                logits,
-                entity_logits,
-                outputs.hidden_states,
-                outputs.entity_hidden_states,
-                outputs.attentions,
-            )
+            output = (logits, entity_logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions)
             if mlm_loss is not None and mep_loss is not None:
                 return (loss, mlm_loss, mep_loss) + output
             elif mlm_loss is not None:
