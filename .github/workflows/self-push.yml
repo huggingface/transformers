@@ -381,7 +381,6 @@ jobs:
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
           pip install .[testing,deepspeed]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -436,7 +435,6 @@ jobs:
           pip install --upgrade pip
           rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
           pip install .[testing,deepspeed,fairscale]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
