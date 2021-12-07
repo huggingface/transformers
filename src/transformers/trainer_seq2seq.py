@@ -15,7 +15,6 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.utils.data import Dataset
 
