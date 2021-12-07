@@ -600,14 +600,14 @@ class CometCallback(TrainerCallback):
 
         Environment:
             COMET_MODE (:obj:`str`, `optional`):
-                Whether to create an online, offline experiment or disable Comet logging.
-                Can be "OFFLINE", "ONLINE", or "DISABLED". Defaults to "ONLINE".
+                Whether to create an online, offline experiment or disable Comet logging. Can be "OFFLINE", "ONLINE",
+                or "DISABLED". Defaults to "ONLINE".
             COMET_PROJECT_NAME (:obj:`str`, `optional`):
                 Comet project name for experiments
             COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
                 Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
             COMET_LOG_ASSETS (:obj:`str`, `optional`):
-                Whether or not to log training assets, tfevents, checkpoints, etc, to Comet.
+                Whether or not to log training assets (tfevents, checkpoints, etc), to Comet.
                 Can be "TRUE", or "FALSE". Defaults to "TRUE".
         For a number of configurable items in the environment, see `here
         <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
@@ -656,6 +656,7 @@ class CometCallback(TrainerCallback):
                     args.output_dir, recursive=True, log_file_name=True, step=state.global_step
                 )
             experiment.end()
+
 
 class AzureMLCallback(TrainerCallback):
     """
