@@ -612,9 +612,9 @@ class CometCallback(TrainerCallback):
         <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
         """
         self._initialized = True
-        log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
-        if log_assets in {"TRUE", "1"}:
-            self._log_assets = True
+        log_assets = os.getenv("COMET_LOG_ASSETS", "TRUE").upper()
+        if log_assets in {"FALSE", "0"}:
+            self._log_assets = False
         if state.is_world_process_zero:
             comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
             experiment = None
