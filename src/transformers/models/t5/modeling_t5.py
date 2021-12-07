@@ -66,6 +66,13 @@ T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# deal with deprecated torch.norm
+if hasattr(torch, "linalg") and hasattr(torch.linalg, "norm"):
+    torch_norm = torch.linalg.norm
+else:
+    torch_norm = torch.norm
+
+
 ####################################################
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
@@ -231,22 +238,38 @@ DEPARALLELIZE_DOCSTRING = r"""
 class T5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Construct a layernorm module in the T5 style No bias and no subtraction of mean.
+        Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        # layer norm should always be calculated in float32
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
-        # convert into half-precision if necessary
+        # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32, so the original code, which might be easier to
+        # understand was:
+        #
+        # variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        # hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # if self.weight.dtype in [torch.float16, torch.bfloat16]:
+        #     hidden_states = hidden_states.to(self.weight.dtype)
+        #
+        # but it's more efficient to use the fused kernel norm and it doesn't require converting the
+        # inputs to fp32, just the intermediary results with norm which are much smaller, we just
+        # need to make a correction for sqrt(N) - note that this is also similar to weight
+        # normalization
+
+        hidden_states = (
+            hidden_states
+            / torch_norm(hidden_states, dim=-1, keepdim=True, dtype=torch.float32)
+            * math.sqrt(hidden_states.shape[-1])
+            * self.weight
+        )
         if self.weight.dtype in [torch.float16, torch.bfloat16]:
             hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
+        return hidden_states
 
 
 class T5DenseReluDense(nn.Module):
