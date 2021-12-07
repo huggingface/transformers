@@ -111,11 +111,15 @@ def check_file_docstrings(code_file):
 
     results = {}
 
-    splits = code.split('\"\"\"')
-    for i, s in enumerate(splits):
-        if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None:
-            continue
-        results.update(check_docstring(s, file=code_file))
+    with tempfile.TemporaryDirectory() as tmpdirname:
+
+        os.environ['TRANSFORMERS_CACHE'] = tmpdirname
+
+        splits = code.split('\"\"\"')
+        for i, s in enumerate(splits):
+            if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None:
+                continue
+            results.update(check_docstring(s, file=code_file))
 
     return results
 
