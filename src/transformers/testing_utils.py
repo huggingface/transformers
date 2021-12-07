@@ -38,6 +38,7 @@ from .file_utils import (
     is_keras2onnx_available,
     is_onnx_available,
     is_pandas_available,
+    is_phonemizer_available,
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
@@ -594,6 +595,16 @@ def require_deepspeed(test_case):
     """
     if not is_deepspeed_available():
         return unittest.skip("test requires deepspeed")(test_case)
+    else:
+        return test_case
+
+
+def require_phonemizer(test_case):
+    """
+    Decorator marking a test that requires phonemizer
+    """
+    if not is_phonemizer_available():
+        return unittest.skip("test requires phonemizer")(test_case)
     else:
         return test_case
 
