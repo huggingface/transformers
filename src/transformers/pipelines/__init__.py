@@ -372,13 +372,13 @@ def pipeline(
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`:.
             - :obj:`"zero-shot-classification"`: will return a :class:`~transformers.ZeroShotClassificationPipeline`:.
 
-        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
+        model (:obj:`str` or :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
             actual instance of a pretrained model inheriting from :class:`~transformers.PreTrainedModel` (for PyTorch)
             or :class:`~transformers.TFPreTrainedModel` (for TensorFlow).
 
             If not provided, the default for the :obj:`task` will be loaded.
-        config (:obj:`str` or :obj:`~transformers.PretrainedConfig`, `optional`):
+        config (:obj:`str` or :class:`~transformers.PretrainedConfig`, `optional`):
             The configuration that will be used by the pipeline to instantiate the model. This can be a model
             identifier or an actual pretrained model configuration inheriting from
             :class:`~transformers.PretrainedConfig`.
@@ -386,7 +386,7 @@ def pipeline(
             If not provided, the default configuration file for the requested model will be used. That means that if
             :obj:`model` is given, its default configuration will be used. However, if :obj:`model` is not supplied,
             this :obj:`task`'s default model's config is used instead.
-        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`):
+        tokenizer (:obj:`str` or :class:`~transformers.PreTrainedTokenizer`, `optional`):
             The tokenizer that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained tokenizer inheriting from :class:`~transformers.PreTrainedTokenizer`.
 
@@ -394,7 +394,7 @@ def pipeline(
             :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
             it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
             for the given :obj:`task` will be loaded.
-        feature_extractor (:obj:`str` or :obj:`~transformers.PreTrainedFeatureExtractor`, `optional`):
+        feature_extractor (:obj:`str` or :class:`~transformers.PreTrainedFeatureExtractor`, `optional`):
             The feature extractor that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained feature extractor inheriting from
             :class:`~transformers.PreTrainedFeatureExtractor`.

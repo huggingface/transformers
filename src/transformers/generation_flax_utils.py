@@ -326,8 +326,8 @@ class FlaxGenerationMixin:
         self, top_k: int = None, top_p: float = None, temperature: float = None
     ) -> FlaxLogitsProcessorList:
         """
-        This class returns a :obj:`~transformers.FlaxLogitsProcessorList` list object that contains all relevant
-        :obj:`~transformers.FlaxLogitsWarper` instances used for multinomial sampling.
+        This class returns a :class:`~transformers.FlaxLogitsProcessorList` list object that contains all relevant
+        :class:`~transformers.FlaxLogitsWarper` instances used for multinomial sampling.
         """
 
         # init warp parameters
@@ -358,8 +358,8 @@ class FlaxGenerationMixin:
         forced_eos_token_id: int,
     ) -> FlaxLogitsProcessorList:
         """
-        This class returns a :obj:`~transformers.FlaxLogitsProcessorList` list object that contains all relevant
-        :obj:`~transformers.FlaxLogitsProcessor` instances used to modify the scores of the language model head.
+        This class returns a :class:`~transformers.FlaxLogitsProcessorList` list object that contains all relevant
+        :class:`~transformers.FlaxLogitsProcessor` instances used to modify the scores of the language model head.
         """
         processors = FlaxLogitsProcessorList()
 

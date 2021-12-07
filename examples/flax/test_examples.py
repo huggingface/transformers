@@ -96,6 +96,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
+    @slow
     def test_run_clm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -155,6 +156,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["test_rougeL"], 7)
             self.assertGreaterEqual(result["test_rougeLsum"], 7)
 
+    @slow
     def test_run_mlm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -208,6 +210,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.42)
 
+    @slow
     def test_run_ner(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -240,6 +243,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertGreaterEqual(result["eval_f1"], 0.3)
 
+    @slow
     def test_run_qa(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
