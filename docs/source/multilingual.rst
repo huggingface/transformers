@@ -17,8 +17,6 @@ Most of the models available in this library are mono-lingual models (English, C
 models are available and have a different mechanisms than mono-lingual models. This page details the usage of these
 models.
 
-The two models that currently support multiple languages are BERT and XLM.
-
 XLM
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -127,3 +125,17 @@ Two XLM-RoBERTa checkpoints can be used for multi-lingual tasks:
 
 - ``xlm-roberta-base`` (Masked language modeling, 100 languages)
 - ``xlm-roberta-large`` (Masked language modeling, 100 languages)
+
+mLUKE
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+mLUKE is based on XLM-RoBERTa and further trained on Wikipedia articles in 24 languages with masked language modeling
+as well as masked entity prediction objective.
+
+The model can be used in the same way as other models solely based on word-piece inputs, but also can be used with
+entity representations to achieve further performance gain, with entity-related tasks such as relation extraction,
+named entity recognition and question answering (see :doc:`LUKE <model_doc/luke>`).
+
+Currently, one mLUKE checkpoint is available:
+
+- ``studio-ousia/mluke-base`` (Masked language modeling + Masked entity prediction, 100 languages)
