@@ -246,7 +246,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
                 import torch
 
                 batch = common_inputs["input_ids"].shape[0]
-                past_shape = (batch, self._config.num_heads, 1, self._config.hidden_size // self.num_attention_heads)
+                past_shape = (batch, self.num_attention_heads, 1, self._config.hidden_size // self.num_attention_heads)
                 ordered_inputs["past_key_values"] = [
                     (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
                 ]

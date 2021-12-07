@@ -126,16 +126,6 @@ class OnnxConfig(ABC):
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
         common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
-        if self.IS_ENCODER_DECODER:
-            # Renaming the outputs axes properly.
-            for name, axes_names in common_outputs.items():
-                sequence_name = "encoder_sequence" if "encoder" in name else "decoder_sequence"
-                for axis_idx, name in axes_names.items():
-                    if "sequence" in name:
-                        axes_names[axis_idx] = sequence_name
-                    # We reset the value as the order in common_outputs (OrderedDict) is lost otherwise
-                    else:
-                        axes_names[axis_idx] = name
         return common_outputs
 
     @property
@@ -376,24 +366,36 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             inputs_or_outputs[f"{name}.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
             inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
 
-    @staticmethod
-    def _flatten_past_key_values_(flatten_output, name, idx, t):
-        flatten_output[f"{name}.{idx}.key"] = t[0]
-        flatten_output[f"{name}.{idx}.value"] = t[1]
+    def _flatten_past_key_values_(self, flattened_output, name, idx, t):
+        flattened_output[f"{name}.{idx}.key"] = t[0]
+        flattened_output[f"{name}.{idx}.value"] = t[1]
 
-    @classmethod
-    def flatten_output_collection_property(cls, name: str, field: Iterable[Any]) -> Dict[str, Any]:
-        flatten_output = {}
+    def flatten_output_collection_property(self, name: str, field: Iterable[Any]) -> Dict[str, Any]:
+        flattened_output = {}
         if name in ["present", "past_key_values"]:
             for idx, t in enumerate(field):
-                cls._flatten_past_key_values_(flatten_output, name, idx, t)
+                self._flatten_past_key_values_(flattened_output, name, idx, t)
         else:
-            flatten_output = super().flatten_output_collection_property(name, field)
+            flattened_output = super().flatten_output_collection_property(name, field)
 
-        return flatten_output
+        return flattened_output
 
 
 class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        # Renaming the outputs axes properly.
+        for name, axes_names in common_outputs.items():
+            sequence_name = "encoder_sequence" if "encoder" in name else "decoder_sequence"
+            for axis_idx, name in axes_names.items():
+                if "sequence" in name:
+                    axes_names[axis_idx] = sequence_name
+                # We reset the value as the order in common_outputs (OrderedDict) is lost otherwise
+                else:
+                    axes_names[axis_idx] = name
+        return common_outputs
+
     @property
     def num_layers(self) -> Tuple[int]:
         try:
@@ -517,9 +519,8 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 axes_info = {0: "batch", 2: decoder_sequence}
             inputs_or_outputs[f"{name}.{i}.{remaining_side_name}.key"] = axes_info
 
-    @staticmethod
-    def _flatten_past_key_values_(flatten_output, name, idx, t):
-        flatten_output[f"{name}.{idx}.decoder.key"] = t[0]
-        flatten_output[f"{name}.{idx}.decoder.value"] = t[1]
-        flatten_output[f"{name}.{idx}.encoder.key"] = t[2]
-        flatten_output[f"{name}.{idx}.encoder.value"] = t[3]
+    def _flatten_past_key_values_(self, flattened_output, name, idx, t):
+        flattened_output[f"{name}.{idx}.decoder.key"] = t[0]
+        flattened_output[f"{name}.{idx}.decoder.value"] = t[1]
+        flattened_output[f"{name}.{idx}.encoder.key"] = t[2]
+        flattened_output[f"{name}.{idx}.encoder.value"] = t[3]
