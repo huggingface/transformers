@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import importlib
 import logging
 import random
@@ -183,8 +184,9 @@ class PipelineTestCaseMeta(type):
                     # 10 examples with batch size 4 means there needs to be a unfinished batch
                     # which is important for the unbatcher
                     def data(n):
-                        for i in range(n):
-                            yield random.choice(examples)
+                        for _ in range(n):
+                            # Need to copy because Conversation object is mutated
+                            yield copy.deepcopy(random.choice(examples))
 
                     for item in pipeline(data(10), batch_size=4):
                         pass

@@ -29,7 +29,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         elif isinstance(inputs, str):
             inputs = [inputs]
             batch_size = 1
-        elif isinstance(inputs, (Dataset, types.GeneratorType)):
+        elif Dataset is not None and isinstance(inputs, (Dataset, types.GeneratorType)):
             return inputs, None
         else:
             raise ValueError("At least one input is required.")
