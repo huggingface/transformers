@@ -1833,8 +1833,8 @@ class Trainer:
 
     def autocast_smart_context_manager(self):
         """
-        this is a helper wrapper that creates an appropriate context manager while feeding it the desired arguments,
-        depending on the situation
+        A helper wrapper that creates an appropriate context manager for :obj:`autocast` while feeding it the desired arguments,
+        depending on the situation.
         """
         if self.use_amp:
             if version.parse(torch.__version__) >= version.parse("1.10"):
