@@ -212,16 +212,24 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         # make sure ' ' is between phonemes
         tokens = text.split(" ")
+
+        tokens = list(filter(lambda p: p.strip() != "", tokens))
         return tokens
 
-    def phonemize(self, text: str, phonemizer_lang: Optional[str] = None):
+    def phonemize(self, text: str, phonemizer_lang: Optional[str] = None) -> str:
         requires_backends(self, "phonemizer")
 
         from phonemizer import phonemize
         from phonemizer.separator import Separator
 
         separator = Separator(phone=" ", word="", syllable="")
-        phonemes = phonemize(text, language=phonemizer_lang, backend=self.phonemizer_backend, separator=separator)
+        phonemes = phonemize(
+            text,
+            language=phonemizer_lang,
+            backend=self.phonemizer_backend,
+            separator=separator,
+            language_switch="remove-flags",
+        )
         phonemes = phonemes.strip()
 
         return phonemes

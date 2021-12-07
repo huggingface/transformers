@@ -116,8 +116,10 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         text_en = tokenizer.decode(input_ids_en)
         text_fr = tokenizer.decode(input_ids_fr)
 
-        self.assertEqual(text_en, "h ə l <unk> uː")
-        self.assertEqual(text_fr, "ɛ l <unk> h aʊ <unk> ʁ j u")  # <unk> is expected since input lang is en-us
+        self.assertEqual(text_en, "h ə l oʊ h aʊ ɑːɹ j uː")
+        self.assertEqual(
+            text_fr, "ɛ l o <unk> h aʊ <unk> a ʁ <unk> j u"
+        )  # <unk> is expected since input lang is en-us
 
     def test_case_insensitive(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
