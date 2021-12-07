@@ -717,11 +717,10 @@ class LukePooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Entity, with config.hidden_size->config.entity_emb_size
 class EntityPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.entity_emb_size, config.entity_emb_size)
+        self.dense = nn.Linear(config.hidden_size, config.entity_emb_size)
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
