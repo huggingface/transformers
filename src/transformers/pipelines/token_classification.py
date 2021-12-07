@@ -1,3 +1,4 @@
+import types
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -5,7 +6,7 @@ import numpy as np
 
 from ..file_utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from ..models.bert.tokenization_bert import BasicTokenizer
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
 
 
 if is_tf_available():
@@ -28,6 +29,8 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         elif isinstance(inputs, str):
             inputs = [inputs]
             batch_size = 1
+        elif isinstance(inputs, (Dataset, types.GeneratorType)):
+            return inputs, None
         else:
             raise ValueError("At least one input is required.")
 

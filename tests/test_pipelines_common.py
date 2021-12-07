@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import importlib
 import logging
 import random
@@ -183,9 +182,11 @@ class PipelineTestCaseMeta(type):
 
                     # 10 examples with batch size 4 means there needs to be a unfinished batch
                     # which is important for the unbatcher
-                    dataset = [copy.deepcopy(random.choice(examples)) for i in range(10)]
+                    def data(n):
+                        for i in range(n):
+                            yield random.choice(examples)
 
-                    for item in pipeline(dataset, batch_size=4):
+                    for item in pipeline(data(10), batch_size=4):
                         pass
 
                 run_batch_test(pipeline, examples)
