@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright novice03 and The HuggingFace Inc. team. All rights reserved.
+# Copyright novice03_ and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
