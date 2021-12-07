@@ -17,6 +17,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
+import contextlib
 import inspect
 import math
 import os
@@ -1830,6 +1831,21 @@ class Trainer:
 
         return inputs
 
+    def autocast_smart_context_manager(self):
+        """
+        this is a helper wrapper that creates an appropriate context manager while feeding it the desired arguments,
+        depending on the situation
+        """
+        if self.use_amp:
+            if version.parse(torch.__version__) >= version.parse("1.10"):
+                ctx_manager = autocast(dtype=self.amp_dtype)
+            else:
+                ctx_manager = autocast()
+        else:
+            ctx_manager = contextlib.nullcontext()
+
+        return ctx_manager
+
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -1856,14 +1872,7 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        if self.use_amp:
-            if version.parse(torch.__version__) >= version.parse("1.10"):
-                with autocast(dtype=self.amp_dtype):
-                    loss = self.compute_loss(model, inputs)
-            else:
-                with autocast():
-                    loss = self.compute_loss(model, inputs)
-        else:
+        with self.autocast_smart_context_manager():
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
@@ -2504,14 +2513,7 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    if self.use_amp:
-                        if version.parse(torch.__version__) >= version.parse("1.10"):
-                            with autocast(dtype=self.amp_dtype):
-                                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                        else:
-                            with autocast():
-                                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                    else:
+                    with self.autocast_smart_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
@@ -2521,14 +2523,7 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    if self.use_amp:
-                        if version.parse(torch.__version__) >= version.parse("1.10"):
-                            with autocast(dtype=self.amp_dtype):
-                                outputs = model(**inputs)
-                        else:
-                            with autocast():
-                                outputs = model(**inputs)
-                    else:
+                    with self.autocast_smart_context_manager():
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
