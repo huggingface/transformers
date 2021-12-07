@@ -149,7 +149,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.nystromformer": ["NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "NystromformerConfig", "NystromformerTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -251,6 +250,11 @@ _import_structure = {
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.nystromformer": [
+        "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "NystromformerConfig",
+        "NystromformerTokenizer",
+    ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -609,21 +613,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.nystromformer"].extend(
-        [
-            "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "NystromformerForMaskedLM",
-            "NystromformerForCausalLM",
-            "NystromformerForMultipleChoice",
-            "NystromformerForQuestionAnswering",
-            "NystromformerForSequenceClassification",
-            "NystromformerForTokenClassification",
-            "NystromformerLayer",
-            "NystromformerModel",
-            "NystromformerPreTrainedModel",
-            "load_tf_weights_in_nystromformer",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1138,6 +1127,21 @@ if is_torch_available():
         ]
     )
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.nystromformer"].extend(
+        [
+            "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NystromformerForCausalLM",
+            "NystromformerForMaskedLM",
+            "NystromformerForMultipleChoice",
+            "NystromformerForQuestionAnswering",
+            "NystromformerForSequenceClassification",
+            "NystromformerForTokenClassification",
+            "NystromformerLayer",
+            "NystromformerModel",
+            "NystromformerPreTrainedModel",
+            "load_tf_weights_in_nystromformer",
+        ]
+    )
     _import_structure["models.openai"].extend(
         [
             "OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2177,7 +2181,11 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig, NystromformerTokenizer
+    from .models.nystromformer import (
+        NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        NystromformerConfig,
+        NystromformerTokenizer,
+    )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2538,6 +2546,7 @@ if TYPE_CHECKING:
             NystromformerPreTrainedModel,
             load_tf_weights_in_nystromformer,
         )
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments

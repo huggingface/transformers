@@ -39,7 +39,7 @@ class NystromformerConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
+        vocab_size (:obj:`int`, `optional`, defaults to 30000):
             Vocabulary size of the Nystromformer model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.NystromformerModel` or
             :class:`~transformers.TFNystromformerModel`.
@@ -64,6 +64,15 @@ class NystromformerConfig(PretrainedConfig):
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.NystromformerModel` or
             :class:`~transformers.TFNystromformerModel`.
+        num_landmarks (:obj:`int`, `optional`, defaults to 64):
+            The number of landmark (or Nystrom) points to used in Nystrom approximation of the softmax self-attention matrix.
+        seq_len (:obj:`int`, `optional`, defaults to 512):
+            The sequence length.
+        conv_kernel_size (:obj:`int`, `optional`, defaults to 65):
+            The kernel size of depthwise convolution used in Nystrom approximation.
+        inv_coeff_init_option (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use exact coefficient computation for the initial values for the iterative method of
+            calculating the Moore-Penrose inverse of a matrix.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -85,11 +94,10 @@ class NystromformerConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "nystromformer"
-    
 
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=30000,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -99,6 +107,10 @@ class NystromformerConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=2,
+        num_landmarks=64,
+        seq_len=512,
+        conv_kernel_size=65,
+        inv_coeff_init_option=False,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
@@ -119,13 +131,10 @@ class NystromformerConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
+        self.num_landmarks = num_landmarks
+        self.seq_len = seq_len
+        self.conv_kernel_size = conv_kernel_size
+        self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
-
-    
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

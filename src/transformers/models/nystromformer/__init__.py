@@ -33,8 +33,8 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_nystromformer"] = [
         "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "NystromformerForMaskedLM",
         "NystromformerForCausalLM",
+        "NystromformerForMaskedLM",
         "NystromformerForMultipleChoice",
         "NystromformerForQuestionAnswering",
         "NystromformerForSequenceClassification",
@@ -44,8 +44,6 @@ if is_torch_available():
         "NystromformerPreTrainedModel",
         "load_tf_weights_in_nystromformer",
     ]
-
-
 
 
 if TYPE_CHECKING:
@@ -69,7 +67,6 @@ if TYPE_CHECKING:
             NystromformerPreTrainedModel,
             load_tf_weights_in_nystromformer,
         )
-
 
 
 else:
