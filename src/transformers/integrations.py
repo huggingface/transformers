@@ -606,13 +606,13 @@ class CometCallback(TrainerCallback):
                 Comet project name for experiments
             COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
                 Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
-            COMET_LOG_MODEL (:obj:`str`, `optional`):
-                Whether or not to log the model asset. Can be "TRUE", or "FALSE". Defaults to "FALSE".
+            COMET_LOG_ASSETS (:obj:`str`, `optional`):
+                Whether or not to log the training assets. Can be "TRUE", or "FALSE". Defaults to "TRUE".
         For a number of configurable items in the environment, see `here
         <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
         """
         self._initialized = True
-        log_assets = os.getenv("COMET_LOG_MODEL", "FALSE").upper()
+        log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
         if log_assets in {"TRUE", "1"}:
             self._log_assets = True
         if state.is_world_process_zero:
@@ -649,7 +649,7 @@ class CometCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
             experiment = comet_ml.config.get_global_experiment()
-            if (experiment is not None) and (self._log_checkpoints is True):
+            if (experiment is not None) and (self._log_assets is True):
                 logger.info("Logging checkpoints. This may take time.")
                 experiment.log_asset_folder(
                     args.output_dir, recursive=True, log_file_name=True, step=state.global_step
