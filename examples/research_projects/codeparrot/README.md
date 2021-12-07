@@ -96,7 +96,7 @@ If you want to train the small model you need to make some modifications:
 accelerate launch scripts/codeparrot_training.py \
 --model_ckpt lvwerra/codeparrot-small \
 --train_batch_size 12 \
---eval_batch_size 12 \
+--valid_batch_size 12 \
 --learning_rate 5e-4 \
 --num_warmup_steps 2000 \
 --gradient_accumulation 1 \
