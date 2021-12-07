@@ -25,10 +25,6 @@ from .trainer_utils import PredictionOutput
 from .utils import logging
 
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
-    from torch.cuda.amp import autocast
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -180,10 +176,7 @@ class Seq2SeqTrainer(Trainer):
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
         with torch.no_grad():
-            if self.use_amp:
-                with autocast():
-                    outputs = model(**inputs)
-            else:
+            with self.autocast_smart_context_manager():
                 outputs = model(**inputs)
             if has_labels:
                 if self.label_smoother is not None:
