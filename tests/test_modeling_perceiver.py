@@ -16,18 +16,20 @@
 
 import copy
 import inspect
+import math
 import tempfile
 import unittest
 import warnings
 from typing import Dict, List, Tuple
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers import PerceiverConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.models.perceiver.modeling_perceiver import PerceiverForSequenceClassification
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -35,7 +37,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
+    from torch import nn
 
     from transformers import (
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -172,34 +174,6 @@ class PerceiverModelTester:
             raise ValueError(f"Model class {model_class} not supported")
 
         return config, inputs, input_mask, sequence_labels, token_labels
-
-    # def prepare_config_and_inputs_masked_lm(self):
-    #     inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-    #     input_mask = None
-    #     if self.use_input_mask:
-    #         input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-    #     token_labels = None
-    #     if self.use_labels:
-    #         token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-
-    #     config = self.get_config()
-
-    #     return config, inputs, input_mask, token_labels
-
-    # def prepare_config_and_inputs_classification(self):
-    #     inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-
-    #     input_mask = None
-
-    #     classification_labels = None
-    #     if self.use_labels:
-    #         classification_labels = ids_tensor([self.batch_size], self.num_labels)
-
-    #     config = self.get_config()
-
-    #     return config, inputs, input_mask, classification_labels
 
     def get_config(self):
         return PerceiverConfig(
@@ -796,6 +770,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_from_base(self):
         pass
 
+    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass
@@ -825,7 +803,37 @@ def prepare_img():
     return image
 
 
+# Helper functions for optical flow integration test
+def prepare_optical_flow_images():
+    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    image1 = Image.open(dataset[0]["file"]).convert("RGB")
+    image2 = Image.open(dataset[0]["file"]).convert("RGB")
+
+    return image1, image2
+
+
+def normalize(img):
+    return img / 255.0 * 2 - 1
+
+
+def extract_image_patches(x, kernel, stride=1, dilation=1):
+    # Do TF 'SAME' Padding
+    b, c, h, w = x.shape
+    h2 = math.ceil(h / stride)
+    w2 = math.ceil(w / stride)
+    pad_row = (h2 - 1) * stride + (kernel - 1) * dilation + 1 - h
+    pad_col = (w2 - 1) * stride + (kernel - 1) * dilation + 1 - w
+    x = torch.nn.functional.pad(x, (pad_row // 2, pad_row - pad_row // 2, pad_col // 2, pad_col - pad_col // 2))
+
+    # Extract patches
+    patches = x.unfold(2, kernel, stride).unfold(3, kernel, stride)
+    patches = patches.permute(0, 4, 5, 1, 2, 3).contiguous()
+
+    return patches.view(b, -1, patches.shape[-2], patches.shape[-1])
+
+
 @require_torch
+@require_vision
 class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
@@ -843,7 +851,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         inputs, input_mask = encoding.input_ids.to(torch_device), encoding.attention_mask.to(torch_device)
 
         # forward pass
-        outputs = model(inputs=inputs, attention_mask=input_mask)
+        with torch.no_grad():
+            outputs = model(inputs=inputs, attention_mask=input_mask)
         logits = outputs.logits
 
         # verify logits
@@ -873,7 +882,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         input_mask = None
 
         # forward pass
-        outputs = model(inputs=inputs, attention_mask=input_mask)
+        with torch.no_grad():
+            outputs = model(inputs=inputs, attention_mask=input_mask)
         logits = outputs.logits
 
         # verify logits
@@ -897,7 +907,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         input_mask = None
 
         # forward pass
-        outputs = model(inputs=inputs, attention_mask=input_mask)
+        with torch.no_grad():
+            outputs = model(inputs=inputs, attention_mask=input_mask)
         logits = outputs.logits
 
         # verify logits
@@ -921,7 +932,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         input_mask = None
 
         # forward pass
-        outputs = model(inputs=inputs, attention_mask=input_mask)
+        with torch.no_grad():
+            outputs = model(inputs=inputs, attention_mask=input_mask)
         logits = outputs.logits
 
         # verify logits
@@ -931,3 +943,47 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.1186, 0.0554, 0.0897], device=torch_device)
 
         self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_optical_flow(self):
+        model = PerceiverForOpticalFlow.from_pretrained("deepmind/optical-flow-perceiver")
+        model.to(torch_device)
+
+        # prepare inputs
+        image1, image2 = prepare_optical_flow_images()
+        img1 = normalize(np.array(image1))
+        img2 = normalize(np.array(image1))
+
+        # stack images
+        img1 = torch.tensor(np.moveaxis(img1, -1, 0))
+        img2 = torch.tensor(np.moveaxis(img2, -1, 0))
+        images = torch.stack([img1, img2], dim=0)
+
+        # extract 3x3 patches
+        patch_size = model.config.train_size
+
+        inputs = images[..., : patch_size[0], : patch_size[1]].unsqueeze(0)
+        batch_size, _, C, H, W = inputs.shape
+        patches = extract_image_patches(inputs.view(batch_size * 2, C, H, W), kernel=3)
+        _, C, H, W = patches.shape
+        patches = patches.view(batch_size, -1, C, H, W).float()
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(inputs=patches)
+        logits = outputs.logits
+
+        # verify logits
+        expected_shape = torch.Size((1, 368, 496, 2))
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [
+                [[0.0025, -0.0050], [0.0025, -0.0049], [0.0025, -0.0048]],
+                [[0.0026, -0.0049], [0.0026, -0.0048], [0.0026, -0.0047]],
+                [[0.0026, -0.0049], [0.0026, -0.0048], [0.0026, -0.0046]],
+            ],
+            device=torch_device,
+        )
+
+        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
