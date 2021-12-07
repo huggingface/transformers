@@ -29,6 +29,7 @@ if is_torch_available():
         LukeForEntityClassification,
         LukeForEntityPairClassification,
         LukeForEntitySpanClassification,
+        LukeForMaskedLM,
         LukeModel,
         LukeTokenizer,
     )
@@ -138,12 +139,17 @@ class LukeModelTester:
             )
 
         sequence_labels = None
+        labels = None
+        entity_labels = None
         entity_classification_labels = None
         entity_pair_classification_labels = None
         entity_span_classification_labels = None
 
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            entity_labels = ids_tensor([self.batch_size, self.entity_length], self.entity_vocab_size)
+
             entity_classification_labels = ids_tensor([self.batch_size], self.num_entity_classification_labels)
             entity_pair_classification_labels = ids_tensor(
                 [self.batch_size], self.num_entity_pair_classification_labels
@@ -164,6 +170,8 @@ class LukeModelTester:
             entity_token_type_ids,
             entity_position_ids,
             sequence_labels,
+            labels,
+            entity_labels,
             entity_classification_labels,
             entity_pair_classification_labels,
             entity_span_classification_labels,
@@ -199,6 +207,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -226,6 +236,44 @@ class LukeModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_for_masked_lm(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        entity_ids,
+        entity_attention_mask,
+        entity_token_type_ids,
+        entity_position_ids,
+        sequence_labels,
+        labels,
+        entity_labels,
+        entity_classification_labels,
+        entity_pair_classification_labels,
+        entity_span_classification_labels,
+    ):
+        config.num_labels = self.num_entity_classification_labels
+        model = LukeForMaskedLM(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            entity_ids=entity_ids,
+            entity_attention_mask=entity_attention_mask,
+            entity_token_type_ids=entity_token_type_ids,
+            entity_position_ids=entity_position_ids,
+            labels=labels,
+            entity_labels=entity_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.entity_logits.shape, (self.batch_size, self.entity_length, self.entity_vocab_size)
+        )
+
     def create_and_check_for_entity_classification(
         self,
         config,
@@ -237,6 +285,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -269,6 +319,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -301,6 +353,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -341,6 +395,8 @@ class LukeModelTester:
             entity_token_type_ids,
             entity_position_ids,
             sequence_labels,
+            labels,
+            entity_labels,
             entity_classification_labels,
             entity_pair_classification_labels,
             entity_span_classification_labels,
@@ -363,6 +419,7 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LukeModel,
+            LukeForMaskedLM,
             LukeForEntityClassification,
             LukeForEntityPairClassification,
             LukeForEntitySpanClassification,
@@ -396,6 +453,18 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
                     dtype=torch.long,
                     device=torch_device,
                 )
+            elif model_class == LukeForMaskedLM:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["entity_labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.entity_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+
         return inputs_dict
 
     def setUp(self):
@@ -414,6 +483,10 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in LUKE_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = LukeModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_entity_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
