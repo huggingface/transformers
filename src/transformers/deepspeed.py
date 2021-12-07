@@ -357,6 +357,18 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     return optimizer, lr_scheduler
 
 
+def deepspeed_reinit(trainer):
+    """
+    this is a temp hack based on: https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until
+    Deepspeed fixes a bug where it can't resume from a checkpoint after it did some stepping
+    https://github.com/microsoft/DeepSpeed/issues/1612
+    """
+    import deepspeed
+
+    deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**trainer.deepspeed_initialize_kwargs)
+    return deepspeed_engine, optimizer, lr_scheduler
+
+
 def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
@@ -398,18 +410,23 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         model_parameters = None
     else:
         optimizer, lr_scheduler = deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps)
-        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+        model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
 
-    model, optimizer, _, lr_scheduler = deepspeed.initialize(
+    kwargs = dict(
         model=model,
         model_parameters=model_parameters,
         config_params=config,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
     )
+
+    deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+
+    # stash kwargs to enabled a later deepspeed_reinit
+    trainer.deepspeed_initialize_kwargs = kwargs
 
     if resume_from_checkpoint is not None:
 
@@ -424,7 +441,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         if len(deepspeed_checkpoint_dirs) > 0:
             logger.info(f"Attempting to resume from {resume_from_checkpoint}")
             # this magically updates self.optimizer and self.lr_scheduler
-            load_path, _ = model.load_checkpoint(
+            load_path, _ = deepspeed_engine.load_checkpoint(
                 resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
             )
             if load_path is None:
@@ -432,4 +449,4 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         else:
             logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
 
-    return model, optimizer, lr_scheduler
+    return deepspeed_engine, optimizer, lr_scheduler
