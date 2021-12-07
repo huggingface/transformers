@@ -265,11 +265,10 @@ class T5LayerNorm(nn.Module):
             hidden_states
             / torch_norm(hidden_states, dim=-1, keepdim=True, dtype=torch.float32)
             * math.sqrt(hidden_states.shape[-1])
-            * self.weight
         )
         if self.weight.dtype in [torch.float16, torch.bfloat16]:
             hidden_states = hidden_states.to(self.weight.dtype)
-        return hidden_states
+        return self.weight * hidden_states
 
 
 class T5DenseReluDense(nn.Module):
