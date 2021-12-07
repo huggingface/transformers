@@ -18,8 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available
-from ...file_utils import is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -56,8 +55,8 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NystromformerForMaskedLM,
             NystromformerForCausalLM,
+            NystromformerForMaskedLM,
             NystromformerForMultipleChoice,
             NystromformerForQuestionAnswering,
             NystromformerForSequenceClassification,

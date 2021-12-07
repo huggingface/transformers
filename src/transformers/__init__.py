@@ -2181,11 +2181,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.nystromformer import (
-        NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        NystromformerConfig,
-        NystromformerTokenizer,
-    )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2278,6 +2273,11 @@ if TYPE_CHECKING:
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.nystromformer import (
+        NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        NystromformerConfig,
+        NystromformerTokenizer,
+    )
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.phobert import PhobertTokenizer
@@ -2412,7 +2412,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.nystromformer import NystromformerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2442,6 +2441,7 @@ if TYPE_CHECKING:
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
+        from .models.nystromformer import NystromformerTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.reformer import ReformerTokenizerFast
@@ -2532,20 +2532,6 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
-
-        from .models.nystromformer import (
-            NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NystromformerForMaskedLM,
-            NystromformerForCausalLM,
-            NystromformerForMultipleChoice,
-            NystromformerForQuestionAnswering,
-            NystromformerForSequenceClassification,
-            NystromformerForTokenClassification,
-            NystromformerLayer,
-            NystromformerModel,
-            NystromformerPreTrainedModel,
-            load_tf_weights_in_nystromformer,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -3019,6 +3005,19 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.nystromformer import (
+            NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NystromformerForCausalLM,
+            NystromformerForMaskedLM,
+            NystromformerForMultipleChoice,
+            NystromformerForQuestionAnswering,
+            NystromformerForSequenceClassification,
+            NystromformerForTokenClassification,
+            NystromformerLayer,
+            NystromformerModel,
+            NystromformerPreTrainedModel,
+            load_tf_weights_in_nystromformer,
+        )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OpenAIGPTDoubleHeadsModel,

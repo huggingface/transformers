@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    nystromformer,
     albert,
     auto,
     bart,
@@ -77,6 +76,7 @@ from . import (
     mobilebert,
     mpnet,
     mt5,
+    nystromformer,
     openai,
     pegasus,
     phobert,

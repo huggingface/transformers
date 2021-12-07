@@ -141,6 +141,11 @@ class NystromformerSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
+        self.num_landmarks = config.num_landmarks
+        self.seq_len = config.seq_len
+        self.conv_kernel_size = config.conv_kernel_size
+        self.inv_coeff_init_option = config.inv_coeff_init_option
+
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
@@ -149,6 +154,23 @@ class NystromformerSelfAttention(nn.Module):
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
+
+    def iterative_inv(self, mat, n_iter=6):
+        I = torch.eye(mat.size(-1), device=mat.device)
+        K = mat
+
+        # The entries of K are positive and ||K||_{\infty} = 1 due to softmax
+        if self.init_option == "original":
+            # This original implementation is more conservative to compute coefficient of Z_0.
+            V = 1 / torch.max(torch.sum(K, dim=-2)) * K.transpose(-1, -2)
+        else:
+            # This is the exact coefficient computation, 1 / ||K||_1, of initialization of Z_0, leading to faster convergence.
+            V = 1 / torch.max(torch.sum(K, dim=-2), dim=-1).values[:, :, None, None] * K.transpose(-1, -2)
+
+        for _ in range(n_iter):
+            KV = torch.matmul(K, V)
+            V = torch.matmul(0.25 * V, 13 * I - torch.matmul(KV, 15 * I - torch.matmul(KV, 7 * I - KV)))
+        return V
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -166,33 +188,50 @@ class NystromformerSelfAttention(nn.Module):
     ):
         mixed_query_layer = self.query(hidden_states)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        query_layer = query_layer / math.sqrt(math.sqrt(self.attention_head_size))
+        key_layer = key_layer / math.sqrt(math.sqrt(self.attention_head_size))
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in NystromformerModel forward() function)
-            attention_scores = attention_scores + attention_mask
+        if self.num_landmarks == self.seq_len:
+            attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+            if attention_mask is not None:
+                # Apply the attention mask is (precomputed for all layers in NystromformerModel forward() function)
+                attention_scores = attention_scores + attention_mask
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+            attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+        else:
+            Q_landmarks = query_layer.reshape(
+                -1,
+                self.num_attention_heads,
+                self.num_landmarks,
+                self.seq_len // self.num_landmarks,
+                self.attention_head_size,
+            ).mean(dim=-2)
+            K_landmarks = key_layer.reshape(
+                -1,
+                self.num_attention_heads,
+                self.num_landmarks,
+                self.seq_len // self.num_landmarks,
+                self.attention_head_size,
+            ).mean(dim=-2)
+
+            kernel_1 = torch.nn.functional.softmax(torch.matmul(query_layer, K_landmarks.transpose(-1, -2)), dim=-1)
+            kernel_2 = torch.nn.functional.softmax(torch.matmul(Q_landmarks, K_landmarks.transpose(-1, -2)), dim=-1)
+
+            attention_scores = torch.matmul(Q_landmarks, key_layer.transpose(-1, -2))
+
+            if attention_mask is not None:
+                # Apply the attention mask is (precomputed for all layers in NystromformerModel forward() function)
+                attention_scores = attention_scores + attention_mask
+
+            kernel_3 = nn.functional.softmax(attention_scores, dim=-1)
+            attention_probs = torch.matmul(kernel_1, self.iterative_inv(kernel_2))
+            value_layer = torch.matmul(kernel_3, value_layer)
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
