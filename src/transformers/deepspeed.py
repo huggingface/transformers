@@ -425,7 +425,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
 
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
 
-    # stash kwargs for a possible deepspeed_reinit if
+    # stash kwargs to enabled a later deepspeed_reinit
     trainer.deepspeed_initialize_kwargs = kwargs
 
     if resume_from_checkpoint is not None:
