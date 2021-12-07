@@ -56,12 +56,12 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        pad_token="<pad>",
-        bos_token="<s>",
-        eos_token="</s>",
-        mask_token="<mask>",
-        cls_token="<cls>",
-        sep_token="<sep>",
+        pad_token="[PAD]",
+        bos_token="[BOS]",
+        eos_token="[EOS]",
+        mask_token="[MASK]",
+        cls_token="[CLS]",
+        sep_token="[SEP]",
         model_max_length=2048,
         **kwargs
     ) -> None:
@@ -127,7 +127,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
         # normal case: some special tokens
         if token_ids_1 is None:
-            return ([0] * len(token_ids_0)) + [1]
+            return [0] * len(token_ids_0)
         return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
     def build_inputs_with_special_tokens(
@@ -138,7 +138,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         following format:
 
         - single sequence: ``X``
-        - pair of sequences: ``A </s> B </s>``
+        - pair of sequences: ``A [SEP] B [SEP]``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -152,7 +152,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return token_ids_0
         else:
-            return token_ids_0 + token_ids_1
+            return token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
