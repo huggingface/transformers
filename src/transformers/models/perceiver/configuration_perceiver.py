@@ -75,12 +75,22 @@ class PerceiverConfig(PretrainedConfig):
         use_query_residual (:obj:`float`, `optional`, defaults to :obj:`True`):
             Whether to add a query residual in the cross-attention layer of the encoder.
         vocab_size (:obj:`int`, `optional`, defaults to 262):
-            Vocabulary size of the Perceiver model.
+            Vocabulary size for the masked language modeling model.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that the masked language modeling model might ever be used with. Typically set
+            this to something large just in case (e.g., 512 or 1024 or 2048).
+        image_size (:obj:`int`, `optional`, defaults to 56):
+            Size of the images after preprocessing, for :class:`~transformers.PerceiverForImageClassificationLearned`.
         train_size (:obj:`List[int]`, `optional`, defaults to [368, 496]):
             Training size of the images for the optical flow model.
+        num_frames (:obj:`int`, `optional`, defaults to 16):
+            Number of video frames used for the multimodal autoencoding model.
+        audio_samples_per_frame (:obj:`int`, `optional`, defaults to 1920):
+            Number of audio samples per frame for the multimodal autoencoding model.
+        samples_per_patch (:obj:`int`, `optional`, defaults to 16):
+            Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
+        output_shape (:obj:`List[int]`, `optional`, defaults to :obj:`[1, 16, 224, 224]`):
+            Shape of the output for the multimodal autoencoding model.
 
     Example::
 
@@ -120,11 +130,11 @@ class PerceiverConfig(PretrainedConfig):
         use_query_residual=True,
         vocab_size=262,
         max_position_embeddings=2048,
+        image_size=56,
         train_size=[368, 496],
         num_frames=16,
         audio_samples_per_frame=1920,
         samples_per_patch=16,
-        image_size=56,
         output_shape=[1, 16, 224, 224],
         **kwargs
     ):

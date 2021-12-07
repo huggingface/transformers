@@ -1652,9 +1652,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             config,
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
-            # subsampled_index_dims=subsampling["image"],
             output_shape=config.output_shape,
-            # num_z_channels=1024,
             output_num_channels=512,
             use_query_residual=False,
             position_encoding_only=True,
