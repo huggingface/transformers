@@ -38,8 +38,9 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a BEiT feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin` which
+    contains most of the main methods. Users should refer to this superclass for more information regarding those
+    methods.
 
     Args:
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):

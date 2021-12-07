@@ -535,8 +535,8 @@ class GenerationMixin:
         self, top_k: int = None, top_p: float = None, temperature: float = None, num_beams: int = None
     ) -> LogitsProcessorList:
         """
-        This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
-        :obj:`~transformers.LogitsWarper` instances used for multinomial sampling.
+        This class returns a :class:`~transformers.LogitsProcessorList` list object that contains all relevant
+        :class:`~transformers.LogitsWarper` instances used for multinomial sampling.
         """
 
         # init warp parameters
@@ -575,8 +575,8 @@ class GenerationMixin:
         remove_invalid_values: bool,
     ) -> LogitsProcessorList:
         """
-        This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
-        :obj:`~transformers.LogitsProcessor` instances used to modify the scores of the language model head.
+        This class returns a :class:`~transformers.LogitsProcessorList` list object that contains all relevant
+        :class:`~transformers.LogitsProcessor` instances used to modify the scores of the language model head.
         """
         processors = LogitsProcessorList()
 

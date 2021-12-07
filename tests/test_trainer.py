@@ -57,6 +57,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
+    require_torch_tf32,
     require_torch_up_to_2_gpus,
     slow,
 )
@@ -491,6 +492,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(learning_rate=0.1, bf16=True, half_precision_backend="apex")
 
         # will add more specific tests once there are some bugs to fix
+
+    @require_torch_gpu
+    @require_torch_tf32
+    def test_tf32(self):
+
+        # very basic test
+        trainer = get_regression_trainer(learning_rate=0.1, tf32=True)
+        trainer.train()
+        self.check_trained_model(trainer.model)
 
 
 @require_torch

@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("blenderbot-small", "FlaxBlenderbotSmallModel"),
         ("pegasus", "FlaxPegasusModel"),
         ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("distilbert", "FlaxDistilBertModel"),
@@ -85,6 +86,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("blenderbot-small", "FlaxBlenderbotSmallForConditionalGeneration"),
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("bart", "FlaxBartForConditionalGeneration"),
         ("mbart", "FlaxMBartForConditionalGeneration"),

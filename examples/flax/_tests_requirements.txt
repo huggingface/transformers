@@ -1,0 +1,7 @@
+datasets >= 1.1.3
+pytest
+conllu
+nltk
+rouge-score
+seqeval
+tensorboard
