@@ -17,14 +17,14 @@
 import unittest
 from typing import Tuple
 
-from transformers import AddedToken, LukeTokenizer
+from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = LukeTokenizer
+class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = MLukeTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
@@ -35,7 +35,8 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, task=None, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return self.tokenizer_class.from_pretrained("studio-ousia/luke-base", task=task, **kwargs)
+        kwargs.update({"task": task})
+        return self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -43,28 +44,28 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/luke-base")
+        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base")
         text = "lower newer"
-        bpe_tokens = ["lower", "\u0120newer"]
-        tokens = tokenizer.tokenize(text)  # , add_prefix_space=True)
-        self.assertListEqual(tokens, bpe_tokens)
+        spm_tokens = ["▁lower", "▁new", "er"]
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(tokens, spm_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [29668, 13964, 3]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        input_spm_tokens = [92319, 3525, 56, 3]
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_spm_tokens)
 
-    def luke_dict_integration_testing(self):
+    def mluke_dict_integration_testing(self):
         tokenizer = self.get_tokenizer()
 
-        self.assertListEqual(tokenizer.encode("Hello world!", add_special_tokens=False), [0, 31414, 232, 328, 2])
+        self.assertListEqual(tokenizer.encode("Hello world!", add_special_tokens=False), [35378, 8999, 38])
         self.assertListEqual(
             tokenizer.encode("Hello world! cécé herlolip 418", add_special_tokens=False),
-            [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
+            [35378, 8999, 38, 33273, 11676, 604, 365, 21392, 201, 1819],
         )
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/luke-large")
+        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
@@ -86,46 +87,6 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         txt = "Beyonce lives in Los Angeles"
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
-
-    def test_space_encoding(self):
-        tokenizer = self.get_tokenizer()
-
-        sequence = "Encode this sequence."
-        space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
-
-        # Testing encoder arguments
-        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
-        self.assertNotEqual(first_char, space_encoding)
-
-        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
-        self.assertEqual(first_char, space_encoding)
-
-        tokenizer.add_special_tokens({"bos_token": "<s>"})
-        encoded = tokenizer.encode(sequence, add_special_tokens=True)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[1])[0]
-        self.assertNotEqual(first_char, space_encoding)
-
-        # Testing spaces after special tokens
-        mask = "<mask>"
-        tokenizer.add_special_tokens(
-            {"mask_token": AddedToken(mask, lstrip=True, rstrip=False)}
-        )  # mask token has a left space
-        mask_ind = tokenizer.convert_tokens_to_ids(mask)
-
-        sequence = "Encode <mask> sequence"
-        sequence_nospace = "Encode <mask>sequence"
-
-        encoded = tokenizer.encode(sequence)
-        mask_loc = encoded.index(mask_ind)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
-        self.assertEqual(first_char, space_encoding)
-
-        encoded = tokenizer.encode(sequence_nospace)
-        mask_loc = encoded.index(mask_ind)
-        first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
-        self.assertNotEqual(first_char, space_encoding)
 
     def test_pretokenized_inputs(self):
         pass
@@ -177,9 +138,9 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
         tokenizer = self.get_tokenizer()
 
-        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-        spans = [(15, 34)]
-        entities = ["East Asian language"]
+        sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and Afghanistan."
+        entities = ["en:ISO 639-3"]
+        spans = [(0, 9)]
 
         with self.assertRaises(ValueError):
             tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
@@ -236,93 +197,123 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class LukeTokenizerIntegrationTests(unittest.TestCase):
-    tokenizer_class = LukeTokenizer
+class MLukeTokenizerIntegrationTests(unittest.TestCase):
+    tokenizer_class = MLukeTokenizer
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/mluke-base", return_token_type_ids=True)
+        cls.entity_classification_tokenizer = MLukeTokenizer.from_pretrained(
+            "studio-ousia/mluke-base", return_token_type_ids=True, task="entity_classification"
+        )
+        cls.entity_pair_tokenizer = MLukeTokenizer.from_pretrained(
+            "studio-ousia/mluke-base", return_token_type_ids=True, task="entity_pair_classification"
+        )
+
+        cls.entity_span_tokenizer = MLukeTokenizer.from_pretrained(
+            "studio-ousia/mluke-base", return_token_type_ids=True, task="entity_span_classification"
+        )
 
     def test_single_text_no_padding_or_truncation(self):
-        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
-        entities = ["Ana Ivanovic", "Thursday", "Dummy Entity"]
-        spans = [(9, 21), (30, 38), (39, 42)]
+        tokenizer = self.tokenizer
+        sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
+        entities = ["en:ISO 639-3", "DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
+        spans = [(0, 9), (59, 63), (68, 75), (77, 88)]
 
         encoding = tokenizer(sentence, entities=entities, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed Ana Ivanovic said on Thursday she could hardly believe her luck.</s>",
+            "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
+            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
+        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
+        self.assertEqual(
+            tokenizer.decode(encoding["input_ids"][19:25], spaces_between_special_tokens=False), "アフガニスタン"
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
+            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
         )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][9:10], spaces_between_special_tokens=False), " she")
 
         self.assertEqual(
             encoding["entity_ids"],
             [
-                tokenizer.entity_vocab["Ana Ivanovic"],
-                tokenizer.entity_vocab["Thursday"],
+                tokenizer.entity_vocab["en:ISO 639-3"],
                 tokenizer.entity_vocab["[UNK]"],
+                tokenizer.entity_vocab["ja:アフガニスタン"],
+                tokenizer.entity_vocab["en:Afghanistan"],
             ],
         )
-        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1])
-        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0])
+        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1, 1])
+        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0, 0])
         # fmt: off
         self.assertEqual(
             encoding["entity_position_ids"],
             [
-                [3, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [17, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [19, 20, 21, 22, 23, 24, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
             ]
         )
         # fmt: on
 
     def test_single_text_only_entity_spans_no_padding_or_truncation(self):
-        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
-        spans = [(9, 21), (30, 38), (39, 42)]
+        tokenizer = self.tokenizer
 
-        encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
+        sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
+        entities = ["en:ISO 639-3", "DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
+        spans = [(0, 9), (59, 63), (68, 75), (77, 88)]
+
+        encoding = tokenizer(sentence, entities=entities, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed Ana Ivanovic said on Thursday she could hardly believe her luck.</s>",
+            "<s> ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
+            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
+        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][17], spaces_between_special_tokens=False), "Iran")
+        self.assertEqual(
+            tokenizer.decode(encoding["input_ids"][20:25], spaces_between_special_tokens=False), "アフガニスタン"
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
+            tokenizer.decode(encoding["input_ids"][26], spaces_between_special_tokens=False), "Afghanistan"
         )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][9:10], spaces_between_special_tokens=False), " she")
 
-        mask_id = tokenizer.entity_vocab["[MASK]"]
-        self.assertEqual(encoding["entity_ids"], [mask_id, mask_id, mask_id])
-        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1])
-        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0])
+        self.assertEqual(
+            encoding["entity_ids"],
+            [
+                tokenizer.entity_vocab["en:ISO 639-3"],
+                tokenizer.entity_vocab["[UNK]"],
+                tokenizer.entity_vocab["ja:アフガニスタン"],
+                tokenizer.entity_vocab["en:Afghanistan"],
+            ],
+        )
+        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1, 1])
+        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0, 0])
         # fmt: off
         self.assertEqual(
             encoding["entity_position_ids"],
             [
-                [3, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, ],
-                [9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, ]
+                [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [17, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [19, 20, 21, 22, 23, 24, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
             ]
         )
         # fmt: on
 
     def test_single_text_padding_pytorch_tensors(self):
-        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
-        entities = ["Ana Ivanovic", "Thursday", "Dummy Entity"]
-        spans = [(9, 21), (30, 38), (39, 42)]
+        tokenizer = self.tokenizer
+
+        sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
+        entities = ["en:ISO 639-3", "DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
+        spans = [(0, 9), (59, 63), (68, 75), (77, 88)]
 
         encoding = tokenizer(
             sentence,
@@ -347,13 +338,14 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_position_ids"].shape, (1, 16, tokenizer.max_mention_length))
 
     def test_text_pair_no_padding_or_truncation(self):
-        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
-        sentence = "Top seed Ana Ivanovic said on Thursday"
-        sentence_pair = "She could hardly believe her luck."
-        entities = ["Ana Ivanovic", "Thursday"]
-        entities_pair = ["Dummy Entity"]
-        spans = [(9, 21), (30, 38)]
-        spans_pair = [(0, 3)]
+        tokenizer = self.tokenizer
+
+        sentence = "ISO 639-3 uses the code fas"
+        sentence_pair = "for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
+        entities = ["en:ISO 639-3"]
+        entities_pair = ["DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
+        spans = [(0, 9)]
+        spans_pair = [(31, 35), (40, 47), (49, 60)]
 
         encoding = tokenizer(
             sentence,
@@ -367,47 +359,57 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed Ana Ivanovic said on Thursday</s></s>She could hardly believe her luck.</s>",
+            "<s> ISO 639-3 uses the code fas</s></s> for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
+            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
+        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][19], spaces_between_special_tokens=False), "Iran")
+        self.assertEqual(
+            tokenizer.decode(encoding["input_ids"][21:27], spaces_between_special_tokens=False), "アフガニスタン"
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
+            tokenizer.decode(encoding["input_ids"][28], spaces_between_special_tokens=False), "Afghanistan"
         )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][11:12], spaces_between_special_tokens=False), "She")
 
         self.assertEqual(
             encoding["entity_ids"],
             [
-                tokenizer.entity_vocab["Ana Ivanovic"],
-                tokenizer.entity_vocab["Thursday"],
+                tokenizer.entity_vocab["en:ISO 639-3"],
                 tokenizer.entity_vocab["[UNK]"],
+                tokenizer.entity_vocab["ja:アフガニスタン"],
+                tokenizer.entity_vocab["en:Afghanistan"],
             ],
         )
-        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1])
-        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0])
+        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1, 1])
+        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0, 0])
         # fmt: off
         self.assertEqual(
             encoding["entity_position_ids"],
             [
-                [3, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [19, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [21, 22, 23, 24, 25, 26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [28, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
             ]
         )
         # fmt: on
 
     def test_text_pair_only_entity_spans_no_padding_or_truncation(self):
-        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
-        sentence = "Top seed Ana Ivanovic said on Thursday"
-        sentence_pair = "She could hardly believe her luck."
-        spans = [(9, 21), (30, 38)]
-        spans_pair = [(0, 3)]
+        tokenizer = self.tokenizer
+
+        sentence = "ISO 639-3 uses the code fas"
+        sentence_pair = "for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
+        entities = ["en:ISO 639-3"]
+        entities_pair = ["DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
+        spans = [(0, 9)]
+        spans_pair = [(31, 35), (40, 47), (49, 60)]
 
         encoding = tokenizer(
             sentence,
             sentence_pair,
+            entities=entities,
+            entities_pair=entities_pair,
             entity_spans=spans,
             entity_spans_pair=spans_pair,
             return_token_type_ids=True,
@@ -415,39 +417,49 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed Ana Ivanovic said on Thursday</s></s>She could hardly believe her luck.</s>",
+            "<s> ISO 639-3 uses the code fas</s></s> for the dialects spoken across Iran and アフガニスタン ( Afghanistan ).</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:6], spaces_between_special_tokens=False), " Ana Ivanovic"
+            tokenizer.decode(encoding["input_ids"][1:5], spaces_between_special_tokens=False), "ISO 639-3"
+        )
+        self.assertEqual(tokenizer.decode(encoding["input_ids"][19], spaces_between_special_tokens=False), "Iran")
+        self.assertEqual(
+            tokenizer.decode(encoding["input_ids"][21:27], spaces_between_special_tokens=False), "アフガニスタン"
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][8:9], spaces_between_special_tokens=False), " Thursday"
+            tokenizer.decode(encoding["input_ids"][28], spaces_between_special_tokens=False), "Afghanistan"
         )
-        self.assertEqual(tokenizer.decode(encoding["input_ids"][11:12], spaces_between_special_tokens=False), "She")
 
-        mask_id = tokenizer.entity_vocab["[MASK]"]
-        self.assertEqual(encoding["entity_ids"], [mask_id, mask_id, mask_id])
-        self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1])
-        self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0])
+        self.assertEqual(
+            encoding["entity_ids"],
+            [
+                tokenizer.entity_vocab["en:ISO 639-3"],
+                tokenizer.entity_vocab["[UNK]"],
+                tokenizer.entity_vocab["ja:アフガニスタン"],
+                tokenizer.entity_vocab["en:Afghanistan"],
+            ],
+        )
         # fmt: off
         self.assertEqual(
             encoding["entity_position_ids"],
             [
-                [3, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [19, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [21, 22, 23, 24, 25, 26, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [28, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
             ]
         )
         # fmt: on
 
     def test_text_pair_padding_pytorch_tensors(self):
-        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", return_token_type_ids=True)
-        sentence = "Top seed Ana Ivanovic said on Thursday"
-        sentence_pair = "She could hardly believe her luck."
-        entities = ["Ana Ivanovic", "Thursday"]
-        entities_pair = ["Dummy Entity"]
-        spans = [(9, 21), (30, 38)]
-        spans_pair = [(0, 3)]
+        tokenizer = self.tokenizer
+
+        sentence = "ISO 639-3 uses the code fas"
+        sentence_pair = "for the dialects spoken across Iran and アフガニスタン (Afghanistan)."
+        entities = ["en:ISO 639-3"]
+        entities_pair = ["DUMMY_ENTITY", "ja:アフガニスタン", "en:Afghanistan"]
+        spans = [(0, 9)]
+        spans_pair = [(31, 35), (40, 47), (49, 60)]
 
         encoding = tokenizer(
             sentence,
@@ -458,15 +470,15 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
             entity_spans_pair=spans_pair,
             return_token_type_ids=True,
             padding="max_length",
-            max_length=30,
+            max_length=40,
             max_entity_length=16,
             return_tensors="pt",
         )
 
         # test words
-        self.assertEqual(encoding["input_ids"].shape, (1, 30))
-        self.assertEqual(encoding["attention_mask"].shape, (1, 30))
-        self.assertEqual(encoding["token_type_ids"].shape, (1, 30))
+        self.assertEqual(encoding["input_ids"].shape, (1, 40))
+        self.assertEqual(encoding["attention_mask"].shape, (1, 40))
+        self.assertEqual(encoding["token_type_ids"].shape, (1, 40))
 
         # test entities
         self.assertEqual(encoding["entity_ids"].shape, (1, 16))
@@ -475,44 +487,43 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(encoding["entity_position_ids"].shape, (1, 16, tokenizer.max_mention_length))
 
     def test_entity_classification_no_padding_or_truncation(self):
-        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
-        span = (39, 42)
+        tokenizer = self.entity_classification_tokenizer
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        span = (15, 34)
 
         encoding = tokenizer(sentence, entity_spans=[span], return_token_type_ids=True)
 
         # test words
-        self.assertEqual(len(encoding["input_ids"]), 42)
-        self.assertEqual(len(encoding["attention_mask"]), 42)
-        self.assertEqual(len(encoding["token_type_ids"]), 42)
+        self.assertEqual(len(encoding["input_ids"]), 23)
+        self.assertEqual(len(encoding["attention_mask"]), 23)
+        self.assertEqual(len(encoding["token_type_ids"]), 23)
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed Ana Ivanovic said on Thursday<ent> she<ent> could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon.</s>",
+            "<s> Japanese is an<ent>East Asian language<ent>spoken by about 128 million people, primarily in Japan.</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][9:12], spaces_between_special_tokens=False), "<ent> she<ent>"
+            tokenizer.decode(encoding["input_ids"][4:9], spaces_between_special_tokens=False),
+            "<ent>East Asian language<ent>",
         )
 
         # test entities
-        self.assertEqual(encoding["entity_ids"], [2])
+        mask_id = tokenizer.entity_vocab["[MASK]"]
+        self.assertEqual(encoding["entity_ids"], [mask_id])
         self.assertEqual(encoding["entity_attention_mask"], [1])
         self.assertEqual(encoding["entity_token_type_ids"], [0])
         # fmt: off
         self.assertEqual(
             encoding["entity_position_ids"],
-            [
-                [9, 10, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
-            ]
+            [[4, 5, 6, 7, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]]
         )
         # fmt: on
 
     def test_entity_classification_padding_pytorch_tensors(self):
-        tokenizer = LukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_classification", return_token_type_ids=True
-        )
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
-        # entity information
-        span = (39, 42)
+        tokenizer = self.entity_classification_tokenizer
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        span = (15, 34)
 
         encoding = tokenizer(
             sentence, entity_spans=[span], return_token_type_ids=True, padding="max_length", return_tensors="pt"
@@ -532,47 +543,47 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
     def test_entity_pair_classification_no_padding_or_truncation(self):
-        tokenizer = LukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_pair_classification", return_token_type_ids=True
-        )
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
+        tokenizer = self.entity_pair_tokenizer
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         # head and tail information
-        spans = [(9, 21), (39, 42)]
+        spans = [(0, 8), (84, 89)]
 
         encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed<ent> Ana Ivanovic<ent> said on Thursday<ent2> she<ent2> could hardly believe her luck.</s>",
+            "<s><ent>Japanese<ent>is an East Asian language spoken by about 128 million people, primarily in<ent2>Japan<ent2>.</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][3:8], spaces_between_special_tokens=False),
-            "<ent> Ana Ivanovic<ent>",
+            tokenizer.decode(encoding["input_ids"][1:4], spaces_between_special_tokens=False),
+            "<ent>Japanese<ent>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][11:14], spaces_between_special_tokens=False), "<ent2> she<ent2>"
+            tokenizer.decode(encoding["input_ids"][20:23], spaces_between_special_tokens=False), "<ent2>Japan<ent2>"
         )
 
-        self.assertEqual(encoding["entity_ids"], [2, 3])
+        mask_id = tokenizer.entity_vocab["[MASK]"]
+        mask2_id = tokenizer.entity_vocab["[MASK2]"]
+        self.assertEqual(encoding["entity_ids"], [mask_id, mask2_id])
         self.assertEqual(encoding["entity_attention_mask"], [1, 1])
         self.assertEqual(encoding["entity_token_type_ids"], [0, 0])
         # fmt: off
         self.assertEqual(
             encoding["entity_position_ids"],
             [
-                [3, 4, 5, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [11, 12, 13, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [1, 2, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [20, 21, 22, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
             ]
         )
         # fmt: on
 
     def test_entity_pair_classification_padding_pytorch_tensors(self):
-        tokenizer = LukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_pair_classification", return_token_type_ids=True
-        )
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
+        tokenizer = self.entity_pair_tokenizer
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
         # head and tail information
-        spans = [(9, 21), (39, 42)]
+        spans = [(0, 8), (84, 89)]
 
         encoding = tokenizer(
             sentence,
@@ -597,41 +608,39 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         )
 
     def test_entity_span_classification_no_padding_or_truncation(self):
-        tokenizer = LukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_span_classification", return_token_type_ids=True
-        )
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
-        spans = [(0, 8), (9, 21), (39, 42)]
+        tokenizer = self.entity_span_tokenizer
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        spans = [(0, 8), (15, 34), (84, 89)]
 
         encoding = tokenizer(sentence, entity_spans=spans, return_token_type_ids=True)
 
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed Ana Ivanovic said on Thursday she could hardly believe her luck.</s>",
+            "<s> Japanese is an East Asian language spoken by about 128 million people, primarily in Japan.</s>",
         )
 
-        self.assertEqual(encoding["entity_ids"], [2, 2, 2])
+        mask_id = tokenizer.entity_vocab["[MASK]"]
+        self.assertEqual(encoding["entity_ids"], [mask_id, mask_id, mask_id])
         self.assertEqual(encoding["entity_attention_mask"], [1, 1, 1])
         self.assertEqual(encoding["entity_token_type_ids"], [0, 0, 0])
         # fmt: off
         self.assertEqual(
             encoding["entity_position_ids"],
             [
-                [1, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [3, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-                [9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-            ]
+                [1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [4, 5, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+                [18, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]]
         )
         # fmt: on
-        self.assertEqual(encoding["entity_start_positions"], [1, 3, 9])
-        self.assertEqual(encoding["entity_end_positions"], [2, 5, 9])
+        self.assertEqual(encoding["entity_start_positions"], [1, 4, 18])
+        self.assertEqual(encoding["entity_end_positions"], [1, 6, 18])
 
     def test_entity_span_classification_padding_pytorch_tensors(self):
-        tokenizer = LukeTokenizer.from_pretrained(
-            "studio-ousia/luke-base", task="entity_span_classification", return_token_type_ids=True
-        )
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck."
-        spans = [(0, 8), (9, 21), (39, 42)]
+        tokenizer = self.entity_span_tokenizer
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        spans = [(0, 8), (15, 34), (84, 89)]
 
         encoding = tokenizer(
             sentence,

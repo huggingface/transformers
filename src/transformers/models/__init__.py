@@ -72,6 +72,7 @@ from . import (
     mbart50,
     megatron_bert,
     megatron_gpt2,
+    mluke,
     mmbt,
     mobilebert,
     mpnet,

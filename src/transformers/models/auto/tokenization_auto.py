@@ -178,6 +178,7 @@ else:
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("luke", ("LukeTokenizer", None)),
+            ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("bigbird_pegasus", ("PegasusTokenizer", "PegasusTokenizerFast" if is_tokenizers_available() else None)),
             ("canine", ("CanineTokenizer", None)),
             ("bertweet", ("BertweetTokenizer", None)),
