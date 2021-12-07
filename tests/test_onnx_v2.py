@@ -5,9 +5,6 @@ from unittest.mock import patch
 
 from parameterized import parameterized
 from transformers import AutoConfig, AutoTokenizer, is_torch_available
-
-# from transformers.models.t5 import T5OnnxConfig
-# from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -170,7 +167,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 if is_torch_available():
     PYTORCH_EXPORT_MODELS = {
         ("albert", "hf-internal-testing/tiny-albert"),
-        # ("bart", "facebook/bart-base"),
+        ("bart", "facebook/bart-base"),
         ("bert", "bert-base-cased"),
         ("camembert", "camembert-base"),
         ("distilbert", "distilbert-base-cased"),
@@ -180,7 +177,7 @@ if is_torch_available():
         ("roberta", "roberta-base"),
         ("xlm-roberta", "xlm-roberta-base"),
         ("layoutlm", "microsoft/layoutlm-base-uncased"),
-        # # ("mbart", "sshleifer/tiny-mbart"),
+        ("mbart", "sshleifer/tiny-mbart"),
         ("t5", "t5-small"),
     }
 

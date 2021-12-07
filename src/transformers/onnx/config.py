@@ -55,7 +55,6 @@ class OnnxConfig(ABC):
 
     DEFAULT_FIXED_BATCH = 2
     DEFAULT_FIXED_SEQUENCE = 8
-    IS_ENCODER_DECODER = False
 
     _TASKS_TO_COMMON_OUTPUTS = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
@@ -180,7 +179,7 @@ class OnnxConfig(ABC):
         Returns:
             Float absolute tolerance value
         """
-        return 1e-4
+        return 1e-5
 
     @staticmethod
     def use_external_data_format(num_parameters: int) -> bool:
@@ -460,6 +459,8 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 encoder_seq_length,
                 self._config.hidden_size // num_encoder_attention_heads,
             )
+            # Here decoder_seq_length is 1 because only the last decoder_input_ids are used when using pre-computed
+            # past_key_values
             decoder_shape = (
                 batch,
                 num_decoder_attention_heads,
@@ -475,6 +476,8 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
             remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
 
             for _ in range(min_num_layers):
+                # For encoder-decoder models, past_key_values contains pre-computed values for both the encoder and the
+                # decoder layers, hence a tuple of 4 tensors instead of 2
                 common_inputs["past_key_values"].append(
                     (
                         torch.zeros(decoder_shape),

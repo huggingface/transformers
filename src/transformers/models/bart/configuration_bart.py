@@ -283,6 +283,10 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     self._config.hidden_size // num_decoder_attention_heads,
                 )
 
+                common_inputs["decoder_attention_mask"] = torch.cat(
+                    [common_inputs["decoder_attention_mask"], torch.ones(batch, 1)], dim=1
+                )
+
                 common_inputs["past_key_values"] = []
                 # If the number of encoder and decoder layers are present in the model configuration, both are considered
                 num_encoder_layers, num_decoder_layers = self.num_layers
@@ -346,7 +350,3 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-2

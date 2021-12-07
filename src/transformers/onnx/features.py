@@ -84,15 +84,13 @@ class FeaturesManager:
         ),
         "mbart": supported_features_mapping(
             "default",
+            "default-with-past",
             "causal-lm",
+            "causal-lm-with-past",
             "seq2seq-lm",
+            "seq2seq-lm-with-past",
             "sequence-classification",
             "question-answering",
-            "default-with-past",
-            "causal-lm-with-past",
-            "seq2seq-lm-with-past",
-            "sequence-classification-with-past",
-            "question-answering-with-past",
             onnx_config_cls=MBartOnnxConfig,
         ),
         "bert": supported_features_mapping(
