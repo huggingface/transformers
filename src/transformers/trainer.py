@@ -1842,7 +1842,7 @@ class Trainer:
             else:
                 ctx_manager = autocast()
         else:
-            ctx_manager = contextlib.nullcontext()
+            ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
         return ctx_manager
 
