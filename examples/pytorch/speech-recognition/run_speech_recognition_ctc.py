@@ -578,7 +578,7 @@ def main():
         with processor.as_target_processor():
             additional_kwargs = {}
             if phoneme_language is not None:
-                additional_kwargs["text_lang"] = phoneme_language
+                additional_kwargs["phonemizer_lang"] = phoneme_language
 
             batch["labels"] = processor(batch["target_text"], **additional_kwargs).input_ids
         return batch
