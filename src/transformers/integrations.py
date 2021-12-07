@@ -592,7 +592,7 @@ class CometCallback(TrainerCallback):
         if not _has_comet:
             raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
         self._initialized = False
-        self._log_assets = False
+        self._log_assets = True
 
     def setup(self, args, state, model):
         """
