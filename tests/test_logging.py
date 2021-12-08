@@ -17,7 +17,7 @@ import unittest
 
 import transformers.models.bart.tokenization_bart
 from transformers import logging
-from transformers.testing_utils import CaptureLogger, mockenv
+from transformers.testing_utils import CaptureLogger, mockenv, mockenv_context
 
 
 class HfArgumentParserTest(unittest.TestCase):
@@ -103,3 +103,21 @@ class HfArgumentParserTest(unittest.TestCase):
         self.assertIn("Unknown option TRANSFORMERS_VERBOSITY=super-error", cl.out)
 
         # no need to restore as nothing was changed
+
+    def test_advisory_warnings(self):
+        # testing `logger.warning_advice()`
+
+        logger = logging.get_logger("transformers.models.bart.tokenization_bart")
+        msg = "Testing 1, 2, 3"
+
+        with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS="1"):
+            # nothing should be logged as env var disables this method
+            with CaptureLogger(logger) as cl:
+                logger.warning_advice(msg)
+            self.assertEqual(cl.out, "")
+
+        with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS=""):
+            # should log normally as TRANSFORMERS_NO_ADVISORY_WARNINGS is unset
+            with CaptureLogger(logger) as cl:
+                logger.warning_advice(msg)
+            self.assertEqual(cl.out, msg + "\n")
