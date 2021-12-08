@@ -94,14 +94,14 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
         input_text = "Hello how are you"
-        phonemes = tokenizer.phonemize(input_text)
-        self.assertEqual(phonemes, "h ə l oʊh aʊɑːɹj uː")
+        phonemes = tokenizer.phonemize(input_text, phonemizer_lang="en-us")
+        self.assertEqual(phonemes, "h ə l oʊ h aʊ ɑːɹ j uː")
 
     def test_encode(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
         input_text = "Hello how are you"
-        phonemes = tokenizer.phonemize(input_text)
+        phonemes = tokenizer.phonemize(input_text, phonemizer_lang="en-us")
         self.assertEqual(tokenizer(input_text).input_ids, tokenizer(phonemes, do_phonemize=False).input_ids)
 
     def test_change_phonemizer_lang(self):
@@ -118,8 +118,8 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(text_en, "h ə l oʊ h aʊ ɑːɹ j uː")
         self.assertEqual(
-            text_fr, "ɛ l o <unk> h aʊ <unk> a ʁ <unk> j u"
-        )  # <unk> is expected since input lang is en-us
+            text_fr, "ɛ l o h aʊ a ʁ j u"
+        )
 
     def test_case_insensitive(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
