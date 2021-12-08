@@ -59,7 +59,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -239,7 +239,7 @@ class Trainer:
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
+        callbacks (List of :class:`~transformers.TrainerCallback`, `optional`):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
             detailed in :doc:`here <callback>`.
 
@@ -1434,19 +1434,26 @@ class Trainer:
 
             best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
             if os.path.exists(best_model_path):
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(best_model_path, map_location="cpu")
-                # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
+                if self.deepspeed:
+                    # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
+                    deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
+                    self.model = deepspeed_engine.module
+                    self.model_wrapped = deepspeed_engine
+                    self.deepspeed = deepspeed_engine
+                    self.optimizer = optimizer
+                    self.lr_scheduler = lr_scheduler
+                    self.deepspeed.load_checkpoint(
+                        self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+                    )
+                else:
+                    # We load the model state dict on the CPU to avoid an OOM error.
+                    state_dict = torch.load(best_model_path, map_location="cpu")
+                    # If the model is on the GPU, it still works!
+                    self._load_state_dict_in_model(state_dict)
             else:
                 logger.warn(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                     "on multiple nodes, you should activate `--save_on_each_node`."
-                )
-
-            if self.deepspeed:
-                self.deepspeed.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
         # add remaining tr_loss
@@ -1857,8 +1864,12 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         if self.use_amp:
-            with autocast(dtype=self.amp_dtype):
-                loss = self.compute_loss(model, inputs)
+            if version.parse(torch.__version__) >= version.parse("1.10"):
+                with autocast(dtype=self.amp_dtype):
+                    loss = self.compute_loss(model, inputs)
+            else:
+                with autocast():
+                    loss = self.compute_loss(model, inputs)
         else:
             loss = self.compute_loss(model, inputs)
 
@@ -1970,6 +1981,9 @@ class Trainer:
                 # if false it will not be saved.
                 # This must be called on all ranks
                 self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
+
+            # save a deepspeed checkpoint as well (this is very fast)
+            self.deepspeed.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
@@ -2501,8 +2515,12 @@ class Trainer:
             else:
                 if has_labels:
                     if self.use_amp:
-                        with autocast(dtype=self.amp_dtype):
-                            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                        if version.parse(torch.__version__) >= version.parse("1.10"):
+                            with autocast(dtype=self.amp_dtype):
+                                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                        else:
+                            with autocast():
+                                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     else:
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
@@ -2514,8 +2532,12 @@ class Trainer:
                 else:
                     loss = None
                     if self.use_amp:
-                        with autocast(dtype=self.amp_dtype):
-                            outputs = model(**inputs)
+                        if version.parse(torch.__version__) >= version.parse("1.10"):
+                            with autocast(dtype=self.amp_dtype):
+                                outputs = model(**inputs)
+                        else:
+                            with autocast():
+                                outputs = model(**inputs)
                     else:
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):

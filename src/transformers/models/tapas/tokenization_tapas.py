@@ -1277,7 +1277,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Total number of table columns
             max_length (:obj:`int`):
                 Total maximum length.
-            truncation_strategy (:obj:`str` or :obj:`~transformers.TapasTruncationStrategy`):
+            truncation_strategy (:obj:`str` or :class:`~transformers.TapasTruncationStrategy`):
                 Truncation strategy to use. Seeing as this method should only be called when truncating, the only
                 available strategy is the :obj:`"drop_rows_to_fit"` strategy.
 

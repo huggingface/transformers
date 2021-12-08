@@ -26,22 +26,22 @@ BERT
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 You can convert any TensorFlow checkpoint for BERT (in particular `the pre-trained models released by Google
-<https://github.com/google-research/bert#pre-trained-models>`_\ ) in a PyTorch save file by using the
+<https://github.com/google-research/bert#pre-trained-models>`_) in a PyTorch save file by using the
 :prefix_link:`convert_bert_original_tf_checkpoint_to_pytorch.py
 <src/transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py>` script.
 
-This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``\ ) and the associated
-configuration file (\ ``bert_config.json``\ ), and creates a PyTorch model for this configuration, loads the weights
-from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that
-can be imported using ``from_pretrained()`` (see example in :doc:`quicktour` , :prefix_link:`run_glue.py
-<examples/pytorch/text-classification/run_glue.py>` \ ).
+This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``) and the associated
+configuration file (``bert_config.json``), and creates a PyTorch model for this configuration, loads the weights from
+the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can
+be imported using ``from_pretrained()`` (see example in :doc:`quicktour` , :prefix_link:`run_glue.py
+<examples/pytorch/text-classification/run_glue.py>` ).
 
 You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow
-checkpoint (the three files starting with ``bert_model.ckpt``\ ) but be sure to keep the configuration file (\
-``bert_config.json``\ ) and the vocabulary file (\ ``vocab.txt``\ ) as these are needed for the PyTorch model too.
+checkpoint (the three files starting with ``bert_model.ckpt``) but be sure to keep the configuration file (\
+``bert_config.json``) and the vocabulary file (``vocab.txt``) as these are needed for the PyTorch model too.
 
-To run this specific conversion script you will need to have TensorFlow and PyTorch installed (\ ``pip install
-tensorflow``\ ). The rest of the repository only requires PyTorch.
+To run this specific conversion script you will need to have TensorFlow and PyTorch installed (``pip install
+tensorflow``). The rest of the repository only requires PyTorch.
 
 Here is an example of the conversion process for a pre-trained ``BERT-Base Uncased`` model:
 
@@ -64,9 +64,9 @@ Convert TensorFlow model checkpoints of ALBERT to PyTorch using the
 :prefix_link:`convert_albert_original_tf_checkpoint_to_pytorch.py
 <src/transformers/models/albert/convert_albert_original_tf_checkpoint_to_pytorch.py>` script.
 
-The CLI takes as input a TensorFlow checkpoint (three files starting with ``model.ckpt-best``\ ) and the accompanying
-configuration file (\ ``albert_config.json``\ ), then creates and saves a PyTorch model. To run this conversion you
-will need to have TensorFlow and PyTorch installed.
+The CLI takes as input a TensorFlow checkpoint (three files starting with ``model.ckpt-best``) and the accompanying
+configuration file (``albert_config.json``), then creates and saves a PyTorch model. To run this conversion you will
+need to have TensorFlow and PyTorch installed.
 
 Here is an example of the conversion process for the pre-trained ``ALBERT Base`` model:
 
@@ -104,7 +104,7 @@ OpenAI GPT-2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here is an example of the conversion process for a pre-trained OpenAI GPT-2 model (see `here
-<https://github.com/openai/gpt-2>`__\ )
+<https://github.com/openai/gpt-2>`__)
 
 .. code-block:: shell
 
@@ -120,7 +120,7 @@ Transformer-XL
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here is an example of the conversion process for a pre-trained Transformer-XL model (see `here
-<https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models>`__\ )
+<https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models>`__)
 
 .. code-block:: shell
 

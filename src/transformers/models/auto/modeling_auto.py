@@ -385,6 +385,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         # Model for Question Answering mapping
         ("qdqbert", "QDQBertForQuestionAnswering"),
         ("fnet", "FNetForQuestionAnswering"),
+        ("gptj", "GPTJForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
         ("canine", "CanineForQuestionAnswering"),
