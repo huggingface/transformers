@@ -159,6 +159,9 @@ class Wav2Vec2ProcessorWithLM:
         if os.path.isdir(pretrained_model_name_or_path):
             decoder = BeamSearchDecoderCTC.load_from_dir(pretrained_model_name_or_path)
         else:
+            # BeamSearchDecoderCTC has no auto class
+            kwargs.pop("_from_auto", None)
+
             decoder = BeamSearchDecoderCTC.load_from_hf_hub(pretrained_model_name_or_path, **kwargs)
 
         # set language model attributes
