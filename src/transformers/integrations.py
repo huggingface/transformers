@@ -607,8 +607,8 @@ class CometCallback(TrainerCallback):
             COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
                 Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
             COMET_LOG_ASSETS (:obj:`str`, `optional`):
-                Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet.
-                Can be "TRUE", or "FALSE". Defaults to "TRUE".
+                Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be "TRUE", or
+                "FALSE". Defaults to "TRUE".
 
         For a number of configurable items in the environment, see `here
         <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
