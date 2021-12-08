@@ -213,11 +213,9 @@ class TokenClassificationPipeline(Pipeline):
         special_tokens_mask = model_inputs.pop("special_tokens_mask")
         offset_mapping = model_inputs.pop("offset_mapping", None)
         sentence = model_inputs.pop("sentence")
-        if self.framework == "tf":
-            logits = self.model(model_inputs.data)[0]
-        else:
-            logits = self.model(**model_inputs)[0]
+        logits = self.model(**model_inputs).logits
 
+        print("SPECIAL", special_tokens_mask)
         return {
             "logits": logits,
             "special_tokens_mask": special_tokens_mask,
@@ -235,6 +233,12 @@ class TokenClassificationPipeline(Pipeline):
         else:
             logits = model_outputs["logits"][0].numpy()
             special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+
+        print("RECEIVED", special_tokens_mask)
+        if str(special_tokens_mask) == "1":
+            import ipdb
+
+            ipdb.set_trace()
 
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
@@ -272,8 +276,13 @@ class TokenClassificationPipeline(Pipeline):
             # Filter special_tokens, they should only occur
             # at the sentence boundaries since we're not encoding pairs of
             # sentences so we don't have to keep track of those.
-            if special_tokens_mask[idx]:
-                continue
+            try:
+                if special_tokens_mask[idx]:
+                    continue
+            except Exception:
+                import ipdb
+
+                ipdb.set_trace()
 
             word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
             if offset_mapping is not None:

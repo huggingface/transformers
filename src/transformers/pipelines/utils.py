@@ -147,17 +147,26 @@ class PipelineIterator(IterableDataset):
     def loader_batch_item(self):
         if isinstance(self._loader_batch_data, TorchTensor):
             result = self._loader_batch_data[self._loader_batch_index]
+        elif isinstance(self._loader_batch_index, TFTensor):
+            result = self._loader_batch_data[self._loader_batch_index]
         else:
             loader_batched = {}
             for k, element in self._loader_batch_data.items():
-                if k in {"past_key_values", "hidden_states", "attentions"}:
+                if k == "training" and isinstance(element, bool):
+                    # Can happen for `(...., training=False)` argument for TF
+                    continue
+                elif k in {"past_key_values", "hidden_states", "attentions"}:
                     if isinstance(element[0], TorchTensor):
                         loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                    elif isinstance(element[0], TFTensor):
+                        loader_batched[k] = tuple(tf.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
                 elif isinstance(element[self._loader_batch_index], TorchTensor):
                     loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
+                elif isinstance(element[self._loader_batch_index], TFTensor):
+                    loader_batched[k] = tf.expand_dims(element[self._loader_batch_index], 0)
                 elif isinstance(element[self._loader_batch_index], np.ndarray):
                     loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
                 else:
