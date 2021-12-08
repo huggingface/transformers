@@ -94,28 +94,28 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.perceiver_tokenizer
         src_text = "Unicode €."
         encoded = tokenizer(src_text)
-        encoded_ids = [91, 116, 111, 105, 117, 106, 107, 38, 232, 136, 178, 52]
+        encoded_ids = [4, 91, 116, 111, 105, 117, 106, 107, 38, 232, 136, 178, 52, 5]
         self.assertEqual(encoded["input_ids"], encoded_ids)
 
         # decoding
         decoded = tokenizer.decode(encoded_ids)
-        self.assertEqual(decoded, "Unicode €.")
+        self.assertEqual(decoded, "<cls>Unicode €.<sep>")
 
         encoded = tokenizer("e è é ê ë")
-        encoded_ids = [107, 38, 201, 174, 38, 201, 175, 38, 201, 176, 38, 201, 177]
+        encoded_ids = [4, 107, 38, 201, 174, 38, 201, 175, 38, 201, 176, 38, 201, 177, 5]
         self.assertEqual(encoded["input_ids"], encoded_ids)
         # decoding
         decoded = tokenizer.decode(encoded_ids)
-        self.assertEqual(decoded, "e è é ê ë")
+        self.assertEqual(decoded, "<cls>e è é ê ë<sep>")
 
         # encode/decode, but with `encode` instead of `__call__`
-        self.assertEqual(tokenizer.decode(tokenizer.encode("e è é ê ë")), "e è é ê ë")
+        self.assertEqual(tokenizer.decode(tokenizer.encode("e è é ê ë")), "<cls>e è é ê ë<sep>")
 
     def test_prepare_batch_integration(self):
         tokenizer = self.perceiver_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         # fmt: off
-        expected_src_tokens = [71, 38, 114, 117, 116, 109, 38, 118, 103, 120, 103, 109, 120, 103, 118, 110, 38, 108, 117, 120, 38, 121, 123, 115, 115, 103, 120, 111, 128, 103, 122, 111, 117, 116, 52, 0]
+        expected_src_tokens = [4, 71, 38, 114, 117, 116, 109, 38, 118, 103, 120, 103, 109, 120, 103, 118, 110, 38, 108, 117, 120, 38, 121, 123, 115, 115, 103, 120, 111, 128, 103, 122, 111, 117, 116, 52, 5, 0]
         # fmt: on
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch, BatchEncoding)
@@ -127,8 +127,8 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(expected_src_tokens, result)
 
-        self.assertEqual((2, 36), batch.input_ids.shape)
-        self.assertEqual((2, 36), batch.attention_mask.shape)
+        self.assertEqual((2, 38), batch.input_ids.shape)
+        self.assertEqual((2, 38), batch.attention_mask.shape)
 
     def test_empty_target_text(self):
         tokenizer = self.perceiver_tokenizer
@@ -266,6 +266,10 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tokenizer.convert_tokens_to_ids(["a_new_additional_special_token"])
                     ),
                 )
+
+    def test_decode_invalid_byte_id(self):
+        tokenizer = self.perceiver_tokenizer
+        self.assertEqual(tokenizer.decode([178]), "�")
 
     # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
     def test_pretrained_model_lists(self):

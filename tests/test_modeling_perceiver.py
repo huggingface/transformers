@@ -847,7 +847,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         encoding = tokenizer(text, padding="max_length", return_tensors="pt")
 
         # mask " missing.".
-        encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
+        encoding.input_ids[0, 52:61] = tokenizer.mask_token_id
         inputs, input_mask = encoding.input_ids.to(torch_device), encoding.attention_mask.to(torch_device)
 
         # forward pass
@@ -860,13 +860,13 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
+            [[-10.8609, -10.7651, -10.9187], [-12.1689, -11.9389, -12.1479], [-12.1518, -11.9707, -12.2073]]
         )
 
         self.assertTrue(torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4))
 
         expected_greedy_predictions = [38, 115, 111, 121, 121, 111, 116, 109, 52]
-        masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()
+        masked_tokens_predictions = logits[0, 52:61].argmax(dim=-1).tolist()
         self.assertListEqual(expected_greedy_predictions, masked_tokens_predictions)
 
     @slow

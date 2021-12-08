@@ -35,20 +35,20 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"[BOS]"`):
-            ...
+            The BOS token (reserved in the vocab, but not actually used).
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"[EOS]"`):
-            The end of sequence token.
+            The end of sequence token (reserved in the vocab, but not actually used).
 
             .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the end of
                 sequence. The token used is the :obj:`sep_token`.
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
-            ...
+            The MASK token, useful for masked language modeling.
         cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
-            ...
+            The CLS token (reserved in the vocab, but not actually used).
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
-            ...
+            The separator token, which is used when building a sequence from two sequences.
 
     """
 
@@ -127,8 +127,8 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
         # normal case: some special tokens
         if token_ids_1 is None:
-            return [0] * len(token_ids_0)
-        return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+            return [1] + [0] * len(token_ids_0) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -137,8 +137,8 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks. A sequence has the
         following format:
 
-        - single sequence: ``X``
-        - pair of sequences: ``A [SEP] B [SEP]``
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -150,9 +150,9 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
-            return token_ids_0
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         else:
-            return token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
@@ -175,6 +175,8 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         if index in self.special_tokens_decoder:
             token = self.special_tokens_decoder[index]
+        elif index in self.added_tokens_decoder:
+            token = self.added_tokens_decoder[index]
         else:
             token = chr(index - self._num_special_tokens)
         return token
@@ -194,7 +196,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             else:
                 tok_string = bytes([ord(token)])
             bstring += tok_string
-        string = bstring.decode("utf-8")
+        string = bstring.decode("utf-8", errors="replace")
         return string
 
     # PerceiverTokenizer has no vocab file
