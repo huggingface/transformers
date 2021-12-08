@@ -44,6 +44,7 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
+    is_pyctcdecode_available,
     is_pytorch_quantization_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -252,6 +253,7 @@ _import_structure = {
     "models.mt5": ["MT5Config"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
+    "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -311,6 +313,7 @@ _import_structure = {
         "Wav2Vec2Tokenizer",
     ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
+    "models.wav2vec2_with_lm": [],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
@@ -472,6 +475,15 @@ else:
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 
+if is_pyctcdecode_available():
+    _import_structure["models.wav2vec2_with_lm"].append("Wav2Vec2ProcessorWithLM")
+else:
+    from .utils import dummy_pyctcdecode_objects
+
+    _import_structure["utils.dummy_pyctcdecode_objects"] = [
+        name for name in dir(dummy_pyctcdecode_objects) if not name.startswith("_")
+    ]
+
 if is_sentencepiece_available() and is_speech_available():
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
 else:
@@ -493,6 +505,7 @@ if is_vision_available():
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+    _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
@@ -1134,6 +1147,21 @@ if is_torch_available():
     )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
+    )
+    _import_structure["models.perceiver"].extend(
+        [
+            "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PerceiverForImageClassificationConvProcessing",
+            "PerceiverForImageClassificationFourier",
+            "PerceiverForImageClassificationLearned",
+            "PerceiverForMaskedLM",
+            "PerceiverForMultimodalAutoencoding",
+            "PerceiverForOpticalFlow",
+            "PerceiverForSequenceClassification",
+            "PerceiverLayer",
+            "PerceiverModel",
+            "PerceiverPreTrainedModel",
+        ]
     )
     _import_structure["models.prophetnet"].extend(
         [
@@ -2254,6 +2282,7 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
+    from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -2443,6 +2472,11 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_speech_objects import *
 
+    if is_pyctcdecode_available():
+        from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
+    else:
+        from .utils.dummy_pyctcdecode_objects import *
+
     if is_speech_available() and is_sentencepiece_available():
         from .models.speech_to_text import Speech2TextProcessor
     else:
@@ -2457,6 +2491,7 @@ if TYPE_CHECKING:
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
+        from .models.perceiver import PerceiverFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
@@ -2992,6 +3027,19 @@ if TYPE_CHECKING:
             PegasusForConditionalGeneration,
             PegasusModel,
             PegasusPreTrainedModel,
+        )
+        from .models.perceiver import (
+            PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PerceiverForImageClassificationConvProcessing,
+            PerceiverForImageClassificationFourier,
+            PerceiverForImageClassificationLearned,
+            PerceiverForMaskedLM,
+            PerceiverForMultimodalAutoencoding,
+            PerceiverForOpticalFlow,
+            PerceiverForSequenceClassification,
+            PerceiverLayer,
+            PerceiverModel,
+            PerceiverPreTrainedModel,
         )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -36,9 +36,11 @@ from .file_utils import (
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
+    is_librosa_available,
     is_onnx_available,
     is_pandas_available,
     is_phonemizer_available,
+    is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
@@ -605,6 +607,24 @@ def require_phonemizer(test_case):
     """
     if not is_phonemizer_available():
         return unittest.skip("test requires phonemizer")(test_case)
+
+
+def require_pyctcdecode(test_case):
+    """
+    Decorator marking a test that requires pyctcdecode
+    """
+    if not is_pyctcdecode_available():
+        return unittest.skip("test requires pyctcdecode")(test_case)
+    else:
+        return test_case
+
+
+def require_librosa(test_case):
+    """
+    Decorator marking a test that requires librosa
+    """
+    if not is_librosa_available():
+        return unittest.skip("test requires librosa")(test_case)
     else:
         return test_case
 

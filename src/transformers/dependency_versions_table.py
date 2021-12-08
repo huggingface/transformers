@@ -70,6 +70,7 @@ deps = {
     "tokenizers": "tokenizers>=0.10.1,<0.11",
     "torch": "torch>=1.0",
     "torchaudio": "torchaudio",
+    "pyctcdecode": "pyctcdecode>=0.2.0",
     "tqdm": "tqdm>=4.27",
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
