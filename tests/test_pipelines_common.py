@@ -324,10 +324,9 @@ class CommonPipelineTest(unittest.TestCase):
         pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
         out = pipe("This is a test")
         self.assertEqual(nested_simplify(out), [{"label": "LABEL_0", "score": 0.504}])
-        pipe = pipeline(model="Narsil/tiny-distilbert-sequence-classification", framework="tf")
         results = []
         for out in pipe(data(10), batch_size=2):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 1.0})
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
 
