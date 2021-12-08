@@ -313,7 +313,7 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
-    "models.wav2vec2_with_lm": [],
+    "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
@@ -473,15 +473,6 @@ else:
 
     _import_structure["utils.dummy_speech_objects"] = [
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
-    ]
-
-if is_pyctcdecode_available():
-    _import_structure["models.wav2vec2_with_lm"].append("Wav2Vec2ProcessorWithLM")
-else:
-    from .utils import dummy_pyctcdecode_objects
-
-    _import_structure["utils.dummy_pyctcdecode_objects"] = [
-        name for name in dir(dummy_pyctcdecode_objects) if not name.startswith("_")
     ]
 
 if is_sentencepiece_available() and is_speech_available():
@@ -2329,6 +2320,7 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
+    from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -2471,11 +2463,6 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextFeatureExtractor
     else:
         from .utils.dummy_speech_objects import *
-
-    if is_pyctcdecode_available():
-        from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
-    else:
-        from .utils.dummy_pyctcdecode_objects import *
 
     if is_speech_available() and is_sentencepiece_available():
         from .models.speech_to_text import Speech2TextProcessor
