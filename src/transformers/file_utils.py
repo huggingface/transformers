@@ -237,6 +237,22 @@ except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
 
+_pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
+try:
+    _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
+    logger.debug(f"Successfully imported pyctcdecode version {_pyctcdecode_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pyctcdecode_available = False
+
+
+_librosa_available = importlib.util.find_spec("librosa") is not None
+try:
+    _librosa_version = importlib_metadata.version("librosa")
+    logger.debug(f"Successfully imported librosa version {_librosa_version}")
+except importlib_metadata.PackageNotFoundError:
+    _librosa_available = False
+
+
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
@@ -309,6 +325,14 @@ def is_offline_mode():
 
 def is_torch_available():
     return _torch_available
+
+
+def is_pyctcdecode_available():
+    return _pyctcdecode_available
+
+
+def is_librosa_available():
+    return _librosa_available
 
 
 def is_torch_cuda_available():
@@ -736,6 +760,12 @@ PYTESSERACT_IMPORT_ERROR = """
 `pip install pytesseract`
 """
 
+# docstyle-ignore
+PYCTCDECODE_IMPORT_ERROR = """
+{0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
+`pip install pyctcdecode`
+"""
+
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -745,6 +775,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),

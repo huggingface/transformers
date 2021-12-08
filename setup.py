@@ -51,7 +51,7 @@ To create the package for pypi.
    pip install -i https://testpypi.python.org/pypi transformers
 
    Check you can run the following commands:
-   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))" 
+   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
 
 9. Upload the final version to actual pypi:
@@ -59,7 +59,7 @@ To create the package for pypi.
 
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release, 
+11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
     you need to go back to master before executing this.
 """
 
@@ -159,6 +159,7 @@ _deps = [
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "torchaudio",
+    "pyctcdecode>=0.2.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -262,7 +263,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa")
+extras["audio"] = deps_list("librosa", "pyctcdecode")
 extras["speech"] = deps_list("torchaudio") + extras["audio"]  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
