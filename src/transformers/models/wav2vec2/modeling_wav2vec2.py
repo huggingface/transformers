@@ -1517,7 +1517,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 
         Example::
 
-            >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
+            >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForMaskedLM
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
