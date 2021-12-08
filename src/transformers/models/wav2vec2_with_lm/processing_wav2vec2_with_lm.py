@@ -35,8 +35,8 @@ from pyctcdecode.constants import (
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...file_utils import ModelOutput, requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
-from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
-from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
+from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
 @dataclass
