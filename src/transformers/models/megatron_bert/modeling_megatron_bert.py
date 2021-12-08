@@ -1189,7 +1189,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
-            >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert-cased-345m', is_decoder=True)
+            >>> model = MegatronBertForCausalLM.from_pretrained('nvidia/megatron-bert-cased-345m', is_decoder=True)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
