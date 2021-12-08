@@ -67,8 +67,18 @@ Wav2Vec2Processor
     :members: __call__, pad, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
 
 
+Wav2Vec2ProcessorWithLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Wav2Vec2ProcessorWithLM
+    :members: __call__, pad, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
+
+
 Wav2Vec2 specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.models.wav2vec2.processing_wav2vec2_with_lm.Wav2Vec2DecoderWithLMOutput
+    :members: 
 
 .. autoclass:: transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2BaseModelOutput
     :members: 
