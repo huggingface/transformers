@@ -128,7 +128,7 @@ python scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
 --temperature 0.2 \
 --top_p 0.95 \
 --n_samples=200 \
---HF_ALLOW_CODE_EVAL="1"
+--HF_ALLOW_CODE_EVAL="0"
 ```
 
 The results as well as reference values are shown in the following table:
