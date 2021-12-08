@@ -64,6 +64,11 @@ class LayoutXLMProcessor:
         requires_backends(cls, ["vision"])
 
 
+class PerceiverFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class SegformerFeatureExtractor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
