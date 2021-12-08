@@ -474,7 +474,7 @@ else:
     ]
 
 if is_pyctcdecode_available():
-    _import_structure["models.wav2vec2_with_lm"] = ["Wav2Vec2ProcessorWithLM"]
+    _import_structure["models.wav2vec2_with_lm"].append("Wav2Vec2ProcessorWithLM")
 else:
     from .utils import dummy_pyctcdecode_objects
 
