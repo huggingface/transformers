@@ -185,7 +185,7 @@ class BartConfig(PretrainedConfig):
 class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task in ["default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past"]:
+        if self.task in ["default", "seq2seq-lm"]:
             common_inputs = OrderedDict(
                 [
                     ("input_ids", {0: "batch", 1: "encoder_sequence"}),
@@ -202,7 +202,7 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
             if self.use_past:
                 self.fill_with_past_key_values_(common_inputs, direction="inputs")
-        elif self.task in ["causal-lm", "causal-lm-with-past"]:
+        elif self.task == "causal-lm":
             # TODO: figure this case out.
             common_inputs = OrderedDict(
                 [
@@ -229,7 +229,7 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task in ["default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past"]:
+        if self.task in ["default", "seq2seq-lm"]:
             common_outputs = super().outputs
         else:
             common_outputs = super(OnnxConfigWithPast, self).outputs
@@ -249,7 +249,7 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
 
-        if self.task in ["default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past"]:
+        if self.task in ["default", "seq2seq-lm"]:
             encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
                 tokenizer, batch_size, seq_length, is_pair, framework
             )
@@ -268,7 +268,6 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     import torch
                 batch = common_inputs["input_ids"].shape[0]
                 encoder_seq_length = common_inputs["input_ids"].shape[1]
-                # decoder_seq_length = ordered_inputs["decoder_input_ids"].shape[1]
                 num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
                 encoder_shape = (
                     batch,
@@ -309,7 +308,7 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 for _ in range(min_num_layers, max_num_layers):
                     common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
 
-        elif self.task in ["causal-lm", "causal-lm-with-past"]:
+        elif self.task == "causal-lm":
             common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
                 tokenizer, batch_size, seq_length, is_pair, framework
             )
@@ -344,7 +343,7 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
-        if self.task in ["default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past"]:
+        if self.task in ["default", "seq2seq-lm"]:
             flattened_output = super()._flatten_past_key_values_(flattened_output, name, idx, t)
         else:
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(

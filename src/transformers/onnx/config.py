@@ -88,10 +88,6 @@ class OnnxConfig(ABC):
                 final_spec = dataclasses.replace(spec, orig_op=getattr(spec.o, spec.name))
             self._patching_specs.append(final_spec)
 
-    @property
-    def is_encoder_decoder(self) -> bool:
-        return getattr(self._config, "is_encoder_decoder", False)
-
     @classmethod
     def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
         """
@@ -174,10 +170,10 @@ class OnnxConfig(ABC):
     @property
     def atol_for_validation(self) -> float:
         """
-        What absolute tolerance value to use during model conversion validation
+        What absolute tolerance value to use during model conversion validation.
 
         Returns:
-            Float absolute tolerance value
+            Float absolute tolerance value.
         """
         return 1e-5
 
@@ -305,6 +301,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     @property
     def num_layers(self) -> int:
+        """
+        The number of layers attribute retrieved from the model config. Override this for model configs where the
+        number of layers attribute is not called `num_layers`.
+        """
         if not hasattr(self._config, "num_layers"):
             raise AttributeError(
                 "could not find the number of layers attribute in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
@@ -313,6 +313,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     @property
     def num_attention_heads(self) -> int:
+        """
+        The number of attention heads attribute retrieved from the model config. Override this for model configs where
+        the number of attention heads attribute is not called `num_attention_heads`.
+        """
         if not hasattr(self._config, "num_attention_heads"):
             raise AttributeError(
                 "could not find the number of attention heads attribute in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
@@ -357,6 +361,15 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         return common_inputs
 
     def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+        """
+        Fill the input_or_ouputs mapping with past_key_values dynamic axes considering.
+
+        Args:
+            inputs_or_outputs: The mapping to fill.
+            direction: either "inputs" or "outputs", it specifies whether input_or_outputs is the input mapping or the
+                output mapping, this is important for axes naming.
+
+        """
         if direction not in ["inputs", "outputs"]:
             raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
 

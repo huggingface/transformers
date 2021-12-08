@@ -4,7 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers import AutoConfig, AutoTokenizer, is_torch_available
+from transformers import AutoConfig, AutoTokenizer
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -164,28 +164,37 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                 )
 
 
-if is_torch_available():
-    PYTORCH_EXPORT_MODELS = {
-        ("albert", "hf-internal-testing/tiny-albert"),
-        ("bart", "facebook/bart-base"),
-        ("bert", "bert-base-cased"),
-        ("camembert", "camembert-base"),
-        ("distilbert", "distilbert-base-cased"),
-        ("gpt2", "gpt2"),
-        ("gpt-neo", "EleutherAI/gpt-neo-125M"),
-        # ("longFormer", "longformer-base-4096"),
-        ("roberta", "roberta-base"),
-        ("xlm-roberta", "xlm-roberta-base"),
-        ("layoutlm", "microsoft/layoutlm-base-uncased"),
-        ("mbart", "sshleifer/tiny-mbart"),
-        ("t5", "t5-small"),
-    }
+PYTORCH_EXPORT_MODELS = {
+    ("albert", "hf-internal-testing/tiny-albert"),
+    ("bert", "bert-base-cased"),
+    ("camembert", "camembert-base"),
+    ("distilbert", "distilbert-base-cased"),
+    # ("longFormer", "longformer-base-4096"),
+    ("roberta", "roberta-base"),
+    ("xlm-roberta", "xlm-roberta-base"),
+    ("layoutlm", "microsoft/layoutlm-base-uncased"),
+}
 
-    PYTORCH_EXPORT_WITH_PAST_MODELS = {
-        # ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
-        # ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
-        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
-    }
+PYTORCH_EXPORT_WITH_PAST_MODELS = {
+    ("gpt2", "gpt2"),
+    ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+}
+
+PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
+    ("bart", "facebook/bart-base"),
+    ("mbart", "sshleifer/tiny-mbart"),
+    ("t5", "t5-small"),
+}
+
+
+def _get_models_to_test(export_models_list):
+    models_to_test = []
+    for (name, model) in export_models_list:
+        for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
+            name
+        ).items():
+            models_to_test.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
+    return models_to_test
 
 
 class OnnxExportTestCaseV2(TestCase):
@@ -193,17 +202,7 @@ class OnnxExportTestCaseV2(TestCase):
     Integration tests ensuring supported models are correctly exported
     """
 
-    MODELS_TO_TEST = []
-    for (name, model) in PYTORCH_EXPORT_MODELS:
-        for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
-            name
-        ).items():
-            MODELS_TO_TEST.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
-
-    @parameterized.expand(MODELS_TO_TEST)
-    @slow
-    @require_torch
-    def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+    def _pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         from transformers.onnx import export
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -233,31 +232,22 @@ class OnnxExportTestCaseV2(TestCase):
             except ValueError as ve:
                 self.fail(f"{name}, {feature} -> {ve}")
 
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
     @slow
     @require_torch
-    def test_pytorch_export_with_past(self):
-        from transformers.onnx import export
+    def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
-        for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_WITH_PAST_MODELS:
-            with self.subTest(name):
-                self.assertTrue(hasattr(onnx_config_class, "with_past"), "OnnxConfigWithPast should have with_past()")
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS))
+    @slow
+    @require_torch
+    def test_pytorch_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
-                tokenizer = AutoTokenizer.from_pretrained(model)
-                model = model_class(config_class())
-                onnx_config = onnx_config_class.with_past(model.config)
-
-                self.assertTrue(hasattr(onnx_config, "use_past"), "OnnxConfigWithPast should have use_past attribute.")
-                self.assertTrue(
-                    onnx_config.use_past, "OnnxConfigWithPast.use_past should be if called with with_past()"
-                )
-
-                with NamedTemporaryFile("w") as output:
-                    output = Path(output.name)
-                    onnx_inputs, onnx_outputs = export(
-                        tokenizer, model, onnx_config, onnx_config.default_onnx_opset, output
-                    )
-
-                    try:
-                        validate_model_outputs(onnx_config, tokenizer, model, output, onnx_outputs, 1e-5)
-                    except ValueError as ve:
-                        self.fail(f"{name} -> {ve}")
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS))
+    @slow
+    @require_torch
+    def test_pytorch_export_seq2seq_with_past(
+        self, test_name, name, model_name, feature, onnx_config_class_constructor
+    ):
+        self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
