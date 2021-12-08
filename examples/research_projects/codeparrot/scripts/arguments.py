@@ -84,7 +84,8 @@ class HumanEvalArguments:
     )
     num_workers: Optional[int] = field(default=None, metadata={"help": "Number of workers used for code evaluation."})
     num_tasks: Optional[int] = field(
-        default=None, metadata={"help": "The number of human-eval tasks to run. If not included all tasks are evaluated."}
+        default=None,
+        metadata={"help": "The number of human-eval tasks to run. If not included all tasks are evaluated."},
     )
     do_sample: Optional[bool] = field(
         default=True, metadata={"help": "Sample from the language model's output distribution."}
@@ -105,7 +106,10 @@ class HumanEvalArguments:
         default="0", metadata={"help": "Allow `code_eval` to execute Python code on machine"}
     )
     device_int: Optional[int] = field(
-        default=-1, metadata={"help": "Determine which device to run the `text-generation` Pipeline on. -1 is CPU and any zero or positive number corresponds to which GPU device id to run on."}
+        default=-1,
+        metadata={
+            "help": "Determine which device to run the `text-generation` Pipeline on. -1 is CPU and any zero or positive number corresponds to which GPU device id to run on."
+        },
     )
 
 
