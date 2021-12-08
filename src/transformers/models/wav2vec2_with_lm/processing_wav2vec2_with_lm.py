@@ -19,7 +19,7 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing import Pool
-from typing import Iterable, List, Optional, Union
+from typing import TYPE_CHECKING, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -28,6 +28,10 @@ from ...file_utils import ModelOutput, requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
 from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+
+
+if TYPE_CHECKING:
+    from pyctcdecode import BeamSearchDecoderCTC
 
 
 @dataclass
@@ -63,7 +67,6 @@ class Wav2Vec2ProcessorWithLM:
         tokenizer: PreTrainedTokenizer,
         decoder: "BeamSearchDecoderCTC",
     ):
-        requires_backends(cls, "pyctcdecode")
         from pyctcdecode import BeamSearchDecoderCTC
 
         if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
@@ -269,7 +272,10 @@ class Wav2Vec2ProcessorWithLM:
 
         """
         from pyctcdecode.constants import (
-            DEFAULT_BEAM_WIDTH, DEFAULT_HOTWORD_WEIGHT, DEFAULT_MIN_TOKEN_LOGP, DEFAULT_PRUNE_LOGP
+            DEFAULT_BEAM_WIDTH,
+            DEFAULT_HOTWORD_WEIGHT,
+            DEFAULT_MIN_TOKEN_LOGP,
+            DEFAULT_PRUNE_LOGP,
         )
 
         # set defaults
@@ -332,7 +338,10 @@ class Wav2Vec2ProcessorWithLM:
 
         """
         from pyctcdecode.constants import (
-            DEFAULT_BEAM_WIDTH, DEFAULT_HOTWORD_WEIGHT, DEFAULT_MIN_TOKEN_LOGP, DEFAULT_PRUNE_LOGP
+            DEFAULT_BEAM_WIDTH,
+            DEFAULT_HOTWORD_WEIGHT,
+            DEFAULT_MIN_TOKEN_LOGP,
+            DEFAULT_PRUNE_LOGP,
         )
 
         # set defaults
