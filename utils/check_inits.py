@@ -27,6 +27,8 @@ _re_backend = re.compile(r"is\_([a-z_]*)_available()")
 _re_import_struct_key_value = re.compile(r'\s+"\S*":\s+\[([^\]]*)\]')
 # Catches a line if is_foo_available
 _re_test_backend = re.compile(r"^\s*if\s+is\_[a-z_]*\_available\(\)")
+# Catches a line _import_struct["bla"] = ["foo"]
+_re_import_struct_equal_one = re.compile(r'^\s*_import_structure\["\S*"\]\ = "\[(\S*)\]"')
 # Catches a line _import_struct["bla"].append("foo")
 _re_import_struct_add_one = re.compile(r'^\s*_import_structure\["\S*"\]\.append\("(\S*)"\)')
 # Catches a line _import_struct["bla"].extend(["foo", "bar"]) or _import_struct["bla"] = ["foo", "bar"]
@@ -88,7 +90,9 @@ def parse_init(init_file):
             # Until we unindent, add backend objects to the list
             while len(lines[line_index]) <= 1 or lines[line_index].startswith(" " * 4):
                 line = lines[line_index]
-                if _re_import_struct_add_one.search(line) is not None:
+                if _re_import_struct_equal_one.search(line) is not None:
+                    objects.append(_re_import_struct_equal_one.search(line).groups()[0])
+                elif _re_import_struct_add_one.search(line) is not None:
                     objects.append(_re_import_struct_add_one.search(line).groups()[0])
                 elif _re_import_struct_add_many.search(line) is not None:
                     imports = _re_import_struct_add_many.search(line).groups()[0].split(", ")
