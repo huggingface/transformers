@@ -15,7 +15,7 @@
 """ GPT Neo model configuration """
 
 from collections import OrderedDict
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
@@ -212,10 +212,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
-            for i in range(self._config.num_layers):
-                common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence"}
-
+            self.fill_with_past_key_values_(common_inputs, direction="inputs")
             common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
@@ -223,16 +220,8 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         return common_inputs
 
     @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = super().outputs
-        if self.use_past:
-            for i in range(self._config.num_layers):
-                common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-                common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
-
-            return common_outputs
-
-        return common_outputs
+    def num_attention_heads(self) -> int:
+        return self._config.num_heads
 
     def generate_dummy_inputs(
         self,
@@ -242,7 +231,10 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+            tokenizer, batch_size, seq_length, is_pair, framework
+        )
 
         # We need to order the input in the way they appears in the forward()
         ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
@@ -254,28 +246,27 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
             else:
                 import torch
 
-                batch = common_inputs["input_ids"].shape[0]
-                past_shape = (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_heads)
+                batch, seqlen = common_inputs["input_ids"].shape
+                # Not using the same length for past_key_values
+                past_key_values_length = seqlen + 2
+                past_shape = (
+                    batch,
+                    self.num_attention_heads,
+                    past_key_values_length,
+                    self._config.hidden_size // self.num_attention_heads,
+                )
                 ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self._config.num_layers)
+                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
                 ]
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
             )
 
         return ordered_inputs
 
-    @staticmethod
-    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
-        if name in ["present", "past_key_values"]:
-            flatten_output = {}
-            for idx, t in enumerate(field):
-                flatten_output[f"{name}.{idx}.key"] = t[0]
-                flatten_output[f"{name}.{idx}.value"] = t[1]
-
-            return flatten_output
-
-        return super().flatten_output_collection_property(name, field)
+    @property
+    def default_onnx_opset(self) -> int:
+        return 13
