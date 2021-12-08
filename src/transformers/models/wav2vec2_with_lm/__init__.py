@@ -20,11 +20,11 @@ from typing import TYPE_CHECKING
 from ...file_utils import _LazyModule, is_pyctcdecode_available
 
 
-_import_structure = {}
+_import_structure = {"processing_wav2vec2_with_lm": []}
 
 
 if is_pyctcdecode_available():
-    _import_structure["processing_wav2vec2_with_lm"] = ["Wav2Vec2ProcessorWithLM"]
+    _import_structure["processing_wav2vec2_with_lm"].append("Wav2Vec2ProcessorWithLM")
 
 
 if TYPE_CHECKING:
