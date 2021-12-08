@@ -27,6 +27,7 @@ import shutil
 import sys
 import time
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -1813,8 +1814,8 @@ class Trainer:
         """
         Prepares one :obj:`data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
         """
-        if isinstance(data, dict):
-            return type(data)(**{k: self._prepare_input(v) for k, v in data.items()})
+        if isinstance(data, Mapping):
+            return type(data)({k: self._prepare_input(v) for k, v in data.items()})
         elif isinstance(data, (tuple, list)):
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
