@@ -191,7 +191,7 @@ def validate_model_outputs(
             f"{onnx_outputs_set.difference(ref_outputs_set)}"
         )
     else:
-        logger.info(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set}")
+        logger.info(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set})")
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
