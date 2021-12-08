@@ -23,15 +23,6 @@ from typing import Iterable, List, Optional, Union
 
 import numpy as np
 
-from pyctcdecode import BeamSearchDecoderCTC
-from pyctcdecode.alphabet import BLANK_TOKEN_PTN, UNK_TOKEN, UNK_TOKEN_PTN
-from pyctcdecode.constants import (
-    DEFAULT_BEAM_WIDTH,
-    DEFAULT_HOTWORD_WEIGHT,
-    DEFAULT_MIN_TOKEN_LOGP,
-    DEFAULT_PRUNE_LOGP,
-)
-
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...file_utils import ModelOutput, requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
@@ -70,8 +61,11 @@ class Wav2Vec2ProcessorWithLM:
         self,
         feature_extractor: FeatureExtractionMixin,
         tokenizer: PreTrainedTokenizer,
-        decoder: BeamSearchDecoderCTC,
+        decoder: "BeamSearchDecoderCTC",
     ):
+        requires_backends(cls, "pyctcdecode")
+        from pyctcdecode import BeamSearchDecoderCTC
+
         if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
             raise ValueError(
                 f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
@@ -153,6 +147,8 @@ class Wav2Vec2ProcessorWithLM:
                 :class:`~transformers.PreTrainedTokenizer`
         """
         requires_backends(cls, "pyctcdecode")
+        from pyctcdecode import BeamSearchDecoderCTC
+
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
         tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
@@ -183,7 +179,7 @@ class Wav2Vec2ProcessorWithLM:
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer, decoder=decoder)
 
     @staticmethod
-    def _set_language_model_attribute(decoder: BeamSearchDecoderCTC, attribute: str, value: float):
+    def _set_language_model_attribute(decoder: "BeamSearchDecoderCTC", attribute: str, value: float):
         setattr(decoder.model_container[decoder._model_key], attribute, value)
 
     @property
@@ -192,6 +188,8 @@ class Wav2Vec2ProcessorWithLM:
 
     @staticmethod
     def get_missing_alphabet_tokens(decoder, tokenizer):
+        from pyctcdecode.alphabet import BLANK_TOKEN_PTN, UNK_TOKEN, UNK_TOKEN_PTN
+
         # we need to make sure that all of the tokenizer's except the special tokens
         # are present in the decoder's alphabet. Retrieve missing alphabet token
         # from decoder
@@ -270,6 +268,9 @@ class Wav2Vec2ProcessorWithLM:
             :class:`~transformers.models.wav2vec2.Wav2Vec2DecoderWithLMOutput` or :obj:`tuple`.
 
         """
+        from pyctcdecode.constants import (
+            DEFAULT_BEAM_WIDTH, DEFAULT_HOTWORD_WEIGHT, DEFAULT_MIN_TOKEN_LOGP, DEFAULT_PRUNE_LOGP
+        )
 
         # set defaults
         beam_width = beam_width if beam_width is not None else DEFAULT_BEAM_WIDTH
@@ -330,6 +331,9 @@ class Wav2Vec2ProcessorWithLM:
             :class:`~transformers.models.wav2vec2.Wav2Vec2DecoderWithLMOutput` or :obj:`tuple`.
 
         """
+        from pyctcdecode.constants import (
+            DEFAULT_BEAM_WIDTH, DEFAULT_HOTWORD_WEIGHT, DEFAULT_MIN_TOKEN_LOGP, DEFAULT_PRUNE_LOGP
+        )
 
         # set defaults
         beam_width = beam_width if beam_width is not None else DEFAULT_BEAM_WIDTH
