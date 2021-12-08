@@ -1,3 +1,4 @@
+import types
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -5,7 +6,7 @@ import numpy as np
 
 from ..file_utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from ..models.bert.tokenization_bert import BasicTokenizer
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
 
 
 if is_tf_available():
@@ -28,6 +29,8 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         elif isinstance(inputs, str):
             inputs = [inputs]
             batch_size = 1
+        elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
+            return inputs, None
         else:
             raise ValueError("At least one input is required.")
 
@@ -112,7 +115,12 @@ class TokenClassificationPipeline(Pipeline):
         grouped_entities: Optional[bool] = None,
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
+        offset_mapping: Optional[List[Tuple[int, int]]] = None,
     ):
+
+        preprocess_params = {}
+        if offset_mapping is not None:
+            preprocess_params["offset_mapping"] = offset_mapping
 
         postprocess_params = {}
         if grouped_entities is not None or ignore_subwords is not None:
@@ -147,7 +155,7 @@ class TokenClassificationPipeline(Pipeline):
             postprocess_params["aggregation_strategy"] = aggregation_strategy
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
-        return {}, {}, postprocess_params
+        return preprocess_params, {}, postprocess_params
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
@@ -174,12 +182,13 @@ class TokenClassificationPipeline(Pipeline):
               Only exists if the offsets are available within the tokenizer
         """
 
-        _inputs, offset_mappings = self._args_parser(inputs, **kwargs)
-        self.offset_mappings = offset_mappings
+        _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
+        if offset_mapping:
+            kwargs["offset_mapping"] = offset_mapping
 
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, sentence):
+    def preprocess(self, sentence, offset_mapping=None):
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
         model_inputs = self.tokenizer(
             sentence,
@@ -189,8 +198,7 @@ class TokenClassificationPipeline(Pipeline):
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
         )
-        if self.offset_mappings:
-            offset_mapping = self.offset_mappings[0]
+        if offset_mapping:
             model_inputs["offset_mapping"] = offset_mapping
 
         model_inputs["sentence"] = sentence
@@ -262,12 +270,13 @@ class TokenClassificationPipeline(Pipeline):
             word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
             if offset_mapping is not None:
                 start_ind, end_ind = offset_mapping[idx]
-                if self.framework == "pt":
-                    start_ind = start_ind.item()
-                    end_ind = end_ind.item()
-                else:
-                    start_ind = int(start_ind.numpy())
-                    end_ind = int(end_ind.numpy())
+                if not isinstance(start_ind, int):
+                    if self.framework == "pt":
+                        start_ind = start_ind.item()
+                        end_ind = end_ind.item()
+                    else:
+                        start_ind = int(start_ind.numpy())
+                        end_ind = int(end_ind.numpy())
                 word_ref = sentence[start_ind:end_ind]
                 if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way
