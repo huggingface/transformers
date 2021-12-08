@@ -17,19 +17,18 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_pyctcdecode_available
+from ...file_utils import _LazyModule
 
 
-_import_structure = {"processing_wav2vec2_with_lm": []}
-
-
-if is_pyctcdecode_available():
-    _import_structure["processing_wav2vec2_with_lm"].append("Wav2Vec2ProcessorWithLM")
+# fmt: off
+_import_structure = {
+    "processing_wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"]
+}
+# fmt: on
 
 
 if TYPE_CHECKING:
-    if is_pyctcdecode_available():
-        from .processing_wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
+    from .processing_wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 else:
     import sys
 
