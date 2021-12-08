@@ -9,8 +9,6 @@ from transformers import (  # LongformerConfig,; T5Config,
     BartConfig,
     DistilBertConfig,
     GPT2Config,
-    GPTNeoConfig,
-    LayoutLMConfig,
     MBartConfig,
     RobertaConfig,
     TFAlbertModel,
@@ -29,16 +27,11 @@ from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
-
-# from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
-from transformers.models.gpt_neo import GPTNeoOnnxConfig
-from transformers.models.layoutlm import LayoutLMOnnxConfig
 from transformers.models.mbart import MBartOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
-
-# from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
+
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -46,7 +39,8 @@ from transformers.onnx import (
     export,
     validate_model_outputs,
 )
-from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
+from transformers.onnx.config import OnnxConfigWithPast, DEFAULT_ONNX_OPSET
+from transformers.onnx.features import FeaturesManager
 from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
 from transformers.testing_utils import require_onnx, require_tf, require_torch, slow
 
@@ -196,34 +190,37 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                 )
 
 
-if is_torch_available():
-    from transformers import (  # T5Model,
-        AlbertModel,
-        BartModel,
-        BertModel,
-        DistilBertModel,
-        GPT2Model,
-        GPTNeoModel,
-        LayoutLMModel,
-        MBartModel,
-        RobertaModel,
-        XLMRobertaModel,
-    )
+PYTORCH_EXPORT_MODELS = {
+    ("albert", "hf-internal-testing/tiny-albert"),
+    ("bert", "bert-base-cased"),
+    ("camembert", "camembert-base"),
+    ("distilbert", "distilbert-base-cased"),
+    # ("longFormer", "longformer-base-4096"),
+    ("roberta", "roberta-base"),
+    ("xlm-roberta", "xlm-roberta-base"),
+    ("layoutlm", "microsoft/layoutlm-base-uncased"),
+}
 
-    PYTORCH_EXPORT_DEFAULT_MODELS = {
-        ("ALBERT", "hf-internal-testing/tiny-albert", AlbertModel, AlbertConfig, AlbertOnnxConfig),
-        ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
-        ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
-        ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
-        ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
-        ("GPT-Neo", "EleutherAI/gpt-neo-125M", GPTNeoModel, GPTNeoConfig, GPTNeoOnnxConfig),
-        # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
-        ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
-        ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
-        ("LayoutLM", "microsoft/layoutlm-base-uncased", LayoutLMModel, LayoutLMConfig, LayoutLMOnnxConfig),
-        ("MBart", "sshleifer/tiny-mbart", MBartModel, MBartConfig, MBartOnnxConfig),
-        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
-    }
+PYTORCH_EXPORT_WITH_PAST_MODELS = {
+    ("gpt2", "gpt2"),
+    ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+}
+
+PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
+    ("bart", "facebook/bart-base"),
+    ("mbart", "sshleifer/tiny-mbart"),
+    ("t5", "t5-small"),
+}
+
+
+def _get_models_to_test(export_models_list):
+    models_to_test = []
+    for (name, model) in export_models_list:
+        for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
+            name
+        ).items():
+            models_to_test.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
+    return models_to_test
 
     PYTORCH_EXPORT_WITH_PAST_MODELS = {
         # ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
@@ -278,7 +275,7 @@ class OnnxExportTestCaseV2(TestCase):
     def test_pytorch_export_default(self):
         from transformers.onnx import export
 
-        for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_DEFAULT_MODELS:
+        for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_MODELS:
             with self.subTest(name):
                 self.assertTrue(hasattr(onnx_config_class, "from_model_config"))
 
