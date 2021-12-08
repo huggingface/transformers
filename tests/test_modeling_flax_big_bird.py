@@ -40,8 +40,7 @@ class FlaxBigBirdModelTester(unittest.TestCase):
         self,
         parent,
         batch_size=13,
-        # This needs to be a multiple of 6 * block_size.
-        seq_length=48,
+        seq_length=52,
         is_training=True,
         use_attention_mask=True,
         use_token_type_ids=True,

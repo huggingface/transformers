@@ -1455,7 +1455,7 @@ class FlaxBigBirdModule(nn.Module):
     ):
         """A helper function to pad tokens and mask to work with implementation of BigBird block-sparse attention."""
         # padding
-        block_size = self.config.block_size * 6
+        block_size = self.config.block_size  # * 6
 
         input_shape = input_ids.shape
         batch_size, seq_len = input_shape[:2]
