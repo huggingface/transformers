@@ -13,11 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Marian model configuration """
-from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
 from transformers import PreTrainedTokenizer, TensorType, is_torch_available
-from transformers.onnx import OnnxConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
