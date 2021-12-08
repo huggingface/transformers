@@ -32,10 +32,10 @@ def main():
         help="Export the model with some additional feature.",
     )
     parser.add_argument(
-        "--opset", type=int, default=None, help="ONNX opset version to export the model with (default 12)."
+        "--opset", type=int, default=12, help="ONNX opset version to export the model with (default 12)."
     )
     parser.add_argument(
-        "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
+        "--atol", type=float, default=1e-4, help="Absolute difference tolerence when validating the model."
     )
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
@@ -53,9 +53,6 @@ def main():
     onnx_config = model_onnx_config(model.config)
 
     # Ensure the requested opset is sufficient
-    if args.opset is None:
-        args.opset = onnx_config.default_onnx_opset
-
     if args.opset < onnx_config.default_onnx_opset:
         raise ValueError(
             f"Opset {args.opset} is not sufficient to export {model_kind}. "
@@ -63,9 +60,6 @@ def main():
         )
 
     onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, args.opset, args.output)
-
-    if args.atol is None:
-        args.atol = onnx_config.atol_for_validation
 
     validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
     logger.info(f"All good, model saved at: {args.output.as_posix()}")
