@@ -34,6 +34,7 @@ jobs:
           apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -87,6 +88,7 @@ jobs:
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
           pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -142,6 +144,7 @@ jobs:
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
+#          pip install https://github.com/kpu/kenlm/archive/master.zip
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
@@ -200,7 +203,7 @@ jobs:
           apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-
+          pip install https://github.com/kpu/kenlm/archive/master.zip
       - name: Launcher docker
         uses: actions/checkout@v2
         with:
@@ -256,6 +259,7 @@ jobs:
 #          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
+#          pip install https://github.com/kpu/kenlm/archive/master.zip
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
@@ -311,6 +315,7 @@ jobs:
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
+#          pip install https://github.com/kpu/kenlm/archive/master.zip
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2

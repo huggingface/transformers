@@ -183,9 +183,12 @@ class PipelineTestCaseMeta(type):
 
                     # 10 examples with batch size 4 means there needs to be a unfinished batch
                     # which is important for the unbatcher
-                    dataset = [copy.deepcopy(random.choice(examples)) for i in range(10)]
+                    def data(n):
+                        for _ in range(n):
+                            # Need to copy because Conversation object is mutated
+                            yield copy.deepcopy(random.choice(examples))
 
-                    for item in pipeline(dataset, batch_size=4):
+                    for item in pipeline(data(10), batch_size=4):
                         pass
 
                 run_batch_test(pipeline, examples)

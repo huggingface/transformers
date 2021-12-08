@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - doc-builder*
 
 jobs:
   build_and_package:
@@ -48,6 +49,7 @@ jobs:
           sudo apt install tesseract-ocr
           pip install pytesseract
           pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Setup git
         run: |

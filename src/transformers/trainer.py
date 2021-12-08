@@ -17,6 +17,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
+import contextlib
 import inspect
 import math
 import os
@@ -26,6 +27,7 @@ import shutil
 import sys
 import time
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -1812,8 +1814,8 @@ class Trainer:
         """
         Prepares one :obj:`data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
         """
-        if isinstance(data, dict):
-            return type(data)(**{k: self._prepare_input(v) for k, v in data.items()})
+        if isinstance(data, Mapping):
+            return type(data)({k: self._prepare_input(v) for k, v in data.items()})
         elif isinstance(data, (tuple, list)):
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
@@ -1836,6 +1838,21 @@ class Trainer:
             inputs["mems"] = self._past
 
         return inputs
+
+    def autocast_smart_context_manager(self):
+        """
+        A helper wrapper that creates an appropriate context manager for :obj:`autocast` while feeding it the desired
+        arguments, depending on the situation.
+        """
+        if self.use_amp:
+            if version.parse(torch.__version__) >= version.parse("1.10"):
+                ctx_manager = autocast(dtype=self.amp_dtype)
+            else:
+                ctx_manager = autocast()
+        else:
+            ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
+
+        return ctx_manager
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
@@ -1863,14 +1880,7 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        if self.use_amp:
-            if version.parse(torch.__version__) >= version.parse("1.10"):
-                with autocast(dtype=self.amp_dtype):
-                    loss = self.compute_loss(model, inputs)
-            else:
-                with autocast():
-                    loss = self.compute_loss(model, inputs)
-        else:
+        with self.autocast_smart_context_manager():
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
@@ -2514,14 +2524,7 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    if self.use_amp:
-                        if version.parse(torch.__version__) >= version.parse("1.10"):
-                            with autocast(dtype=self.amp_dtype):
-                                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                        else:
-                            with autocast():
-                                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                    else:
+                    with self.autocast_smart_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
@@ -2531,14 +2534,7 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    if self.use_amp:
-                        if version.parse(torch.__version__) >= version.parse("1.10"):
-                            with autocast(dtype=self.amp_dtype):
-                                outputs = model(**inputs)
-                        else:
-                            with autocast():
-                                outputs = model(**inputs)
-                    else:
+                    with self.autocast_smart_context_manager():
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)

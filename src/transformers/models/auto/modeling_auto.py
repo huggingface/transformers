@@ -33,6 +33,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetModel"),
         ("segformer", "SegformerModel"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
+        ("perceiver", "PerceiverModel"),
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
         ("beit", "BeitModel"),
@@ -247,6 +248,14 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
+        (
+            "perceiver",
+            (
+                "PerceiverForImageClassificationLearned",
+                "PerceiverForImageClassificationFourier",
+                "PerceiverForImageClassificationConvProcessing",
+            ),
+        ),
     ]
 )
 
@@ -266,6 +275,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("perceiver", "PerceiverForMaskedLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("rembert", "RemBertForMaskedLM"),
@@ -337,6 +347,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
