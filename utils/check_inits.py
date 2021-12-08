@@ -147,6 +147,7 @@ def parse_init(init_file):
                 elif line.startswith(" " * 12):
                     objects.append(line[12:-2])
                 line_index += 1
+
             type_hint_objects[backend] = objects
         else:
             line_index += 1
