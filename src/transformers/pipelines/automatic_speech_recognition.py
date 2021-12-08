@@ -77,13 +77,13 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
         """
         Arguments:
-            feature_extractor (:obj:`~transformers.SequenceFeatureExtractor`):
+            feature_extractor (:class:`~transformers.SequenceFeatureExtractor`):
                 The feature extractor that will be used by the pipeline to encode waveform for the model.
-            model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+            model (:class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
                 The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
                 from :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel`
                 for TensorFlow.
-            tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+            tokenizer (:class:`~transformers.PreTrainedTokenizer`):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
                 :class:`~transformers.PreTrainedTokenizer`.
             modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
@@ -114,7 +114,7 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :obj:`~transformers.AutomaticSpeechRecognitionPipeline`
+        Classify the sequence(s) given as inputs. See the :class:`~transformers.AutomaticSpeechRecognitionPipeline`
         documentation for more information.
 
         Args:

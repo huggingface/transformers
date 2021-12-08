@@ -34,6 +34,7 @@ jobs:
           apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -46,10 +47,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Fetch the tests to run
         run: |
@@ -90,6 +88,7 @@ jobs:
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
           pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -145,6 +144,7 @@ jobs:
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
+#          pip install https://github.com/kpu/kenlm/archive/master.zip
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
@@ -203,7 +203,7 @@ jobs:
           apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-
+          pip install https://github.com/kpu/kenlm/archive/master.zip
       - name: Launcher docker
         uses: actions/checkout@v2
         with:
@@ -216,10 +216,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Fetch the tests to run
         run: |
@@ -262,6 +259,7 @@ jobs:
 #          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
+#          pip install https://github.com/kpu/kenlm/archive/master.zip
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
@@ -317,6 +315,7 @@ jobs:
 #          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
+#          pip install https://github.com/kpu/kenlm/archive/master.zip
 #
 #      - name: Launcher docker
 #        uses: actions/checkout@v2
@@ -385,10 +384,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Fetch the tests to run
         run: |
@@ -442,10 +438,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Fetch the tests to run
         run: |

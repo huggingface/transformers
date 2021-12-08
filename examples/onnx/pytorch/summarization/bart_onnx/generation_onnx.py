@@ -1,4 +1,5 @@
 import copy
+import itertools
 from typing import List, Optional, Tuple
 
 import torch
@@ -8,23 +9,23 @@ from transformers import BartConfig
 from transformers.generation_utils import GenerationMixin
 
 
-def flatten_list(past):
-    values = []
-    if past is not None:
-        for i, p in enumerate(past):
-            for j, q in enumerate(p):
-                values.append(q)
+def _convert_past_list_to_tuple(past_key_values):
+    """
+    In Bart model, the type of past_key_values is tuple(tuple(torch.FloatTensor)) which is not
+    TorchScript-compatible. To support this, we have to convert it during the export process.
+    This function will convert past values from a list to tuple(tuple(torch.FloatTensor)) for
+    the inner decoder.
 
-    return values
-
-
-def list_to_tuple(past):
+    According to the definition of past_key_values, each inner tuple(torch.FloatTensor) has 4 tensors,
+    so we convert every 4 elements in the list as a tuple(torch.FloatTensor).
+    """
+    count_of_each_inner_tuple = 4
     results = ()
     temp_result = ()
-    count_n = len(past) // 4
+    count_n = len(past_key_values) // count_of_each_inner_tuple
     for idx in range(count_n):
-        real_idx = idx * 4
-        temp_result = tuple(past[real_idx : real_idx + 4])
+        real_idx = idx * count_of_each_inner_tuple
+        temp_result = tuple(past_key_values[real_idx : real_idx + count_of_each_inner_tuple])
         results += ((temp_result),)
 
     return results
@@ -51,7 +52,7 @@ class DecoderForONNX(torch.nn.Module):
     def forward(self, input_ids, encoder_state, attention_mask, past=None):
         all_results = None
         if past is not None:
-            all_results = list_to_tuple(past)
+            all_results = _convert_past_list_to_tuple(past)
             input_ids = input_ids[:, -1:]
 
         last_hidden_state, past_key_values = self.decoder(
@@ -68,28 +69,33 @@ class DecoderForONNX(torch.nn.Module):
         return last_hidden_state, past_values
 
 
-def create_traced_encoder(encoder, input_ids, attention_mask):
+def _create_traced_encoder(encoder, input_ids, attention_mask):
     encoder_c = copy.deepcopy(encoder)
     encoder_for_onnx = EncoderForONNX(encoder_c)
 
-    # return torch.jit.trace(encoder, (input_ids, attention_mask))
     return torch.jit.trace(encoder_for_onnx, (input_ids, attention_mask))
 
 
-def create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past=None):
+def _create_traced_decoder(decoder, input_ids, encoder_state, attention_mask, past=None):
     decoder_c = copy.deepcopy(decoder)
     decoder_for_onnx = DecoderForONNX(decoder_c)
-    past_values = flatten_list(past)
+    past_values = list(itertools.chain.from_iterable(past or ()))
 
     # Do this twice so we got 2 different decoders for further work.
-    if past_values is None or len(past_values) == 0:
-        return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask))
-    else:
+    if past_values:
         return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask, past_values))
+    else:
+        return torch.jit.trace(decoder_for_onnx, (input_ids, encoder_state, attention_mask))
 
 
 class BartConfigTS(BartConfig, torch.nn.Module):
-    def init_module(self):
+    """
+    BartConfigTS is a TorchScript-compatible transformers.models.bart.configuration_bart.BartConfig.
+    TorchScript only supports sub-classes of torch.nn.Module.
+    """
+
+    def __init__(self, config):
+        BartConfig.__init__(self, config)
         torch.nn.Module.__init__(self)
 
 
@@ -127,7 +133,6 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
     def __init__(self, model):
         super().__init__()
         self.config = BartConfigTS(model.config)
-        self.config.init_module()
         self.config.force_bos_token_to_be_generated = False
         self._trace_modules(model)
         self.logits_processor = MinLengthLogitsProcessorTS(self.config.min_length, self.config.eos_token_id)
@@ -136,7 +141,6 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         self.decoder_layers = model.config.decoder_layers
 
     def _trace_modules(self, model):
-        # Be aware of the last one 2 should be kept.
         input_ids = torch.tensor(
             [
                 [
@@ -200,89 +204,25 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
                     57,
                     8629,
                     5,
-                    2,
+                    model.config.eos_token_id,
                 ]
             ],
             device=model.device,
             dtype=torch.long,
         )
         attention_mask = torch.tensor(
-            [
-                [
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                ]
-            ],
+            [[True] * input_ids.shape[-1]],
             device=model.device,
             dtype=torch.bool,
         )
-        self.encoder = create_traced_encoder(model.get_encoder(), input_ids, attention_mask)
+        self.encoder = _create_traced_encoder(model.get_encoder(), input_ids, attention_mask)
         encoder_outputs = model.get_encoder()(input_ids, attention_mask=attention_mask, return_dict=True)
         decoder = model.model.decoder
         decoder_outputs = decoder(input_ids, attention_mask, encoder_outputs["last_hidden_state"], None, None, None)
-        self.decoder_no_past = create_traced_decoder(
+        self.decoder_no_past = _create_traced_decoder(
             model.model.decoder, input_ids, encoder_outputs["last_hidden_state"], attention_mask
         )
-        self.decoder_with_past = create_traced_decoder(
+        self.decoder_with_past = _create_traced_decoder(
             model.model.decoder, input_ids, encoder_outputs["last_hidden_state"], attention_mask, decoder_outputs[1]
         )
 
@@ -414,8 +354,8 @@ class BeamSearchScorerTS(torch.nn.Module):
         self._beam_hyps_count = torch.zeros(self.batch_size, dtype=torch.long)
         self._beam_hyps_worst_scores = torch.zeros(self.batch_size) + 1e9
         self._beam_hyps_max_length: int = self.max_length - 1
-        self._beam_hyps: List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatible
-        self._beam_scores: List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatible
+        self._beam_hyps: List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatibility
+        self._beam_scores: List[torch.Tensor] = [torch.zeros(2)]  # placeholder for TorchScript compatibility
 
     def is_done(self) -> torch.Tensor:
         return self._done.all()
@@ -474,11 +414,11 @@ class BeamSearchScorerTS(torch.nn.Module):
         score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
         hyps_count = self.hypo_len(hypo_idx)
         if hyps_count < self.num_beams or score > self._beam_hyps_worst_scores[hypo_idx]:
-            # NOTE: work around difference of torch.sum(empty_tensor) = 0, while error in onnx.
+            # NOTE: work around difference of torch.sum(empty_tensor) == 0, while error in onnx.
+            # Bug: https://msdata.visualstudio.com/Vienna/_workitems/edit/1486599
             beam_idx = (
                 torch.sum(self._beam_hyps_count[:hypo_idx]) if hypo_idx != 0 else torch.tensor(0, dtype=torch.long)
             )
-            # beam_idx = torch.sum(_beam_hyps_count[:hypo_idx])
             self._beam_scores.insert(beam_idx, torch.tensor([score]))
             self._beam_hyps.insert(beam_idx, hyp)
             if hyps_count + 1 > self.num_beams:
@@ -605,7 +545,7 @@ class BeamSearchScorerTS(torch.nn.Module):
                 self.hypo_add(final_tokens, final_score, batch_idx)
 
         # select the best hypotheses
-        # NOTE: new is not scriptable
+        # NOTE: torch.Tensor.new_zeros() is not scriptable
         sent_lengths = torch.zeros(batch_size * self.num_beam_hyps_to_keep, dtype=torch.long)
         best = []
         best_scores = torch.zeros(
@@ -782,7 +722,6 @@ class BARTBeamSearchGenerator(BARTGenerator):
             bos_token_id=bos_token_id,
         )
 
-        # from generation_utils.py
         batch_size = input_ids.shape[0]
 
         length_penalty = self.config.length_penalty

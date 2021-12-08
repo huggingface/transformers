@@ -717,7 +717,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
 
             >>> outputs = model(**inputs)
             >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooled_output # pooled (EOS token) states
+            >>> pooled_output = outputs.pooler_output # pooled (EOS token) states
         """
         return self.text_model(
             input_ids=input_ids,
@@ -827,7 +827,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
             >>> outputs = model(**inputs)
             >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooled_output # pooled CLS states
+            >>> pooled_output = outputs.pooler_output # pooled CLS states
         """
         return self.vision_model(
             pixel_values=pixel_values,
