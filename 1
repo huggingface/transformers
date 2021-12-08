@@ -126,19 +126,23 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ", "j ð s j ð s oːɹ"])
 
     def test_phonemize_with_word_del(self):
-        tokenizer = self.tokenizer_class.from_pretrained(
-            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|"
-        )
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|")
         tokenizer.add_tokens("|")
 
         input_text = "Hello how are you"
         phonemes = tokenizer.phonemize(input_text, phonemizer_lang="en-us")
-        self.assertEqual(phonemes, "h ə l oʊ | h aʊ | ɑːɹ | j uː |")
+        self.assertEqual(phonemes, "h ə l oʊ |h aʊ |ɑːɹ |j uː |")
 
     def test_encode_with_del(self):
-        tokenizer = self.tokenizer_class.from_pretrained(
-            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|"
-        )
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|")
+        tokenizer.add_tokens("|")
+
+        input_text = "Hello how are you"
+        phonemes = tokenizer.phonemize(input_text, phonemizer_lang="en-us")
+        self.assertEqual(tokenizer(input_text).input_ids, tokenizer(phonemes, do_phonemize=False).input_ids)
+
+    def test_encode_with_del(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|")
         tokenizer.add_tokens("|")
 
         input_text = "Hello how are you"
@@ -146,23 +150,11 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer(input_text).input_ids, tokenizer(phonemes, do_phonemize=False).input_ids)
 
     def test_decode_with_del(self):
-        tokenizer = self.tokenizer_class.from_pretrained(
-            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|"
-        )
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|")
         tokenizer.add_tokens("|")
 
         sample_ids = [
-            [
-                11,
-                5,
-                15,
-                tokenizer.pad_token_id,
-                tokenizer.word_delimiter_token_id,
-                15,
-                8,
-                tokenizer.word_delimiter_token_id,
-                98,
-            ],
+            [11, 5, 15, tokenizer.pad_token_id, tokenizer.word_delimiter_token_id, 15, 8, tokenizer.word_delimiter_token_id, 98],
             [tokenizer.word_delimiter_token_id, 24, 22, tokenizer.word_delimiter_token_id, 5, 24, 22, 5, 77],
         ]
 
@@ -177,11 +169,9 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         batch_tokens = tokenizer.batch_decode(sample_ids, filter_word_delimiter_token=False)
         self.assertEqual(tokens, batch_tokens[0])
         self.assertEqual(batch_tokens, ["k s ɾ | ɾ l | ɭʲ", "| j ð | s j ð s oːɹ"])
-
+        
     def test_encode_decode_with_del(self):
-        tokenizer = self.tokenizer_class.from_pretrained(
-            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|"
-        )
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|")
         tokenizer.add_tokens("|")
 
         input_text = "Hello how are you"
@@ -192,9 +182,7 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(phonemes, phonemes_enc_dec)
 
     def test_encode_decode_with_del_filter(self):
-        tokenizer = self.tokenizer_class.from_pretrained(
-            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|"
-        )
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token="|")
         tokenizer.add_tokens("|")
 
         input_text = "Hello how are you"
@@ -202,12 +190,11 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         phonemes_enc_dec = tokenizer.decode(tokenizer(input_text).input_ids, filter_word_delimiter_token=True)
 
-        self.assertEqual(" ".join([p.strip() for p in phonemes.split(" |")]).strip(), phonemes_enc_dec)
+        import ipdb; ipdb.set_trace()
+        self.assertEqual(phonemes, phonemes_enc_dec)
 
     def test_change_phonemizer_lang(self):
-        tokenizer = self.tokenizer_class.from_pretrained(
-            "facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token=None
-        )
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", word_delimiter_token=None)
         input_text = "Hello how are you"
 
         input_ids_en = tokenizer(input_text, phonemizer_lang="en-us").input_ids

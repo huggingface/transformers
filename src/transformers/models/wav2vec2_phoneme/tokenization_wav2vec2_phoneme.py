@@ -121,6 +121,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        phone_delimiter_token=" ",
+        word_delimiter_token=None,
         do_phonemize=True,
         phonemizer_lang="en-us",
         phonemizer_backend="espeak",
@@ -131,12 +133,16 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
+            word_delimiter_token=word_delimiter_token,
+            phone_delimiter_token=phone_delimiter_token,
             do_phonemize=do_phonemize,
             phonemizer_lang=phonemizer_lang,
             phonemizer_backend=phonemizer_backend,
             **kwargs,
         )
 
+        self._word_delimiter_token = word_delimiter_token
+        self._phone_delimiter_token = phone_delimiter_token
         self.do_phonemize = do_phonemize
         self.phonemizer_lang = phonemizer_lang
         self.phonemizer_backend = phonemizer_backend
@@ -222,7 +228,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         from phonemizer import phonemize
         from phonemizer.separator import Separator
 
-        separator = Separator(phone=" ", word="", syllable="")
+        word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
+
+        separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
         phonemes = phonemize(
             text,
             language=phonemizer_lang,
@@ -234,6 +242,61 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         return phonemes
 
+    @property
+    def word_delimiter_token(self) -> str:
+        """
+        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
+        """
+        if self._word_delimiter_token is None and self.verbose:
+            return None
+        return str(self._word_delimiter_token)
+
+    @property
+    def word_delimiter_token_id(self) -> Optional[int]:
+        """
+        :obj:`Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns :obj:`None` if the token has
+        not been set.
+        """
+        if self._word_delimiter_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.word_delimiter_token)
+
+    @word_delimiter_token.setter
+    def word_delimiter_token(self, value):
+        self._word_delimiter_token = value
+
+    @word_delimiter_token_id.setter
+    def word_delimiter_token_id(self, value):
+        self._word_delimiter_token = self.convert_tokens_to_ids(value)
+
+    @property
+    def phone_delimiter_token(self) -> str:
+        """
+        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
+        """
+        if self._phone_delimiter_token is None and self.verbose:
+            logger.error("Using phone_delimiter_token, but it is not set yet.")
+            return None
+        return str(self._phone_delimiter_token)
+
+    @property
+    def phone_delimiter_token_id(self) -> Optional[int]:
+        """
+        :obj:`Optional[int]`: Id of the phone_delimiter_token in the vocabulary. Returns :obj:`None` if the token has
+        not been set.
+        """
+        if self._phone_delimiter_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.phone_delimiter_token)
+
+    @phone_delimiter_token.setter
+    def phone_delimiter_token(self, value):
+        self._phone_delimiter_token = value
+
+    @phone_delimiter_token_id.setter
+    def phone_delimiter_token_id(self, value):
+        self._phone_delimiter_token = self.convert_tokens_to_ids(value)
+
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) in an index (integer) using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
@@ -244,7 +307,11 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return result
 
     def convert_tokens_to_string(
-        self, tokens: List[str], group_tokens: bool = True, spaces_between_special_tokens: bool = False
+        self,
+        tokens: List[str],
+        group_tokens: bool = True,
+        spaces_between_special_tokens: bool = False,
+        filter_word_delimiter_token: bool = True,
     ) -> str:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
@@ -256,7 +323,10 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # filter self.pad_token which is used as CTC-blank token
         filtered_tokens = list(filter(lambda token: token != self.pad_token, tokens))
 
-        # replace delimiter token
+        # also filter self.word_delimiter_token if not not
+        if filter_word_delimiter_token and self.word_delimiter_token is not None:
+            filtered_tokens = list(filter(lambda token: token != self.word_delimiter_token, filtered_tokens))
+
         string = " ".join(filtered_tokens).strip()
 
         return string
@@ -267,6 +337,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         group_tokens: bool = True,
+        filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
     ) -> str:
         """
@@ -283,7 +354,10 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             result.append(token)
 
         text = self.convert_tokens_to_string(
-            result, group_tokens=group_tokens, spaces_between_special_tokens=spaces_between_special_tokens
+            result,
+            group_tokens=group_tokens,
+            spaces_between_special_tokens=spaces_between_special_tokens,
+            filter_word_delimiter_token=filter_word_delimiter_token,
         )
 
         if clean_up_tokenization_spaces:

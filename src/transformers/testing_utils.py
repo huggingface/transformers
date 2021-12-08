@@ -607,6 +607,8 @@ def require_phonemizer(test_case):
     """
     if not is_phonemizer_available():
         return unittest.skip("test requires phonemizer")(test_case)
+    else:
+        return test_case
 
 
 def require_pyctcdecode(test_case):
