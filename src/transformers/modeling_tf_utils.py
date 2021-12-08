@@ -737,7 +737,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Prepare the output of the saved model. Each model must implement this function.
 
         Args:
-            output (:obj:`~transformers.TFBaseModelOutput`):
+            output (:class:`~transformers.TFBaseModelOutput`):
                 The output returned by the model.
         """
         raise NotImplementedError

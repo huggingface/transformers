@@ -20,7 +20,6 @@ import argparse
 import logging
 import os
 import sys
-from datetime import datetime
 
 import numpy as np
 import torch
@@ -46,7 +45,7 @@ tokenizer_dict = {"facebook/bart-base": BartTokenizer}
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(description="Export Bart model + Beam Search to ONNX graph.")
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
@@ -104,13 +103,12 @@ def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_l
     model.eval()
 
     ort_sess = None
-    onnx_bart = torch.jit.script(BARTBeamSearchGenerator(model))
+    bart_script_model = torch.jit.script(BARTBeamSearchGenerator(model))
 
     with torch.no_grad():
         ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt").to(model.device)
 
-        # Test export here.
         summary_ids = model.generate(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -120,53 +118,54 @@ def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_l
             decoder_start_token_id=model.config.decoder_start_token_id,
         )
 
-        if not ort_sess:
-            torch.onnx.export(
-                onnx_bart,
-                (
-                    inputs["input_ids"],
-                    inputs["attention_mask"],
-                    num_beams,
-                    max_length,
-                    model.config.decoder_start_token_id,
-                ),
-                onnx_file_path,
-                opset_version=14,
-                input_names=["input_ids", "attention_mask", "num_beams", "max_length", "decoder_start_token_id"],
-                output_names=["output_ids"],
-                dynamic_axes={
-                    "input_ids": {0: "batch", 1: "seq"},
-                    "output_ids": {0: "batch", 1: "seq_out"},
-                },
-                verbose=False,
-                strip_doc_string=False,
-                example_outputs=summary_ids,
-            )
+        torch.onnx.export(
+            bart_script_model,
+            (
+                inputs["input_ids"],
+                inputs["attention_mask"],
+                num_beams,
+                max_length,
+                model.config.decoder_start_token_id,
+            ),
+            onnx_file_path,
+            opset_version=14,
+            input_names=["input_ids", "attention_mask", "num_beams", "max_length", "decoder_start_token_id"],
+            output_names=["output_ids"],
+            dynamic_axes={
+                "input_ids": {0: "batch", 1: "seq"},
+                "output_ids": {0: "batch", 1: "seq_out"},
+            },
+            example_outputs=summary_ids,
+        )
 
-            new_onnx_file_path = remove_dup_initializers(os.path.abspath(onnx_file_path))
+        logger.info("Model exported to {}".format(onnx_file_path))
 
-            ort_sess = onnxruntime.InferenceSession(new_onnx_file_path)
-            ort_out = ort_sess.run(
-                None,
-                {
-                    "input_ids": inputs["input_ids"].cpu().numpy(),
-                    "attention_mask": inputs["attention_mask"].cpu().numpy(),
-                    "num_beams": np.array(num_beams),
-                    "max_length": np.array(max_length),
-                    "decoder_start_token_id": np.array(model.config.decoder_start_token_id),
-                },
-            )
+        new_onnx_file_path = remove_dup_initializers(os.path.abspath(onnx_file_path))
 
-            np.testing.assert_allclose(summary_ids.cpu().numpy(), ort_out[0], rtol=1e-3, atol=1e-3)
+        logger.info("Deduplicated and optimized model written to {}".format(new_onnx_file_path))
 
-            print("========= Pass - Results are matched! =========")
+        ort_sess = onnxruntime.InferenceSession(new_onnx_file_path)
+        ort_out = ort_sess.run(
+            None,
+            {
+                "input_ids": inputs["input_ids"].cpu().numpy(),
+                "attention_mask": inputs["attention_mask"].cpu().numpy(),
+                "num_beams": np.array(num_beams),
+                "max_length": np.array(max_length),
+                "decoder_start_token_id": np.array(model.config.decoder_start_token_id),
+            },
+        )
+
+        np.testing.assert_allclose(summary_ids.cpu().numpy(), ort_out[0], rtol=1e-3, atol=1e-3)
+
+        logger.info("Model outputs from torch and ONNX Runtime are similar.")
+        logger.info("Success.")
 
 
 def main():
     args = parse_args()
-    local_device = None
-    local_max_length = 5
-    local_num_beams = 4
+    max_length = 5
+    num_beams = 4
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -175,41 +174,31 @@ def main():
         level=logging.INFO,
     )
 
-    logger.setLevel(logging.ERROR)
+    logger.setLevel(logging.INFO)
     transformers.utils.logging.set_verbosity_error()
 
-    if args.model_name_or_path:
-        model, tokenizer = load_model_tokenizer(args.model_name_or_path, local_device)
-    else:
-        raise ValueError("Make sure that model name has been passed")
+    device = torch.device(args.device)
+
+    model, tokenizer = load_model_tokenizer(args.model_name_or_path, device)
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
-    if args.device:
-        if args.device == "cuda" and not torch.cuda.is_available():
-            raise ValueError("CUDA is not available in this server.")
-
-        local_device = torch.device(args.device)
-    else:
-        local_device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-    model.to(local_device)
+    model.to(device)
 
     if args.max_length:
-        local_max_length = args.max_length
+        max_length = args.max_length
 
     if args.num_beams:
-        local_num_beams = args.num_beams
+        num_beams = args.num_beams
 
     if args.output_file_path:
         output_name = args.output_file_path
     else:
-        output_name = "onnx_model_{}.onnx".format(datetime.now().utcnow().microsecond)
+        output_name = "BART.onnx"
 
-    export_and_validate_model(model, tokenizer, output_name, local_num_beams, local_max_length)
-
-    logger.info("***** Running export *****")
+    logger.info("Exporting model to ONNX")
+    export_and_validate_model(model, tokenizer, output_name, num_beams, max_length)
 
 
 if __name__ == "__main__":
