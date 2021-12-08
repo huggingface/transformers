@@ -715,7 +715,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, init_strategy: str = 'avg_emb') -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
 
@@ -727,11 +727,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
                 just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model without doing
                 anything.
+            init_strategy (:obj:`str`, `optional`, defaults to :obj:`'avg_emb'`):
+                Method for initializing new embeddings, if any.
+
+                Options include `'avg_emb'` and `'as_pretrained'`.
+                If `'as_pretrained'`, intializes new embeddings via the same distribution as given for pretraining.
+                If `'avg_emb`', samples from the distribution as given for pretraining, and adds the average
+                of all existing word embeddings to avoid destroying the pretrained LM, as discussed in
+                https://nlp.stanford.edu/~johnhew/vocab-expansion.html.
 
         Return:
             :obj:`torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        model_embeds = self._resize_token_embeddings(new_num_tokens)
+        model_embeds = self._resize_token_embeddings(new_num_tokens, init_strategy)
         if new_num_tokens is None:
             return model_embeds
 
@@ -744,9 +752,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    def _resize_token_embeddings(self, new_num_tokens, init_strategy):
         old_embeddings = self.get_input_embeddings()
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, init_strategy)
         self.set_input_embeddings(new_embeddings)
 
         # if word embeddings are not tied, make sure that lm head is resized as well
@@ -758,8 +766,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
-        self, old_embeddings: nn.Embedding, new_num_tokens: Optional[int] = None
-    ) -> nn.Embedding:
+        self, old_embeddings: nn.Embedding, new_num_tokens: Optional[int] = None,
+        init_strategy: str = 'avg_emb') -> nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
@@ -773,11 +781,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
                 :obj:`torch.nn.Embedding`` module of the model without doing anything.
+            init_strategy (:obj:`str`, `optional`, defaults to :obj:`'avg_emb'`):
+                Method for initializing new embeddings, if any.
+
+                Options include `'avg_emb'` and `'as_pretrained'`.
+                If `'as_pretrained'`, intializes new embeddings via the same distribution as given for pretraining.
+                If `'avg_emb'`, samples from the distribution as given for pretraining, and adds the average
+                of all existing word embeddings to avoid destroying the pretrained LM distribution, as discussed in
+                https://nlp.stanford.edu/~johnhew/vocab-expansion.html.
 
         Return:
             :obj:`torch.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
             :obj:`new_num_tokens` is :obj:`None`
         """
+        if init_strategy not in {'avg_emb', 'as_pretrained'}:
+            raise NotImplementedError("Unknown new embedding initialization method: {}".format(init_strategy))
+
         if new_num_tokens is None:
             return old_embeddings
 
@@ -793,7 +812,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return old_embeddings
 
         if not isinstance(old_embeddings, nn.Embedding):
-            raise TypeError(
+          raise TypeError(
                 f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. "
                 f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
             )
@@ -818,6 +837,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
+        # function for noisy average initialization
+        def get_noisy_avg_embeddings(samples_needed):
+            old_weights = old_embeddings.weight.data
+            mu = torch.mean(old_weights, dim=0)
+            sigma = (old_weights - mu).T @ (old_weights - mu) / old_num_tokens
+            dist = torch.distributions.multivariate_normal.MultivariateNormal(
+                    mu, covariance_matrix=sigma)
+            samples = torch.stack(tuple((dist.sample() for _ in range(samples_needed))), dim=0).to(mu.device)
+            return samples
+
+        # optionally overwrite new embeddings with samples from noisy average
+        if init_strategy == 'avg_emb':
+            extra_words = new_num_tokens - old_num_tokens
+            if extra_words > 0:
+                if is_deepspeed_zero3_enabled():
+                    import deepspeed
+                    with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=0):
+                        if torch.distributed.get_rank() == 0:
+                            new_embeddings.weight.data[-extra_words:, :] = get_noisy_avg_embeddings(extra_words)
+                else:
+                    new_embeddings.weight.data[-extra_words:, :] = get_noisy_avg_embeddings(extra_words)
         return new_embeddings
 
     def _get_resized_lm_head(
