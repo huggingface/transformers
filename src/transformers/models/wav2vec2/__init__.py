@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_pyctcdecode_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -26,6 +26,9 @@ _import_structure = {
     "processing_wav2vec2": ["Wav2Vec2Processor"],
     "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
 }
+
+if is_pyctcdecode_available():
+    _import_structure["processing_wav2vec2_with_lm"] = ["Wav2Vec2ProcessorWithLM"]
 
 if is_torch_available():
     _import_structure["modeling_wav2vec2"] = [
@@ -60,6 +63,9 @@ if TYPE_CHECKING:
     from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
     from .processing_wav2vec2 import Wav2Vec2Processor
     from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2Tokenizer
+
+    if is_pyctcdecode_available():
+        from .processing_wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 
     if is_torch_available():
         from .modeling_wav2vec2 import (
