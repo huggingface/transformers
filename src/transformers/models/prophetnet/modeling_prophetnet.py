@@ -1299,7 +1299,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
             >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone')
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> del inputs["token_type_ids"]  # `ProphetNetEncoder` doesn't use `token_type_ids`
             >>> outputs = model(**inputs)
 
             >>> last_hidden_states = outputs.last_hidden_state
@@ -2178,7 +2177,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> model = ProphetNetForCausalLM.from_pretrained('microsoft/prophetnet-large-uncased')
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> del inputs["token_type_ids"]  # `ProphetNetEncoder` doesn't use `token_type_ids`
             >>> outputs = model(**inputs)
 
             >>> logits = outputs.logits
