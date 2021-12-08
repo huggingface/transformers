@@ -79,6 +79,7 @@ from . import (
     mt5,
     openai,
     pegasus,
+    perceiver,
     phobert,
     prophetnet,
     qdqbert,
