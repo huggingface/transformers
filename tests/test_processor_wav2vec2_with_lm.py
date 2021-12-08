@@ -31,7 +31,7 @@ from .test_feature_extraction_wav2vec2 import floats_list
 
 if is_pyctcdecode_available():
     from pyctcdecode import BeamSearchDecoderCTC
-    from transformers.models.wav2vec2 import Wav2Vec2ProcessorWithLM
+    from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 
 
 @require_pyctcdecode
