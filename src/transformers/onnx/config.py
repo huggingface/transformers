@@ -14,9 +14,9 @@
 import dataclasses
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
+from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType, is_torch_available
 
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
 
@@ -58,6 +58,7 @@ class OnnxConfig(ABC):
 
     _TASKS_TO_COMMON_OUTPUTS = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
+        "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
@@ -119,7 +120,8 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        return self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        return common_outputs
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
@@ -164,6 +166,16 @@ class OnnxConfig(ABC):
             Integer ONNX Opset version
         """
         return DEFAULT_ONNX_OPSET
+
+    @property
+    def atol_for_validation(self) -> float:
+        """
+        What absolute tolerance value to use during model conversion validation.
+
+        Returns:
+            Float absolute tolerance value.
+        """
+        return 1e-5
 
     @staticmethod
     def use_external_data_format(num_parameters: int) -> bool:
@@ -229,8 +241,8 @@ class OnnxConfig(ABC):
             orig_op = spec.orig_op if spec.op_wrapper is None else spec.op_wrapper(spec.orig_op)
             setattr(spec.o, spec.name, orig_op)
 
-    @staticmethod
-    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+    @classmethod
+    def flatten_output_collection_property(cls, name: str, field: Iterable[Any]) -> Dict[str, Any]:
         """
         Flatten any potential nested structure expanding the name of the field with the index of the element within the
         structure.
@@ -273,11 +285,43 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         return cls(config, task=task, use_past=True)
 
     @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = super().outputs
+        if self.use_past:
+            self.fill_with_past_key_values_(common_outputs, direction="outputs")
+
+        return common_outputs
+
+    @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
         if hasattr(self._config, "use_cache"):
             return {"use_cache": self.use_past}
 
         return None
+
+    @property
+    def num_layers(self) -> int:
+        """
+        The number of layers attribute retrieved from the model config. Override this for model configs where the
+        number of layers attribute is not called `num_layers`.
+        """
+        if not hasattr(self._config, "num_layers"):
+            raise AttributeError(
+                "could not find the number of layers attribute in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
+            )
+        return self._config.num_layers
+
+    @property
+    def num_attention_heads(self) -> int:
+        """
+        The number of attention heads attribute retrieved from the model config. Override this for model configs where
+        the number of attention heads attribute is not called `num_attention_heads`.
+        """
+        if not hasattr(self._config, "num_attention_heads"):
+            raise AttributeError(
+                "could not find the number of attention heads attribute in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
+            )
+        return self._config.num_attention_heads
 
     def generate_dummy_inputs(
         self,
@@ -287,32 +331,217 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-        batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=self.default_batch_size, num_token_to_add=0
-        )
 
-        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
-        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
+        # TODO: should we set seq_length = 1 when self.use_past = True?
+        common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
 
-        # When use_past the caching mechanism requires inputs to be only 1 single token
-        fixed_sequence_length = 1 if self.use_past else self.default_sequence_length
-        seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=fixed_sequence_length, num_token_to_add=token_to_add
-        )
+        if self.use_past:
+            if not is_torch_available():
+                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+            else:
+                import torch
 
-        # Generate dummy inputs according to compute batch and sequence
-        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        return OrderedDict(dict(tokenizer(dummy_input, return_tensors=framework)))
+            batch, seqlen = common_inputs["input_ids"].shape
+            # Not using the same length for past_key_values
+            past_key_values_length = seqlen + 2
+            shape = (
+                batch,
+                self.num_attention_heads,
+                past_key_values_length,
+                self._config.hidden_size // self.num_attention_heads,
+            )
 
-    @staticmethod
-    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+            if "attention_mask" in common_inputs:
+                common_inputs["attention_mask"] = torch.cat(
+                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                )
+
+            common_inputs["past_key_values"] = []
+            for _ in range(self.num_layers):
+                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+
+        return common_inputs
+
+    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+        """
+        Fill the input_or_ouputs mapping with past_key_values dynamic axes considering.
+
+        Args:
+            inputs_or_outputs: The mapping to fill.
+            direction: either "inputs" or "outputs", it specifies whether input_or_outputs is the input mapping or the
+                output mapping, this is important for axes naming.
+
+        """
+        if direction not in ["inputs", "outputs"]:
+            raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
+
+        name = "past_key_values" if direction == "inputs" else "present"
+        for i in range(self.num_layers):
+            inputs_or_outputs[f"{name}.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
+            inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+
+    def _flatten_past_key_values_(self, flattened_output, name, idx, t):
+        flattened_output[f"{name}.{idx}.key"] = t[0]
+        flattened_output[f"{name}.{idx}.value"] = t[1]
+
+    def flatten_output_collection_property(self, name: str, field: Iterable[Any]) -> Dict[str, Any]:
+        flattened_output = {}
         if name in ["present", "past_key_values"]:
-            flatten_output = {}
             for idx, t in enumerate(field):
-                flatten_output[f"{name}.{idx}.key"] = t[0]
-                flatten_output[f"{name}.{idx}.value"] = t[1]
+                self._flatten_past_key_values_(flattened_output, name, idx, t)
+        else:
+            flattened_output = super().flatten_output_collection_property(name, field)
 
-            return flatten_output
+        return flattened_output
 
-        return super().flatten_output_collection_property(name, field)
+
+class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        # Renaming the outputs axes properly.
+        for name, axes_names in common_outputs.items():
+            sequence_name = "encoder_sequence" if "encoder" in name else "decoder_sequence"
+            for axis_idx, name in axes_names.items():
+                if "sequence" in name:
+                    axes_names[axis_idx] = sequence_name
+                # We reset the value as the order in common_outputs (OrderedDict) is lost otherwise
+                else:
+                    axes_names[axis_idx] = name
+        if self.use_past:
+            self.fill_with_past_key_values_(common_outputs, direction="outputs")
+
+        return common_outputs
+
+    @property
+    def num_layers(self) -> Tuple[int]:
+        try:
+            num_layers = super().num_layers
+            num_layers = (num_layers, num_layers)
+        except AttributeError:
+            if hasattr(self._config, "encoder_layers") and hasattr(self._config, "decoder_layers"):
+                num_layers = (self._config.encoder_layers, self._config.decoder_layers)
+            else:
+                raise AttributeError(
+                    "could not find the number of encoder and decoder layers attributes in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
+                )
+
+        return num_layers
+
+    @property
+    def num_attention_heads(self) -> Tuple[int]:
+        try:
+            num_attention_heads = super().num_attention_heads
+            num_attention_heads = (num_attention_heads, num_attention_heads)
+        except AttributeError:
+            if hasattr(self._config, "encoder_attention_heads") and hasattr(self._config, "decoder_attention_heads"):
+                num_attention_heads = (self._config.encoder_attention_heads, self._config.decoder_attention_heads)
+            else:
+                raise AttributeError(
+                    "could not find the number of attention heads for the encoder and the decoder attributes in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
+                )
+        return num_attention_heads
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+
+        encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+            tokenizer, batch_size, seq_length, is_pair, framework
+        )
+
+        # Generate decoder inputs
+        decoder_seq_length = seq_length if not self.use_past else 1
+        decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+            tokenizer, batch_size, decoder_seq_length, is_pair, framework
+        )
+        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+        common_inputs = dict(**encoder_inputs, **decoder_inputs)
+
+        if self.use_past:
+            if not is_torch_available():
+                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+            else:
+                import torch
+            batch = common_inputs["input_ids"].shape[0]
+            encoder_seq_length = common_inputs["input_ids"].shape[1]
+            decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
+            num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
+            encoder_shape = (
+                batch,
+                num_encoder_attention_heads,
+                encoder_seq_length,
+                self._config.hidden_size // num_encoder_attention_heads,
+            )
+            decoder_shape = (
+                batch,
+                num_decoder_attention_heads,
+                # Not using the same length for past_key_values
+                decoder_seq_length + 3,
+                self._config.hidden_size // num_decoder_attention_heads,
+            )
+
+            common_inputs["past_key_values"] = []
+            # If the number of encoder and decoder layers are present in the model configuration, both are considered
+            num_encoder_layers, num_decoder_layers = self.num_layers
+            min_num_layers = min(num_encoder_layers, num_decoder_layers)
+            max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
+            remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+
+            for _ in range(min_num_layers):
+                # For encoder-decoder models, past_key_values contains pre-computed values for both the encoder and the
+                # decoder layers, hence a tuple of 4 tensors instead of 2
+                common_inputs["past_key_values"].append(
+                    (
+                        torch.zeros(decoder_shape),
+                        torch.zeros(decoder_shape),
+                        torch.zeros(encoder_shape),
+                        torch.zeros(encoder_shape),
+                    )
+                )
+
+            # TODO: test this.
+            shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
+            for _ in range(min_num_layers, max_num_layers):
+                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+
+        return common_inputs
+
+    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+        if direction not in ["inputs", "outputs"]:
+            raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
+
+        name = "past_key_values" if direction == "inputs" else "present"
+
+        # If the number of encoder and decoder layers are present in the model configuration, both are considered
+        num_encoder_layers, num_decoder_layers = self.num_layers
+        min_num_layers = min(num_encoder_layers, num_decoder_layers)
+        max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
+        remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+
+        encoder_sequence = "past_encoder_sequence"
+        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_decoder_sequence + sequence"
+
+        for i in range(min_num_layers):
+            inputs_or_outputs[f"{name}.{i}.decoder.key"] = {0: "batch", 2: decoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+
+        for i in range(min_num_layers, max_num_layers):
+            if remaining_side_name == "encoder":
+                axes_info = {0: "batch", 2: encoder_sequence}
+            else:
+                axes_info = {0: "batch", 2: decoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.{remaining_side_name}.key"] = axes_info
+
+    def _flatten_past_key_values_(self, flattened_output, name, idx, t):
+        flattened_output[f"{name}.{idx}.decoder.key"] = t[0]
+        flattened_output[f"{name}.{idx}.decoder.value"] = t[1]
+        flattened_output[f"{name}.{idx}.encoder.key"] = t[2]
+        flattened_output[f"{name}.{idx}.encoder.value"] = t[3]

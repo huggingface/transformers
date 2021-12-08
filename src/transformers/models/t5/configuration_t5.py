@@ -13,14 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration """
-from collections import OrderedDict
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Mapping
 
-from transformers import PreTrainedTokenizer, TensorType
-
-from ... import is_torch_available
+# from ... import is_torch_available
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
+from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
 
@@ -125,101 +122,26 @@ class T5Config(PretrainedConfig):
         )
 
 
-class T5OnnxConfig(OnnxConfigWithPast):
+class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-                ("decoder_input_ids", {0: "batch"}),
-                ("decoder_attention_mask", {0: "batch"}),
-            ]
-        )
+        common_inputs = {
+            "input_ids": {0: "batch", 1: "encoder_sequence"},
+            "attention_mask": {0: "batch", 1: "encoder_sequence"},
+        }
+        if self.use_past:
+            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
+            common_inputs["decoder_input_ids"] = {0: "batch"}
+            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+        else:
+            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
+            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
 
         if self.use_past:
-            for i in range(0, self._config.num_layers):
-                common_inputs[f"past_key_values.{i}.decoder.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.decoder.value"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.encoder.key"] = {0: "batch", 2: "past_sequence"}
-                common_inputs[f"past_key_values.{i}.encoder.value"] = {0: "batch", 2: "past_sequence"}
+            self.fill_with_past_key_values_(common_inputs, direction="inputs")
 
         return common_inputs
 
     @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = super().outputs
-
-        if "last_hidden_state" in common_outputs:
-            common_outputs["last_hidden_state"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            for i in range(self._config.num_layers):
-                common_outputs[f"present.{i}.decoder.key"] = {0: "batch", 2: "decoder_sequence"}
-                common_outputs[f"present.{i}.decoder.value"] = {0: "batch", 2: "decoder_sequence"}
-                common_outputs[f"present.{i}.encoder.key"] = {0: "batch", 2: "encoder_sequence"}
-                common_outputs[f"present.{i}.encoder.value"] = {0: "batch", 2: "encoder_sequence"}
-
-        if self.task == "default":
-            common_outputs["encoder_last_hidden_state"] = {0: "batch", 2: "encoder_sequence"}
-
-        return common_outputs
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-
-        # Generate encoder inputs
-        encoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
-
-        # Generate decoder inputs
-        decoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, 1, is_pair, framework)
-        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
-
-        ordered_inputs = dict(**encoder_inputs, **decoder_inputs)
-        if self.use_past:
-            if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
-            else:
-                import torch
-            batch = encoder_inputs["input_ids"].shape[0]
-            encoder_seq_length = encoder_inputs["input_ids"].shape[1]
-            encoder_shape = (
-                batch,
-                self._config.num_heads,
-                encoder_seq_length,
-                self._config.hidden_size // self._config.num_heads,
-            )
-            decoder_shape = (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_heads)
-
-            ordered_inputs["past_key_values"] = []
-            for _ in range(self._config.num_layers):
-                ordered_inputs["past_key_values"].append(
-                    (
-                        torch.zeros(decoder_shape),
-                        torch.zeros(decoder_shape),
-                        torch.zeros(encoder_shape),
-                        torch.zeros(encoder_shape),
-                    )
-                )
-
-        return ordered_inputs
-
-    @staticmethod
-    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
-        if name in ["present", "past_key_values"]:
-            flatten_output = {}
-            for idx, t in enumerate(field):
-                flatten_output[f"{name}.{idx}.decoder.key"] = t[0]
-                flatten_output[f"{name}.{idx}.decoder.value"] = t[1]
-                flatten_output[f"{name}.{idx}.encoder.key"] = t[2]
-                flatten_output[f"{name}.{idx}.encoder.value"] = t[3]
-
-            return flatten_output
-
-        return super().flatten_output_collection_property(name, field)
+    def default_onnx_opset(self) -> int:
+        return 13
