@@ -13,12 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .config import (
-    EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
-    OnnxConfig,
-    OnnxConfigWithPast,
-    OnnxSeq2SeqConfigWithPast,
-    PatchingSpec,
-)
+from .config import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, OnnxConfigWithPast, PatchingSpec
 from .convert import export, validate_model_outputs
 from .utils import ParameterFormat, compute_serialized_parameters_size
