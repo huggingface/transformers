@@ -255,8 +255,9 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
             )
 
             # Generate decoder inputs
+            decoder_seq_length = seq_length if not self.use_past else 1
             decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-                tokenizer, batch_size, 1, is_pair, framework
+                tokenizer, batch_size, decoder_seq_length, is_pair, framework
             )
             decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
             common_inputs = dict(**encoder_inputs, **decoder_inputs)
@@ -266,8 +267,8 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
                 else:
                     import torch
-                batch = common_inputs["input_ids"].shape[0]
-                encoder_seq_length = common_inputs["input_ids"].shape[1]
+                batch, encoder_seq_length = common_inputs["input_ids"].shape
+                decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
                 num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
                 encoder_shape = (
                     batch,
@@ -275,15 +276,16 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     encoder_seq_length,
                     self._config.hidden_size // num_encoder_attention_heads,
                 )
+                decoder_past_length = decoder_seq_length + 3
                 decoder_shape = (
                     batch,
                     num_decoder_attention_heads,
-                    1,
+                    decoder_past_length,
                     self._config.hidden_size // num_decoder_attention_heads,
                 )
 
                 common_inputs["decoder_attention_mask"] = torch.cat(
-                    [common_inputs["decoder_attention_mask"], torch.ones(batch, 1)], dim=1
+                    [common_inputs["decoder_attention_mask"], torch.ones(batch, decoder_past_length)], dim=1
                 )
 
                 common_inputs["past_key_values"] = []
@@ -319,18 +321,20 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 else:
                     import torch
 
-                    batch = common_inputs["input_ids"].shape[0]
+                    batch, seqlen = common_inputs["input_ids"].shape
+                    # Not using the same length for past_key_values
+                    past_key_values_length = seqlen + 2
                     num_encoder_layers, _ = self.num_layers
                     num_encoder_attention_heads, _ = self.num_attention_heads
                     past_shape = (
                         batch,
                         num_encoder_attention_heads,
-                        1,
+                        past_key_values_length,
                         self._config.hidden_size // num_encoder_attention_heads,
                     )
 
                     common_inputs["attention_mask"] = torch.cat(
-                        [common_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+                        [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
                     )
                     common_inputs["past_key_values"] = [
                         (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_encoder_layers)

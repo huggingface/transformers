@@ -332,6 +332,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
 
+        # TODO: should we set seq_length = 1 when self.use_past = True?
         common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
 
         if self.use_past:
@@ -340,18 +341,19 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             else:
                 import torch
 
-            batch = common_inputs["input_ids"].shape[0]
-            seqlen = common_inputs["input_ids"].shape[1]
+            batch, seqlen = common_inputs["input_ids"].shape
+            # Not using the same length for past_key_values
+            past_key_values_length = seqlen + 2
             shape = (
                 batch,
                 self.num_attention_heads,
-                seqlen,
+                past_key_values_length,
                 self._config.hidden_size // self.num_attention_heads,
             )
 
             if "attention_mask" in common_inputs:
                 common_inputs["attention_mask"] = torch.cat(
-                    [common_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
                 )
 
             common_inputs["past_key_values"] = []
@@ -406,6 +408,9 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 # We reset the value as the order in common_outputs (OrderedDict) is lost otherwise
                 else:
                     axes_names[axis_idx] = name
+        if self.use_past:
+            self.fill_with_past_key_values_(common_outputs, direction="outputs")
+
         return common_outputs
 
     @property
@@ -451,8 +456,9 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         )
 
         # Generate decoder inputs
+        decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, 1, is_pair, framework
+            tokenizer, batch_size, decoder_seq_length, is_pair, framework
         )
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
         common_inputs = dict(**encoder_inputs, **decoder_inputs)
@@ -464,7 +470,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 import torch
             batch = common_inputs["input_ids"].shape[0]
             encoder_seq_length = common_inputs["input_ids"].shape[1]
-            # decoder_seq_length = ordered_inputs["decoder_input_ids"].shape[1]
+            decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
             num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
             encoder_shape = (
                 batch,
@@ -472,12 +478,11 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 encoder_seq_length,
                 self._config.hidden_size // num_encoder_attention_heads,
             )
-            # Here decoder_seq_length is 1 because only the last decoder_input_ids are used when using pre-computed
-            # past_key_values
             decoder_shape = (
                 batch,
                 num_decoder_attention_heads,
-                1,
+                # Not using the same length for past_key_values
+                decoder_seq_length + 3,
                 self._config.hidden_size // num_decoder_attention_heads,
             )
 
