@@ -312,6 +312,7 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.wav2vec2_with_lm": [],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
@@ -474,7 +475,7 @@ else:
     ]
 
 if is_pyctcdecode_available():
-    _import_structure["models.wav2vec2"].append("Wav2Vec2ProcessorWithLM")
+    _import_structure["models.wav2vec2_with_lm"].append("Wav2Vec2ProcessorWithLM")
 else:
     from .utils import dummy_pyctcdecode_objects
 
@@ -2470,7 +2471,7 @@ if TYPE_CHECKING:
         from .utils.dummy_speech_objects import *
 
     if is_pyctcdecode_available():
-        from .models.wav2vec2 import Wav2Vec2ProcessorWithLM
+        from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     else:
         from .utils.dummy_pyctcdecode_objects import *
 

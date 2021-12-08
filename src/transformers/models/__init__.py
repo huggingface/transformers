@@ -107,6 +107,7 @@ from . import (
     visual_bert,
     vit,
     wav2vec2,
+    wav2vec2_with_lm,
     xlm,
     xlm_prophetnet,
     xlm_roberta,
