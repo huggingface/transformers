@@ -29,6 +29,7 @@ from .file_utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
+    is_torch_bf16_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     torch_required,
@@ -793,6 +794,9 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.half_precision_backend = self.fp16_backend
+
+        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available():
+            raise ValueError("Your setup doesn't support bf16. You need Ampere GPU, torch>=1.10, cuda>=11.0")
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
