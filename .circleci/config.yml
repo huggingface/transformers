@@ -121,6 +121,7 @@ jobs:
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
             - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.10.0+cpu.html
             - run: pip install tensorflow_probability
+            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
