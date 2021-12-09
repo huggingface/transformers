@@ -76,6 +76,11 @@ Perceiver uses a vocabulary size of 262 byte IDs).
 This model was contributed by `<nielsr> <https://huggingface.co/nielsr>`__. The original code can be found `here
 <https://github.com/deepmind/deepmind-research/tree/master/perceiver>`__.
 
+Tips:
+
+- The quickest way to get started with the Perceiver is by checking the `tutorial notebooks
+  <https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Perceiver>`__.
+
 
 Perceiver specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
