@@ -488,9 +488,15 @@ One of the important requirements to reach great training speed is the ability t
 
 ### Optimizers
 
-#### torch.optim.AdamW
+#### Faster optimizers
+
+- `torch.optim.AdamW`
 
 `torch.optim.AdamW` is faster than Transformers' `AdamW`
+
+- `apex.optimizers.FusedAdam` is supposed to be even faster
+
+https://nvidia.github.io/apex/optimizers.html
 
 XXX: benchmark once https://github.com/huggingface/transformers/issues/14539 is resolved
 
