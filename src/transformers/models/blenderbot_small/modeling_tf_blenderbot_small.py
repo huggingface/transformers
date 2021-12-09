@@ -517,12 +517,11 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
         >>> from transformers import BlenderbotSmallTokenizer, TFBlenderbotSmallForConditionalGeneration
         >>> mname = 'facebook/blenderbot_small-90M'
         >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
-        >>> tokenizer = TFBlenderbotSmallTokenizer.from_pretrained(mname)
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
 
         >>> UTTERANCE = "My friends are cool but they eat too many carbs."
         >>> print("Human: ", UTTERANCE)
         >>> inputs = tokenizer([UTTERANCE], return_tensors='tf')
-        >>> inputs.pop("token_type_ids")
 
         >>> reply_ids = model.generate(**inputs)
         >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
