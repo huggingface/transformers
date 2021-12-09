@@ -99,17 +99,17 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # decoding
         decoded = tokenizer.decode(encoded_ids)
-        self.assertEqual(decoded, "<cls>Unicode €.<sep>")
+        self.assertEqual(decoded, "[CLS]Unicode €.[SEP]")
 
         encoded = tokenizer("e è é ê ë")
         encoded_ids = [4, 107, 38, 201, 174, 38, 201, 175, 38, 201, 176, 38, 201, 177, 5]
         self.assertEqual(encoded["input_ids"], encoded_ids)
         # decoding
         decoded = tokenizer.decode(encoded_ids)
-        self.assertEqual(decoded, "<cls>e è é ê ë<sep>")
+        self.assertEqual(decoded, "[CLS]e è é ê ë[SEP]")
 
         # encode/decode, but with `encode` instead of `__call__`
-        self.assertEqual(tokenizer.decode(tokenizer.encode("e è é ê ë")), "<cls>e è é ê ë<sep>")
+        self.assertEqual(tokenizer.decode(tokenizer.encode("e è é ê ë")), "[CLS]e è é ê ë[SEP]")
 
     def test_prepare_batch_integration(self):
         tokenizer = self.perceiver_tokenizer
