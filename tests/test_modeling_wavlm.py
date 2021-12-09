@@ -23,7 +23,7 @@ from datasets import load_dataset
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import WavLMConfig, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -32,14 +32,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Wav2Vec2FeatureExtractor,
-        Wav2Vec2Processor,
-        WavLMForCTC,
-        WavLMForPreTraining,
-        WavLMForSequenceClassification,
-        WavLMModel,
-    )
+    from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor, WavLMModel, WavLMForSequenceClassification
 
 
 class WavLMModelTester:
@@ -167,7 +160,7 @@ class WavLMModelTester:
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
-        model = WavLMForCTC(config=config)
+        model = WavLMModel(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -221,7 +214,7 @@ class WavLMModelTester:
 
     def check_ctc_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
-        model = WavLMForCTC(config=config)
+        model = WavLMModel(config=config)
         model.to(torch_device)
         model.train()
 
@@ -272,7 +265,7 @@ class WavLMModelTester:
         loss.backward()
 
     def check_labels_out_of_vocab(self, config, input_values, *args):
-        model = WavLMForCTC(config)
+        model = WavLMModel(config)
         model.to(torch_device)
         model.train()
 
@@ -294,7 +287,7 @@ class WavLMModelTester:
 @require_torch
 class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (WavLMForCTC, WavLMForPreTraining, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
+        (WavLMModel, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
     )
     test_pruning = False
     test_headmasking = False
@@ -439,7 +432,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
             module.masked_spec_embed.data.fill_(3)
 
     def test_mask_feature_prob_ctc(self):
-        model = WavLMForCTC.from_pretrained(
+        model = WavLMModel.from_pretrained(
             "hf-internal-testing/tiny-random-wavlm-sat", mask_feature_prob=0.2, mask_feature_length=2
         )
         model.to(torch_device).train()
@@ -461,7 +454,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(logits.shape, (4, 1498, 32))
 
     def test_mask_time_prob_ctc(self):
-        model = WavLMForCTC.from_pretrained(
+        model = WavLMModel.from_pretrained(
             "hf-internal-testing/tiny-random-wavlm-sat", mask_time_prob=0.2, mask_time_length=2
         )
         model.to(torch_device).train()
@@ -492,7 +485,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class WavLMRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (WavLMForCTC, WavLMForPreTraining, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
+        (WavLMModel, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
     )
     test_pruning = False
     test_headmasking = False
@@ -643,7 +636,7 @@ class WavLMRobustModelTest(ModelTesterMixin, unittest.TestCase):
             module.masked_spec_embed.data.fill_(3)
 
     def test_mask_feature_prob_ctc(self):
-        model = WavLMForCTC.from_pretrained(
+        model = WavLMModel.from_pretrained(
             "hf-internal-testing/tiny-random-wavlm-sat", mask_feature_prob=0.2, mask_feature_length=2
         )
         model.to(torch_device).train()
@@ -666,7 +659,7 @@ class WavLMRobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(logits.shape, (4, 1498, 32))
 
     def test_mask_time_prob_ctc(self):
-        model = WavLMForCTC.from_pretrained(
+        model = WavLMModel.from_pretrained(
             "hf-internal-testing/tiny-random-wavlm-sat", mask_time_prob=0.2, mask_time_length=2
         )
         model.to(torch_device).train()
@@ -689,7 +682,7 @@ class WavLMRobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(logits.shape, (4, 1498, 32))
 
     def test_mask_time_feature_prob_ctc_single_batch(self):
-        model = WavLMForCTC.from_pretrained(
+        model = WavLMModel.from_pretrained(
             "hf-internal-testing/tiny-random-wavlm-sat",
             mask_time_prob=0.2,
             mask_feature_prob=0.2,
@@ -722,82 +715,57 @@ class WavLMRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_datasets
-@require_soundfile
 @slow
 class WavLMModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
+        return [x["array"] for x in speech_samples]
 
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
+    def test_inference_base(self):
+        model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(torch_device)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/wavlm-base-plus", return_attention_mask=True)
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
-
-    def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
-
-        return ds[:num_samples]
-
-    def test_inference_encoder_base(self):
-        model = WavLMModel.from_pretrained("microsoft/wavlm-sat-base-plus")
-        model.to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "facebook/wav2vec2-base", return_attention_mask=True
-        )
         input_speech = self._load_datasamples(2)
 
-        inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
+        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            outputs = model(
-                inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
-            )
+            hidden_states_slice = model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
 
-        # fmt: off
-        expected_hidden_states_slice = torch.tensor(
-            [[[-0.0743, 0.1384],
-              [-0.0845, 0.1704]],
-             [[-0.0954, 0.1936],
-              [-0.1123, 0.2095]]],
-            device=torch_device,
-        )
-        # fmt: on
+        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor([
+            [[0.0554, 0.1138],
+             [0.0555, 0.1144]],
+            [[0.0200, 0.1240],
+             [0.0059, 0.0607]]
+        ])
+        self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, atol=1e-3))
+    def test_inference_large(self):
+        model = WavLMModel.from_pretrained("microsoft/wavlm-large").to(torch_device)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/wavlm-base-plus", return_attention_mask=True)
 
-    def test_inference_encoder_large(self):
-        model = WavLMModel.from_pretrained("microsoft/wavlm-sat-large")
-        model.to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-large-xlsr-53")
         input_speech = self._load_datasamples(2)
 
-        inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
+        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            outputs = model(
-                inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
-            )
+            hidden_states_slice = model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
 
-        # fmt: off
-        expected_hidden_states_slice = torch.tensor(
-            [[[-0.1172, -0.0797],
-              [-0.0012, 0.0213]],
-             [[-0.1225, -0.1277],
-              [-0.0668, -0.0585]]],
-            device=torch_device,
-        )
-        # fmt: on
-
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, atol=1e-3))
+        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor([
+            [[0.2122, 0.0500],
+             [0.2118, 0.0563]],
+            [[0.1353, 0.1818],
+             [0.2453, 0.0595]]
+        ])
+        self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
