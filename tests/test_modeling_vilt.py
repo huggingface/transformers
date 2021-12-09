@@ -17,8 +17,9 @@
 
 import unittest
 
-from transformers import ViltConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import ViltConfig, is_torch_available, is_vision_available
+from transformers.file_utils import cached_property
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -34,6 +35,11 @@ if is_torch_available():
         ViltModel,
     )
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import ViltProcessor
 
 
 class ViltModelTester:
@@ -298,8 +304,35 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
 @require_torch
+@require_vision
 class ViltModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa") if is_vision_available() else None
+
     @slow
-    def test_inference_masked_lm(self):
-        raise NotImplementedError("TODO")
+    def test_inference_visual_question_answering(self):
+        model = ViltForVisualQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa").to(torch_device)
+
+        processor = self.default_processor
+        image = prepare_img()
+        text = "How many cats are there?"
+        inputs = processor(image, text, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 3129))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-15.9495, -18.1472, -10.3041]).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
