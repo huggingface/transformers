@@ -1267,7 +1267,8 @@ benchmarks, please, see `TensorFloat-32(TF32) on Ampere devices
 <https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices>`__. The document includes
 instructions on how to disable this automatic conversion if for some reason you prefer not to use it.
 
-
+With the 🤗 Trainer you can use `--tf32` to enable it, or disable it with `--tf32 0` or `--no_tf32`. By default the
+PyTorch default is used.
 
 
 .. _deepspeed-amp:
@@ -1276,6 +1277,10 @@ Automatic Mixed Precision
 =======================================================================================================================
 
 You can use automatic mixed precision with either a pytorch-like AMP way or the apex-like way:
+
+fp16 / float16
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 
 To configure pytorch AMP-like mode set:
 
@@ -1295,7 +1300,7 @@ To configure pytorch AMP-like mode set:
 and the :class:`~transformers.Trainer` will automatically enable or disable it based on the value of
 ``args.fp16_backend``. The rest of config values are up to you.
 
-This mode gets enabled when ``--fp16 --fp16_backend amp`` command line args are passed.
+This mode gets enabled when ``--fp16 --fp16_backend amp`` or ``--fp16_full_eval`` command line args are passed.
 
 You can also enable/disable this mode explicitly:
 
@@ -1316,6 +1321,36 @@ But then you're on your own synchronizing the :class:`~transformers.Trainer` com
 configuration.
 
 Here is the `documentation <https://www.deepspeed.ai/docs/config-json/#fp16-training-options>`__.
+
+bf16 / bfloat16
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+If bf16 is desired instead of fp16 then the following configuration section is to be used:
+
+.. code-block:: json
+
+    {
+        "bfloat16": {
+            "enabled": auto,
+        }
+    }
+
+bf16 has the same dynamic range as fp32 and thus doesn't require loss scaling.
+
+This mode gets enabled when ``--bf16`` or ``--bf16_full_eval`` command line args are passed.
+
+You can also enable/disable this mode explicitly:
+
+.. code-block:: json
+
+    {
+        "bfloat16": {
+            "enabled": true,
+        }
+    }
+
+apex
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 To configure apex AMP-like mode set:
 
