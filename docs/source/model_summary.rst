@@ -360,7 +360,7 @@ ConvBERT
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-convbert-blueviolet">
    </a>
 
-`ConvBERT: Improving BERT with Span-based Dynamic Convolution <https://arxiv.org/abs/1910.01108>`_, Zihang Jiang,
+`ConvBERT: Improving BERT with Span-based Dynamic Convolution <https://arxiv.org/abs/2008.02496>`_, Zihang Jiang,
 Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng Yan.
 
 Pre-trained language models like BERT and its variants have recently achieved impressive performance in various natural
