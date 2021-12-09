@@ -1331,7 +1331,7 @@ If bf16 is desired instead of fp16 then the following configuration section is t
 
     {
         "bfloat16": {
-            "enabled": auto,
+            "enabled": auto
         }
     }
 
@@ -1345,7 +1345,7 @@ You can also enable/disable this mode explicitly:
 
     {
         "bfloat16": {
-            "enabled": true,
+            "enabled": true
         }
     }
 
