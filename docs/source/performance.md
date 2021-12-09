@@ -485,7 +485,24 @@ One of the important requirements to reach great training speed is the ability t
 - `DataLoader(pin_memory=True, ...)` which ensures that the data gets preloaded into the pinned memory on CPU and typically leads to much faster transfers from CPU to GPU memory.
 -  `DataLoader(num_workers=4, ...)` - spawn several workers to pre-load data faster - during training watch the GPU utilization stats and if it's far from 100% experiment with raising the number of workers. Of course, the problem could be elsewhere so a very big number of workers won't necessarily lead to a better performance.
 
-### Faster optimizer
+
+### Optimizers
+
+#### torch.optim.AdamW
+
+`torch.optim.AdamW` is faster than Transformers' `AdamW`
+
+XXX: benchmark once https://github.com/huggingface/transformers/issues/14539 is resolved
+
+
+#### Leaner Optimizers
+
+- [bitsandbytes](https://github.com/facebookresearch/bitsandbytes) uses 1/4 of normal AdamW optimizer's memory and otherwise performs on par with the normal optimizer quality-wise.
+
+   It's a bit tricky to integrate into Transformers since it requires an Embedding layer that includes a layer norm, which currently our models don't have. But other than that you just configure to use that optimizer instead of the normal one.
+
+
+#### Faster optimizer
 
 pytorch-nightly introduced `torch.optim._multi_tensor` which should significantly speed up the optimizers for situations with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner and don't mind using the bleed-edge, see: https://github.com/huggingface/transformers/issues/9965
 
