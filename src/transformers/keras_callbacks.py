@@ -68,8 +68,11 @@ class PushToHubCallback(Callback):
             hub_model_id = output_dir.absolute().name
         if "/" not in hub_model_id:
             hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
+
         self.output_dir = output_dir
-        self.repo = Repository(str(output_dir), clone_from=hub_model_id)
+        self.repo = Repository(
+            str(output_dir), clone_from=hub_model_id, use_auth_token=hub_token if hub_token else True
+        )
         self.tokenizer = tokenizer
         self.last_job = None
         self.checkpoint = checkpoint
