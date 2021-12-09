@@ -193,8 +193,10 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
 
 def _get_models_to_test(export_models_list):
     models_to_test = []
-    # if not is_torch_available():
-    #     return models_to_test
+    if not is_torch_available():
+        # Returning some dummy test that should not be ever called because of the @require_torch decorator.
+        # The reason for not returning an empty list is because parameterized.expand complains when it's empty.
+        return [("dummy", "dummy", "dummy", "dummy", OnnxConfig.from_model_config)]
     for (name, model) in export_models_list:
         for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
             name
@@ -238,21 +240,21 @@ class OnnxExportTestCaseV2(TestCase):
             except ValueError as ve:
                 self.fail(f"{name}, {feature} -> {ve}")
 
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
     @slow
     @require_torch
-    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
     def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS))
     @slow
     @require_torch
-    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS))
     def test_pytorch_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS))
     @slow
     @require_torch
-    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS))
     def test_pytorch_export_seq2seq_with_past(
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
