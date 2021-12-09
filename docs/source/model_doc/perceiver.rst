@@ -81,7 +81,6 @@ Tips:
 - The quickest way to get started with the Perceiver is by checking the `tutorial notebooks
   <https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Perceiver>`__.
 
-
 Perceiver specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

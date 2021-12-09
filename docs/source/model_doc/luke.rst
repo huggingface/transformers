@@ -81,7 +81,6 @@ Tips:
   the HuggingFace implementation of LUKE. They can be found `here
   <https://github.com/studio-ousia/luke/tree/master/notebooks>`__.
 
-
 Example:
 
 .. code-block::
