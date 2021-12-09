@@ -32,7 +32,6 @@ from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -430,7 +429,7 @@ class WavLMAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
-        num_buckets: int = 32,
+        num_buckets: int = 320,
         max_distance: int = 800,  # TODO(PVP) - add to config
     ):
         super().__init__()
@@ -534,9 +533,6 @@ class WavLMAttention(nn.Module):
         # [Seq_Len, Batch Size, ...] -> [Batch Size, Seq_Len, ...]
         attn_output = attn_output.transpose(0, 1)
 
-        if index == 0:
-            print("HF: attn output abs sum", attn_output.abs().sum())
-
         return attn_output, attn_weights, position_bias
 
     def compute_bias(self, query_length, key_length):
@@ -620,18 +616,15 @@ class WavLMEncoderLayer(nn.Module):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False, index=0):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False, index=0):
         attn_residual = hidden_states
         hidden_states, attn_weights, position_bias = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions, index=index,
+            hidden_states, attention_mask=attention_mask, position_bias=position_bias, output_attentions=output_attentions, index=index,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
         hidden_states = self.layer_norm(hidden_states)
-
-        if index == 0:
-            print("Before act", hidden_states.abs().sum())
 
         hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
@@ -644,7 +637,6 @@ class WavLMEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->WavLM
 class WavLMEncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -659,17 +651,17 @@ class WavLMEncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = WavLMFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        hidden_states, attn_weights, position_bias = self.attention(
+            hidden_states, attention_mask=attention_mask, position_bias=position_bias, output_attentions=output_attentions
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
 
-        outputs = (hidden_states,)
+        outputs = (hidden_states, position_bias)
 
         if output_attentions:
             outputs += (attn_weights,)
@@ -710,7 +702,7 @@ class WavLMEncoder(nn.Module):
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
-        print("hf before attn", hidden_states.sum())
+        position_bias = None
 
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
@@ -734,18 +726,20 @@ class WavLMEncoder(nn.Module):
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
+                        position_bias,
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions, index=i
+                        hidden_states, attention_mask=attention_mask, position_bias=position_bias, output_attentions=output_attentions, index=i
                     )
-                hidden_states = layer_outputs[0]
+
+                hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
                 layer_outputs = (None, None)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -787,17 +781,13 @@ class WavLMEncoderStableLayerNorm(nn.Module):
             # make sure padded tokens are not attended to
             hidden_states[~attention_mask] = 0
 
-            # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
-
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
+        position_bias = None
 
         for layer in self.layers:
             if output_hidden_states:
@@ -822,18 +812,19 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
+                        position_bias,
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions, position_bias=position_bias
                     )
-                hidden_states = layer_outputs[0]
+                hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
                 layer_outputs = (None, None)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (layer_outputs[2],)
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1194,173 +1185,6 @@ class WavLMModel(WavLMPreTrainedModel):
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """WavLM Model with a vector-quantization module and ctc loss for pre-training. """, WAVLM_START_DOCSTRING
-)
-class WavLMForPreTraining(WavLMPreTrainedModel):
-    def __init__(self, config: WavLMConfig):
-        super().__init__(config)
-        self.wavlm = WavLMModel(config)
-        self.dropout_features = nn.Dropout(config.feat_quantizer_dropout)
-
-        self.quantizer = WavLMGumbelVectorQuantizer(config)
-        self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
-        self.project_hid = nn.Linear(config.proj_codevector_dim, config.hidden_size)
-
-        self.ctc_proj = nn.Linear(config.hidden_size, config.num_ctc_classes)
-        self.dropout = nn.Dropout(config.final_dropout)
-
-        self.init_weights()
-
-    def set_gumbel_temperature(self, temperature: int):
-        """
-        Set the Gumbel softmax temperature to a given value. Only necessary for training
-        """
-        self.quantizer.temperature = temperature
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
-        """
-        self.wavlm.feature_extractor._freeze_parameters()
-
-    @staticmethod
-    def compute_contrastive_logits(
-        target_features: torch.FloatTensor,
-        negative_features: torch.FloatTensor,
-        predicted_features: torch.FloatTensor,
-        temperature: int = 1,
-    ):
-        """
-        Compute logits for contrastive loss based using cosine similarity as the distance measure between
-        :obj:`[positive_feature, negative_features]` and :obj:`[predicted_features]`. Additionally, temperature can be
-        applied.
-        """
-        target_features = torch.cat([target_features, negative_features], dim=0)
-
-        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1)
-        logits = logits.type_as(target_features)
-
-        # apply temperature
-        logits = logits / temperature
-        return logits
-
-    @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=WavLMForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in `config.proj_codevector_dim` space.
-        sampled_negative_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length, num_negatives)`, `optional`):
-            Indices indicating which quantized target vectors are used as negative sampled vectors in contrastive loss.
-            Required input for pre-training.
-
-        Returns:
-
-        Example::
-
-            >>> import torch
-            >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
-            >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
-
-            >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
-            >>> model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
-
-
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
-
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-
-            >>> # compute masked indices
-            >>> batch_size, raw_sequence_length = input_values.shape
-            >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2, device=model.device)
-
-            >>> with torch.no_grad():
-            ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
-
-            >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-            >>> cosine_sim = torch.cosine_similarity(
-            ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
-            ... )
-
-            >>> # show that cosine similarity is much higher than random
-            >>> assert cosine_sim[mask_time_indices].mean() > 0.5
-
-            >>> # for contrastive loss training model should be put into train mode
-            >>> model.train()
-            >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.wavlm(
-            input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        transformer_features = outputs[0]
-
-        # quantize all (unmasked) extracted features and project to final vq dim
-        extract_features = self.dropout_features(outputs[1])
-        quantized_features, codevector_perplexity = self.quantizer(extract_features)
-
-        # project quantized features twice
-        quantized_features = self.project_q(quantized_features)
-        quantized_features = self.project_hid(quantized_features)
-
-        prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
-            self.config.replace_prob
-        )
-        prob_replace_matrix = prob_replace_matrix.transpose(0, 1)
-        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool().to(transformer_features.device)
-        sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
-        sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
-        logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + (
-            quantized_features.masked_fill(~sampled_replace_matrix, 0.0)
-        )
-
-        # project to ctc units
-        logits = self.dropout(logits)
-        logits = self.ctc_proj(logits)
-
-        # TODO(PVP) - add negative sampling & loss computation
-        loss = None
-        if not return_dict:
-            if loss is not None:
-                return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-            return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-
-        return WavLMForPreTrainingOutput(
-            loss=loss,
-            projected_states=transformer_features,
-            projected_quantized_states=quantized_features,
-            codevector_perplexity=codevector_perplexity,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
