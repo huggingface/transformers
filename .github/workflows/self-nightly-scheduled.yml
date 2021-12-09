@@ -40,10 +40,7 @@ jobs:
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-                  python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-                  python -c "import torch; print('Cuda version:', torch.version.cuda)"
-                  python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-                  python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               run: |
@@ -110,10 +107,7 @@ jobs:
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-                  python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-                  python -c "import torch; print('Cuda version:', torch.version.cuda)"
-                  python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-                  python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               env:
@@ -166,10 +160,7 @@ jobs:
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-                  python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-                  python -c "import torch; print('Cuda version:', torch.version.cuda)"
-                  python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-                  python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               run: |
@@ -205,20 +196,18 @@ jobs:
                   apt -y update && apt install -y libaio-dev
                   pip install --upgrade pip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html -U
-                  pip install .[testing,deepspeed,fairscale]
-                  pip install git+https://github.com/microsoft/DeepSpeed
+                  rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
+                  pip install .[testing,fairscale]
+                  pip install git+https://github.com/microsoft/DeepSpeed # testing bleeding edge
 
             - name: Are GPUs recognized by our DL frameworks
               run: |
-                  python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-                  python -c "import torch; print('Cuda version:', torch.version.cuda)"
-                  python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-                  python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+                utils/print_env_pt.py
 
             - name: Run all tests on GPU
               run: |
                   python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
- 
+
             - name: Failure short reports
               if: ${{ always() }}
               run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt

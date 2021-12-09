@@ -36,17 +36,23 @@ from .file_utils import (
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
+    is_librosa_available,
     is_onnx_available,
     is_pandas_available,
+    is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytorch_quantization_available,
     is_rjieba_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_soundfile_availble,
+    is_tensorflow_probability_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torch_bf16_available,
+    is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_vision_available,
@@ -291,6 +297,19 @@ def require_torch_scatter(test_case):
         return test_case
 
 
+def require_tensorflow_probability(test_case):
+    """
+    Decorator marking a test that requires TensorFlow probability.
+
+    These tests are skipped when TensorFlow probability isn't installed.
+
+    """
+    if not is_tensorflow_probability_available():
+        return unittest.skip("test requires TensorFlow probability")(test_case)
+    else:
+        return test_case
+
+
 def require_torchaudio(test_case):
     """
     Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
@@ -367,6 +386,17 @@ def require_scatter(test_case):
     """
     if not is_scatter_available():
         return unittest.skip("test requires PyTorch Scatter")(test_case)
+    else:
+        return test_case
+
+
+def require_pytorch_quantization(test_case):
+    """
+    Decorator marking a test that requires PyTorch Quantization Toolkit. These tests are skipped when PyTorch
+    Quantization Toolkit isn't installed.
+    """
+    if not is_pytorch_quantization_available():
+        return unittest.skip("test requires PyTorch Quantization Toolkit")(test_case)
     else:
         return test_case
 
@@ -451,11 +481,34 @@ else:
 if is_tf_available():
     import tensorflow as tf
 
+if is_flax_available():
+    import jax
+
+    jax_device = jax.default_backend()
+else:
+    jax_device = None
+
 
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     if torch_device != "cuda":
         return unittest.skip("test requires CUDA")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_bf16(test_case):
+    """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.10."""
+    if not is_torch_bf16_available():
+        return unittest.skip("test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.10")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_tf32(test_case):
+    """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7."""
+    if not is_torch_tf32_available():
+        return unittest.skip("test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")(test_case)
     else:
         return test_case
 
@@ -547,9 +600,29 @@ def require_deepspeed(test_case):
         return test_case
 
 
+def require_pyctcdecode(test_case):
+    """
+    Decorator marking a test that requires pyctcdecode
+    """
+    if not is_pyctcdecode_available():
+        return unittest.skip("test requires pyctcdecode")(test_case)
+    else:
+        return test_case
+
+
+def require_librosa(test_case):
+    """
+    Decorator marking a test that requires librosa
+    """
+    if not is_librosa_available():
+        return unittest.skip("test requires librosa")(test_case)
+    else:
+        return test_case
+
+
 def get_gpu_count():
     """
-    Return the number of available gpus (regardless of whether torch or tf is used)
+    Return the number of available gpus (regardless of whether torch, tf or jax is used)
     """
     if is_torch_available():
         import torch
@@ -559,6 +632,10 @@ def get_gpu_count():
         import tensorflow as tf
 
         return len(tf.config.list_physical_devices("GPU"))
+    elif is_flax_available():
+        import jax
+
+        return jax.device_count()
     else:
         return 0
 

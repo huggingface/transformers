@@ -252,7 +252,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
     "modelcard.py": "test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
-    "modeling_tf_utils.py": "test_modeling_tf_common.py",
+    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_modeling_tf_core.py"],
     "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
     "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
     "models/auto/modeling_flax_auto.py": "test_flax_auto.py",
@@ -431,6 +431,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
             # Example files are tested separately
             elif f.startswith("examples/pytorch"):
                 test_files_to_run.append("examples/pytorch/test_examples.py")
+            elif f.startswith("examples/flax"):
+                test_files_to_run.append("examples/flax/test_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:

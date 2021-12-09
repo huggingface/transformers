@@ -32,6 +32,7 @@ if is_torch_available():
         GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         GPTJForCausalLM,
+        GPTJForQuestionAnswering,
         GPTJForSequenceClassification,
         GPTJModel,
     )
@@ -50,6 +51,7 @@ class GPTJModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
+        rotary_dim=4,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -73,6 +75,7 @@ class GPTJModelTester:
         self.use_mc_token_ids = use_mc_token_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.rotary_dim = rotary_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -149,6 +152,7 @@ class GPTJModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            rotary_dim=self.rotary_dim,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -353,7 +357,11 @@ class GPTJModelTester:
 @require_torch
 class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification, GPTJForQuestionAnswering)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
     fx_ready_model_classes = all_model_classes
     test_pruning = False

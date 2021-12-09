@@ -15,6 +15,7 @@
 """ Classes to support TF Encoder-Decoder architectures """
 
 
+import tempfile
 from typing import Optional
 
 import tensorflow as tf
@@ -22,12 +23,13 @@ import tensorflow as tf
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import (
     DUMMY_INPUTS,
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, input_processing
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
@@ -167,12 +169,22 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         decoder: Optional[TFPreTrainedModel] = None,
     ):
         if config is None and (encoder is None or decoder is None):
-            raise ValueError("Either a configuration or an encoder and a decoder has to be provided")
+            raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
         if config is None:
             config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"config: {config} has to be of type {self.config_class}")
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
+                raise ValueError(
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    "it has to be equal to the encoder's `hidden_size`. "
+                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
+                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                )
+
         # initialize with config
         super().__init__(config)
 
@@ -199,8 +211,21 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
+        # encoder outputs might need to be projected to different dimension for decoder
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            self.enc_to_dec_proj = tf.keras.layers.Dense(
+                units=self.decoder.config.hidden_size,
+                kernel_initializer=get_initializer(config.encoder.initializer_range),
+                name="enc_to_dec_proj",
+            )
+
         if self.encoder.get_output_embeddings() is not None:
-            raise ValueError("The encoder {} should not have a LM Head. Please use a model without LM Head")
+            raise ValueError(
+                f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
+            )
 
     @property
     def dummy_inputs(self):
@@ -253,6 +278,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             ... )
             >>> # This is only for copying some specific attributes of this particular model.
             >>> model.config = _model.config
+
+        Example::
+
+            >>> from transformers import TFEncoderDecoderModel
+            >>> model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
 
         """
 
@@ -349,16 +379,16 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         if encoder is None:
             if encoder_pretrained_model_name_or_path is None:
                 raise ValueError(
-                    "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+                    "If `encoder_model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has "
+                    "to be defined."
                 )
 
             if "config" not in kwargs_encoder:
-
                 encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
-
                     logger.info(
-                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
+                        "from a decoder model. Cross-attention and casual mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
@@ -369,19 +399,30 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             kwargs_encoder["load_weight_prefix"] = cls.load_weight_prefix
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
+            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            if kwargs_encoder.get("from_pt", None):
+                del kwargs_encoder["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    encoder.save_pretrained(tmp_dirname)
+                    del encoder
+                    encoder = TFAutoModel.from_pretrained(tmp_dirname, *model_args, **kwargs_encoder)
+
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
             if decoder_pretrained_model_name_or_path is None:
                 raise ValueError(
-                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has "
+                    "to be defined."
                 )
 
             if "config" not in kwargs_decoder:
-
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
+                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
+                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
+                        "cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -390,12 +431,24 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
+                    f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
+                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
+                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             kwargs_decoder["name"] = "decoder"
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            if kwargs_decoder.get("from_pt", None):
+                del kwargs_decoder["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    decoder.save_pretrained(tmp_dirname)
+                    del decoder
+                    decoder = TFAutoModelForCausalLM.from_pretrained(tmp_dirname, **kwargs_decoder)
 
         # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         if encoder.name != "encoder":
@@ -463,6 +516,14 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
+        # Let the user be responsible for the expected format.
+        if encoder_outputs is not None:
+            if return_dict and not isinstance(encoder_outputs, ModelOutput):
+                raise ValueError(
+                    "If `return_dict=True` and `encoder_outputs` is provided, it should be an instance of "
+                    f"`ModelOutput`. Got an instance {type(encoder_outputs)} for `encoder_outputs`."
+                )
+
         if encoder_outputs is None:
 
             encoder_processing_inputs = {
@@ -495,6 +556,13 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             encoder_outputs = self.encoder(**encoder_inputs)
 
         encoder_hidden_states = encoder_outputs[0]
+
+        # optionally project encoder_hidden_states
+        if (
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
+        ):
+            encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         decoder_processing_inputs = {
             "func": self.decoder.call,
@@ -539,14 +607,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
             output = (loss, logits, past) + decoder_outputs[start_index:] + encoder_outputs
             output = tuple([x for x in output if x is not None])
             return output
-
-        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        if not isinstance(encoder_outputs, TFBaseModelOutput):
-            encoder_outputs = TFBaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
 
         return TFSeq2SeqLMOutput(
             loss=decoder_outputs.loss,

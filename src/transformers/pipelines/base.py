@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import collections
 import csv
 import importlib
 import json
 import os
 import pickle
 import sys
+import types
 import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
@@ -642,11 +644,11 @@ class _ScikitCompat(ABC):
 
 PIPELINE_INIT_ARGS = r"""
     Arguments:
-        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+        model (:class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
             :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
             TensorFlow.
-        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             :class:`~transformers.PreTrainedTokenizer`.
         modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
@@ -745,9 +747,14 @@ if is_torch_available():
             else:
                 loader_batched = {}
                 for k, element in self._loader_batch_data.items():
-                    if k == "past_key_values":
-                        continue
-                    if isinstance(element[self._loader_batch_index], torch.Tensor):
+                    if k in {"hidden_states", "past_key_values", "attentions"} and isinstance(element, tuple):
+                        if isinstance(element[0], torch.Tensor):
+                            loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                        elif isinstance(element[0], np.ndarray):
+                            loader_batched[k] = tuple(
+                                np.expand_dims(el[self._loader_batch_index], 0) for el in element
+                            )
+                    elif isinstance(element[self._loader_batch_index], torch.Tensor):
                         loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
                     elif isinstance(element[self._loader_batch_index], np.ndarray):
                         loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
@@ -1035,10 +1042,20 @@ class Pipeline(_ScikitCompat):
     def get_iterator(
         self, inputs, num_workers: int, batch_size: int, preprocess_params, forward_params, postprocess_params
     ):
+        if isinstance(inputs, collections.abc.Sized):
+            dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
+        else:
+            if num_workers > 1:
+                logger.warning(
+                    "For iterable dataset using num_workers>1 is likely to result"
+                    " in errors since everything is iterable, setting `num_workers=1`"
+                    " to guarantee correctness."
+                )
+                num_workers = 1
+            dataset = PipelineIterator(inputs, self.preprocess, preprocess_params)
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
         collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
@@ -1074,6 +1091,14 @@ class Pipeline(_ScikitCompat):
             return self.get_iterator(
                 inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
             )
+        elif isinstance(inputs, types.GeneratorType):
+            if self.framework == "pt":
+                return self.get_iterator(
+                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+                )
+            else:
+                # TODO make the get_iterator work also for `tf` (and `flax`).
+                return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
@@ -1085,3 +1110,9 @@ class Pipeline(_ScikitCompat):
         model_outputs = self.forward(model_inputs, **forward_params)
         outputs = self.postprocess(model_outputs, **postprocess_params)
         return outputs
+
+    def iterate(self, inputs, preprocess_params, forward_params, postprocess_params):
+        # This function should become `get_iterator` again, this is a temporary
+        # easy solution.
+        for input_ in inputs:
+            yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)

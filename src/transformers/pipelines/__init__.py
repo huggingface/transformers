@@ -2,6 +2,9 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
+import io
+import json
+
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
@@ -21,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import is_tf_available, is_torch_available
+from ..file_utils import http_get, is_tf_available, is_torch_available
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
@@ -75,6 +78,7 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
+        TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
     )
 
@@ -167,7 +171,7 @@ SUPPORTED_TASKS = {
     "table-question-answering": {
         "impl": TableQuestionAnsweringPipeline,
         "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
-        "tf": (),
+        "tf": (TFAutoModelForTableQuestionAnswering,) if is_tf_available() else (),
         "default": {
             "model": {
                 "pt": "google/tapas-base-finetuned-wtq",
@@ -248,6 +252,29 @@ SUPPORTED_TASKS = {
 }
 
 
+def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
+    tmp = io.BytesIO()
+    headers = {}
+    if use_auth_token:
+        headers["Authorization"] = f"Bearer {use_auth_token}"
+
+    try:
+        http_get(f"https://huggingface.co/api/models/{model}", tmp, headers=headers)
+        tmp.seek(0)
+        body = tmp.read()
+        data = json.loads(body)
+    except Exception as e:
+        raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
+    if "pipeline_tag" not in data:
+        raise RuntimeError(
+            f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
+        )
+    if data.get("library_name", "transformers") != "transformers":
+        raise RuntimeError(f"This model is meant to be used with {data['library_name']} not with transformers")
+    task = data["pipeline_tag"]
+    return task
+
+
 def check_task(task: str) -> Tuple[Dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
@@ -299,7 +326,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
 def pipeline(
-    task: str,
+    task: str = None,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
@@ -308,7 +335,8 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
-    model_kwargs: Dict[str, Any] = {},
+    model_kwargs: Dict[str, Any] = None,
+    pipeline_class: Optional[Any] = None,
     **kwargs
 ) -> Pipeline:
     """
@@ -344,13 +372,13 @@ def pipeline(
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`:.
             - :obj:`"zero-shot-classification"`: will return a :class:`~transformers.ZeroShotClassificationPipeline`:.
 
-        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
+        model (:obj:`str` or :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
             actual instance of a pretrained model inheriting from :class:`~transformers.PreTrainedModel` (for PyTorch)
             or :class:`~transformers.TFPreTrainedModel` (for TensorFlow).
 
             If not provided, the default for the :obj:`task` will be loaded.
-        config (:obj:`str` or :obj:`~transformers.PretrainedConfig`, `optional`):
+        config (:obj:`str` or :class:`~transformers.PretrainedConfig`, `optional`):
             The configuration that will be used by the pipeline to instantiate the model. This can be a model
             identifier or an actual pretrained model configuration inheriting from
             :class:`~transformers.PretrainedConfig`.
@@ -358,7 +386,7 @@ def pipeline(
             If not provided, the default configuration file for the requested model will be used. That means that if
             :obj:`model` is given, its default configuration will be used. However, if :obj:`model` is not supplied,
             this :obj:`task`'s default model's config is used instead.
-        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`):
+        tokenizer (:obj:`str` or :class:`~transformers.PreTrainedTokenizer`, `optional`):
             The tokenizer that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained tokenizer inheriting from :class:`~transformers.PreTrainedTokenizer`.
 
@@ -366,7 +394,7 @@ def pipeline(
             :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
             it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
             for the given :obj:`task` will be loaded.
-        feature_extractor (:obj:`str` or :obj:`~transformers.PreTrainedFeatureExtractor`, `optional`):
+        feature_extractor (:obj:`str` or :class:`~transformers.PreTrainedFeatureExtractor`, `optional`):
             The feature extractor that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained feature extractor inheriting from
             :class:`~transformers.PreTrainedFeatureExtractor`.
@@ -420,6 +448,16 @@ def pipeline(
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
+    if model_kwargs is None:
+        model_kwargs = {}
+
+    if task is None and model is None:
+        raise RuntimeError(
+            "Impossible to instantiate a pipeline without either a task or a model"
+            "being specified."
+            "Please provide a task class or a model"
+        )
+
     if model is None and tokenizer is not None:
         raise RuntimeError(
             "Impossible to instantiate a pipeline with tokenizer specified but not the model "
@@ -433,9 +471,18 @@ def pipeline(
             "Please provide a PreTrainedModel class or a path/identifier to a pretrained model when providing feature_extractor."
         )
 
+    if task is None and model is not None:
+        if not isinstance(model, str):
+            raise RuntimeError(
+                "Inferring the task automatically requires to check the hub with a model_id defined as a `str`."
+                f"{model} is not a valid model_id."
+            )
+        task = get_task(model, use_auth_token)
+
     # Retrieve the task
     targeted_task, task_options = check_task(task)
-    task_class = targeted_task["impl"]
+    if pipeline_class is None:
+        pipeline_class = targeted_task["impl"]
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
@@ -547,4 +594,4 @@ def pipeline(
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
 
-    return task_class(model=model, framework=framework, task=task, **kwargs)
+    return pipeline_class(model=model, framework=framework, task=task, **kwargs)
