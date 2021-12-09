@@ -31,11 +31,11 @@ REPLACE_PATTERNS = {
 REPLACE_FILES = {
     "init": "src/transformers/__init__.py",
     "setup": "setup.py",
-    # "doc": "docs/source/conf.py",
+    "doc": "docs/source/conf.py",
 }
 README_FILE = "README.md"
-# CUSTOM_JS_FILE = "docs/source/_static/js/custom.js"
-# DEPLOY_SH_FILE = ".circleci/deploy.sh"
+CUSTOM_JS_FILE = "docs/source/_static/js/custom.js"
+DEPLOY_SH_FILE = ".circleci/deploy.sh"
 
 
 def update_version_in_file(fname, version, pattern):
@@ -205,8 +205,8 @@ def post_release_work():
     global_version_update(version)
 
     print("Updating doc deployment and version navbar in the source documentation.")
-    # update_custom_js(current_version)
-    # update_deploy_sh(current_version, commit)
+    update_custom_js(current_version)
+    update_deploy_sh(current_version, commit)
 
 
 def post_patch_work():
