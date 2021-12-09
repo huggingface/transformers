@@ -200,7 +200,7 @@ def _get_models_to_test(export_models_list):
             name
         ).items():
             models_to_test.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
-    return models_to_test
+    return sorted(models_to_test)
 
 
 class OnnxExportTestCaseV2(TestCase):
