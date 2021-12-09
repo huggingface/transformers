@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - doc-builder*
 
 jobs:
   build_and_package:
@@ -21,6 +22,16 @@ jobs:
       - name: Clone transformers
         run: |
           git clone https://github.com/huggingface/transformers
+      
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.cache/pip
+          key: v1-test_build_doc
+          restore-keys: |
+            v1-test_build_doc-${{ hashFiles('setup.py') }}
+            v1-test_build_doc
 
       - name: Setup environment
         run: |
@@ -38,6 +49,7 @@ jobs:
           sudo apt install tesseract-ocr
           pip install pytesseract
           pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Setup git
         run: |

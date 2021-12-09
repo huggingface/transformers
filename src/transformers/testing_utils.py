@@ -36,8 +36,10 @@ from .file_utils import (
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
+    is_librosa_available,
     is_onnx_available,
     is_pandas_available,
+    is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
@@ -598,9 +600,29 @@ def require_deepspeed(test_case):
         return test_case
 
 
+def require_pyctcdecode(test_case):
+    """
+    Decorator marking a test that requires pyctcdecode
+    """
+    if not is_pyctcdecode_available():
+        return unittest.skip("test requires pyctcdecode")(test_case)
+    else:
+        return test_case
+
+
+def require_librosa(test_case):
+    """
+    Decorator marking a test that requires librosa
+    """
+    if not is_librosa_available():
+        return unittest.skip("test requires librosa")(test_case)
+    else:
+        return test_case
+
+
 def get_gpu_count():
     """
-    Return the number of available gpus (regardless of whether torch or tf is used)
+    Return the number of available gpus (regardless of whether torch, tf or jax is used)
     """
     if is_torch_available():
         import torch
@@ -610,6 +632,10 @@ def get_gpu_count():
         import tensorflow as tf
 
         return len(tf.config.list_physical_devices("GPU"))
+    elif is_flax_available():
+        import jax
+
+        return jax.device_count()
     else:
         return 0
 
