@@ -101,8 +101,6 @@ class ViltEmbeddings(nn.Module):
     Text embeddings are equivalent to BERT embeddings.
 
     Patch embeddings are equivalent to ViT embeddings.
-
-
     """
 
     def __init__(self, config):
@@ -125,7 +123,7 @@ class ViltEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def visual_embed(self, _x, max_image_len=200, mask_it=False):
+    def visual_embed(self, _x, max_image_length=200, mask_it=False):
         _, _, ph, pw = self.patch_embeddings.projection.weight.shape
 
         x = self.patch_embeddings(_x)
@@ -168,16 +166,16 @@ class ViltEmbeddings(nn.Module):
         if mask_it:
             x, label = self.mask_tokens(_x, x)
 
-        if max_image_len < 0 or max_image_len is None or not isinstance(max_image_len, int):
+        if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
             # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
             # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
             # if self.patch_size = 32, 25 * 41 = 1025
             # if res is 384 x 640, 12 * 20 = 240
             eff = x_h * x_w
-            max_image_len = eff.max()
+            max_image_length = eff.max()
         else:
             eff = x_h * x_w
-            max_image_len = min(eff.max(), max_image_len)
+            max_image_length = min(eff.max(), max_image_length)
 
         valid_idx = x_mask.nonzero(as_tuple=False)
         non_valid_idx = (1 - x_mask).nonzero(as_tuple=False)
@@ -187,12 +185,12 @@ class ViltEmbeddings(nn.Module):
 
         valid_nums = [v.size(0) for v in valid_row_idx]
         non_valid_nums = [v.size(0) for v in non_valid_row_idx]
-        pad_nums = [max_image_len - v for v in valid_nums]
+        pad_nums = [max_image_length - v for v in valid_nums]
 
         select = list()
         for i, (v, nv, p) in enumerate(zip(valid_nums, non_valid_nums, pad_nums)):
             if p <= 0:
-                valid_choice = torch.multinomial(torch.ones(v).float(), max_image_len)
+                valid_choice = torch.multinomial(torch.ones(v).float(), max_image_length)
                 select.append(valid_row_idx[i][valid_choice])
             else:
                 pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
@@ -238,8 +236,12 @@ class ViltEmbeddings(nn.Module):
         # PART 1: text embeddings
         text_embeds = self.text_embeddings(input_ids, token_type_ids)
 
+        print("Shape of text embeddings:", text_embeds.shape)
+
         # PART 2: patch embeddings (with interpolated position encodings)
-        image_embeds, image_masks, patch_index, image_labels = self.visual_embed(pixel_values)
+        image_embeds, image_masks, patch_index, image_labels = self.visual_embed(
+            pixel_values, max_image_length=self.config.max_image_length
+        )
 
         # PART 3: add token type embeddings
         # 0 indicates text, 1 indicates patch
@@ -248,6 +250,8 @@ class ViltEmbeddings(nn.Module):
             text_embeds + self.token_type_embeddings(torch.zeros_like(input_ids)),
             image_embeds + self.token_type_embeddings(torch.ones(patch_shape, device=input_ids.device).long()),
         )
+
+        print("Shape of image embeddings:", image_embeds.shape)
 
         # PART 4: concatenate
         embeddings = torch.cat([text_embeds, image_embeds], dim=1)
@@ -774,7 +778,7 @@ class ViltPooler(nn.Module):
 
 @add_start_docstrings(
     """
-    ViLT Model with 2 heads on top as done during the pretraining: a `masked language modeling` head and a `image text
+    ViLT Model with 2 heads on top as done during the pretraining: a `masked language modeling` head and an `image text
     matching (classification)` head.
     """,
     VILT_START_DOCSTRING,
@@ -805,12 +809,18 @@ class ViltForPreTraining(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         head_mask=None,
-        mlm_labels=None,
+        labels=None,
+        itm_labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+
         Returns:
 
         Example::
@@ -833,9 +843,10 @@ class ViltForPreTraining(ViltPreTrainedModel):
         mlm_logits = self.mlm_score(sequence_output)
 
         total_loss = None
-        if mlm_labels is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), mlm_labels.view(-1))
+            masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            # TODO: add itm loss
             total_loss = masked_lm_loss
 
         if not return_dict:
@@ -881,6 +892,7 @@ class ViltPredictionHeadTransform(nn.Module):
 class ViltMLMHead(nn.Module):
     def __init__(self, config, weight=None):
         super().__init__()
+        self.config = config
         self.transform = ViltPredictionHeadTransform(config)
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
@@ -888,8 +900,15 @@ class ViltMLMHead(nn.Module):
             self.decoder.weight = weight
 
     def forward(self, x):
+        print(self.config.tie_word_embeddings)
+        print("Shape of decoder weights:", self.decoder.weight.shape)
+        print("Shape of x before transform:", x.shape)
         x = self.transform(x)
-        x = self.decoder(x) + self.bias
+        print("Shape of x after transform:", x.shape)
+        x = self.decoder(x)
+        print("Shape of x after decoder:", x.shape)
+        x = x + self.bias
+        print("Shape of x after bias:", x.shape)
         return x
 
 
@@ -938,9 +957,26 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
 
         Returns:
 
-
         Examples::
-            >>> TODO
+            >>> from transformers import ViltProcessor, ViltForVisualQuestionAnswering
+            >>> import requests
+            >>> from PIL import Image
+
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+            >>> text = "How many cats are there?"
+
+            >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+            >>> model = ViltForVisualQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+
+            >>> # prepare inputs
+            >>> encoding = processor(image, text, return_tensors="pt")
+
+            >>> # forward pass
+            >>> outputs = model(**encoding)
+            >>> logits = outputs.logits
+            >>> idx = logits.argmax(-1).item()
+            >>> print("Predicted answer:", model.config.id2label[idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1010,13 +1046,9 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
+            ...
 
         Returns:
-
 
         Examples::
             >>> TODO

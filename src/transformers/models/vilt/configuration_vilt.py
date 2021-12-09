@@ -71,7 +71,8 @@ class ViltConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to add a bias to the queries, keys and values.
-
+        max_image_length (:obj:`int`, `optional`, defaults to :obj:`200`):
+            The maximum number of patches to take as input for the Transformer encoder.
 
     Example::
 
@@ -107,9 +108,11 @@ class ViltConfig(PretrainedConfig):
         patch_size=32,
         num_channels=3,
         qkv_bias=True,
+        max_image_length=-1,
+        tie_word_embeddings=False,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
@@ -129,3 +132,4 @@ class ViltConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.max_image_length = max_image_length
