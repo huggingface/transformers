@@ -344,9 +344,9 @@ Supported models
 80. :doc:`Wav2Vec2 <model_doc/wav2vec2>` (from Facebook AI) released with the paper `wav2vec 2.0: A Framework for
     Self-Supervised Learning of Speech Representations <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry
     Zhou, Abdelrahman Mohamed, Michael Auli.
-81. :doc:`WavLM <model_doc/wavlm>` (from Microsoft Research) released with
-    the paper `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
-    <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
+81. :doc:`WavLM <model_doc/wavlm>` (from Microsoft Research) released with the paper `wav2vec 2.0: A Framework for
+    Self-Supervised Learning of Speech Representations <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry
+    Zhou, Abdelrahman Mohamed, Michael Auli.
 82. :doc:`XLM <model_doc/xlm>` (from Facebook) released together with the paper `Cross-lingual Language Model
     Pretraining <https://arxiv.org/abs/1901.07291>`__ by Guillaume Lample and Alexis Conneau.
 83. :doc:`XLM-ProphetNet <model_doc/xlmprophetnet>` (from Microsoft Research) released with the paper `ProphetNet:
