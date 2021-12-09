@@ -204,12 +204,13 @@ task_cmds = make_task_cmds()
 ZERO2 = "zero2"
 ZERO3 = "zero3"
 
-FP16 = "fp16"
-BF16 = "bf16"
-
 stages = [ZERO2, ZERO3]
 
+# future preparation:
 # for now test just fp16, as these tests are quite slow
+# FP16 = "fp16"
+# BF16 = "bf16"
+#
 # dtypes = [FP16]
 # so just hardcoding --fp16 for now
 # if is_torch_bf16_available():
