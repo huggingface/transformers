@@ -15,8 +15,11 @@ from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
+from ..utils import logging
 from .config import OnnxConfig
 
+
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 if is_torch_available():
     from transformers import PreTrainedModel
@@ -29,6 +32,10 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
+    )
+else:
+    logger.warning(
+        "The ONNX export features are only supported for PyTorch, you will not be able to export models without it."
     )
 
 
@@ -60,16 +67,19 @@ def supported_features_mapping(
 
 
 class FeaturesManager:
-    _TASKS_TO_AUTOMODELS = {
-        "default": AutoModel,
-        "masked-lm": AutoModelForMaskedLM,
-        "causal-lm": AutoModelForCausalLM,
-        "seq2seq-lm": AutoModelForSeq2SeqLM,
-        "sequence-classification": AutoModelForSequenceClassification,
-        "token-classification": AutoModelForTokenClassification,
-        "multiple-choice": AutoModelForMultipleChoice,
-        "question-answering": AutoModelForQuestionAnswering,
-    }
+    if is_torch_available():
+        _TASKS_TO_AUTOMODELS = {
+            "default": AutoModel,
+            "masked-lm": AutoModelForMaskedLM,
+            "causal-lm": AutoModelForCausalLM,
+            "seq2seq-lm": AutoModelForSeq2SeqLM,
+            "sequence-classification": AutoModelForSequenceClassification,
+            "token-classification": AutoModelForTokenClassification,
+            "multiple-choice": AutoModelForMultipleChoice,
+            "question-answering": AutoModelForQuestionAnswering,
+        }
+    else:
+        _TASKS_TO_AUTOMODELS = {}
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
     _SUPPORTED_MODEL_TYPE = {

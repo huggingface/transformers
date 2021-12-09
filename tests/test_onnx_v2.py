@@ -4,7 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers import AutoConfig, AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -13,7 +13,11 @@ from transformers.onnx import (
     validate_model_outputs,
 )
 from transformers.onnx.config import OnnxConfigWithPast
-from transformers.onnx.features import FeaturesManager
+
+
+if is_torch_available():
+    from transformers.onnx.features import FeaturesManager
+
 from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
 from transformers.testing_utils import require_onnx, require_torch, slow
 
@@ -189,6 +193,8 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
 
 def _get_models_to_test(export_models_list):
     models_to_test = []
+    if not is_torch_available():
+        return models_to_test
     for (name, model) in export_models_list:
         for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
             name
