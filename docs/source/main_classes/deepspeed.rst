@@ -206,7 +206,7 @@ Here is an example of running ``run_translation.py`` under DeepSpeed deploying a
 .. code-block:: bash
 
     deepspeed examples/pytorch/translation/run_translation.py \
-    --deepspeed tests/deepspeed/ds_config_zero3_fp16.json \
+    --deepspeed tests/deepspeed/ds_config_zero3.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -233,7 +233,7 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
 .. code-block:: bash
 
     deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
-    --deepspeed tests/deepspeed/ds_config_zero2_fp16.json \
+    --deepspeed tests/deepspeed/ds_config_zero2.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -320,7 +320,7 @@ If you're using only 1 GPU, here is how you'd have to adjust your training code 
     os.environ['WORLD_SIZE'] = "1"
 
     # Now proceed as normal, plus pass the deepspeed config file
-    training_args = TrainingArguments(..., deepspeed="ds_config_zero3_fp16.json")
+    training_args = TrainingArguments(..., deepspeed="ds_config_zero3.json")
     trainer = Trainer(...)
     trainer.train()
 
@@ -336,7 +336,7 @@ cell with:
 .. code-block:: python
 
     %%bash
-    cat <<'EOT' > ds_config_zero3_fp16.json
+    cat <<'EOT' > ds_config_zero3.json
     {
         "fp16": {
             "enabled": "auto",
@@ -823,7 +823,7 @@ these help you to trade scalability for speed depending on your needs.
 ZeRO-2 Example
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Here is a full ZeRO-2 auto-configuration file ``ds_config_zero2_fp16.json``:
+Here is a full ZeRO-2 auto-configuration file ``ds_config_zero2.json``:
 
 .. code-block:: json
 
@@ -938,7 +938,7 @@ values look like, but we highly recommend using the one with multiple ``auto`` s
 ZeRO-3 Example
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Here is a full ZeRO-3 auto-configuration file ``ds_config_zero3_fp16.json``:
+Here is a full ZeRO-3 auto-configuration file ``ds_config_zero3.json``:
 
 
 .. code-block:: json
@@ -1701,7 +1701,7 @@ Here is an example of running ``run_translation.py`` under DeepSpeed deploying a
 .. code-block:: bash
 
     deepspeed examples/pytorch/translation/run_translation.py \
-    --deepspeed tests/deepspeed/ds_config_zero3_fp16.json \
+    --deepspeed tests/deepspeed/ds_config_zero3.json \
     --model_name_or_path t5-small --output_dir output_dir \
     --do_eval --max_eval_samples 50 --warmup_steps 50  \
     --max_source_length 128 --val_max_target_length 128 \
