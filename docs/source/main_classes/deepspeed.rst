@@ -1278,11 +1278,10 @@ Automatic Mixed Precision
 
 You can use automatic mixed precision with either a pytorch-like AMP way or the apex-like way:
 
-fp16 / float16
+fp16
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-
-To configure pytorch AMP-like mode set:
+To configure pytorch AMP-like mode with fp16 (float16) set:
 
 .. code-block:: json
 
@@ -1322,10 +1321,10 @@ configuration.
 
 Here is the `documentation <https://www.deepspeed.ai/docs/config-json/#fp16-training-options>`__.
 
-bf16 / bfloat16
+bf16
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-If bf16 is desired instead of fp16 then the following configuration section is to be used:
+If bf16 (bfloat16) is desired instead of fp16 then the following configuration section is to be used:
 
 .. code-block:: json
 
