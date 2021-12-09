@@ -202,7 +202,7 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
         patching_specs: List[PatchingSpec] = None,
         use_past: bool = False,
     ):
-        super().__init__(config, task=task, patching_specs=patching_specs)
+        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
         if not getattr(self._config, "pad_token_id", None):
             # TODO: how to do that better?
             self._config.pad_token_id = 0
