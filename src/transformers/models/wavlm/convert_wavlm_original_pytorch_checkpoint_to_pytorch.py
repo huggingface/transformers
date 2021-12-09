@@ -17,11 +17,16 @@
 
 import argparse
 
-import fairseq
 import torch
 
 from transformers import WavLMConfig, WavLMForPreTraining, logging
 
+# Step 1. clone https://github.com/microsoft/unilm
+# Step 2. git checkout to https://github.com/microsoft/unilm/commit/b94ec76c36f02fb2b0bf0dcb0b8554a2185173cd
+# Step 3. cd unilm
+# Step 4. ln -s $(realpath wavlm/modules.py) ./  # create simlink
+# import classes
+from unilm.wavlm.WavLM import WavLM as WavLMOrig, WavLMConfig as WavLMConfigOrig
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -33,6 +38,9 @@ MAPPING = {
     "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
     "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
     "self_attn.out_proj": "encoder.layers.*.attention.out_proj",
+    "self_attn.grep_linear": "encoder.layers.*.attention.gru_rel_pos_linear",
+    "self_attn.relative_attention_bias": "encoder.layers.*.attention.rel_attn_embed",
+    "self_attn.grep_a": "encoder.layers.*.attention.gru_rel_pos_const",
     "self_attn_layer_norm": "encoder.layers.*.layer_norm",
     "fc1": "encoder.layers.*.feed_forward.intermediate_dense",
     "fc2": "encoder.layers.*.feed_forward.output_dense",
@@ -111,13 +119,14 @@ def recursively_load_weights(fairseq_model, hf_model):
                         weight_type = "weight_g"
                     elif "weight_v" in name:
                         weight_type = "weight_v"
-                    elif "bias" in name:
+                    elif "bias" in name and "relative_attention_bias" not in name:
                         weight_type = "bias"
                     elif "weight" in name:
                         # TODO: don't match quantizer.weight_proj
                         weight_type = "weight"
                     else:
                         weight_type = None
+
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
                 continue
         if not is_used:
@@ -164,18 +173,20 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 @torch.no_grad()
 def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
+
+    # load the pre-trained checkpoints
+    checkpoint = torch.load(checkpoint_path)
+    cfg = WavLMConfigOrig(checkpoint['cfg'])
+    model = WavLMOrig(cfg)
+    model.load_state_dict(checkpoint['model'])
+    model.eval()
+
     if config_path is not None:
         config = WavLMConfig.from_pretrained(config_path)
     else:
         config = WavLMConfig()
 
     hf_wavlm = WavLMForPreTraining(config)
-
-    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
-    model = model[0].eval()
 
     recursively_load_weights(model, hf_wavlm)
 

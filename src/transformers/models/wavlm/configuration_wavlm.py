@@ -183,6 +183,7 @@ class WavLMConfig(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
+        num_buckets=320,
         do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
@@ -215,6 +216,7 @@ class WavLMConfig(PretrainedConfig):
         self.conv_stride = list(conv_stride)
         self.conv_kernel = list(conv_kernel)
         self.conv_bias = conv_bias
+        self.num_buckets = num_buckets
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.num_feat_extract_layers = len(self.conv_dim)
