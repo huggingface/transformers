@@ -2117,7 +2117,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2917,7 +2917,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2985,9 +2985,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForCausalLM
+            >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
 
-            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+            >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
             >>> model = BigBirdPegasusForCausalLM.from_pretrained("google/bigbird-pegasus-large-arxiv", add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
