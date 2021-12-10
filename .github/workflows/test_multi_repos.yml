@@ -48,4 +48,4 @@ jobs:
       
       - name: Build documentation
         run: |
-          doc-builder build transformers transformers/docs/source --build_dir doc-builder/build --notebook_dir notebooks/transformers_doc
+          doc-builder build transformers transformers/docs/source --build_dir doc-builder/build --notebook_dir notebooks/transformers_doc --clean
