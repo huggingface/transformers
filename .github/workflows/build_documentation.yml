@@ -76,6 +76,8 @@ jobs:
             git add build
             git commit -m "Updated with commit ${{ github.sha }}"
             git push origin main
+          else
+            echo "No diff in the documentation."
           fi
           cd ..
 
@@ -85,5 +87,7 @@ jobs:
             git add build
             git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }}"
             git push origin master
+          else
+            echo "No diff in the notebooks."
           fi
           cd ..
