@@ -997,6 +997,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, AMSoftmaxLoss):
+            nn.init.xavier_normal_(module.weight, gain=1.0)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -1721,8 +1723,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
+    Wav2Vec2 Model with a frame classification head on top for tasks like Speaker Diarization.
     """,
     WAV_2_VEC_2_START_DOCSTRING,
 )
@@ -1836,35 +1837,25 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
 
 class AMSoftmaxLoss(nn.Module):
-    def __init__(self, hidden_dim, speaker_num, s=30.0, m=0.4, **kwargs):
-        """
-        Additive Margin Softmax Loss
-        """
+    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
         super(AMSoftmaxLoss, self).__init__()
-        self.s = s
-        self.m = m
-        self.speaker_num = speaker_num
-        self.W = torch.nn.Parameter(torch.randn(hidden_dim, speaker_num), requires_grad=True)
-        nn.init.xavier_normal_(self.W, gain=1)
+        self.scale = scale
+        self.margin = margin
+        self.num_labels = num_labels
+        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
+        self.loss = nn.CrossEntropyLoss()
 
-    def forward(self, x_BxH, labels_B):
-        """
-        x shape: (B, H) labels shape: (B)
-        """
-        assert len(x_BxH) == len(labels_B)
-        assert torch.min(labels_B) >= 0
-        assert torch.max(labels_B) < self.speaker_num
+    def forward(self, hidden_states, labels):
+        weight = nn.functional.normalize(self.weight, dim=0)
+        hidden_states = nn.functional.normalize(hidden_states, dim=1)
+        cos_theta = torch.mm(hidden_states, weight)
+        psi = cos_theta - self.margin
 
-        W = F.normalize(self.W, dim=0)
+        onehot = nn.functional.one_hot(labels, self.num_labels)
+        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
+        loss = self.loss(logits, labels)
 
-        x_BxH = F.normalize(x_BxH, dim=1)
-
-        wf = torch.mm(x_BxH, W)
-        numerator = self.s * (torch.diagonal(wf.transpose(0, 1)[labels_B]) - self.m)
-        excl = torch.cat([torch.cat((wf[i, :y], wf[i, y + 1 :])).unsqueeze(0) for i, y in enumerate(labels_B)], dim=0)
-        denominator = torch.exp(numerator) + torch.sum(torch.exp(self.s * excl), dim=1)
-        L = numerator - torch.log(denominator)
-        return -torch.mean(L)
+        return loss
 
 
 class TDNNLayer(nn.Module):
@@ -1902,8 +1893,7 @@ class TDNNLayer(nn.Module):
 
 @add_start_docstrings(
     """
-    Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
+    Wav2Vec2 Model with an XVector feature extraction head on top for tasks like Speaker Verification.
     """,
     WAV_2_VEC_2_START_DOCSTRING,
 )
@@ -1923,7 +1913,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         self.feature_extractor = nn.Linear(config.tdnn_dim[-1] * 2, config.xvector_output_dim)
         self.classifier = nn.Linear(config.xvector_output_dim, config.xvector_output_dim)
 
-        self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels, s=30.0, m=0.4)
+        self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
         self.init_weights()
 
@@ -1941,6 +1931,21 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         """
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
+
+    def _get_tdnn_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+        """
+        Computes the output length of the TDNN layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size in self.config.tdnn_kernel:
+            input_lengths = _conv_out_length(input_lengths, kernel_size, 1)
+
+        return input_lengths
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1992,16 +1997,16 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             hidden_states = tdnn_layer(hidden_states)
         # hidden_states = hidden_states.transpose(1, 2)
 
-        # Statistic Pooling with attention mask support
+        # Statistic Pooling
         if attention_mask is None:
             mean_features = hidden_states.mean(dim=1)
             std_features = hidden_states.std(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            lengths = padding_mask.sum(dim=1)
+            feat_extract_output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(dim=1))
+            tdnn_output_lengths = self._get_tdnn_output_lengths(feat_extract_output_lengths)
             mean_features = []
             std_features = []
-            for i, length in enumerate(lengths):
+            for i, length in enumerate(tdnn_output_lengths):
                 mean_features.append(hidden_states[i, :length].mean(dim=0))
                 std_features.append(hidden_states[i, :length].std(dim=0))
             mean_features = torch.stack(mean_features)

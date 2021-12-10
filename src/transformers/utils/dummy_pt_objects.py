@@ -3721,6 +3721,11 @@ class UniSpeechPreTrainedModel:
 UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class UniSpeechSatForAudioFrameClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UniSpeechSatForCTC:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3738,6 +3743,11 @@ class UniSpeechSatForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+
+class UniSpeechSatForXVector:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class UniSpeechSatModel:
@@ -3855,6 +3865,11 @@ class ViTPreTrainedModel:
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class Wav2Vec2ForAudioFrameClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Wav2Vec2ForCTC:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -3881,6 +3896,11 @@ class Wav2Vec2ForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
+
+class Wav2Vec2ForXVector:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class Wav2Vec2Model:

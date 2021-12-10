@@ -33,9 +33,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        UniSpeechSatForAudioFrameClassification,
         UniSpeechSatForCTC,
         UniSpeechSatForPreTraining,
         UniSpeechSatForSequenceClassification,
+        UniSpeechSatForXVector,
         UniSpeechSatModel,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
@@ -805,3 +807,64 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, atol=1e-3))
+
+    def test_inference_diarization(self):
+        from datasets import load_dataset
+
+        model = UniSpeechSatForAudioFrameClassification.from_pretrained("anton-l/unispeech-sat-base-plus-sd").to(
+            torch_device
+        )
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/unispeech-sat-base-plus-sd")
+        # TODO: switch to a dummy dataset
+        dataset = load_dataset("superb", "sd", split="test")[:4]
+        input_data = [x["array"] for x in dataset["audio"]]
+
+        inputs = processor(input_data, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_values, attention_mask=attention_mask)
+        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
+
+        expected_labels = [[1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 1], [1, 0, 0, 0]]
+        # s3prl logits for the same batch
+        expected_logits = torch.tensor(
+            [
+                [-4.9217, -3.8230, -3.7996, -3.0207],
+                [-5.2126, -4.9249, -5.6203, -4.9762],
+                [-4.9643, -4.9596, -5.1089, -5.0661],
+                [-4.9040, -5.1866, -5.0702, -4.9949],
+            ],
+            device=torch_device,
+        )
+
+        self.assertListEqual(predicted_ids[:, :4].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(predicted_logits[:, :4], expected_logits, atol=1e-3))
+
+    def test_inference_speaker_verification(self):
+        model = UniSpeechSatForXVector.from_pretrained("anton-l/unispeech-sat-base-plus-sv").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "anton-l/unispeech-sat-base-plus-sv", return_attention_mask=True
+        )
+        input_data = self._load_superb("si", 4)
+
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+        labels = torch.tensor([5, 1, 1, 3], device=torch_device)
+
+        with torch.no_grad():
+            input_values = inputs.input_values.to(torch_device)
+            attention_mask = inputs.attention_mask.to(torch_device)
+            with torch.no_grad():
+                outputs = model(input_values, attention_mask=attention_mask, labels=labels)
+        output_vectors = torch.nn.functional.normalize(outputs.class_vectors, dim=-1)
+
+        cosine_sim = torch.nn.CosineSimilarity(dim=-1)
+        # id10002 vs id10002
+        self.assertAlmostEqual(cosine_sim(output_vectors[1], output_vectors[2]).item(), 0.9703, 3)
+        # id10006 vs id10002
+        self.assertAlmostEqual(cosine_sim(output_vectors[0], output_vectors[1]).item(), 0.4675, 3)
+        # id10002 vs id10004
+        self.assertAlmostEqual(cosine_sim(output_vectors[2], output_vectors[3]).item(), 0.5336, 3)
+
+        self.assertAlmostEqual(outputs.loss.item(), 18.1902, 3)

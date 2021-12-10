@@ -1261,12 +1261,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def test_inference_diarization(self):
         from datasets import load_dataset
 
-        model = Wav2Vec2ForAudioFrameClassification.from_pretrained(
-            "anton-l/wav2vec2-base-superb-sd"
-        ).to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "anton-l/wav2vec2-base-superb-sd"
-        )
+        model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sd")
         # TODO: switch to a dummy dataset
         dataset = load_dataset("superb", "sd", split="test")[:4]
         input_data = [x["array"] for x in dataset["audio"]]
@@ -1295,27 +1291,28 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_logits[:, :4], expected_logits, atol=1e-3))
 
     def test_inference_speaker_verification(self):
-        model = Wav2Vec2ForXVector.from_pretrained(
-            "anton-l/wav2vec2-base-superb-sv"
-        ).to(torch_device)
+        model = Wav2Vec2ForXVector.from_pretrained("anton-l/wav2vec2-base-superb-sv").to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "anton-l/wav2vec2-base-superb-sv"
+            "anton-l/wav2vec2-base-superb-sv", return_attention_mask=True
         )
         input_data = self._load_superb("si", 4)
 
-        output_vectors = []
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+        labels = torch.tensor([5, 1, 1, 3], device=torch_device)
+
         with torch.no_grad():
-            for example in input_data["speech"]:
-                input = processor(example, return_tensors="pt", padding=True)
-                output = model(input.input_values.to(torch_device), attention_mask=None)
-                output_vectors.append(output.class_vectors[0])
-        output_vectors = torch.stack(output_vectors)
-        output_vectors = torch.nn.functional.normalize(output_vectors, dim=-1).cpu()
+            input_values = inputs.input_values.to(torch_device)
+            attention_mask = inputs.attention_mask.to(torch_device)
+            with torch.no_grad():
+                outputs = model(input_values, attention_mask=attention_mask, labels=labels)
+        output_vectors = torch.nn.functional.normalize(outputs.class_vectors, dim=-1).cpu()
 
         cosine_sim = torch.nn.CosineSimilarity(dim=-1)
         # id10002 vs id10002
-        self.assertAlmostEqual(cosine_sim(output_vectors[1], output_vectors[2]).numpy(), 0.9828, 4)
+        self.assertAlmostEqual(cosine_sim(output_vectors[1], output_vectors[2]).numpy(), 0.9758, 3)
         # id10006 vs id10002
-        self.assertAlmostEqual(cosine_sim(output_vectors[0], output_vectors[1]).numpy(), 0.7552, 4)
+        self.assertAlmostEqual(cosine_sim(output_vectors[0], output_vectors[1]).numpy(), 0.7579, 3)
         # id10002 vs id10004
-        self.assertAlmostEqual(cosine_sim(output_vectors[2], output_vectors[3]).numpy(), 0.7352, 4)
+        self.assertAlmostEqual(cosine_sim(output_vectors[2], output_vectors[3]).numpy(), 0.7484, 3)
+
+        self.assertAlmostEqual(outputs.loss.item(), 18.0354, 3)

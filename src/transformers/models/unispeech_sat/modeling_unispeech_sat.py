@@ -16,13 +16,14 @@
 
 import math
 from dataclasses import dataclass
+from itertools import permutations
 from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -33,7 +34,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_unispeech_sat import UniSpeechSatConfig
@@ -119,6 +120,38 @@ class UniSpeechSatForPreTrainingOutput(ModelOutput):
     projected_states: torch.FloatTensor = None
     projected_quantized_states: torch.FloatTensor = None
     codevector_perplexity: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class XVectorOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.Wav2Vec2ForXVector`.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Classification loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
+            Classification hidden states before AMSoftmax.
+        class_vectors (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
+            Utterance embeddings used for vector similarity-based retrieval.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    class_vectors: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -917,6 +950,8 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, AMSoftmaxLoss):
+            nn.init.xavier_normal_(module.weight, gain=1.0)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -1513,6 +1548,322 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    UniSpeech-SAT Model with a frame classification head on top for tasks like Speaker Diarization.
+    """,
+    UNISPEECH_SAT_START_DOCSTRING,
+)
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
+class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.unispeech_sat = UniSpeechSatModel(config)
+        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        if config.use_weighted_layer_sum:
+            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        will not be updated during training.
+        """
+        self.unispeech_sat.feature_extractor._freeze_parameters()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.unispeech_sat.parameters():
+            param.requires_grad = False
+
+    def pit_loss_single_permutation(self, logits, loss_mask, labels):
+        bce_loss = BCEWithLogitsLoss(reduction="none")
+        loss = bce_loss(logits, labels)
+        loss = loss * loss_mask
+        loss = loss.mean(dim=2).sum(dim=1)
+        loss = torch.unsqueeze(loss, dim=1)
+        return loss
+
+    def pit_loss(self, logits, attention_mask, labels):
+        label_permutations = permutations(range(self.config.num_labels))
+        loss_mask = self._get_feature_vector_attention_mask(logits.shape[1], attention_mask)
+        losses = []
+        for p in label_permutations:
+            labels_perm = labels[:, :, p]
+            loss_perm = self.pit_loss_single_permutation(logits, loss_mask, labels_perm)
+            losses.append(loss_perm)
+        loss = torch.cat(losses, dim=1)
+        min_loss, min_idx = loss.min(dim=1)
+        loss = min_loss.sum() / loss_mask.sum()
+        return loss
+
+    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
+    def forward(
+        self,
+        input_values,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.unispeech_sat(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = torch.stack(hidden_states, dim=1)
+            norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
+            hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
+        else:
+            hidden_states = outputs[0]
+
+        logits = self.classifier(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.pit_loss(logits, attention_mask, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.AMSoftmaxLoss
+class AMSoftmaxLoss(nn.Module):
+    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
+        super(AMSoftmaxLoss, self).__init__()
+        self.scale = scale
+        self.margin = margin
+        self.num_labels = num_labels
+        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
+        self.loss = nn.CrossEntropyLoss()
+
+    def forward(self, hidden_states, labels):
+        weight = nn.functional.normalize(self.weight, dim=0)
+        hidden_states = nn.functional.normalize(hidden_states, dim=1)
+        cos_theta = torch.mm(hidden_states, weight)
+        psi = cos_theta - self.margin
+
+        onehot = nn.functional.one_hot(labels, self.num_labels)
+        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
+        loss = self.loss(logits, labels)
+
+        return loss
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.TDNNLayer
+class TDNNLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
+        self.out_conv_dim = config.tdnn_dim[layer_id]
+        self.kernel_size = config.tdnn_kernel[layer_id]
+        self.dilation = config.tdnn_dilation[layer_id]
+
+        # self.conv = nn.Conv1d(
+        #    self.in_conv_dim,
+        #    self.out_conv_dim,
+        #    kernel_size=config.tdnn_kernel[layer_id],
+        #    dilation=config.tdnn_dilation[layer_id],
+        #    bias=True,
+        # )
+        self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
+        self.activation = nn.ReLU()
+
+    def forward(self, hidden_states):
+        # hidden_states = self.conv(hidden_states)
+        hidden_states = hidden_states.unsqueeze(1)
+        hidden_states = nn.functional.unfold(
+            hidden_states,
+            (self.kernel_size, self.in_conv_dim),
+            stride=(1, self.in_conv_dim),
+            dilation=(self.dilation, 1),
+        )
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.kernel(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+@add_start_docstrings(
+    """
+    UniSpeech-SAT Model with an XVector feature extraction head on top for tasks like Speaker Verification.
+    """,
+    UNISPEECH_SAT_START_DOCSTRING,
+)
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
+class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.unispeech_sat = UniSpeechSatModel(config)
+        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        if config.use_weighted_layer_sum:
+            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
+        self.projector = nn.Linear(config.hidden_size, config.tdnn_dim[0])
+
+        tdnn_layers = [TDNNLayer(config, i) for i in range(len(config.tdnn_dim))]
+        self.tdnn = nn.ModuleList(tdnn_layers)
+
+        self.feature_extractor = nn.Linear(config.tdnn_dim[-1] * 2, config.xvector_output_dim)
+        self.classifier = nn.Linear(config.xvector_output_dim, config.xvector_output_dim)
+
+        self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
+
+        self.init_weights()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        will not be updated during training.
+        """
+        self.unispeech_sat.feature_extractor._freeze_parameters()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.unispeech_sat.parameters():
+            param.requires_grad = False
+
+    def _get_tdnn_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+        """
+        Computes the output length of the TDNN layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size in self.config.tdnn_kernel:
+            input_lengths = _conv_out_length(input_lengths, kernel_size, 1)
+
+        return input_lengths
+
+    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=XVectorOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+    )
+    def forward(
+        self,
+        input_values,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.unispeech_sat(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = torch.stack(hidden_states, dim=1)
+            norm_weights = nn.functional.softmax(self.layer_weights, dim=-1)
+            hidden_states = (hidden_states * norm_weights.view(-1, 1, 1)).sum(dim=1)
+        else:
+            hidden_states = outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        # hidden_states = hidden_states.transpose(1, 2)
+
+        for tdnn_layer in self.tdnn:
+            hidden_states = tdnn_layer(hidden_states)
+        # hidden_states = hidden_states.transpose(1, 2)
+
+        # Statistic Pooling
+        if attention_mask is None:
+            mean_features = hidden_states.mean(dim=1)
+            std_features = hidden_states.std(dim=1)
+        else:
+            feat_extract_output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(dim=1))
+            tdnn_output_lengths = self._get_tdnn_output_lengths(feat_extract_output_lengths)
+            mean_features = []
+            std_features = []
+            for i, length in enumerate(tdnn_output_lengths):
+                mean_features.append(hidden_states[i, :length].mean(dim=0))
+                std_features.append(hidden_states[i, :length].std(dim=0))
+            mean_features = torch.stack(mean_features)
+            std_features = torch.stack(std_features)
+        statistic_pooling = torch.cat([mean_features, std_features], dim=-1)
+
+        class_vectors = self.feature_extractor(statistic_pooling)
+        logits = self.classifier(class_vectors)
+
+        loss = None
+        if labels is not None:
+            loss = self.objective(logits, labels)
+
+        if not return_dict:
+            output = (logits, class_vectors) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return XVectorOutput(
+            loss=loss,
+            logits=logits,
+            class_vectors=class_vectors,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
