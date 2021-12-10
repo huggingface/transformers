@@ -313,12 +313,8 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
-<<<<<<< HEAD
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
-    "models.wav2vec2_with_lm": [],
-=======
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
->>>>>>> 5b004001983d72c142da8216d2bd50ef0d5bf74a
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
