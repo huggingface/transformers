@@ -16,6 +16,7 @@
 
 import math
 from typing import Callable, Iterable, Optional, Tuple, Union
+import warnings
 
 import torch
 from torch import nn
@@ -287,6 +288,8 @@ class AdamW(Optimizer):
             Decoupled weight decay to apply.
         correct_bias (:obj:`bool`, `optional`, defaults to `True`):
             Whether or not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
+        no_deprecation_warning (:obj:`bool`, `optional`, defaults to `False`):
+            A flag used to disable the deprecation warning (`True` to disable the warning).
     """
 
     def __init__(
@@ -297,7 +300,14 @@ class AdamW(Optimizer):
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
+        no_deprecation_warning: bool = False
     ):
+        if no_deprecation_warning is False:
+            warnings.warn(
+                "HuggingFace AdamW is deprecated and will be removed in a future version. Use the"
+                "PyTorch implementation torch.optim.AdamW instead.",
+                FutureWarning,
+            )
         require_version("torch>=1.5.0")  # add_ with alpha
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
