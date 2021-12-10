@@ -650,7 +650,7 @@ class Trainer:
 
             return DataLoader(
                 train_dataset,
-                batch_size=self.args.train_batch_size,
+                batch_size=self.args.per_device_train_batch_size,
                 collate_fn=self.data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
@@ -719,7 +719,7 @@ class Trainer:
             if self.args.world_size > 1:
                 eval_dataset = IterableDatasetShard(
                     eval_dataset,
-                    batch_size=self.args.eval_batch_size,
+                    batch_size=self.args.per_device_eval_batch_size,
                     drop_last=self.args.dataloader_drop_last,
                     num_processes=self.args.world_size,
                     process_index=self.args.process_index,
