@@ -90,7 +90,7 @@ jobs:
 
           cd notebooks
           if [[ `git status --porcelain` ]]; then
-            git add build
+            git add transformers_doc
             git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }}"
             git push origin master
           else
