@@ -42,10 +42,10 @@ from .configuration_vilt import ViltConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ViltConfig"
-_CHECKPOINT_FOR_DOC = "google/vilt-base-patch16-224"
+_CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm-itm"
 
 VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vilt-base-patch16-224",
+    "dandelin/vilt-b32-mlm-itm",
     # See all ViLT models at https://huggingface.co/models?filter=vilt
 ]
 
@@ -75,8 +75,8 @@ class ViltForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    mlm_logits: torch.FloatTensor = None
+    itm_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -232,11 +232,11 @@ class ViltEmbeddings(nn.Module):
         else:
             return x, x_mask, (patch_index, (H, W)), None
 
-    def forward(self, input_ids, token_type_ids, pixel_values):
+    def forward(self, input_ids, token_type_ids, pixel_values, inputs_embeds):
         # PART 1: text embeddings
-        text_embeds = self.text_embeddings(input_ids, token_type_ids)
-
-        print("Shape of text embeddings:", text_embeds.shape)
+        text_embeds = self.text_embeddings(
+            input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
 
         # PART 2: patch embeddings (with interpolated position encodings)
         image_embeds, image_masks, patch_index, image_labels = self.visual_embed(
@@ -245,10 +245,13 @@ class ViltEmbeddings(nn.Module):
 
         # PART 3: add token type embeddings
         # 0 indicates text, 1 indicates patch
-        patch_shape = image_embeds.size()[:2]
+        text_tokens_shape = text_embeds.size()[:2]
+        image_tokens_shape = image_embeds.size()[:2]
         text_embeds, image_embeds = (
-            text_embeds + self.token_type_embeddings(torch.zeros_like(input_ids)),
-            image_embeds + self.token_type_embeddings(torch.ones(patch_shape, device=input_ids.device).long()),
+            text_embeds
+            + self.token_type_embeddings(torch.zeros(text_tokens_shape, dtype=torch.long, device=text_embeds.device)),
+            image_embeds
+            + self.token_type_embeddings(torch.ones(image_tokens_shape, dtype=torch.long, device=text_embeds.device)),
         )
 
         print("Shape of image embeddings:", image_embeds.shape)
@@ -679,7 +682,10 @@ class ViltModel(ViltPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings.projection
+        return self.embeddings.text_embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.text_embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -698,6 +704,7 @@ class ViltModel(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         head_mask=None,
+        inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -714,8 +721,8 @@ class ViltModel(ViltPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViltFeatureExtractor.from_pretrained('google/vilt-base-patch16-224-in21k')
-            >>> model = ViltModel.from_pretrained('google/vilt-base-patch16-224-in21k')
+            >>> feature_extractor = ViltFeatureExtractor.from_pretrained('dandelin/vilt-b32-mlm-itm')
+            >>> model = ViltModel.from_pretrained('dandelin/vilt-b32-mlm-itm')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -727,6 +734,11 @@ class ViltModel(ViltPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is None and inputs_embeds is None:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -737,7 +749,7 @@ class ViltModel(ViltPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(input_ids, token_type_ids, pixel_values)
+        embedding_output = self.embeddings(input_ids, token_type_ids, pixel_values, inputs_embeds)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -809,6 +821,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         head_mask=None,
+        inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -833,6 +846,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -840,7 +854,8 @@ class ViltForPreTraining(ViltPreTrainedModel):
 
         sequence_output, pooled_output = outputs[:2]
         # split up final hidden states into text and image features
-        text_features, _ = (sequence_output[:, : input_ids.shape[1]], sequence_output[:, input_ids.shape[1] :])
+        text_seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        text_features, _ = (sequence_output[:, :text_seq_len], sequence_output[:, text_seq_len:])
         mlm_logits = self.mlm_score(text_features)
 
         total_loss = None
@@ -947,6 +962,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         head_mask=None,
+        inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -989,6 +1005,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1043,6 +1060,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         head_mask=None,
+        inputs_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1065,6 +1083,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

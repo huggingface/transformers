@@ -17,8 +17,11 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import ViltConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -29,6 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_MAPPING,
         ViltForImageRetrievalTextRetrieval,
         ViltForPreTraining,
         ViltForVisualQuestionAnswering,
@@ -141,6 +145,7 @@ class ViltModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            num_labels=self.num_labels,
         )
 
     def create_and_check_model(
@@ -196,6 +201,19 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
+    test_torchscript = False
+
+    # ViltForVisualQuestionAnswering requires special treatment
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "ViltForVisualQuestionAnswering":
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
+                )
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = ViltModelTester(self)
@@ -207,6 +225,69 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            # ViltForPreTraining and ViltForImageRetrievalTextRetrieval don't support training for now
+            if model_class in [*get_values(MODEL_MAPPING), ViltForPreTraining, ViltForImageRetrievalTextRetrieval]:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+
+            # ViltForPreTraining and ViltForImageRetrievalTextRetrieval don't support training for now
+            if (
+                model_class in [*get_values(MODEL_MAPPING), ViltForPreTraining, ViltForImageRetrievalTextRetrieval]
+                or not model_class.supports_gradient_checkpointing
+            ):
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.gradient_checkpointing_enable()
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_determinism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            print("Model class:", model_class)
+            print("Inputs dict:", inputs_dict)
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
