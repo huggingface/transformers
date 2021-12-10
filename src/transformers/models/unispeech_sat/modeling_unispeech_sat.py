@@ -1260,7 +1260,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
             >>> # compute masked indices
             >>> batch_size, raw_sequence_length = input_values.shape
             >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2, device=model.device)
+            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
 
             >>> with torch.no_grad():
             ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
