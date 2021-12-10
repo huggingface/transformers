@@ -631,9 +631,10 @@ def main():
 
     # Now create a single processor
     if is_main_process(training_args.local_rank):
-        # save feature extractor and tokenizer
+        # save feature extractor, tokenizer and config
         feature_extractor.save_pretrained(training_args.output_dir)
         tokenizer.save_pretrained(training_args.output_dir)
+        config.save_pretrained(training_args.output_dir)
 
         # load processor
         processor = AutoProcessor.from_pretrained(training_args.output_dir)
