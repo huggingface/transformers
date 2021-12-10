@@ -151,20 +151,12 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
         tokenizer.add_tokens("|")
 
+        # fmt: off
         sample_ids = [
-            [
-                11,
-                5,
-                15,
-                tokenizer.pad_token_id,
-                tokenizer.word_delimiter_token_id,
-                15,
-                8,
-                tokenizer.word_delimiter_token_id,
-                98,
-            ],
+            [11, 5, 15, tokenizer.pad_token_id, tokenizer.word_delimiter_token_id, 15, 8, tokenizer.word_delimiter_token_id, 98],
             [tokenizer.word_delimiter_token_id, 24, 22, tokenizer.word_delimiter_token_id, 5, 24, 22, 5, 77],
         ]
+        # fmt: on
 
         # decode with word_del_token filter
         tokens = tokenizer.decode(sample_ids[0])
@@ -236,26 +228,13 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.add_tokens(["!", "?"])
         tokenizer.add_special_tokens({"cls_token": "$$$"})
 
+        # fmt: off
         sample_ids = [
-            [
-                11,
-                5,
-                15,
-                tokenizer.pad_token_id,
-                15,
-                8,
-                98,
-                392,
-                392,
-                393,
-                392,
-                392,
-                393,
-                394,
-                394,
-            ],
+            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98, 392, 392, 393, 392, 392, 393, 394, 394],
             [24, 22, 5, 24, 22, 5, 77, tokenizer.pad_token_id, 394, 394],
         ]
+        # fmt: on
+
         batch_tokens = tokenizer.batch_decode(sample_ids)
         self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ!?!? $$$", "j ð s j ð s oːɹ $$$"])
 

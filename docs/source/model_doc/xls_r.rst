@@ -39,6 +39,8 @@ Tips:
 - XLS-R model was trained using connectionist temporal classification (CTC) so the model output has to be decoded using
   :class:`~transformers.Wav2Vec2CTCTokenizer`.
 
+Relevant checkpoints can be found under https://huggingface.co/models?other=xls_r.
+
 XLS-R's architecture is based on the Wav2Vec2 model, so one can refer to :doc:`Wav2Vec2's documentation page
 <wav2vec2>`.
 

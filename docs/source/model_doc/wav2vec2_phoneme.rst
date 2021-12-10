@@ -40,6 +40,8 @@ Tips:
 - By default the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
   should make use of a dictionary and language model.
 
+Relevant checkpoints can be found under https://huggingface.co/models?other=phoneme-recognition.
+
 This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__.
 
 The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec>`__.
@@ -48,9 +50,9 @@ XLSR-Wav2Vec2's architecture is based on the Wav2Vec2 model, so one can refer to
 <wav2vec2>` except for the tokenizer.
 
 
-Wav2Vec2PhonemeTokenizer
+Wav2Vec2PhonemeCTCTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Wav2Vec2PhonemeTokenizer
+.. autoclass:: transformers.Wav2Vec2PhonemeCTCTokenizer
     :members:
 
