@@ -994,6 +994,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        input_ids=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1015,6 +1016,10 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
             >>> outputs = model(inputs=inputs)
             >>> logits = outputs.logits
         """
+        if inputs is not None and input_ids is not None:
+            raise ValueError("You cannot use both `inputs` and `input_ids`")
+        elif inputs is None and input_ids is not None:
+            inputs = input_ids
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
