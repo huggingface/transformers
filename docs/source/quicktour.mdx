@@ -246,10 +246,10 @@ objects are described in greater detail [here](main_classes/output). For now, le
 ```py
 >>> print(pt_outputs)
 SequenceClassifierOutput(loss=None, logits=tensor([[-4.0833,  4.3364],
-        [ 0.0818, -0.0418]], grad_fn=&amp;lt;AddmmBackward>), hidden_states=None, attentions=None)
+        [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
 ===PT-TF-SPLIT===
 >>> print(tf_outputs)
-TFSequenceClassifierOutput(loss=None, logits=&amp;lt;tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+TFSequenceClassifierOutput(loss=None, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
 array([[-4.0833 ,  4.3364  ],
        [ 0.0818, -0.0418]], dtype=float32)>, hidden_states=None, attentions=None)
 ```
@@ -278,7 +278,7 @@ We can see we get the numbers from before:
 ```py
 >>> print(pt_predictions)
 tensor([[2.2043e-04, 9.9978e-01],
-        [5.3086e-01, 4.6914e-01]], grad_fn=&amp;lt;SoftmaxBackward>)
+        [5.3086e-01, 4.6914e-01]], grad_fn=<SoftmaxBackward>)
 ===PT-TF-SPLIT===
 >>> print(tf_predictions)
 tf.Tensor(
@@ -293,13 +293,13 @@ attribute:
 >>> import torch
 >>> pt_outputs = pt_model(**pt_batch, labels = torch.tensor([1, 0]))
 >>> print(pt_outputs)
-SequenceClassifierOutput(loss=tensor(0.3167, grad_fn=&amp;lt;NllLossBackward>), logits=tensor([[-4.0833,  4.3364],
-        [ 0.0818, -0.0418]], grad_fn=&amp;lt;AddmmBackward>), hidden_states=None, attentions=None)
+SequenceClassifierOutput(loss=tensor(0.3167, grad_fn=<NllLossBackward>), logits=tensor([[-4.0833,  4.3364],
+        [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
 ===PT-TF-SPLIT===
 >>> import tensorflow as tf
 >>> tf_outputs = tf_model(tf_batch, labels = tf.constant([1, 0]))
 >>> print(tf_outputs)
-TFSequenceClassifierOutput(loss=&amp;lt;tf.Tensor: shape=(2,), dtype=float32, numpy=array([2.2051e-04, 6.3326e-01], dtype=float32)>, logits=&amp;lt;tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+TFSequenceClassifierOutput(loss=<tf.Tensor: shape=(2,), dtype=float32, numpy=array([2.2051e-04, 6.3326e-01], dtype=float32)>, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
 array([[-4.0833 ,  4.3364  ],
        [ 0.0818, -0.0418]], dtype=float32)>, hidden_states=None, attentions=None)
 ```
