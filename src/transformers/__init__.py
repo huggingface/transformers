@@ -1130,7 +1130,6 @@ if is_torch_available():
     _import_structure["models.nystromformer"].extend(
         [
             "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "NystromformerForCausalLM",
             "NystromformerForMaskedLM",
             "NystromformerForMultipleChoice",
             "NystromformerForQuestionAnswering",
@@ -3007,7 +3006,6 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NystromformerForCausalLM,
             NystromformerForMaskedLM,
             NystromformerForMultipleChoice,
             NystromformerForQuestionAnswering,

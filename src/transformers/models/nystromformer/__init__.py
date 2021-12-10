@@ -32,7 +32,6 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_nystromformer"] = [
         "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "NystromformerForCausalLM",
         "NystromformerForMaskedLM",
         "NystromformerForMultipleChoice",
         "NystromformerForQuestionAnswering",
@@ -55,7 +54,6 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NystromformerForCausalLM,
             NystromformerForMaskedLM,
             NystromformerForMultipleChoice,
             NystromformerForQuestionAnswering,

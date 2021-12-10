@@ -16,7 +16,6 @@
 
 
 import math
-import os
 
 import torch
 import torch.utils.checkpoint
@@ -29,11 +28,9 @@ from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -144,7 +141,11 @@ class NystromformerSelfAttention(nn.Module):
         self.num_landmarks = config.num_landmarks
         self.seq_len = config.seq_len
         self.conv_kernel_size = config.conv_kernel_size
-        self.inv_coeff_init_option = config.inv_coeff_init_option
+        
+        if config.inv_coeff_init_option:
+            self.init_option = config["inv_init_coeff_option"]
+        else:
+            self.init_option = "original"
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
@@ -420,8 +421,6 @@ class NystromformerEncoder(nn.Module):
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
