@@ -1070,7 +1070,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             >>> labels = tokenizer(table=table, queries="How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
 
             >>> outputs = model(**inputs, labels=labels)
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
