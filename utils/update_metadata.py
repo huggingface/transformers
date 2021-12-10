@@ -19,8 +19,9 @@ import importlib.util
 import os
 import pandas as pd
 import re
-import tempdir
+import tempfile
 
+from datasets import Dataset
 from huggingface_hub import Repository
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -168,4 +169,31 @@ def update_pipeline_and_auto_class_table(table):
 
 
 def update_metadata(token):
-    
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        repo = Repository(tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", use_auth_token=token)
+
+        frameworks_table = get_frameworks_table()
+        frameworks_dataset = Dataset.from_pandas(frameworks_table)
+        frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
+
+        tags_dataset = Dataset.from_json(os.path.join(tmp_dir, "pipeline_tags.json"))
+        table = {tags_dataset[i]["model_class"]: (tags_dataset[i]["pipeline_tag"], tags_dataset[i]["auto_class"]) for i in range(len(tags_dataset))}
+        table = update_pipeline_and_auto_class_table(table)
+        tags_table = pd.DataFrame(
+            {
+                "model_class": list(table.keys()),
+                "pipeline_tag": [v[0] for v in table.values()],
+                "auto_class": [v[1] for v in table.values()]
+            }
+        )
+        tags_dataset = Dataset.from_pandas(tags_table)
+        tags_dataset.to_json(os.path.join(tmp_dir, "pipeline_tags.json"))
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--token", type=str, help="The token to use to push to the transformers-metadata dataset.")
+    args = parser.parse_args()
+
+    update_metadata(args.token)
