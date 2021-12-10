@@ -45,7 +45,7 @@ jobs:
         run: |
           sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
 
-          pip install git+https://github.com/huggingface/doc-builder@add-install-cell
+          pip install git+https://github.com/huggingface/doc-builder@add_install_cell
           pip install git+https://github.com/huggingface/transformers#egg=transformers[dev]
 
           export TORCH_VERSION=$(python -c "from torch import version; print(version.__version__.split('+')[0])")
