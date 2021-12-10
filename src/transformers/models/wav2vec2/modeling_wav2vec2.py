@@ -24,7 +24,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -35,7 +35,13 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    CausalLMOutput,
+    MaskedLMOutput,
+    SequenceClassifierOutput,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
@@ -94,7 +100,7 @@ class Wav2Vec2BaseModelOutput(ModelOutput):
 @dataclass
 class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.Wav2Vec2ForPreTrainingOutput`, with potential hidden states and attentions.
+    Output type of :class:`~transformers.Wav2Vec2ForPreTraining`, with potential hidden states and attentions.
 
     Args:
         loss (`optional`, returned when :obj:`sample_negative_indices` are passed, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -131,6 +137,38 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     contrastive_loss: Optional[torch.FloatTensor] = None
     diversity_loss: Optional[torch.FloatTensor] = None
+
+
+@dataclass
+class XVectorOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.Wav2Vec2ForXVector`.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Classification loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
+            Classification hidden states before AMSoftmax.
+        class_vectors (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
+            Utterance embeddings used for vector similarity-based retrieval.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    class_vectors: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def _compute_mask_indices(
@@ -1736,12 +1774,11 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         loss = min_loss.sum() / loss_mask.sum()
         return loss
 
-
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
+        output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
@@ -1790,12 +1827,78 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return TokenClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class AMSoftmaxLoss(nn.Module):
+    def __init__(self, hidden_dim, speaker_num, s=30.0, m=0.4, **kwargs):
+        """
+        Additive Margin Softmax Loss
+        """
+        super(AMSoftmaxLoss, self).__init__()
+        self.s = s
+        self.m = m
+        self.speaker_num = speaker_num
+        self.W = torch.nn.Parameter(torch.randn(hidden_dim, speaker_num), requires_grad=True)
+        nn.init.xavier_normal_(self.W, gain=1)
+
+    def forward(self, x_BxH, labels_B):
+        """
+        x shape: (B, H) labels shape: (B)
+        """
+        assert len(x_BxH) == len(labels_B)
+        assert torch.min(labels_B) >= 0
+        assert torch.max(labels_B) < self.speaker_num
+
+        W = F.normalize(self.W, dim=0)
+
+        x_BxH = F.normalize(x_BxH, dim=1)
+
+        wf = torch.mm(x_BxH, W)
+        numerator = self.s * (torch.diagonal(wf.transpose(0, 1)[labels_B]) - self.m)
+        excl = torch.cat([torch.cat((wf[i, :y], wf[i, y + 1 :])).unsqueeze(0) for i, y in enumerate(labels_B)], dim=0)
+        denominator = torch.exp(numerator) + torch.sum(torch.exp(self.s * excl), dim=1)
+        L = numerator - torch.log(denominator)
+        return -torch.mean(L)
+
+
+class TDNNLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
+        self.out_conv_dim = config.tdnn_dim[layer_id]
+        self.kernel_size = config.tdnn_kernel[layer_id]
+        self.dilation = config.tdnn_dilation[layer_id]
+
+        # self.conv = nn.Conv1d(
+        #    self.in_conv_dim,
+        #    self.out_conv_dim,
+        #    kernel_size=config.tdnn_kernel[layer_id],
+        #    dilation=config.tdnn_dilation[layer_id],
+        #    bias=True,
+        # )
+        self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
+        self.activation = nn.ReLU()
+
+    def forward(self, hidden_states):
+        # hidden_states = self.conv(hidden_states)
+        hidden_states = hidden_states.unsqueeze(1)
+        hidden_states = nn.functional.unfold(
+            hidden_states,
+            (self.kernel_size, self.in_conv_dim),
+            stride=(1, self.in_conv_dim),
+            dilation=(self.dilation, 1),
+        )
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.kernel(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
 
 @add_start_docstrings(
     """
@@ -1812,19 +1915,15 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
-        self.projector = nn.Linear(config.hidden_size, config.tdnn_proj_size)
-        self.tdnn = nn.Sequential(
-            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=5, dilation=1, bias=True),
-            nn.ReLU(),
-            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=3, dilation=2, bias=True),
-            nn.ReLU(),
-            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=3, dilation=3, bias=True),
-            nn.ReLU(),
-            nn.Conv1d(config.tdnn_proj_size, config.tdnn_proj_size, kernel_size=1, dilation=1, bias=True),
-            nn.ReLU(),
-            nn.Conv1d(config.tdnn_proj_size, config.tdnn_output_size, kernel_size=1, dilation=1, bias=True),
-            nn.ReLU(),
-        )
+        self.projector = nn.Linear(config.hidden_size, config.tdnn_dim[0])
+
+        tdnn_layers = [TDNNLayer(config, i) for i in range(len(config.tdnn_dim))]
+        self.tdnn = nn.ModuleList(tdnn_layers)
+
+        self.feature_extractor = nn.Linear(config.tdnn_dim[-1] * 2, config.xvector_output_dim)
+        self.classifier = nn.Linear(config.xvector_output_dim, config.xvector_output_dim)
+
+        self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels, s=30.0, m=0.4)
 
         self.init_weights()
 
@@ -1847,7 +1946,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
+        output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
@@ -1887,27 +1986,43 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             hidden_states = outputs[0]
 
         hidden_states = self.projector(hidden_states)
+        # hidden_states = hidden_states.transpose(1, 2)
+
+        for tdnn_layer in self.tdnn:
+            hidden_states = tdnn_layer(hidden_states)
+        # hidden_states = hidden_states.transpose(1, 2)
+
+        # Statistic Pooling with attention mask support
         if attention_mask is None:
-            pooled_output = hidden_states.mean(dim=1)
+            mean_features = hidden_states.mean(dim=1)
+            std_features = hidden_states.std(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
-            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
+            lengths = padding_mask.sum(dim=1)
+            mean_features = []
+            std_features = []
+            for i, length in enumerate(lengths):
+                mean_features.append(hidden_states[i, :length].mean(dim=0))
+                std_features.append(hidden_states[i, :length].std(dim=0))
+            mean_features = torch.stack(mean_features)
+            std_features = torch.stack(std_features)
+        statistic_pooling = torch.cat([mean_features, std_features], dim=-1)
 
-        logits = self.classifier(pooled_output)
+        class_vectors = self.feature_extractor(statistic_pooling)
+        logits = self.classifier(class_vectors)
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            loss = self.objective(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            output = (logits, class_vectors) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return XVectorOutput(
             loss=loss,
             logits=logits,
+            class_vectors=class_vectors,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

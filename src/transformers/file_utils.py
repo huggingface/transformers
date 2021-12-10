@@ -1285,6 +1285,12 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["LMHead"]
         elif "CTC" in model_class:
             code_sample = sample_docstrings["CTC"]
+        elif "AudioFrameClassification" in model_class:
+            # TODO: replace docstring
+            code_sample = sample_docstrings["AudioClassification"]
+        elif "XVector" in model_class:
+            # TODO: replace docstring
+            code_sample = sample_docstrings["AudioClassification"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:

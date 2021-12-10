@@ -140,6 +140,8 @@ class Wav2Vec2Config(PretrainedConfig):
             instance of :class:`~transformers.Wav2Vec2ForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
+        tdnn_proj_size (:obj:`int`, `optional`, defaults to 512):
+            Number of convolutional filters in each TDNN layer of :class:`Wav2Vec2ForXVector`.
 
     Example::
 
@@ -198,6 +200,10 @@ class Wav2Vec2Config(PretrainedConfig):
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,
+        tdnn_dim=(512, 512, 512, 512, 1500),
+        tdnn_kernel=(5, 3, 3, 1, 1),
+        tdnn_dilation=(1, 2, 3, 1, 1),
+        xvector_output_dim=512,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -230,6 +236,10 @@ class Wav2Vec2Config(PretrainedConfig):
         self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.classifier_proj_size = classifier_proj_size
+        self.tdnn_dim = list(tdnn_dim)
+        self.tdnn_kernel = list(tdnn_kernel)
+        self.tdnn_dilation = list(tdnn_dilation)
+        self.xvector_output_dim = xvector_output_dim
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
