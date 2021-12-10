@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class KerasMetricCallback(Callback):
 
     """
-    Callback to prompt metrics.
+    Callback to prompt metrics at the end of every epoch.
     
     Args:
         metric_fn: Metric function provided by the user. 
@@ -26,36 +26,50 @@ class KerasMetricCallback(Callback):
         the end of the epoch. 
         metric_name: Name of the metric calculated in metric_fn.
         batch_size: Batch size. 
+        labels: Labels.
     """
-    def __init__(self, metric_fn: Callable, val_dataset: tf.data.Dataset, batch_size: int, metric_name: Optional[str]):
+
+    def __init__(self, metric_fn: Callable, val_dataset: tf.data.Dataset, batch_size: int, metric_name: Optional[str], label_names: Optional[str]):
         super().__init__()
         self.model = model
         self.metric_fn = metric_fn
         self.batch_size = batch_size
         self.val_dataset = val_dataset
         self.metric_name = metric_name
+        self.label_names = "labels" if label_names is None else label_names
+        
 
     def on_epoch_end(self, epoch, logs=None):
-        
-        if isinstance(self.val_dataset, (tf.Tensor, np.ndarray, dict)):
-            self.val_dataset = tf.data.Dataset.from_tensor_slices(self.val_dataset)
-            self.val_dataset = self.val_dataset.batch(batch_size, drop_remainder=False)
-        elif isinstance(self.val_dataset, tf.data.Dataset):
-            pass
-        
-        predictions = []
-        for batch in self.val_dataset:
-            pred = self.model.predict(batch)["logits"]
-            pred = np.argmax(pred, axis=1)
-            for element in pred:
-              predictions.append(element)
+      
+      prediction_list = []
+      label_list = []
 
-        metric_value = metric_fn(np.asarray(predictions), np.asarray(encoded_dataset["validation"]["label"]))
+      for batch in self.val_dataset:
+        
+        if isinstance(batch, tuple):
+            batch, labels = batch
+            labels = np.asarray(labels)
+            
+        elif isinstance(batch, dict):
+            labels = np.asarray(batch["labels"])
+        
+        predictions = self.model.predict(batch)
+        predictions_dict = dict(predictions)
+        
+        for prediction in predictions_dict["logits"]:
+          
+          prediction_list.append(predictions)
+        
+        for label in labels:
+            
+          label_list.append(label)
 
-        if metric_name is not None:
-            print(f"{self.metric_name} for epoch {epoch} is {metric_value}")
-        else:
-            print(f"At epoch {epoch}: {metric_value}")
+      metric_value = self.metric_fn(predictions = np.asarray(prediction_list), labels = np.asarray(label_list))
+
+      if metric_name is not None:
+          print(f"{self.metric_name} for epoch {epoch} is {metric_value}")
+      else:
+          print(f"At epoch {epoch}: {metric_value}")
 
 
 class PushToHubCallback(Callback):
