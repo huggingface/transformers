@@ -947,7 +947,50 @@ jobs:
                   perform-login: true
             - *delete_gke_jobs
 
-
+workflow_filters: &workflow_filters
+    filters:
+        branches:
+            only:
+                - master
+workflows:
+    version: 2
+    build_and_test:
+        jobs:
+            - check_code_quality
+            - check_repository_consistency
+            - run_examples_torch
+            - run_examples_flax
+            - run_tests_custom_tokenizers
+            - run_tests_torch_and_tf
+            - run_tests_torch_and_flax
+            - run_tests_torch
+            - run_tests_tf
+            - run_tests_flax
+            - run_tests_pipelines_torch
+            - run_tests_pipelines_tf
+            - run_tests_onnxruntime
+            - run_tests_hub
+            - run_tests_layoutlmv2
+    nightly:
+        triggers:
+            - schedule:
+                cron: "0 0 * * *"
+                filters:
+                    branches:
+                        only:
+                            - master
+        jobs:
+            - run_examples_torch_all
+            - run_examples_flax_all
+            - run_tests_torch_and_tf_all
+            - run_tests_torch_and_flax_all
+            - run_tests_torch_all
+            - run_tests_tf_all
+            - run_tests_flax_all
+            - run_tests_pipelines_torch_all
+            - run_tests_pipelines_tf_all
+            - run_tests_onnxruntime_all
+            - run_tests_hub_all
 
 #    tpu_testing_jobs:
 #        triggers:

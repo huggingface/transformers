@@ -1,0 +1,46 @@
+name: Torch hub integration
+
+on:
+  push:
+    branches:
+      - "*"
+
+jobs:
+  torch_hub_integration:
+    runs-on: ubuntu-latest
+    env:
+      # TODO quickfix but may need more investigation
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: True
+    steps:
+    # no checkout necessary here.
+    - name: Extract branch name
+      run: echo "::set-env name=BRANCH::${GITHUB_REF#refs/heads/}"
+    - name: Check branch name
+      run: echo $BRANCH
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+
+    - name: Loading cache
+      uses: actions/cache@v2
+      id: cache
+      with:
+        path: ~/.cache/pip
+        key: v0-torch_hub-${{ hashFiles('setup.py') }}
+
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        # install torch-hub specific dependencies
+        pip install -e git+https://github.com/huggingface/transformers.git#egg=transformers[torchhub]
+        # no longer needed
+        pip uninstall -y transformers
+
+    #- name: Torch hub list
+    #  run: |
+    #    python -c "import torch; print(torch.hub.list('huggingface/transformers:$BRANCH'))"
+
+    #- name: Torch hub help
+    #  run: |
+    #    python -c "import torch; print(torch.hub.help('huggingface/transformers:$BRANCH', 'modelForSequenceClassification'))"

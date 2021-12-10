@@ -1,0 +1,75 @@
+name: Model templates runner
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "templates/**"
+    types: [assigned, opened, synchronize, reopened]
+
+jobs:
+  run_tests_templates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.6
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.cache/pip
+          key: v1.2-tests_templates
+          restore-keys: |
+            v1.2-tests_templates-${{ hashFiles('setup.py') }}
+            v1.2-tests_templates
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip!=21.3
+          sudo apt -y update && sudo apt install -y libsndfile1-dev
+          pip install .[dev]
+      - name: Create model files
+        run: |
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-seq-2-seq-bart-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-seq-2-seq-bart-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/flax-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/flax-seq-2-seq-bart-tokenizer.json --path=templates/adding_a_new_model
+          make style
+          python utils/check_table.py --fix_and_overwrite
+          python utils/check_dummies.py --fix_and_overwrite
+          python utils/check_copies.py --fix_and_overwrite
+
+      - name: Run all non-slow tests
+        run: |
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_templates tests/*template*
+
+      - name: Run style changes
+        run: |
+          git fetch origin master:master
+          make style && make quality
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_templates_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_templates_test_reports
+          path: reports
