@@ -168,8 +168,10 @@ def update_pipeline_and_auto_class_table(table):
     return table
 
 
-def update_metadata(token):
-
+def update_metadata(token, commit_sha):
+    """
+    Update the metada for the Transformers repo.
+    """
     with tempfile.TemporaryDirectory() as tmp_dir:
         repo = Repository(tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", use_auth_token=token)
 
@@ -180,20 +182,30 @@ def update_metadata(token):
         tags_dataset = Dataset.from_json(os.path.join(tmp_dir, "pipeline_tags.json"))
         table = {tags_dataset[i]["model_class"]: (tags_dataset[i]["pipeline_tag"], tags_dataset[i]["auto_class"]) for i in range(len(tags_dataset))}
         table = update_pipeline_and_auto_class_table(table)
+
+        # Sort the model classes to avoid some nondeterministic updates to create false update commits.
+        model_classes = sorted(list(table.keys()))
         tags_table = pd.DataFrame(
             {
-                "model_class": list(table.keys()),
-                "pipeline_tag": [v[0] for v in table.values()],
-                "auto_class": [v[1] for v in table.values()]
+                "model_class": model_classes,
+                "pipeline_tag": [table[m][0] for m in model_classes],
+                "auto_class": [table[m][1] for m in model_classes],
             }
         )
         tags_dataset = Dataset.from_pandas(tags_table)
         tags_dataset.to_json(os.path.join(tmp_dir, "pipeline_tags.json"))
 
+        if repo.is_repo_clean():
+            print("Nothing to commit!")
+        else:
+            commit_message = f"Update with commit {commit_sha}" if commit_sha is not None else "Update"
+            repo.push_to_hub(commit_message)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", type=str, help="The token to use to push to the transformers-metadata dataset.")
+    parser.add_argument("--commit_sha", type=str, help="The sha of the commit going with this update.")
     args = parser.parse_args()
 
-    update_metadata(args.token)
+    update_metadata(args.token, args.commit_sha)
