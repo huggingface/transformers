@@ -3294,7 +3294,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
 
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
