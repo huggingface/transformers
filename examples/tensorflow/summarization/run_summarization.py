@@ -636,6 +636,7 @@ def main():
                 tf_eval_dataset, total=len(eval_dataset) // training_args.per_device_eval_batch_size
             ):
                 batch.update(gen_kwargs)
+                breakpoint()
                 generated_tokens = model.generate(**batch)
                 if isinstance(generated_tokens, tuple):
                     generated_tokens = generated_tokens[0]

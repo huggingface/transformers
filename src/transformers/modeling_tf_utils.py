@@ -50,6 +50,7 @@ from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
+from .modelcard import TrainingSummary
 
 
 logger = logging.get_logger(__name__)
@@ -925,6 +926,37 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if "loss" in return_metrics and "loss_loss" in return_metrics:
             del return_metrics["loss_loss"]
         return return_metrics
+
+    def create_model_card(
+        self,
+        history,
+        output_dir,
+        model_name,
+        language: Optional[str] = None,
+        license: Optional[str] = None,
+        tags: Optional[str] = None,
+        finetuned_from: Optional[str] = None,
+        tasks: Optional[str] = None,
+        dataset_tags: Optional[Union[str, List[str]]] = None,
+        dataset: Optional[Union[str, List[str]]] = None,
+        dataset_args: Optional[Union[str, List[str]]] = None,
+    ):
+        training_summary = TrainingSummary.from_keras(
+            self,
+            keras_history=history,
+            language=language,
+            license=license,
+            tags=tags,
+            model_name=model_name,
+            finetuned_from=finetuned_from,
+            tasks=tasks,
+            dataset_tags=dataset_tags,
+            dataset=dataset,
+            dataset_args=dataset_args,
+        )
+        model_card = training_summary.to_model_card()
+        with open(os.path.join(output_dir, "README.md"), "w") as f:
+            f.write(model_card)
 
     def set_input_embeddings(self, value):
         """
