@@ -15,8 +15,8 @@
 """PyTorch optimization for BERT model."""
 
 import math
-from typing import Callable, Iterable, Optional, Tuple, Union
 import warnings
+from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -300,7 +300,7 @@ class AdamW(Optimizer):
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
-        no_deprecation_warning: bool = False
+        no_deprecation_warning: bool = False,
     ):
         if no_deprecation_warning is False:
             warnings.warn(

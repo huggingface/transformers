@@ -77,7 +77,7 @@ from .file_utils import (
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-from .optimization import Adafactor, AdamW, get_scheduler
+from .optimization import Adafactor, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -818,17 +818,43 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-            optimizer_cls = Adafactor if self.args.adafactor else AdamW
-            if self.args.adafactor:
+            if self.args.adafactor and self.args.optim not in {"adamw_hf", "adafactor"}:
+                raise ValueError(f"You passed the --adafactor flag and optimizer {self.args.optim}.")
+
+            optimizer_kwargs = {"lr": self.args.learning_rate}
+
+            adam_kwargs = {
+                "betas": (self.args.adam_beta1, self.args.adam_beta2),
+                "eps": self.args.adam_epsilon,
+            }
+
+            # TODO the following code is a good candidate for PEP 622 once Python 3.10 becomes the
+            #  minimum required version. See, https://www.python.org/dev/peps/pep-0622/
+            if (self.args.adafactor and self.args.optim == "adamw_hf") or self.args.optim == "adafactor":
                 optimizer_cls = Adafactor
-                optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
-            else:
+                optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
+            elif self.args.optim == "adamw_hf":
+                from .optimization import AdamW
+
                 optimizer_cls = AdamW
-                optimizer_kwargs = {
-                    "betas": (self.args.adam_beta1, self.args.adam_beta2),
-                    "eps": self.args.adam_epsilon,
-                }
-            optimizer_kwargs["lr"] = self.args.learning_rate
+                optimizer_kwargs.update(adam_kwargs)
+            elif self.args.optim == "adamw_torch":
+                from torch.optim import AdamW
+
+                optimizer_kwargs.update(adam_kwargs)
+            elif self.args.optim == "apex_fused_adam":
+                try:
+                    from apex.optimizers import FusedAdam
+
+                    optimizer_cls = FusedAdam
+                    optimizer_kwargs.update(adam_kwargs)
+                except ImportError:
+                    raise ValueError(
+                        "Trainer attempted to instantiate apex.optimizers.FusedAdam but apex is not installed!"
+                    )
+            else:
+                raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {self.args.optim}")
+
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
                 self.optimizer = OSS(
                     params=optimizer_grouped_parameters,

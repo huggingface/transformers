@@ -330,9 +330,11 @@ class TrainingArguments:
             - :obj:`"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
+        optim (:obj:`str`, `optional`, defaults to :obj:`adamw_hf`):
+            The optimizer to use: adamw_hf, adamw_torch, adafactor, or apex_fused_adam.
         adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
-            :class:`~transformers.AdamW`.
+            This argument is deprecated. Use ``optim`` instead. Whether or not to use the
+            :class:`~transformers.Adafactor` optimizer instead of :class:`~transformers.AdamW`.
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
@@ -646,6 +648,10 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
+    optim: str = field(
+        default="adamw_hf",
+        metadata={"help": "The optimizer to use: adamw_hf, adamw_torch, adafactor, or apex_fused_adam."},
+    )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
@@ -807,6 +813,13 @@ class TrainingArguments:
                 )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
+
+        if self.adafactor:
+            warnings.warn(
+                "`adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `optim` instead",
+                FutureWarning,
+            )
+
         if (
             is_torch_available()
             and self.device.type != "cuda"
