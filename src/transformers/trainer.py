@@ -1007,11 +1007,15 @@ class Trainer:
                 find_unused_parameters = not model.is_gradient_checkpointing
             else:
                 find_unused_parameters = True
+            kwargs = {}
+            if self.args.ddp_bucket_cap_mb is not None:
+                kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
             model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
                 output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
                 find_unused_parameters=find_unused_parameters,
+                **kwargs,
             )
 
         return model
