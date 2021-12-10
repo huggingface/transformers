@@ -71,6 +71,8 @@ class PushToHubCallback(Callback):
         if "/" not in hub_model_id:
             hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
 
+        # TODO Is it okay to store the hub token as a callback attribute like this?
+        self.hub_token = hub_token
         self.output_dir = output_dir
         self.hub_model_id = hub_model_id
         self.repo = None
@@ -81,7 +83,8 @@ class PushToHubCallback(Callback):
         self.model_card_args = model_card_args
 
     def on_train_begin(self, logs=None):
-        self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id)
+        self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id,
+                               use_auth_token=self.hub_token if self.hub_token else True)
         self.training_history = []
 
     def on_train_batch_end(self, batch, logs=None):
