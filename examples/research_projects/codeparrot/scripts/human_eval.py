@@ -60,11 +60,11 @@ def main():
     # Run a quick test to see if code evaluation is enabled
     try:
         _ = code_eval_metric.compute(references=[""], predictions=[[""]])
-    except Exception as e:
+    except ValueError as exception:
         print(
             'Code evaluation not enabled. Read the warning below carefully and then use `--HF_ALLOW_CODE_EVAL="1"` flag to enable code evaluation.'
         )
-        raise e
+        raise exception
 
     # Generate completions for evaluation set
     n_tasks = args.num_tasks if args.num_tasks is not None else len(human_eval["test"])
