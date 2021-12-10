@@ -1,0 +1,39 @@
+name: Build documentation
+
+on:
+  pull_request:
+    paths:
+      - ".github/**"
+
+jobs:
+  build_and_package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/doc-builder'
+          path: doc-builder
+      
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/transformers'
+          path: transformers
+      
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/notebooks'
+          path: notebooks
+
+      - name: Install packages
+        run: |
+          cd transformers
+          pip install -e .
+          cd ..
+
+          cd doc-builder
+          pip install -e .
+          cd ..
