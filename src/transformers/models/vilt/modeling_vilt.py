@@ -59,11 +59,11 @@ class ViltForPreTrainingOutput(ModelOutput):
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
-        prediction_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+        mlm_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-            before SoftMax).
+        itm_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
+            Prediction scores of the image-text matching prediction (classification) head (scores of True/False
+            continuation before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
@@ -810,7 +810,6 @@ class ViltForPreTraining(ViltPreTrainedModel):
         pixel_values=None,
         head_mask=None,
         labels=None,
-        itm_labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -840,7 +839,9 @@ class ViltForPreTraining(ViltPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-        mlm_logits = self.mlm_score(sequence_output)
+        # split up final hidden states into text and image features
+        text_features, _ = (sequence_output[:, : input_ids.shape[1]], sequence_output[:, input_ids.shape[1] :])
+        mlm_logits = self.mlm_score(text_features)
 
         total_loss = None
         if labels is not None:
@@ -855,8 +856,8 @@ class ViltForPreTraining(ViltPreTrainedModel):
 
         return ViltForPreTrainingOutput(
             loss=total_loss,
-            prediction_logits=mlm_logits,
-            seq_relationship_logits=None,
+            mlm_logits=mlm_logits,
+            itm_logits=None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -952,8 +953,10 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            ...
+        labels (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`, `optional`):
+            Labels for computing the visual question answering loss. This tensor must be either a one-hot encoding of
+            all answers that are applicable for a given example in the batch, or a soft encoding indicating which
+            answers are applicable, where 1.0 is the highest score.
 
         Returns:
 
@@ -997,7 +1000,8 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not yet supported.")
+            loss = nn.functional.binary_cross_entropy_with_logits(logits, labels) * labels.shape[1]
+            # see https://github.com/jnhwkim/ban-vqa/blob/master/train.py#L19
 
         if not return_dict:
             output = (logits,) + outputs[2:]

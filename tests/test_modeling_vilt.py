@@ -336,3 +336,18 @@ class ViltModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-15.9495, -18.1472, -10.3041]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+        # compute loss
+        vqa_labels = [[2, 3, 155, 800]]
+        vqa_scores = [[1.0, 0.3, 0.3, 0.3]]
+        labels = torch.zeros(1, model.config.num_labels).to(torch_device)
+
+        for i, (labels_example, scores_example) in enumerate(zip(vqa_labels, vqa_scores)):
+            for l, s in zip(labels_example, scores_example):
+                labels[i, l] = s
+
+        # forward pass
+        outputs = model(**inputs, labels=labels)
+
+        # verify we have a positive loss
+        self.assertTrue(outputs.loss > 0)
