@@ -915,16 +915,12 @@ class ViltMLMHead(nn.Module):
         if weight is not None:
             self.decoder.weight = weight
 
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
     def forward(self, x):
-        print(self.config.tie_word_embeddings)
-        print("Shape of decoder weights:", self.decoder.weight.shape)
-        print("Shape of x before transform:", x.shape)
         x = self.transform(x)
-        print("Shape of x after transform:", x.shape)
         x = self.decoder(x)
-        print("Shape of x after decoder:", x.shape)
-        x = x + self.bias
-        print("Shape of x after bias:", x.shape)
         return x
 
 
