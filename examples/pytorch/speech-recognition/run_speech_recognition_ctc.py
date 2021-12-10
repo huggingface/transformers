@@ -34,11 +34,11 @@ from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForCTC,
+    AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    Wav2Vec2Processor,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
@@ -245,7 +245,7 @@ class DataCollatorCTCWithPadding:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
-        processor (:class:`~transformers.Wav2Vec2Processor`)
+        processor (:class:`~transformers.AutoProcessor`)
             The processor used for proccessing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
@@ -266,7 +266,7 @@ class DataCollatorCTCWithPadding:
             7.5 (Volta).
     """
 
-    processor: Wav2Vec2Processor
+    processor: AutoProcessor
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
@@ -498,7 +498,7 @@ def main():
     # Note for distributed training, the .from_pretrained methods guarantee that only
     # one local process can concurrently download model & vocab.
 
-    # load feature_extractor, tokenizer and create processor
+    # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
         unk_token=unk_token,
@@ -510,7 +510,6 @@ def main():
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
-    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     # adapt config
     config.update(
@@ -526,8 +525,8 @@ def main():
             "gradient_checkpointing": training_args.gradient_checkpointing,
             "layerdrop": model_args.layerdrop,
             "ctc_loss_reduction": model_args.ctc_loss_reduction,
-            "pad_token_id": processor.tokenizer.pad_token_id,
-            "vocab_size": len(processor.tokenizer),
+            "pad_token_id": tokenizer.pad_token_id,
+            "vocab_size": len(tokenizer),
             "activation_dropout": model_args.activation_dropout,
         }
     )
@@ -555,8 +554,8 @@ def main():
     )
 
     # derive max & min input length for sample rate & max duration
-    max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
-    min_input_length = data_args.min_duration_in_seconds * processor.feature_extractor.sampling_rate
+    max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
+    min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
 
@@ -569,18 +568,17 @@ def main():
         # load audio
         sample = batch[audio_column_name]
 
-        batch["input_values"] = processor(
+        batch["input_values"] = feature_extractor(
             sample["array"], sampling_rate=sample["sampling_rate"], truncate=True, max_length=max_input_length
         ).input_values[0]
         batch["input_length"] = len(batch["input_values"])
 
-        # Setup the processor for targets
-        with processor.as_target_processor():
-            additional_kwargs = {}
-            if phoneme_language is not None:
-                additional_kwargs["phonemizer_lang"] = phoneme_language
+        # encode targets
+        additional_kwargs = {}
+        if phoneme_language is not None:
+            additional_kwargs["phonemizer_lang"] = phoneme_language
 
-            batch["labels"] = processor(batch["target_text"], **additional_kwargs).input_ids
+        batch["labels"] = tokenizer(batch["target_text"], **additional_kwargs).input_ids
         return batch
 
     with training_args.main_process_first(desc="dataset map preprocessing"):
@@ -621,15 +619,24 @@ def main():
         pred_logits = pred.predictions
         pred_ids = np.argmax(pred_logits, axis=-1)
 
-        pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id
+        pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
 
-        pred_str = processor.batch_decode(pred_ids)
+        pred_str = tokenizer.batch_decode(pred_ids)
         # we do not want to group tokens when computing the metrics
-        label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
+        label_str = tokenizer.batch_decode(pred.label_ids, group_tokens=False)
 
         metrics = {k: v.compute(predictions=pred_str, references=label_str) for k, v in eval_metrics.items()}
 
         return metrics
+
+    # Now create a single processor
+    if is_main_process(training_args.local_rank):
+        # save feature extractor and tokenizer
+        feature_extractor.save_pretrained(training_args.output_dir)
+        tokenizer.save_pretrained(training_args.output_dir)
+
+        # load processor
+        processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
@@ -657,10 +664,6 @@ def main():
             checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None
-
-        # Save the feature_extractor and the tokenizer
-        if is_main_process(training_args.local_rank):
-            processor.save_pretrained(training_args.output_dir)
 
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
