@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, slow
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@slow
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MLukeTokenizer
     test_rust_tokenizer = False
@@ -196,6 +197,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer(sentence, entity_spans=[0, 0, 0])
 
 
+@slow
 @require_torch
 class MLukeTokenizerIntegrationTests(unittest.TestCase):
     tokenizer_class = MLukeTokenizer

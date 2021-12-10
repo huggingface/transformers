@@ -1623,8 +1623,8 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration, BigBirdPegasusConfig
 
-        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('bigbird-pegasus-large-arxiv')
-        >>> tokenizer = PegasusTokenizer.from_pretrained('bigbird-pegasus-large-arxiv')
+        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('google/bigbird-pegasus-large-arxiv')
+        >>> tokenizer = PegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors='pt', truncation=True)
@@ -2993,7 +2993,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
 
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

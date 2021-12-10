@@ -224,6 +224,13 @@ else:
                 ),
             ),
             ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer")),
+            (
+                "perceiver",
+                (
+                    "PerceiverTokenizer",
+                    None,
+                ),
+            ),
         ]
     )
 
