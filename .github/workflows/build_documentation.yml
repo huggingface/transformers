@@ -63,6 +63,14 @@ jobs:
         run: |
           git config --global user.name "Hugging Face"
           git config --global user.email transformers@huggingface.co
+          
+          cd doc-builder
+          git pull origin main
+          cd ..
+
+          cd notebooks
+          git pull origin master
+          cd ..
 
       - name: Make documentation
         run: |
@@ -71,7 +79,6 @@ jobs:
       - name: Push to repositories
         run: |
           cd doc-builder
-          git pull origin main
           if [[ `git status --porcelain` ]]; then
             git add build
             git commit -m "Updated with commit ${{ github.sha }}"
@@ -82,7 +89,6 @@ jobs:
           cd ..
 
           cd notebooks
-          git pull origin master
           if [[ `git status --porcelain` ]]; then
             git add build
             git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }}"
