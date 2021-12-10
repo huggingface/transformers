@@ -47,10 +47,10 @@ from .file_utils import (
     is_remote_url,
 )
 from .generation_tf_utils import TFGenerationMixin
+from .modelcard import TrainingSummary
 from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
-from .modelcard import TrainingSummary
 
 
 logger = logging.get_logger(__name__)

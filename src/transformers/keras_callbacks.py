@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from time import sleep
 from typing import Optional, Union
-from .modelcard import TrainingSummary
 
 from tensorflow.keras.callbacks import Callback
 
@@ -11,6 +10,7 @@ from huggingface_hub import Repository
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .file_utils import get_full_repo_name
+from .modelcard import TrainingSummary
 
 
 logger = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ class PushToHubCallback(Callback):
                 model=self.model,
                 model_name=self.hub_model_id,
                 keras_history=self.training_history,
-                **self.model_card_args
+                **self.model_card_args,
             )
             model_card = train_summary.to_model_card()
             print("Model card:")
@@ -131,10 +131,7 @@ class PushToHubCallback(Callback):
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(self.output_dir)
         train_summary = TrainingSummary.from_keras(
-            model=self.model,
-            model_name=self.hub_model_id,
-            keras_history=self.training_history,
-            **self.model_card_args
+            model=self.model, model_name=self.hub_model_id, keras_history=self.training_history, **self.model_card_args
         )
         model_card = train_summary.to_model_card()
         print("Model card:")
