@@ -41,9 +41,9 @@ Tips:
 TrOCR's [`VisionEncoderDecoder`] model accepts images as input and makes use of
 [`~generation_utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
-The [`~transformers.ViTFeatureExtractor`] class is responsible for preprocessing the input image and
-[`~transformers.RobertaTokenizer`] decodes the generated target tokens to the target string. The
-[`~transformers.TrOCRProcessor`] wraps [`~transformers.ViTFeatureExtractor`] and [`~transformers.RobertaTokenizer`]
+The [`ViTFeatureExtractor`] class is responsible for preprocessing the input image and
+[`RobertaTokenizer`] decodes the generated target tokens to the target string. The
+[`TrOCRProcessor`] wraps [`ViTFeatureExtractor`] and [`RobertaTokenizer`]
 into a single instance to both extract the input features and decode the predicted token ids.
 
 - Step-by-step Optical Character Recognition (OCR)
