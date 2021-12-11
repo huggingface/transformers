@@ -478,6 +478,7 @@ class DeiTModel(DeiTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
