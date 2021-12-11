@@ -196,6 +196,13 @@ class PerceiverModelTester:
             num_labels=self.num_labels,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        # Byte level vocab
+        config.vocab_size = 261
+        config.max_position_embeddings = 40
+        return config
+
     def create_and_check_for_masked_lm(self, config, inputs, input_mask, sequence_labels, token_labels):
         model = PerceiverForMaskedLM(config=config)
         model.to(torch_device)
