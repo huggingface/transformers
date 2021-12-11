@@ -64,7 +64,7 @@ To summarize:
 
 In PyTorch, initializing a model with a pre-trained base and randomly initialized classification heads from the hub can be done as follows (be sure to have installed the [torch-scatter](https://github.com/rusty1s/pytorch_scatter) dependency for your environment):
 
-```
+```py
 >>> from transformers import TapasConfig, TapasForQuestionAnswering
 
 >>> # for example, the base sized model with default SQA configuration
@@ -81,7 +81,7 @@ In PyTorch, initializing a model with a pre-trained base and randomly initialize
 
 In TensorFlow, this can be done as follows (make sure to have installed the [tensorflow_probability](https://github.com/tensorflow/probability) dependency for your environment):
 
-```
+```py
 >>> from transformers import TapasConfig, TFTapasForQuestionAnswering
 
 >>> # for example, the base sized model with default SQA configuration
@@ -98,7 +98,7 @@ In TensorFlow, this can be done as follows (make sure to have installed the [ten
 
 Of course, you don't necessarily have to follow one of these three ways in which TAPAS was fine-tuned. You can also experiment by defining any hyperparameters you want when initializing [`TapasConfig`], and then create a [`TapasForQuestionAnswering`] based on that configuration. For example, if you have a dataset that has both conversational questions and questions that might involve aggregation, then you can do it this way. Here's an example:
 
-```
+```py
 >>> from transformers import TapasConfig, TapasForQuestionAnswering
 
 >>> # you can initialize the classification heads any way you want (see docs of TapasConfig)
@@ -108,7 +108,7 @@ Of course, you don't necessarily have to follow one of these three ways in which
 ```
 And here is the equivalent code for TensorFlow:
 
-```
+```py
 >>> from transformers import TapasConfig, TFTapasForQuestionAnswering
 
 >>> # you can initialize the classification heads any way you want (see docs of TapasConfig)
@@ -150,7 +150,7 @@ inputs to be fine-tuned:
 
 [`TapasTokenizer`] creates the `labels`, `numeric_values` and `numeric_values_scale` based on the `answer_coordinates` and `answer_text` columns of the TSV file. The `float_answer` and `aggregation_labels` are already in the TSV file of step 2. Here's an example:
 
-```
+```py
 >>> from transformers import TapasTokenizer
 >>> import pandas as pd
 
@@ -173,7 +173,7 @@ Set `return_tensors='tf'` when calling the tokenizer to prepare data for the TF 
 Note that [`TapasTokenizer`] expects the data of the table to be **text-only**. You can use
 `.astype(str)` on a dataframe to turn it into text-only data. Of course, this only shows how to encode a single training example. It is advised to create a PyTorch dataset and a corresponding dataloader:
 
-```
+```py
 >>> import torch
 >>> import pandas as pd
 
@@ -212,7 +212,7 @@ Note that [`TapasTokenizer`] expects the data of the table to be **text-only**. 
 
 And here is the equivalent code for TensorFlow:
 
-```
+```py
 >>> import tensorflow as tf
 >>> import pandas as pd
 
@@ -267,7 +267,7 @@ index) and batch encode each table with its questions. This will make sure that 
 
 You can then fine-tune [`TapasForQuestionAnswering`] using native PyTorch as follows (shown here for the weak supervision for aggregation case):
 
-```
+```py
 >>> from transformers import TapasConfig, TapasForQuestionAnswering, AdamW
 
 >>> # this is the default WTQ configuration
@@ -312,7 +312,7 @@ You can then fine-tune [`TapasForQuestionAnswering`] using native PyTorch as fol
 
 Equivalently, fine-tuning [`TFTapasForQuestionAnswering`] in native TensorFlow can be done as follows (shown here for the weak supervision for aggregation case):
 
-```
+```py
 >>> import tensorflow as tf
 >>> from transformers import TapasConfig, TFTapasForQuestionAnswering
 
@@ -354,11 +354,11 @@ Equivalently, fine-tuning [`TFTapasForQuestionAnswering`] in native TensorFlow c
 
 ## Usage: inference
 
-Here we explain how you can use [`TapasForQuestionAnswering`] for inference (i.e. making predictions on new data). For inference, only `input_ids`, `attention_mask` and `token_type_ids` (which you can obtain using [`~transformers.TapasTokenizer`]) have to be provided to the model to obtain the logits. Next, you can use the handy [`~transformers.models.tapas.tokenization_tapas.convert_logits_to_predictions`] method to convert these into predicted coordinates and optional aggregation indices.
+Here we explain how you can use [`TapasForQuestionAnswering`] for inference (i.e. making predictions on new data). For inference, only `input_ids`, `attention_mask` and `token_type_ids` (which you can obtain using [`TapasTokenizer`]) have to be provided to the model to obtain the logits. Next, you can use the handy [`~models.tapas.tokenization_tapas.convert_logits_to_predictions`] method to convert these into predicted coordinates and optional aggregation indices.
 
 However, note that inference is **different** depending on whether or not the setup is conversational. In a non-conversational set-up, inference can be done in parallel on all table-question pairs of a batch. Here's an example of that:
 
-```
+```py
 >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
 >>> import pandas as pd 
 
@@ -411,7 +411,7 @@ Predicted answer: SUM > 87, 53, 69
 
 And here is the equivalent code for TensorFlow:
 
-```
+```py
 >>> from transformers import TapasTokenizer, TFTapasForQuestionAnswering
 >>> import pandas as pd 
 
