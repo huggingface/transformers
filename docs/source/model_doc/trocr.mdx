@@ -18,7 +18,7 @@ Models](https://arxiv.org/abs/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Y
 Zhoujun Li, Furu Wei. TrOCR consists of an image Transformer encoder and an autoregressive text Transformer decoder to
 perform [optical character recognition (OCR)](https://en.wikipedia.org/wiki/Optical_character_recognition).
 
-Please refer to the [`~transformers.VisionEncoderDecoder`] class on how to use this model.
+Please refer to the [`VisionEncoderDecoder`] class on how to use this model.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 
@@ -38,8 +38,8 @@ Tips:
 
 ## Inference
 
-TrOCR's [`~transformers.VisionEncoderDecoder`] model accepts images as input and makes use of
-[`~transformers.generation_utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
+TrOCR's [`VisionEncoderDecoder`] model accepts images as input and makes use of
+[`~generation_utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
 The [`~transformers.ViTFeatureExtractor`] class is responsible for preprocessing the input image and
 [`~transformers.RobertaTokenizer`] decodes the generated target tokens to the target string. The
@@ -48,7 +48,7 @@ into a single instance to both extract the input features and decode the predict
 
 - Step-by-step Optical Character Recognition (OCR)
 
-``` 
+``` py
 >>> from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 >>> import requests 
 >>> from PIL import Image
@@ -74,7 +74,6 @@ See the [model hub](https://huggingface.co/models?filter=trocr) to look for TrOC
 ## TrOCRProcessor
 
 [[autodoc]] TrOCRProcessor
-
     - __call__
     - from_pretrained
     - save_pretrained
@@ -85,5 +84,4 @@ See the [model hub](https://huggingface.co/models?filter=trocr) to look for TrOC
 ## TrOCRForCausalLM
 
 [[autodoc]] TrOCRForCausalLM
-
      - forward

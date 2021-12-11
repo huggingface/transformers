@@ -46,7 +46,7 @@ Tips:
   applied k-means clustering to the (R,G,B) pixel values with k=512. This way, we only have a 32*32 = 1024-long
   sequence, but now of integers in the range 0..511. So we are shrinking the sequence length at the cost of a bigger
   embedding matrix. In other words, the vocabulary size of ImageGPT is 512, + 1 for a special "start of sentence" (SOS)
-  token, used at the beginning of every sequence. One can use [`~transformers.ImageGPTFeatureExtractor`] to prepare
+  token, used at the beginning of every sequence. One can use [`ImageGPTFeatureExtractor`] to prepare
   images for the model.
 - Despite being pre-trained entirely unsupervised (i.e. without the use of any labels), ImageGPT produces fairly
   performant image features useful for downstream tasks, such as image classification. The authors showed that the
@@ -55,7 +55,7 @@ Tips:
   easily obtained by first forwarding the image through the model, then specifying `output_hidden_states=True`, and
   then average-pool the hidden states at whatever layer you like.
 - Alternatively, one can further fine-tune the entire model on a downstream dataset, similar to BERT. For this, you can
-  use [`~transformers.ImageGPTForImageClassification`].
+  use [`ImageGPTForImageClassification`].
 - ImageGPT comes in different sizes: there's ImageGPT-small, ImageGPT-medium and ImageGPT-large. The authors did also
   train an XL variant, which they didn't release. The differences in size are summarized in the following table:
 
@@ -68,8 +68,7 @@ Tips:
 | MiT-b4 | [3, 8, 27, 3] | [64, 128, 320, 512] | 768 | 62.6 | 83.6 |
 | MiT-b5 | [3, 6, 40, 3] | [64, 128, 320, 512] | 768 | 82.0 | 83.8 |
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr), based on [this
-issue](https://github.com/openai/image-gpt/issues/7). The original code can be found
+This model was contributed by [nielsr](https://huggingface.co/nielsr), based on [this issue](https://github.com/openai/image-gpt/issues/7). The original code can be found
 [here](https://github.com/openai/image-gpt).
 
 ## ImageGPTConfig
