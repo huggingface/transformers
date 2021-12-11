@@ -55,7 +55,7 @@ Software:
 - fp16/bf16 (smaller data/faster throughput)
 - tf32 (faster throughput)
 - Gradient checkpointing
-
+- Sparsity
 
 
 ## Hardware
@@ -488,6 +488,36 @@ One of the important requirements to reach great training speed is the ability t
 ### Faster optimizer
 
 pytorch-nightly introduced `torch.optim._multi_tensor` which should significantly speed up the optimizers for situations with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner and don't mind using the bleed-edge, see: https://github.com/huggingface/transformers/issues/9965
+
+
+### Sparsity
+
+#### Mixture of Experts
+
+Quite a few of the recent papers reported a 4-5x training speedup and a faster inference by integrating
+Mixture of Experts (MoE) into the Transformer models.
+
+Since it has been discovered that more parameters lead to better performance, this technique allows to increase the number of parameters by an order of magnitude without increasing training costs.
+
+In this approach every other FFN layer is replaced with a MoE Layer which consists of many experts, with a gated function that trains each expert in a balanced way depending on the input token's position in a sequence.
+
+![MoE Transformer 2x block](/imgs/perf-moe-transformer.png)
+
+(source: [GLAM](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html))
+
+You can find exhaustive details and comparison tables in the papers listed at the end of this section.
+
+The main drawback of this approach is that it requires staggering amounts of GPU memory - almost an order of magnitude larger than its dense equivalent. Various distillation and approaches are proposed to how to overcome the much higher memory requirements.
+
+Most implementations are built around Tensorflow/TPUs:
+
+- [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding](https://arxiv.org/abs/2006.16668)
+- [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961)
+- [GLaM: Generalist Language Model (GLaM)](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html)
+
+And for Pytorch Deepspeed has built one as well: [blog post](https://www.deepspeed.ai/news/2021/12/09/deepspeed-moe-nlg.html), [code](Thttps://github.com/microsoft/Megatron-DeepSpeed/tree/moe-training)
+
+
 
 
 ## Contribute
