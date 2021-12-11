@@ -59,7 +59,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TrOCRProcessor, ViTFeatureExtractor
+    from transformers import ViTFeatureExtractor
 
 
 @require_tf
