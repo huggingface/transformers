@@ -1530,7 +1530,6 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
     """ELECTRA Model with a `language modeling` head on top for CLM fine-tuning. """, ELECTRA_START_DOCSTRING
 )
 class ElectraForCausalLM(ElectraPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
