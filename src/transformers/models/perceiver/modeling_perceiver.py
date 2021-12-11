@@ -2556,7 +2556,15 @@ class AbstractPreprocessor(nn.Module):
 
 
 class PerceiverTextPreprocessor(AbstractPreprocessor):
-    """Text preprocessing for Perceiver Encoder."""
+    """
+    Text preprocessing for Perceiver Encoder. Can be used to embed `inputs` and add positional encodings.
+
+    The dimensionality of the embeddings is determined by the `d_model` attribute of the configuration.
+
+    Args:
+        config (:obj:`PerceiverConfig`):
+            Model configuration.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -2578,10 +2586,15 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
 
 
 class PerceiverEmbeddingDecoder(nn.Module):
-    """Module to decode embeddings (for masked language modeling)."""
+    """
+    Module to decode embeddings (for masked language modeling).
+
+    Args:
+        config (:obj:`PerceiverConfig`):
+            Model configuration.
+    """
 
     def __init__(self, config):
-        """Constructs the module."""
         super().__init__()
         self.config = config
         self.vocab_size = config.vocab_size
@@ -2597,7 +2610,8 @@ class PerceiverEmbeddingDecoder(nn.Module):
 
 class PerceiverMultimodalPostprocessor(nn.Module):
     """
-    Multimodal postprocessing for Perceiver.
+    Multimodal postprocessing for Perceiver. Can be used to combine modality-specific postprocessors into a single
+    postprocessor.
 
     Args:
           modalities (:obj:`Dict[str, PostprocessorType]`):
@@ -2678,8 +2692,8 @@ class PerceiverAudioPostprocessor(nn.Module):
 
 class PerceiverProjectionPostprocessor(nn.Module):
     """
-    Projection postprocessing for Perceiver. Can be used to convert the project the channels of the decoder output to a
-    lower dimension.
+    Projection postprocessing for Perceiver. Can be used to project the channels of the decoder output to a lower
+    dimension.
 
     Args:
         in_channels (:obj:`int`):
