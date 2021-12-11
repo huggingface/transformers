@@ -59,11 +59,13 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("funnel", ("TFFunnelModel", "TFFunnelBaseModel")),
         ("dpr", "TFDPRQuestionEncoder"),
         ("mpnet", "TFMPNetModel"),
+        ("tapas", "TFTapasModel"),
         ("mbart", "TFMBartModel"),
         ("marian", "TFMarianModel"),
         ("pegasus", "TFPegasusModel"),
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
+        ("vit", "TFViTModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
         ("hubert", "TFHubertModel"),
     ]
@@ -91,6 +93,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("xlm", "TFXLMWithLMHeadModel"),
         ("ctrl", "TFCTRLLMHeadModel"),
         ("electra", "TFElectraForPreTraining"),
+        ("tapas", "TFTapasForMaskedLM"),
         ("funnel", "TFFunnelForPreTraining"),
         ("mpnet", "TFMPNetForMaskedLM"),
     ]
@@ -123,6 +126,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("xlm", "TFXLMWithLMHeadModel"),
         ("ctrl", "TFCTRLLMHeadModel"),
         ("electra", "TFElectraForMaskedLM"),
+        ("tapas", "TFTapasForMaskedLM"),
         ("funnel", "TFFunnelForMaskedLM"),
         ("mpnet", "TFMPNetForMaskedLM"),
     ]
@@ -141,6 +145,13 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "TFXLNetLMHeadModel"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("ctrl", "TFCTRLLMHeadModel"),
+    ]
+)
+
+TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Image-classsification
+        ("vit", "TFViTForImageClassification"),
     ]
 )
 
@@ -164,6 +175,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("flaubert", "TFFlaubertWithLMHeadModel"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("electra", "TFElectraForMaskedLM"),
+        ("tapas", "TFTapasForMaskedLM"),
         ("funnel", "TFFunnelForMaskedLM"),
         ("mpnet", "TFMPNetForMaskedLM"),
     ]
@@ -207,6 +219,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("flaubert", "TFFlaubertForSequenceClassification"),
         ("xlm", "TFXLMForSequenceClassification"),
         ("electra", "TFElectraForSequenceClassification"),
+        ("tapas", "TFTapasForSequenceClassification"),
         ("funnel", "TFFunnelForSequenceClassification"),
         ("gpt2", "TFGPT2ForSequenceClassification"),
         ("mpnet", "TFMPNetForSequenceClassification"),
@@ -240,6 +253,14 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mpnet", "TFMPNetForQuestionAnswering"),
     ]
 )
+
+TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Table Question Answering mapping
+        ("tapas", "TFTapasForQuestionAnswering"),
+    ]
+)
+
 
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
@@ -302,6 +323,9 @@ TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES
 TF_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 TF_MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES)
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
+)
 TF_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
@@ -311,6 +335,9 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 )
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
+)
+TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES
 )
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
@@ -352,6 +379,13 @@ class TFAutoModelForCausalLM(_BaseAutoModelClass):
 TFAutoModelForCausalLM = auto_class_update(TFAutoModelForCausalLM, head_doc="causal language modeling")
 
 
+class TFAutoModelForImageClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+
+
+AutoModelForImageClassification = auto_class_update(TFAutoModelForImageClassification, head_doc="image classification")
+
+
 class TFAutoModelForMaskedLM(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
 
@@ -382,6 +416,17 @@ class TFAutoModelForQuestionAnswering(_BaseAutoModelClass):
 
 
 TFAutoModelForQuestionAnswering = auto_class_update(TFAutoModelForQuestionAnswering, head_doc="question answering")
+
+
+class TFAutoModelForTableQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+
+
+TFAutoModelForTableQuestionAnswering = auto_class_update(
+    TFAutoModelForTableQuestionAnswering,
+    head_doc="table question answering",
+    checkpoint_for_example="google/tapas-base-finetuned-wtq",
+)
 
 
 class TFAutoModelForTokenClassification(_BaseAutoModelClass):

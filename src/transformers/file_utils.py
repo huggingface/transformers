@@ -35,6 +35,7 @@ from dataclasses import fields
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
+from itertools import chain
 from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, ContextManager, Dict, List, Optional, Tuple, Union
@@ -196,12 +197,28 @@ except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
 
 
+_pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
+try:
+    _pytorch_quantization_version = importlib_metadata.version("pytorch_quantization")
+    logger.debug(f"Successfully imported pytorch-quantization version {_pytorch_quantization_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pytorch_quantization_available = False
+
+
 _soundfile_available = importlib.util.find_spec("soundfile") is not None
 try:
     _soundfile_version = importlib_metadata.version("soundfile")
     logger.debug(f"Successfully imported soundfile version {_soundfile_version}")
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
+
+
+_tensorflow_probability_available = importlib.util.find_spec("tensorflow_probability") is not None
+try:
+    _tensorflow_probability_version = importlib_metadata.version("tensorflow_probability")
+    logger.debug(f"Successfully imported tensorflow-probability version {_tensorflow_probability_version}")
+except importlib_metadata.PackageNotFoundError:
+    _tensorflow_probability_available = False
 
 
 _timm_available = importlib.util.find_spec("timm") is not None
@@ -218,6 +235,22 @@ try:
     logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
 except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
+
+
+_pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
+try:
+    _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
+    logger.debug(f"Successfully imported pyctcdecode version {_pyctcdecode_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pyctcdecode_available = False
+
+
+_librosa_available = importlib.util.find_spec("librosa") is not None
+try:
+    _librosa_version = importlib_metadata.version("librosa")
+    logger.debug(f"Successfully imported librosa version {_librosa_version}")
+except importlib_metadata.PackageNotFoundError:
+    _librosa_available = False
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
@@ -294,6 +327,14 @@ def is_torch_available():
     return _torch_available
 
 
+def is_pyctcdecode_available():
+    return _pyctcdecode_available
+
+
+def is_librosa_available():
+    return _librosa_available
+
+
 def is_torch_cuda_available():
     if is_torch_available():
         import torch
@@ -301,6 +342,55 @@ def is_torch_cuda_available():
         return torch.cuda.is_available()
     else:
         return False
+
+
+def is_torch_bf16_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    # since currently no utility function is available we build our own.
+    # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
+    # with additional check for torch version
+    # to succeed:
+    # 1. the hardware needs to support bf16 (arch >= Ampere)
+    # 2. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
+    # 3. CUDA >= 11
+    # 4. torch.autocast exists
+    # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
+    # really only correct for the 0th gpu (or currently set default device if different from 0)
+
+    if not torch.cuda.is_available() or torch.version.cuda is None:
+        return False
+    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+        return False
+    if int(torch.version.cuda.split(".")[0]) < 11:
+        return False
+    if version.parse(torch.__version__) < version.parse("1.10"):
+        return False
+    if not hasattr(torch, "autocast"):
+        return False
+
+    return True
+
+
+def is_torch_tf32_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if not torch.cuda.is_available() or torch.version.cuda is None:
+        return False
+    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+        return False
+    if int(torch.version.cuda.split(".")[0]) < 11:
+        return False
+    if version.parse(torch.__version__) < version.parse("1.7"):
+        return False
+
+    return True
 
 
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
@@ -429,6 +519,14 @@ def is_in_notebook():
 
 def is_scatter_available():
     return _scatter_available
+
+
+def is_pytorch_quantization_available():
+    return _pytorch_quantization_available
+
+
+def is_tensorflow_probability_available():
+    return _tensorflow_probability_available
 
 
 def is_pandas_available():
@@ -610,6 +708,18 @@ SCATTER_IMPORT_ERROR = """
 explained here: https://github.com/rusty1s/pytorch_scatter.
 """
 
+# docstyle-ignore
+PYTORCH_QUANTIZATION_IMPORT_ERROR = """
+{0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
+`pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
+"""
+
+# docstyle-ignore
+TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
+{0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/tensorflow/probability.
+"""
+
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -650,6 +760,12 @@ PYTESSERACT_IMPORT_ERROR = """
 `pip install pytesseract`
 """
 
+# docstyle-ignore
+PYCTCDECODE_IMPORT_ERROR = """
+{0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
+`pip install pyctcdecode`
+"""
+
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -659,11 +775,14 @@ BACKENDS_MAPPING = OrderedDict(
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
+        ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
@@ -826,7 +945,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example of single-label classification::
 
         >>> from transformers import {processor_class}, {model_class}
         >>> import torch
@@ -839,7 +958,22 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
+
+    Example of multi-label classification::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', problem_type="multi_label_classification")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> labels = torch.tensor([[1, 1]], dtype=torch.float) # need dtype=float for BCEWithLogitsLoss
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
+
 
 PT_MASKED_LM_SAMPLE = r"""
     Example::
@@ -2110,7 +2244,7 @@ class _LazyModule(ModuleType):
             for value in values:
                 self._class_to_module[value] = key
         # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
+        self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
         self.__file__ = module_file
         self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]

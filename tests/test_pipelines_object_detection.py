@@ -74,7 +74,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
         import datasets
 
-        dataset = datasets.load_dataset("Narsil/image_dummy", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         batch = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),

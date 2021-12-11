@@ -290,7 +290,7 @@ class RemBertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -328,7 +328,6 @@ class RemBertSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RemBert
 class RemBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -336,6 +335,7 @@ class RemBertAttention(nn.Module):
         self.output = RemBertSelfOutput(config)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -354,6 +354,7 @@ class RemBertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,
         hidden_states,
@@ -409,7 +410,6 @@ class RemBertOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RemBert
 class RemBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -425,6 +425,7 @@ class RemBertLayer(nn.Module):
         self.intermediate = RemBertIntermediate(config)
         self.output = RemBertOutput(config)
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states,
@@ -489,6 +490,7 @@ class RemBertLayer(nn.Module):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
@@ -763,7 +765,8 @@ class RemBertModel(RemBertPreTrainedModel):
 
         self.pooler = RemBertPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -923,7 +926,8 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
         self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.cls = RemBertOnlyMLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1025,7 +1029,8 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
         self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.cls = RemBertOnlyMLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1082,10 +1087,10 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
             >>> from transformers import RemBertTokenizer, RemBertForCausalLM, RemBertConfig
             >>> import torch
 
-            >>> tokenizer = RemBertTokenizer.from_pretrained('rembert')
-            >>> config = RemBertConfig.from_pretrained("rembert")
+            >>> tokenizer = RemBertTokenizer.from_pretrained('google/rembert')
+            >>> config = RemBertConfig.from_pretrained("google/rembert")
             >>> config.is_decoder = True
-            >>> model = RemBertForCausalLM.from_pretrained('rembert', config=config)
+            >>> model = RemBertForCausalLM.from_pretrained('google/rembert', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1171,7 +1176,8 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1267,7 +1273,8 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1359,7 +1366,8 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1447,7 +1455,8 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
         self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

@@ -36,7 +36,7 @@ Tips:
 - Speech2Text2 achieves state-of-the-art results on the CoVoST Speech Translation dataset. For more information, see
   the `official models <https://huggingface.co/models?other=speech2text2>`__ .
 - Speech2Text2 is always used within the :doc:`SpeechEncoderDecoder <speechencoderdecoder>` framework.
-- Speech2Text2's tokenizer currently only supports inference, but not training.
+- Speech2Text2's tokenizer is based on `fastBPE <https://github.com/glample/fastBPE>`.
 
 Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

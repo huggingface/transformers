@@ -47,11 +47,11 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: Image.Image):
+def apply_tesseract(image: Image.Image, lang: Optional[str]):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
 
     # apply OCR
-    data = pytesseract.image_to_data(image, output_type="dict")
+    data = pytesseract.image_to_data(image, lang=lang, output_type="dict")
     words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
 
     # filter empty words and corresponding coordinates
@@ -102,6 +102,9 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         apply_ocr (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
+        ocr_lang (:obj:`Optional[str]`, `optional`):
+            The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+            used.
 
             .. note::
 
@@ -110,12 +113,13 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_resize=True, size=224, resample=Image.BILINEAR, apply_ocr=True, **kwargs):
+    def __init__(self, do_resize=True, size=224, resample=Image.BILINEAR, apply_ocr=True, ocr_lang=None, **kwargs):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
         self.apply_ocr = apply_ocr
+        self.ocr_lang = ocr_lang
         if apply_ocr:
             requires_backends(self, "pytesseract")
 
@@ -199,7 +203,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(self.to_pil_image(image))
+                words, boxes = apply_tesseract(self.to_pil_image(image), self.ocr_lang)
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 

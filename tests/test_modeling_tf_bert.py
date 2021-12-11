@@ -22,6 +22,7 @@ from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():
@@ -284,7 +285,7 @@ class TFBertModelTester:
 
 
 @require_tf
-class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (

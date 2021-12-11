@@ -51,7 +51,7 @@ To create the package for pypi.
    pip install -i https://testpypi.python.org/pypi transformers
 
    Check you can run the following commands:
-   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))" 
+   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
 
 9. Upload the final version to actual pypi:
@@ -59,7 +59,7 @@ To create the package for pypi.
 
 10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release, 
+11. Run `make post-release` (or, for a patch release, `make post-patch`). If you were on a branch for the release,
     you need to go back to master before executing this.
 """
 
@@ -97,14 +97,14 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.3",
+    "deepspeed>=0.5.7",
     "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.3.4",
+    "flax>=0.3.5",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "huggingface-hub>=0.1.0,<1.0",
@@ -114,7 +114,6 @@ _deps = [
     "jax>=0.2.8",
     "jaxlib>=0.1.65",
     "jieba",
-    "keras!=2.7.0", # Remove when they fix their release
     "keras2onnx",
     "nltk",
     "numpy>=1.17",
@@ -145,6 +144,7 @@ _deps = [
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "librosa",
+    "markdown!=3.3.5",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -159,6 +159,7 @@ _deps = [
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "torchaudio",
+    "pyctcdecode>=0.2.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -235,8 +236,8 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "keras2onnx", "keras")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx", "keras")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "keras2onnx")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx")
 
 extras["torch"] = deps_list("torch")
 
@@ -262,7 +263,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa")
+extras["audio"] = deps_list("librosa", "pyctcdecode")
 extras["speech"] = deps_list("torchaudio") + extras["audio"]  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
@@ -280,7 +281,7 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 
-extras["quality"] = deps_list("black", "isort", "flake8")
+extras["quality"] = deps_list("black", "isort", "flake8", "GitPython")
 
 extras["all"] = (
     extras["tf"]
@@ -297,6 +298,7 @@ extras["all"] = (
 
 extras["docs_specific"] = deps_list(
     "docutils",
+    "markdown",
     "recommonmark",
     "sphinx",
     "sphinx-markdown-tables",
@@ -352,7 +354,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.13.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.14.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

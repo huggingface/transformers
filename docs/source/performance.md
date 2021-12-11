@@ -52,9 +52,10 @@ Software:
 - Pipeline Parallelism
 - Tensor Parallelism
 - Low-memory Optimizers
-- fp16/bf16 (smaller data)
+- fp16/bf16 (smaller data/faster throughput)
+- tf32 (faster throughput)
 - Gradient checkpointing
-
+- Sparsity
 
 
 ## Hardware
@@ -164,16 +165,74 @@ Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 ### Anatomy of Model's Memory
 
 The components on GPU memory are the following:
-- the model weights
-- the forward activations saved for gradient computation
-- the gradients
-- the optimizer state
+1. model weights
+2. optimizer states
+3. gradients
+4. forward activations saved for gradient computation
+5. temporary buffers
+6. functionality-specific memory
+
+A typical model trained in mixed precision with AdamW requires 18 bytes per model parameter plus activation memory.
+
+For inference there are no optimizer states and gradients, so we can subtract those. And thus we end up with 6 bytes per model parameter for mixed precision inference, plus activation memory.
+
+Let's look at the details.
+
+#### Model Weights
+
+- 4 bytes * number of parameters for fp32 training
+- 6 bytes * number of parameters for mixed precision training
+
+#### Optimizer States
+
+- 8 bytes * number of parameters for normal AdamW (maintains 2 states)
+- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/facebookresearch/bitsandbytes)
+- 4 bytes * number of parameters for optimizers like SGD (maintains only 1 state)
+
+#### Gradients
+
+- 4 bytes * number of parameters for either fp32 or mixed precision training
+
+#### Forward Activations
+
+- size depends on many factors, the key ones being sequence length, hidden size and batch size.
+
+There are the input and output that are being passed and returned by the forward and the backward functions and the forward activations saved for gradient computation.
+
+#### Temporary Memory
+
+Additionally there are all kinds of temporary variables which get released once the calculation is done, but in the moment these could require additional memory and could push to OOM. Therefore when coding it's crucial to think strategically about such temporary variables and sometimes to explicitly free those as soon as they are no longer needed.
+
+#### Functionality-specific memory
+
+Then your software could have special memory needs. For example, when generating text using beam search, the software needs to maintain multiple copies of inputs and outputs.
+
+
 
 ### `forward` vs `backward` Execution Speed
 
 For convolutions and linear layers there are 2x flops in the backward compared to the forward, which generally translates into ~2x slower (sometimes more, because sizes in the backward tend to be more awkward). Activations are usually bandwidth-limited, and it’s typical for an activation to have to read more data in the backward than in the forward (e.g. activation forward reads once, writes once, activation backward reads twice, gradOutput and output of the forward, and writes once, gradInput).
 
-### fp16
+
+### Floating Data Types
+
+Here are the commonly used floating point data types choice of which impacts both memory usage and throughput:
+
+- fp32 (`float32`)
+- fp16 (`float16`)
+- bf16 (`bfloat16`)
+- tf32 (CUDA internal data type)
+
+Here is a diagram that shows how these data types correlate to each other.
+
+![data types](/imgs/tf32-bf16-fp16-fp32.png)
+
+(source: [NVIDIA Blog](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/))
+
+While fp16 and fp32 have been around for quite some time, bf16 and tf32 are only available on the Ampere architecture GPUS. TPUs support bf16 as well.
+
+
+#### fp16
 
 AMP = Automatic Mixed Precision
 
@@ -184,6 +243,8 @@ If we look at what's happening with FP16 training (mixed precision) we have:
 - the optimizer states are in full precision as all the updates are done in full-precision
 
 So the savings only happen for the forward activations saved for the backward computation, and there is a slight overhead because the model weights are stored both in half- and full-precision.
+
+In 🤗 Transformers fp16 mixed precision is enabled by passing `--fp16` to the 🤗 Trainer.
 
 Now let's look at a simple text-classification fine-tuning on 2 GPUs (I'm giving the command for reference):
 ```
@@ -217,15 +278,92 @@ Summary: FP16 with apex or AMP will only give you some memory savings with a rea
 
 Additionally, under mixed precision when possible, it's important that the batch size is a multiple of 8 to efficiently use tensor cores.
 
+Note that in some situations the speed up can be as big as 5x when using mixed precision. e.g. we have observed that while using [Megatron-Deepspeed](https://github.com/bigscience-workshop/Megatron-DeepSpeed).
+
 Some amazing tutorials to read on mixed precision:
 - @sgugger wrote a great explanation of mixed precision [here](https://docs.fast.ai/callback.fp16.html#A-little-bit-of-theory)
 - Aleksey Bilogur's [A developer-friendly guide to mixed precision training with PyTorch](https://spell.ml/blog/mixed-precision-training-with-pytorch-Xuk7YBEAACAASJam)
 
-### fp16 caching
+##### fp16 caching
 
 pytorch `autocast` which performs AMP include a caching feature, which speed things up by caching fp16-converted values. Here is the full description from this [comment](https://discuss.pytorch.org/t/autocast-and-torch-no-grad-unexpected-behaviour/93475/3):
 
-Autocast maintains a cache of the FP16 casts of model params (leaves). This helps streamline parameter reuse: if the same FP32 param is used in several different FP16list ops, like several matmuls, instead of re-casting the param to FP16 on entering each matmul, the cast will occur on the first matmul, the casted FP16 copy will be cached, and for all later matmuls the FP16 copy will be reused. The cache is maintained only within a particular outermost autocast context. When you exit the autocast context the cache is dropped. For recommended usage, in which autocast wraps the forward pass, and then you exit the context before calling backward(), this means the cache only lasts the duration of the forward pass each iteration, and will be rebuilt next iteration. (The cache of FP16-casted copies MUST be rebuilt each iteration. The FP32 params get updated by the optimizer, so the FP16 copies must be recreated, otherwise the FP16 values will be stale.)
+Autocast maintains a cache of the FP16 casts of model parameters (leaves). This helps streamline parameter reuse: if the same FP32 param is used in several different FP16list ops, like several matmuls, instead of re-casting the param to FP16 on entering each matmul, the cast will occur on the first matmul, the casted FP16 copy will be cached, and for all later matmuls the FP16 copy will be reused. The cache is maintained only within a particular outermost autocast context. When you exit the autocast context the cache is dropped. For recommended usage, in which autocast wraps the forward pass, and then you exit the context before calling backward(), this means the cache only lasts the duration of the forward pass each iteration, and will be rebuilt next iteration. (The cache of FP16-casted copies MUST be rebuilt each iteration. The FP32 parameters get updated by the optimizer, so the FP16 copies must be recreated, otherwise the FP16 values will be stale.)
+
+##### fp16 Inference
+
+While normally inference is done with fp16/amp as with training, it's also possible to use the full fp16 mode without using mixed precision. This is especially a good fit if the pretrained model weights are already in fp16. So a lot less memory is used: 2 bytes per parameter vs 6 bytes with mixed precision!
+
+How good the results this will deliver will depend on the model. If it can handle fp16 without overflows and accuracy issues, then it'll definitely better to use the full fp16 mode.
+
+For example, LayerNorm has to be done in fp32 and recent pytorch (1.10+) has been fixed to do that regardless of the input types, but earlier pytorch versions accumulate in the input type which can be an issue.
+
+In 🤗 Transformers the full fp16 inference is enabled by passing `--fp16_full_eval` to the 🤗 Trainer.
+
+
+#### bf16
+
+If you own Ampere or newer hardware you can start using bf16 for your training and evaluation. While bf16 has a worse precision than fp16, it has a much much bigger dynamic range. Therefore, if in the past you were experiencing overflow issues while training the model, bf16 will prevent this from happening most of the time. Remember that in fp16 the biggest number you can have is `65535` and any number above that will overflow. A bf16 number can be as large as `3.39e+38` (!) which is about the same as fp32 - because both have 8-bits used for the numerical range.
+
+Automatic Mixed Precision (AMP) is the same as with fp16, except it'll use bf16.
+
+Thanks to the fp32-like dynamic range with bf16 mixed precision loss scaling is no longer needed.
+
+If you have tried to finetune models pre-trained under bf16 mixed precision (e.g. T5) it's very likely that you have encountered overflow issues. Now you should be able to finetune those models without any issues.
+
+That said, also be aware that if you pre-trained a model in bf16, it's likely to have overflow issues if someone tries to finetune it in fp16 down the road. So once started on the bf16-mode path it's best to remain on it and not switch to fp16.
+
+In 🤗 Transformers bf16 mixed precision is enabled by passing `--bf16` to the 🤗 Trainer.
+
+If you use your own trainer, this is just:
+
+```
+from torch.cuda.amp import autocast
+with autocast(dtype=torch.bfloat16):
+    loss, outputs = ...
+```
+
+If you need to switch a tensor to bf16, it's just: `t.to(dtype=torch.bfloat16)`
+
+Here is how you can check if your setup supports bf16:
+
+```
+python -c 'import transformers; print(f"BF16 support is {transformers.file_utils.is_torch_bf16_available()}")'
+```
+
+On the other hand bf16 has a much worse precision than fp16, so there are certain situations where you'd still want to use fp16 and not bf16.
+
+
+##### bf16 Inference
+
+Same as with fp16, you can do inference in either the mixed precision bf16 or using the full bf16 mode. The same caveats apply. For details see [fp16 Inference](#fp16-inference).
+
+In 🤗 Transformers the full bf16 inference is enabled by passing `--bf16_full_eval` to the 🤗 Trainer.
+
+
+#### tf32
+
+The Ampere hardware uses a magical data type called tf32. It has the same numerical range as fp32 (8-bits), but instead of 23 bits precision it has only 10 bits (same as fp16). In total it uses only 19 bits.
+
+It's magical in the sense that you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput improvement. All you need to do is to add this to your code:
+
+```
+import torch
+torch.backends.cuda.matmul.allow_tf32 = True
+```
+
+When this is done CUDA will automatically switch to using tf32 instead of fp32 where it's possible. This, of course, assumes that the used GPU is from the Ampere series.
+
+Like all cases with reduced precision this may or may not be satisfactory for your needs, so you have to experiment and see. According to [NVIDIA research](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/) the majority of machine learning training shouldn't be impacted and showed the same perplexity and convergence as the fp32 training.
+
+If you're already using fp16 or bf16 mixed precision it may help with the throughput as well.
+
+You can enable this mode in the 🤗 Trainer with `--tf32`, or disable it with `--tf32 0` or `--no_tf32`.
+By default the PyTorch default is used.
+
+Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exit.
+
+Note: you need `torch>=1.7` to enjoy this feature.
 
 
 ### Gradient Checkpointing
@@ -350,6 +488,38 @@ One of the important requirements to reach great training speed is the ability t
 ### Faster optimizer
 
 pytorch-nightly introduced `torch.optim._multi_tensor` which should significantly speed up the optimizers for situations with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner and don't mind using the bleed-edge, see: https://github.com/huggingface/transformers/issues/9965
+
+
+### Sparsity
+
+#### Mixture of Experts
+
+Quite a few of the recent papers reported a 4-5x training speedup and a faster inference by integrating
+Mixture of Experts (MoE) into the Transformer models.
+
+Since it has been discovered that more parameters lead to better performance, this technique allows to increase the number of parameters by an order of magnitude without increasing training costs.
+
+In this approach every other FFN layer is replaced with a MoE Layer which consists of many experts, with a gated function that trains each expert in a balanced way depending on the input token's position in a sequence.
+
+![MoE Transformer 2x block](/imgs/perf-moe-transformer.png)
+
+(source: [GLAM](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html))
+
+You can find exhaustive details and comparison tables in the papers listed at the end of this section.
+
+The main drawback of this approach is that it requires staggering amounts of GPU memory - almost an order of magnitude larger than its dense equivalent. Various distillation and approaches are proposed to how to overcome the much higher memory requirements.
+
+There is direct trade-off though, you can use just a few experts with a 2-3x smaller base model instead of dozens or hundreds experts leading to a 5x smaller model and thus increase the training speed moderately while increasing the memory requirements moderately as well.
+
+Most related papers and implementations are built around Tensorflow/TPUs:
+
+- [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding](https://arxiv.org/abs/2006.16668)
+- [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961)
+- [GLaM: Generalist Language Model (GLaM)](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html)
+
+And for Pytorch DeepSpeed has built one as well: [Mixture of Experts](https://www.deepspeed.ai/tutorials/mixture-of-experts/) - blog posts:  [1](https://www.microsoft.com/en-us/research/blog/deepspeed-powers-8x-larger-moe-model-training-with-high-performance/), [2](https://www.microsoft.com/en-us/research/publication/scalable-and-efficient-moe-training-for-multitask-multilingual-models/) and specific deployment with large transformer-based natural language generation models: [blog post](https://www.deepspeed.ai/news/2021/12/09/deepspeed-moe-nlg.html), [Megatron-Deepspeed branch](Thttps://github.com/microsoft/Megatron-DeepSpeed/tree/moe-training).
+
+
 
 
 ## Contribute

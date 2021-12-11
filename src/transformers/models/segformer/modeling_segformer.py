@@ -165,7 +165,7 @@ class SegformerEfficientSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -467,7 +467,8 @@ class SegformerModel(SegformerPreTrainedModel):
         # hierarchical Transformer encoder
         self.encoder = SegformerEncoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -489,8 +490,8 @@ class SegformerModel(SegformerPreTrainedModel):
             >>> from PIL import Image
             >>> import requests
 
-            >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0")
-            >>> model = SegformerModel("nvidia/segformer-b0")
+            >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+            >>> model = SegformerModel("nvidia/segformer-b0-finetuned-ade-512-512")
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -541,7 +542,8 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         # Classifier head
         self.classifier = nn.Linear(config.hidden_sizes[-1], config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -696,7 +698,8 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         self.segformer = SegformerModel(config)
         self.decode_head = SegformerDecodeHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -723,7 +726,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             >>> import requests
 
             >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-            >>> model = SegformerForSemanticSegmentation("nvidia/segformer-b0-finetuned-ade-512-512")
+            >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -757,7 +760,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
                 upsampled_logits = nn.functional.interpolate(
                     logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
-                loss_fct = CrossEntropyLoss(ignore_index=255)
+                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:

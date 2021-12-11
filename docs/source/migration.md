@@ -31,7 +31,7 @@ This introduces two breaking changes:
 
 ##### How to obtain the same behavior as v3.x in v4.x
 
-- The pipelines now contain additional features out of the box. See the [token-classification pipeline with the `grouped_entities` flag](https://huggingface.co/transformers/main_classes/pipelines.html?highlight=textclassification#tokenclassificationpipeline).
+- The pipelines now contain additional features out of the box. See the [token-classification pipeline with the `grouped_entities` flag](main_classes/pipelines#transformers.TokenClassificationPipeline).
 - The auto-tokenizers now return rust tokenizers. In order to obtain the python tokenizers instead, the user may use the `use_fast` flag by setting it to `False`:
 
 In version `v3.x`:
@@ -98,7 +98,7 @@ from transformers.models.bert.modeling_bert import BertLayer
 
 #### 4. Switching the `return_dict` argument to `True` by default
 
-The [`return_dict` argument](https://huggingface.co/transformers/main_classes/output.html) enables the return of dict-like python objects containing the model outputs, instead of the standard tuples. This object is self-documented as keys can be used to retrieve values, while also behaving as a tuple as users may retrieve objects by index or by slice.
+The [`return_dict` argument](main_classes/output) enables the return of dict-like python objects containing the model outputs, instead of the standard tuples. This object is self-documented as keys can be used to retrieve values, while also behaving as a tuple as users may retrieve objects by index or by slice.
 
 This is a breaking change as the limitation of that tuple is that it cannot be unpacked: `value0, value1 = outputs` will not work.
 
