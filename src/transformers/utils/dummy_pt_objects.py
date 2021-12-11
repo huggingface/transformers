@@ -1908,6 +1908,9 @@ class ElectraForCausalLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class ElectraForMaskedLM:
     def __init__(self, *args, **kwargs):
