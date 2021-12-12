@@ -172,6 +172,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
+        """`pixel_values` is expected to be of NCHW format."""
 
         batch_size, num_channels, height, width = shape_list(pixel_values)
 
@@ -506,31 +507,13 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
         causal_attention_mask = self._build_causal_attention_mask(batch_size, seq_length, dtype=embedding_output.dtype)
 
-        # # expand attention_mask
-        # if attention_mask is not None:
-        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        #     attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
-
-        # We create a 3D attention mask from a 2D tensor mask.
-        # Sizes are [batch_size, 1, 1, to_seq_length]
-        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-        # this attention mask is more simple than the triangular masking of causal attention
-        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = tf.reshape(attention_mask, (input_shape[0], 1, 1, input_shape[1]))
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
-        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
-        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
+        # check attention mask and invert
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        attention_mask = _expand_mask(attention_mask)
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
