@@ -772,7 +772,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
 @require_vision
 @require_tf
-class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
+class TFViT2GPT2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_coco_en(self):
 
