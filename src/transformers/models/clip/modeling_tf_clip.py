@@ -270,8 +270,8 @@ class TFCLIPAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_attention_heads})."
             )
 
-        factor = self.config.initializer_factor
-        in_proj_std = (self.embed_dim ** -0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
+        factor = config.initializer_factor
+        in_proj_std = (self.embed_dim ** -0.5) * ((2 * config.num_hidden_layers) ** -0.5) * factor
         out_proj_std = (self.embed_dim ** -0.5) * factor
 
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
@@ -360,7 +360,7 @@ class TFCLIPMLP(tf.keras.layers.Layer):
 
         self.activation_fn = get_tf_activation(config.hidden_act)
 
-        factor = self.config.initializer_factor
+        factor = config.initializer_factor
         in_proj_std = (config.hidden_size ** -0.5) * ((2 * config.num_hidden_layers) ** -0.5) * factor
         fc_std = (2 * config.hidden_size) ** -0.5 * factor
 
