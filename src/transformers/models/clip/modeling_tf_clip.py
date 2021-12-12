@@ -329,11 +329,11 @@ class TFCLIPAttention(tf.keras.layers.Layer):
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        _attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(inputs=attention_probs, training=training)
+        attention_probs = self.dropout(inputs=_attention_probs, training=training)
 
         attention_output = tf.matmul(attention_probs, value_layer)
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
@@ -344,8 +344,7 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         attention_output = self.out_proj(attention_output, training=training)
         # In TFBert, attention weights are returned after dropout.
         # However, in CLIP, they are returned before dropout.
-        # Q: What to do?
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        outputs = (attention_output, _attention_probs) if output_attentions else (attention_output,)
 
         return outputs
 
