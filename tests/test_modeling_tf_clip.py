@@ -19,6 +19,7 @@ import inspect
 import os
 import tempfile
 import unittest
+from importlib import import_module
 
 import requests
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
@@ -33,7 +34,7 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers import TFCLIPModel, TFCLIPTextModel, TFCLIPVisionModel
+    from transformers import TFCLIPModel, TFCLIPTextModel, TFCLIPVisionModel, TFSharedEmbeddings
     from transformers.models.clip.modeling_tf_clip import TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -431,6 +432,64 @@ class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
     # CLIPModel does not have input/output embeddings
     def test_model_common_attributes(self):
         pass
+
+    # overwrite from common since `TFCLIPModelTester` set `return_loss` to `True` and causes the preparation of
+    # `symbolic_inputs` failed.
+    def test_keras_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # remove `return_loss` to make code work
+        if self.__class__.__name__ == "TFCLIPModelTest":
+            inputs_dict.pop("return_loss", None)
+
+        tf_main_layer_classes = set(
+            module_member
+            for model_class in self.all_model_classes
+            for module in (import_module(model_class.__module__),)
+            for module_member_name in dir(module)
+            if module_member_name.endswith("MainLayer")
+            # This condition is required, since `modeling_tf_clip.py` has 3 classes whose names end with `MainLayer`.
+            and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
+            for module_member in (getattr(module, module_member_name),)
+            if isinstance(module_member, type)
+            and tf.keras.layers.Layer in module_member.__bases__
+            and getattr(module_member, "_keras_serializable", False)
+        )
+        for main_layer_class in tf_main_layer_classes:
+            # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
+            if "T5" in main_layer_class.__name__:
+                # Take the same values than in TFT5ModelTester for this shared layer
+                shared = TFSharedEmbeddings(99, 32, name="shared")
+                config.use_cache = inputs_dict.pop("use_cache", None)
+                main_layer = main_layer_class(config, embed_tokens=shared)
+            else:
+                main_layer = main_layer_class(config)
+
+            symbolic_inputs = {
+                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+            }
+
+            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            outputs = model(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                filepath = os.path.join(tmpdirname, "keras_model.h5")
+                model.save(filepath)
+                if "T5" in main_layer_class.__name__:
+                    model = tf.keras.models.load_model(
+                        filepath,
+                        custom_objects={
+                            main_layer_class.__name__: main_layer_class,
+                            "TFSharedEmbeddings": TFSharedEmbeddings,
+                        },
+                    )
+                else:
+                    model = tf.keras.models.load_model(
+                        filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                    )
+                assert isinstance(model, tf.keras.Model)
+                after_outputs = model(inputs_dict)
+                self.assert_outputs_same(after_outputs, outputs)
 
     # overwrite from common since CLIPModel/TFCLIPModel return CLIPOutput/TFCLIPOutput
     @is_pt_tf_cross_test

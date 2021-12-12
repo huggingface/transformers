@@ -276,11 +276,6 @@ class TFModelTesterMixin:
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # `CLIPModelTester/TFCLIPModelTester` set `return_loss` to `True`, however this causes the preparation
-        # of `symbolic_inputs` below failed.
-        if self.__class__.__name__ == "TFCLIPModelTest":
-            inputs_dict.pop("return_loss", None)
-
         tf_main_layer_classes = set(
             module_member
             for model_class in self.all_model_classes

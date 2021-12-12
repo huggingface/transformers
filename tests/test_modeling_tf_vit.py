@@ -22,7 +22,7 @@ import unittest
 
 from transformers import ViTConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
-from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.testing_utils import require_tf, require_vision, slow, tooslow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -200,7 +200,7 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # overwrite from common since `encoder_seq_length` and `encoder_key_length` are calculated
     # in a different way than in text models.
-    @slow
+    @tooslow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True

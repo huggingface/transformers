@@ -551,10 +551,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         )
 
         if not return_dict:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -585,9 +582,7 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config: CLIPTextConfig, **kwargs):
         super().__init__(**kwargs)
-
         self.config = config
-
         self.text_model = TFCLIPTextTransformer(config, name="text_model")
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
@@ -679,10 +674,7 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
         pooled_output = self.post_layernorm(inputs=pooled_output)
 
         if not return_dict:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -698,9 +690,7 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config: CLIPVisionConfig, **kwargs):
         super().__init__(**kwargs)
-
         self.config = config
-
         self.vision_model = TFCLIPVisionTransformer(config, name="vision_model")
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
