@@ -137,7 +137,7 @@ class ExamplesTests(TestCasePlus):
             --test_file tests/fixtures/tests_samples/xsum/sample.json
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --max_steps=50
+            --num_train_epochs=3
             --warmup_steps=8
             --do_train
             --do_eval
@@ -257,7 +257,7 @@ class ExamplesTests(TestCasePlus):
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --max_steps=10
+            --num_train_epochs=3
             --warmup_steps=2
             --do_train
             --do_eval
