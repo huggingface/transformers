@@ -18,11 +18,25 @@ Models](https://arxiv.org/abs/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Y
 Zhoujun Li, Furu Wei. TrOCR consists of an image Transformer encoder and an autoregressive text Transformer decoder to
 perform [optical character recognition (OCR)](https://en.wikipedia.org/wiki/Optical_character_recognition).
 
+The abstract from the paper is the following:
+
+*Text recognition is a long-standing research problem for document digitalization. Existing approaches for text recognition
+are usually built based on CNN for image understanding and RNN for char-level text generation. In addition, another language
+model is usually needed to improve the overall accuracy as a post-processing step. In this paper, we propose an end-to-end
+text recognition approach with pre-trained image Transformer and text Transformer models, namely TrOCR, which leverages the
+Transformer architecture for both image understanding and wordpiece-level text generation. The TrOCR model is simple but
+effective, and can be pre-trained with large-scale synthetic data and fine-tuned with human-labeled datasets. Experiments
+show that the TrOCR model outperforms the current state-of-the-art models on both printed and handwritten text recognition
+tasks.*
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/trocr_architecture.jpg"
+alt="drawing" width="600"/> 
+
+<small> TrOCR architecture. Taken from the [original paper](https://arxiv.org/abs/2109.10282) </small>
+
 Please refer to the [`VisionEncoderDecoder`] class on how to use this model.
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-
-The original code can be found
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/microsoft/unilm/tree/6f60612e7cc86a2a1ae85c47231507a587ab4e01/trocr).
 
 Tips:
