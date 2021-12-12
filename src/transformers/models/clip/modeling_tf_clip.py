@@ -642,7 +642,7 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.embeddings = TFCLIPVisionEmbeddings(config, name="embeddings")
-        self.pre_layrnorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
+        self.pre_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
         self.encoder = TFCLIPEncoder(config, name="encoder")
         self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
 
@@ -657,7 +657,7 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         embedding_output = self.embeddings(pixel_values=pixel_values)
-        embedding_output = self.pre_layrnorm(inputs=embedding_output)
+        embedding_output = self.pre_layernorm(inputs=embedding_output)
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
