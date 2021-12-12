@@ -68,7 +68,6 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         self.max_position_embeddings = config.max_position_embeddings
         self.max_2d_position_embeddings = config.max_2d_position_embeddings
         self.initializer_range = config.initializer_range
-        # self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
@@ -168,7 +167,6 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         w_position_embeddings = tf.gather(self.w_position_embeddings, bbox[:, :, 2] - bbox[:, :, 0])
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        # position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = (
             inputs_embeds

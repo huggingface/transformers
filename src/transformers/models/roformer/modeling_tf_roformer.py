@@ -140,7 +140,6 @@ class TFRoFormerEmbeddings(tf.keras.layers.Layer):
         self.type_vocab_size = config.type_vocab_size
         self.embedding_size = config.embedding_size
         self.initializer_range = config.initializer_range
-        # self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
