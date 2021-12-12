@@ -304,7 +304,7 @@ class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -3294,7 +3294,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
 
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -34,7 +34,7 @@ if is_torch_available():
 
     from transformers import (
         IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ImageGPTForCausalLM,
+        ImageGPTForCausalImageModeling,
         ImageGPTForImageClassification,
         ImageGPTModel,
     )
@@ -207,14 +207,14 @@ class ImageGPTModelTester:
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
     def create_and_check_lm_head_model(self, config, pixel_values, input_mask, head_mask, token_type_ids, *args):
-        model = ImageGPTForCausalLM(config)
+        model = ImageGPTForCausalImageModeling(config)
         model.to(torch_device)
         model.eval()
 
         labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
         result = model(pixel_values, token_type_ids=token_type_ids, labels=labels)
         self.parent.assertEqual(result.loss.shape, ())
-        # ImageGPTForCausalLM doens't have tied input- and output embeddings
+        # ImageGPTForCausalImageModeling doens't have tied input- and output embeddings
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size - 1))
 
     def create_and_check_imagegpt_for_image_classification(
@@ -255,9 +255,9 @@ class ImageGPTModelTester:
 class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (ImageGPTForCausalLM, ImageGPTForImageClassification, ImageGPTModel) if is_torch_available() else ()
+        (ImageGPTForCausalImageModeling, ImageGPTForImageClassification, ImageGPTModel) if is_torch_available() else ()
     )
-    all_generative_model_classes = (ImageGPTForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (ImageGPTForCausalImageModeling,) if is_torch_available() else ()
     test_missing_keys = False
     input_name = "pixel_values"
 
@@ -273,7 +273,7 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
         return inputs_dict
 
-    # we overwrite the _check_scores method of GenerationTesterMixin, as ImageGPTForCausalLM doesn't have tied input- and output embeddings
+    # we overwrite the _check_scores method of GenerationTesterMixin, as ImageGPTForCausalImageModeling doesn't have tied input- and output embeddings
     def _check_scores(self, batch_size, scores, length, config):
         expected_shape = (batch_size, config.vocab_size - 1)
         self.assertIsInstance(scores, tuple)
@@ -519,7 +519,7 @@ class ImageGPTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_causal_lm_head(self):
-        model = ImageGPTForCausalLM.from_pretrained("openai/imagegpt-small").to(torch_device)
+        model = ImageGPTForCausalImageModeling.from_pretrained("openai/imagegpt-small").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

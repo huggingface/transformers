@@ -25,12 +25,12 @@ Overview
 
 The DeiT model was proposed in `Training data-efficient image transformers & distillation through attention
 <https://arxiv.org/abs/2012.12877>`__ by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
-Sablayrolles, Hervé Jégou. The `Vision Transformer (ViT) <https://huggingface.co/transformers/model_doc/vit.html>`__
-introduced in `Dosovitskiy et al., 2020 <https://arxiv.org/abs/2010.11929>`__ has shown that one can match or even
-outperform existing convolutional neural networks using a Transformer encoder (BERT-like). However, the ViT models
-introduced in that paper required training on expensive infrastructure for multiple weeks, using external data. DeiT
-(data-efficient image transformers) are more efficiently trained transformers for image classification, requiring far
-less data and far less computing resources compared to the original ViT models.
+Sablayrolles, Hervé Jégou. The `Vision Transformer (ViT) <vit>`__ introduced in `Dosovitskiy et al., 2020
+<https://arxiv.org/abs/2010.11929>`__ has shown that one can match or even outperform existing convolutional neural
+networks using a Transformer encoder (BERT-like). However, the ViT models introduced in that paper required training on
+expensive infrastructure for multiple weeks, using external data. DeiT (data-efficient image transformers) are more
+efficiently trained transformers for image classification, requiring far less data and far less computing resources
+compared to the original ViT models.
 
 The abstract from the paper is the following:
 

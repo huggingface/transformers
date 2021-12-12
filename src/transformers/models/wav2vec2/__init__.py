@@ -27,6 +27,7 @@ _import_structure = {
     "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
 }
 
+
 if is_torch_available():
     _import_structure["modeling_wav2vec2"] = [
         "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",

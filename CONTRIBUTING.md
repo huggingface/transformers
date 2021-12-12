@@ -276,7 +276,7 @@ Follow these steps to start contributing:
 6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_bert.py` for an
    example.
 
-See more about the checks run on a pull request in our [PR guide](https://huggingface.co/transformers/master/pr_tests.html)
+See more about the checks run on a pull request in our [PR guide](pr_checks)
 
 ### Tests
 

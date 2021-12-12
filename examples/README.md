@@ -42,34 +42,35 @@ To browse the examples corresponding to released versions of 🤗 Transformers, 
 
 <details>
   <summary>Examples for older versions of 🤗 Transformers</summary>
-
-  - [v4.5.1](https://github.com/huggingface/transformers/tree/v4.5.1/examples)
-  - [v4.4.2](https://github.com/huggingface/transformers/tree/v4.4.2/examples)
-  - [v4.3.3](https://github.com/huggingface/transformers/tree/v4.3.3/examples)
-  - [v4.2.2](https://github.com/huggingface/transformers/tree/v4.2.2/examples)
-  - [v4.1.1](https://github.com/huggingface/transformers/tree/v4.1.1/examples)
-  - [v4.0.1](https://github.com/huggingface/transformers/tree/v4.0.1/examples)
-  - [v3.5.1](https://github.com/huggingface/transformers/tree/v3.5.1/examples)
-  - [v3.4.0](https://github.com/huggingface/transformers/tree/v3.4.0/examples)
-  - [v3.3.1](https://github.com/huggingface/transformers/tree/v3.3.1/examples)
-  - [v3.2.0](https://github.com/huggingface/transformers/tree/v3.2.0/examples)
-  - [v3.1.0](https://github.com/huggingface/transformers/tree/v3.1.0/examples)
-  - [v3.0.2](https://github.com/huggingface/transformers/tree/v3.0.2/examples)
-  - [v2.11.0](https://github.com/huggingface/transformers/tree/v2.11.0/examples)
-  - [v2.10.0](https://github.com/huggingface/transformers/tree/v2.10.0/examples)
-  - [v2.9.1](https://github.com/huggingface/transformers/tree/v2.9.1/examples)
-  - [v2.8.0](https://github.com/huggingface/transformers/tree/v2.8.0/examples)
-  - [v2.7.0](https://github.com/huggingface/transformers/tree/v2.7.0/examples)
-  - [v2.6.0](https://github.com/huggingface/transformers/tree/v2.6.0/examples)
-  - [v2.5.1](https://github.com/huggingface/transformers/tree/v2.5.1/examples)
-  - [v2.4.0](https://github.com/huggingface/transformers/tree/v2.4.0/examples)
-  - [v2.3.0](https://github.com/huggingface/transformers/tree/v2.3.0/examples)
-  - [v2.2.0](https://github.com/huggingface/transformers/tree/v2.2.0/examples)
-  - [v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.0/examples)
-  - [v2.0.0](https://github.com/huggingface/transformers/tree/v2.0.0/examples)
-  - [v1.2.0](https://github.com/huggingface/transformers/tree/v1.2.0/examples)
-  - [v1.1.0](https://github.com/huggingface/transformers/tree/v1.1.0/examples)
-  - [v1.0.0](https://github.com/huggingface/transformers/tree/v1.0.0/examples)
+	<ul>
+		<li><a href="https://github.com/huggingface/transformers/tree/v4.5.1/examples">v4.5.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v4.4.2/examples">v4.4.2</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v4.3.3/examples">v4.3.3</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v4.2.2/examples">v4.2.2</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v4.1.1/examples">v4.1.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v4.0.1/examples">v4.0.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v3.5.1/examples">v3.5.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v3.4.0/examples">v3.4.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v3.3.1/examples">v3.3.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v3.2.0/examples">v3.2.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v3.1.0/examples">v3.1.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v3.0.2/examples">v3.0.2</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.11.0/examples">v2.11.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.10.0/examples">v2.10.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.9.1/examples">v2.9.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.8.0/examples">v2.8.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.7.0/examples">v2.7.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.6.0/examples">v2.6.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.5.1/examples">v2.5.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.4.0/examples">v2.4.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.3.0/examples">v2.3.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.2.0/examples">v2.2.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.1.0/examples">v2.1.1</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v2.0.0/examples">v2.0.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v1.2.0/examples">v1.2.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v1.1.0/examples">v1.1.0</a></li>
+		<li><a href="https://github.com/huggingface/transformers/tree/v1.0.0/examples">v1.0.0</a></li>
+	</ul>
 </details>
 
 Alternatively, you can switch your cloned 🤗 Transformers to a specific version (for instance with v3.5.1) with

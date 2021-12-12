@@ -31,7 +31,8 @@ class Text2TextGenerationPipeline(Pipeline):
     following task identifier: :obj:`"text2text-generation"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
-    up-to-date list of available models on `huggingface.co/models <https://huggingface.co/models?filter=seq2seq>`__.
+    up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=text2text-generation>`__.
 
     Usage::
 
@@ -226,16 +227,13 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         """
         Checks whether there might be something wrong with given input with regard to the model.
         """
-        if input_length < min_length // 2:
-            logger.warning(
-                f"Your min_length is set to {min_length}, but you input_length is only {input_length}. You might "
-                "consider decreasing min_length manually, e.g. summarizer('...', min_length=10)"
-            )
+        if max_length < min_length:
+            logger.warning(f"Your min_length={min_length} must be inferior than your max_length={max_length}.")
 
         if input_length < max_length:
             logger.warning(
                 f"Your max_length is set to {max_length}, but you input_length is only {input_length}. You might "
-                "consider decreasing max_length manually, e.g. summarizer('...', max_length=50)"
+                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
             )
 
 

@@ -28,8 +28,6 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
-from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES, AutoFeatureExtractor
-from .tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
 
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
@@ -41,6 +39,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("trocr", "TrOCRProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
+        ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
     ]
 )
 
@@ -83,9 +83,6 @@ class AutoProcessor:
         (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible):
 
         List options
-
-        For other types of models, this class will return the appropriate tokenizer (if available) or feature
-        extractor.
 
         Params:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -149,6 +146,9 @@ class AutoProcessor:
             key: kwargs[key] for key in ["revision", "use_auth_token", "local_files_only"] if key in kwargs
         }
         model_files = get_list_of_files(pretrained_model_name_or_path, **get_list_of_files_kwargs)
+        # strip to file name
+        model_files = [f.split("/")[-1] for f in model_files]
+
         if FEATURE_EXTRACTOR_NAME in model_files:
             config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
             if "processor_class" in config_dict:
@@ -166,24 +166,11 @@ class AutoProcessor:
             return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         model_type = config_class_to_model_type(type(config).__name__)
-        if model_type is not None and model_type in PROCESSOR_MAPPING_NAMES:
+        if model_type is not None:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        # At this stage there doesn't seem to be a `Processor` class available for this model, so let's try a tokenizer
-        if model_type in TOKENIZER_MAPPING_NAMES:
-            return AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # At this stage there doesn't seem to be a `Processor` class available for this model, so let's try a tokenizer
-        if model_type in FEATURE_EXTRACTOR_MAPPING_NAMES:
-            return AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        all_model_types = set(
-            PROCESSOR_MAPPING_NAMES.keys() + TOKENIZER_MAPPING_NAMES.keys() + FEATURE_EXTRACTOR_MAPPING_NAMES.keys()
-        )
-        all_model_types = list(all_model_types)
-        all_model_types.sort()
         raise ValueError(
             f"Unrecognized processor in {pretrained_model_name_or_path}. Should have a `processor_type` key in "
             f"its {FEATURE_EXTRACTOR_NAME}, or one of the following `model_type` keys in its {CONFIG_NAME}: "
-            f"{', '.join(all_model_types)}"
+            f"{', '.join(c for c in PROCESSOR_MAPPING_NAMES.keys())}"
         )

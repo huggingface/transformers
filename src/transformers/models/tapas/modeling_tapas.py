@@ -419,7 +419,7 @@ class TapasSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -1070,7 +1070,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             >>> labels = tokenizer(table=table, queries="How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
 
             >>> outputs = model(**inputs, labels=labels)
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

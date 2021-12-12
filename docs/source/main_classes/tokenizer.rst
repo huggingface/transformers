@@ -20,7 +20,7 @@ Rust library `tokenizers <https://github.com/huggingface/tokenizers>`__. The "Fa
 1. a significant speed-up in particular when doing batched tokenization and
 2. additional methods to map between the original string (character and words) and the token space (e.g. getting the
    index of the token comprising a given character or the span of characters corresponding to a given token). Currently
-   no "Fast" implementation is available for the SentencePiece-based tokenizers (for T5, ALBERT, CamemBERT, XLMRoBERTa
+   no "Fast" implementation is available for the SentencePiece-based tokenizers (for T5, ALBERT, CamemBERT, XLM-RoBERTa
    and XLNet models).
 
 The base classes :class:`~transformers.PreTrainedTokenizer` and :class:`~transformers.PreTrainedTokenizerFast`
@@ -39,7 +39,8 @@ methods for using all the tokenizers:
 - Managing special tokens (like mask, beginning-of-sentence, etc.): adding them, assigning them to attributes in the
   tokenizer for easy access and making sure they are not split during tokenization.
 
-:class:`~transformers.BatchEncoding` holds the output of the tokenizer's encoding methods (``__call__``,
+:class:`~transformers.BatchEncoding` holds the output of the
+:class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase`'s encoding methods (``__call__``,
 ``encode_plus`` and ``batch_encode_plus``) and is derived from a Python dictionary. When the tokenizer is a pure python
 tokenizer, this class behaves just like a standard python dictionary and holds the various model inputs computed by
 these methods (``input_ids``, ``attention_mask``...). When the tokenizer is a "Fast" tokenizer (i.e., backed by

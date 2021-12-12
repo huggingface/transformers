@@ -423,7 +423,7 @@ class FlaxMarianEncoderLayer(nn.Module):
             dropout=self.config.attention_dropout,
             dtype=self.dtype,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
@@ -435,7 +435,7 @@ class FlaxMarianEncoderLayer(nn.Module):
         self.fc2 = nn.Dense(
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,
@@ -541,7 +541,7 @@ class FlaxMarianDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.encoder_attn = FlaxMarianAttention(
             config=self.config,
             embed_dim=self.embed_dim,
@@ -549,7 +549,7 @@ class FlaxMarianDecoderLayer(nn.Module):
             dropout=self.config.attention_dropout,
             dtype=self.dtype,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
@@ -558,7 +558,7 @@ class FlaxMarianDecoderLayer(nn.Module):
         self.fc2 = nn.Dense(
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
     def __call__(
         self,

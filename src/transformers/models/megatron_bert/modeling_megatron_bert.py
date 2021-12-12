@@ -298,7 +298,7 @@ class MegatronBertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -1189,7 +1189,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
-            >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert-cased-345m', is_decoder=True)
+            >>> model = MegatronBertForCausalLM.from_pretrained('nvidia/megatron-bert-cased-345m', is_decoder=True)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

@@ -399,7 +399,9 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             raise e
 
         # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
-
+        # Make sure we have a proper numpy array
+        if numpy.isscalar(array):
+            array = numpy.array(array)
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
         all_tf_weights.discard(pt_weight_name)
