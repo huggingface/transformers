@@ -147,24 +147,25 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
             padding="valid",
             data_format="channels_last",
             use_bias=False,
-            kernel_initializer=get_initializer(self.config.initializer_range),
+            kernel_initializer=get_initializer(self.config.initializer_range * self.config.initializer_factor),
             name="patch_embedding",
         )
 
     def build(self, input_shape: tf.TensorShape):
 
-        # Q: should we use normal initializer?
-        # initializer = tf.random_normal_initializer(mean=0.0, stddev=1.0)
-        initializer = get_initializer(self.config.initializer_range)
+        factor = self.config.initializer_factor
 
         self.class_embedding = self.add_weight(
-            shape=(self.embed_dim,), initializer=initializer, trainable=True, name="class_embedding"
+            shape=(self.embed_dim,),
+            initializer=get_initializer(self.embed_dim ** -0.5 * factor),
+            trainable=True,
+            name="class_embedding",
         )
 
         with tf.name_scope("position_embedding"):
             self.position_embedding = self.add_weight(
                 shape=(self.num_positions, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_range),
+                initializer=get_initializer(self.config.initializer_range * factor),
                 trainable=True,
                 name="embeddings",
             )
@@ -210,7 +211,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
                 shape=(self.vocab_size, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_range),
+                initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
                 trainable=True,
                 name="weight",
             )
@@ -218,7 +219,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("position_embedding"):
             self.position_embedding = self.add_weight(
                 shape=(self.config.max_position_embeddings, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_range),
+                initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
                 trainable=True,
                 name="embeddings",
             )
@@ -269,22 +270,26 @@ class TFCLIPAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_attention_heads})."
             )
 
+        factor = self.config.initializer_factor
+        in_proj_std = (self.embed_dim ** -0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
+        out_proj_std = (self.embed_dim ** -0.5) * factor
+
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
         self.q_proj = tf.keras.layers.Dense(
-            units=self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="q_proj"
+            units=self.embed_dim, kernel_initializer=get_initializer(in_proj_std), name="q_proj"
         )
         self.k_proj = tf.keras.layers.Dense(
-            units=self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="k_proj"
+            units=self.embed_dim, kernel_initializer=get_initializer(in_proj_std), name="k_proj"
         )
         self.v_proj = tf.keras.layers.Dense(
-            units=self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="v_proj"
+            units=self.embed_dim, kernel_initializer=get_initializer(in_proj_std), name="v_proj"
         )
 
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_dropout)
 
         self.out_proj = tf.keras.layers.Dense(
-            units=self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
+            units=self.embed_dim, kernel_initializer=get_initializer(out_proj_std), name="out_proj"
         )
 
     # copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention.transpose_for_scores
@@ -354,11 +359,16 @@ class TFCLIPMLP(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.activation_fn = get_tf_activation(config.hidden_act)
+
+        factor = self.config.initializer_factor
+        in_proj_std = (config.hidden_size ** -0.5) * ((2 * config.num_hidden_layers) ** -0.5) * factor
+        fc_std = (2 * config.hidden_size) ** -0.5 * factor
+
         self.fc1 = tf.keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="fc1"
+            units=config.intermediate_size, kernel_initializer=get_initializer(fc_std), name="fc1"
         )
         self.fc2 = tf.keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="fc2"
+            units=config.hidden_size, kernel_initializer=get_initializer(in_proj_std), name="fc2"
         )
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -744,14 +754,14 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
 
         self.visual_projection = tf.keras.layers.Dense(
             units=self.projection_dim,
-            kernel_initializer=get_initializer(vision_config.initializer_range),
+            kernel_initializer=get_initializer(vision_config.hidden_size ** -0.5 * self.config.initializer_factor),
             use_bias=False,
             name="visual_projection",
         )
 
         self.text_projection = tf.keras.layers.Dense(
             units=self.projection_dim,
-            kernel_initializer=get_initializer(text_config.initializer_range),
+            kernel_initializer=get_initializer(text_config.hidden_size ** -0.5 * self.config.initializer_factor),
             use_bias=False,
             name="text_projection",
         )
