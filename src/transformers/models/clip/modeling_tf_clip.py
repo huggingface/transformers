@@ -106,9 +106,9 @@ class TFCLIPOutput(ModelOutput):
         image_embeds(:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             :class:`~transformers.TFCLIPVisionModel`.
-        text_model_output(:obj:`TFBaseModelOutputWithPooling`):
+        text_model_output(:class:`~transformers.modeling_tf_utils.TFBaseModelOutputWithPooling`):
             The output of the :class:`~transformers.TFCLIPTextModel`.
-        vision_model_output(:obj:`TFBaseModelOutputWithPooling`):
+        vision_model_output(:class:`~transformers.modeling_tf_utils.TFBaseModelOutputWithPooling`):
             The output of the :class:`~transformers.TFCLIPVisionModel`.
     """
 
@@ -499,10 +499,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         input_shape = shape_list(input_ids)
 
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-        )
+        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         batch_size, seq_length = input_shape
         # CLIP's text model uses causal mask, prepare it here.
@@ -1215,9 +1212,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(len(DUMMY_INPUTS), 3, self.config.image_size, self.config.image_size), dtype=tf.float32
         )
-        return {
-            "pixel_values": VISION_DUMMY_INPUTS,
-        }
+        return {"pixel_values": VISION_DUMMY_INPUTS}
 
     @tf.function(
         input_signature=[
