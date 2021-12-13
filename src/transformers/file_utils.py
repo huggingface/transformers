@@ -983,6 +983,45 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
 """
 
 
+PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> feature_extractor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
+        >>> logits = model(**inputs).logits
+        >>> TODO: logits to speaker turns
+"""
+
+
+PT_SPEECH_XVECTOR_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> feature_extractor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
+        >>> logits = model(**inputs).logits
+        >>> TODO: cosine sim example
+"""
+
 PT_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": PT_QUESTION_ANSWERING_SAMPLE,
@@ -994,6 +1033,8 @@ PT_SAMPLE_DOCSTRINGS = {
     "SpeechBaseModel": PT_SPEECH_BASE_MODEL_SAMPLE,
     "CTC": PT_SPEECH_CTC_SAMPLE,
     "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
+    "AudioFrameClassification": PT_SPEECH_FRAME_CLASS_SAMPLE,
+    "XVector": PT_SPEECH_XVECTOR_SAMPLE,
 }
 
 
@@ -1286,11 +1327,9 @@ def add_code_sample_docstrings(
         elif "CTC" in model_class:
             code_sample = sample_docstrings["CTC"]
         elif "AudioFrameClassification" in model_class:
-            # TODO: replace docstring
-            code_sample = sample_docstrings["AudioClassification"]
+            code_sample = sample_docstrings["AudioFrameClassification"]
         elif "XVector" in model_class:
-            # TODO: replace docstring
-            code_sample = sample_docstrings["AudioClassification"]
+            code_sample = sample_docstrings["XVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:

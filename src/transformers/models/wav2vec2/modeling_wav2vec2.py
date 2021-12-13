@@ -51,9 +51,11 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_FRAME_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-sd"
+_XVECTOR_CHECKPOINT = "superb/wav2vec2-base-superb-sv"
 
 _HIDDEN_STATES_START_POSITION = 2
 
@@ -996,8 +998,6 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, AMSoftmaxLoss):
-            nn.init.xavier_normal_(module.weight, gain=1.0)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -1652,7 +1652,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1755,8 +1755,8 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_FRAME_CLASS_CHECKPOINT,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
@@ -1922,8 +1922,8 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_XVECTOR_CHECKPOINT,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",

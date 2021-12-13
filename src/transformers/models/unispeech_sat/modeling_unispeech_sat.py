@@ -45,9 +45,11 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "UniSpeechSatConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 _CHECKPOINT_FOR_DOC = "microsoft/unispeech-sat-base-plus"
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_FRAME_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sd"
+_XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
 
 _HIDDEN_STATES_START_POSITION = 2
 
@@ -949,8 +951,6 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, AMSoftmaxLoss):
-            nn.init.xavier_normal_(module.weight, gain=1.0)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -1484,7 +1484,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1588,8 +1588,8 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_FRAME_CLASS_CHECKPOINT,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
@@ -1758,8 +1758,8 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_XVECTOR_CHECKPOINT,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
