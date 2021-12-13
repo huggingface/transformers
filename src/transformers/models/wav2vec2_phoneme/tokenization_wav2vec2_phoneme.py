@@ -380,6 +380,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         tokens_to_add = []
         for token in new_tokens:
+            if not isinstance(token, str):
+                raise ValueError(f"Token {token} has to be of type string, but is " f"of type {type(token)}.")
             assert isinstance(token, str)
             if (
                 token != self.unk_token
