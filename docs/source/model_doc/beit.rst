@@ -40,8 +40,15 @@ significantly outperforming from-scratch DeiT training (81.8%) with the same set
 Tips:
 
 - BEiT models are regular Vision Transformers, but pre-trained in a self-supervised way rather than supervised. They
-  outperform both the original model (ViT) as well as Data-efficient Image Transformers (DeiT) when fine-tuned on
-  ImageNet-1K and CIFAR-100.
+  outperform both the :doc:`original model (ViT) <vit>` as well as :doc:`Data-efficient Image Transformers (DeiT)
+  <deit>` when fine-tuned on ImageNet-1K and CIFAR-100. You can check out demo notebooks regarding inference as well as
+  fine-tuning on custom data `here
+  <https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer>`__ (you can just replace
+  :class:`~transformers.ViTFeatureExtractor` by :class:`~transformers.BeitFeatureExtractor` and
+  :class:`~transformers.ViTForImageClassification` by :class:`~transformers.BeitForImageClassification`).
+- There's also a demo notebook available which showcases how to combine DALL-E's image tokenizer with BEiT for
+  performing masked image modeling. You can find it `here
+  <https://github.com/NielsRogge/Transformers-Tutorials/tree/master/BEiT>`__.
 - As the BEiT models expect each image to be of the same size (resolution), one can use
   :class:`~transformers.BeitFeatureExtractor` to resize (or rescale) and normalize images for the model.
 - Both the patch resolution and image resolution used during pre-training or fine-tuning are reflected in the name of

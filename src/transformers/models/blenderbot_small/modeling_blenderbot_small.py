@@ -512,7 +512,6 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
         >>> UTTERANCE = "My friends are cool but they eat too many carbs."
         >>> print("Human: ", UTTERANCE)
         >>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
-        >>> inputs.pop("token_type_ids")
         >>> reply_ids = model.generate(**inputs)
         >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
         what kind of carbs do they eat? i don't know much about carbs.
@@ -1375,10 +1374,10 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.model = BlenderbotSmallDecoderWrapper(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1503,7 +1502,7 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
 
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
