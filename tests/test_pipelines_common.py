@@ -54,7 +54,7 @@ def get_checkpoint_from_architecture(architecture):
         logger.warning(f"Can't retrieve checkpoint from {architecture.__name__}")
 
 
-def get_tiny_config_from_class(configuration_class, model_architecture):
+def get_tiny_config_from_class(configuration_class):
     if "OpenAIGPT" in configuration_class.__name__:
         # This is the only file that is inconsistent with the naming scheme.
         # Will rename this file if we decide this is the way to go
@@ -221,7 +221,7 @@ class PipelineTestCaseMeta(type):
 
                     for model_architecture in model_architectures:
                         checkpoint = get_checkpoint_from_architecture(model_architecture)
-                        tiny_config = get_tiny_config_from_class(configuration, model_architecture)
+                        tiny_config = get_tiny_config_from_class(configuration)
                         tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
                         feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
                         feature_extractor_name = (
