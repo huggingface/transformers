@@ -147,19 +147,19 @@ class PerceiverModelTester:
             if self.use_input_mask:
                 input_mask = random_attention_mask([self.batch_size, self.seq_length])
         elif model_class.__name__ == "PerceiverForImageClassificationLearned":
-            config.d_model = 512
+            # config.d_model = 512
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForImageClassificationFourier":
-            config.d_model = 261
+            # config.d_model = 261
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForImageClassificationConvProcessing":
-            config.d_model = 322
+            # config.d_model = 322
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForOpticalFlow":
-            config.d_model = 322
+            # config.d_model = 322
             inputs = floats_tensor([self.batch_size, 2, 27, self.train_size[0], self.train_size[1]])
         elif model_class.__name__ == "PerceiverForMultimodalAutoencoding":
-            config.d_model = 409
+            # config.d_model = 409
             images = torch.randn(
                 (self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size),
                 device=torch_device,
@@ -223,7 +223,7 @@ class PerceiverModelTester:
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
         # set d_model and num_labels
-        config.d_model = 512
+        # config.d_model = 512
         config.num_labels = self.num_labels
         model = PerceiverForImageClassificationLearned(config=config)
         model.to(torch_device)
@@ -235,7 +235,7 @@ class PerceiverModelTester:
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
         # set d_model and num_labels
-        config.d_model = 261
+        # config.d_model = 261
         config.num_labels = self.num_labels
         model = PerceiverForImageClassificationFourier(config=config)
         model.to(torch_device)
@@ -247,7 +247,7 @@ class PerceiverModelTester:
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
         # set d_model and num_labels
-        config.d_model = 322
+        # config.d_model = 322
         config.num_labels = self.num_labels
         model = PerceiverForImageClassificationConvProcessing(config=config)
         model.to(torch_device)
