@@ -200,13 +200,13 @@ class MultiHeadSelfAttention(nn.Module):
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
         bs, q_length, dim = query.size()
-        k_length = key.size(1)
+        # k_length = key.size(1)
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
 
         dim_per_head = self.dim // self.n_heads
 
-        mask_reshp = (bs, 1, 1, k_length)
+        # mask_reshp = (bs, 1, 1, k_length)
 
         def shape(x):
             """separate heads"""
@@ -816,7 +816,11 @@ class DistilBertLMHeadModel(DistilBertPreTrainedModel):
         Returns:
         """
         assert use_cache != True, "use_cache is not supported by DistilBERT!"
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if return_dict is not None:
+            return_dict = return_dict
+        else:
+            return_dict = self.config.use_return_dict
+        # return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
