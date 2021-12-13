@@ -17,10 +17,10 @@
 import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
-import torch.nn.functional as F
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -42,11 +42,11 @@ from .configuration_wavlm import WavLMConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "WavLMConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_PROCESSOR_FOR_DOC = "WavLMProcessor"
 _CHECKPOINT_FOR_DOC = "microsoft/wavlm-large-1500h-cv"
 
-_SEQ_CLASS_CHECKPOINT = "microsoft/wavlm-large-1500h-cv"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "microsoft/wavlm-base"
+_SEQ_CLASS_PROCESSOR_FOR_DOC = "WavLMFeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2
 
@@ -459,9 +459,6 @@ class WavLMAttention(nn.Module):
         self.gru_rel_pos_linear = nn.Linear(self.head_dim, 8)
         self.rel_attn_embed = nn.Embedding(self.num_buckets, self.num_heads)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -475,36 +472,49 @@ class WavLMAttention(nn.Module):
         bsz, tgt_len, _ = hidden_states.size()
         src_len = tgt_len
 
+        # first pass of attention layer creates position bias
         if position_bias is None:
             position_bias = self.compute_bias(tgt_len, src_len)
-            position_bias = position_bias.unsqueeze(0).repeat(bsz, 1, 1, 1).view(bsz * self.num_heads, tgt_len, src_len)
+            position_bias = (
+                position_bias.unsqueeze(0).repeat(bsz, 1, 1, 1).view(bsz * self.num_heads, tgt_len, src_len)
+            )
 
         # weird glu stuff now
-        attn_mask_rel_pos = None
-        if position_bias is not None:
-            attn_mask_rel_pos = position_bias
-            if True:  # TODO(PVP) - clean up
-                query_layer = hidden_states
-                new_x_shape = query_layer.size()[:-1] + (self.num_heads, -1)
-                query_layer = query_layer.view(*new_x_shape)
-                query_layer = query_layer.permute(0, 2, 1, 3)
-                _B, _H, _L, __ = query_layer.size()
+        query_layer = hidden_states
+        new_x_shape = query_layer.size()[:-1] + (self.num_heads, -1)
+        query_layer = query_layer.view(*new_x_shape)
+        query_layer = query_layer.permute(0, 2, 1, 3)
+        _B, _H, _L, __ = query_layer.size()
 
-                gate_a, gate_b = torch.sigmoid(self.gru_rel_pos_linear(query_layer).view(
-                    _B, _H, _L, 2, 4).sum(-1, keepdim=False)).chunk(2, dim=-1)
-                gate_a_1 = gate_a * (gate_b * self.gru_rel_pos_const - 1.0) + 2.0
-                attn_mask_rel_pos = gate_a_1.view(bsz * self.num_heads, -1, 1) * position_bias
+        gate_a, gate_b = torch.sigmoid(
+            self.gru_rel_pos_linear(query_layer).view(_B, _H, _L, 2, 4).sum(-1, keepdim=False)
+        ).chunk(2, dim=-1)
+        gate_a_1 = gate_a * (gate_b * self.gru_rel_pos_const - 1.0) + 2.0
+        relative_position_mask_bias = gate_a_1.view(bsz * self.num_heads, -1, 1) * position_bias
 
-            attn_mask_rel_pos = attn_mask_rel_pos.view((-1, tgt_len, tgt_len))
+        relative_position_mask_bias = relative_position_mask_bias.view((-1, tgt_len, tgt_len))
 
-        # self-attention
+        attn_output, attn_weights = self.torch_multi_head_self_attention(
+            hidden_states, attention_mask, relative_position_mask_bias, output_attentions
+        )
+
+        return attn_output, attn_weights, position_bias
+
+    def torch_multi_head_self_attention(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Union[torch.LongTensor, torch.BoolTensor],
+        relative_position_mask_bias: torch.FloatTensor,
+        output_attentions: bool,
+    ) -> (torch.FloatTensor, torch.FloatTensor):
+        """simple wrapper around torch's multi_head_attention_forward function"""
+        # self-attention assumes q = k = v
         query = key = value = hidden_states.transpose(0, 1)
+        key_padding_mask = attention_mask.ne(1)
 
-        # no bias TODO(PVP): move to begin
+        # disable bias and add_zero_attn
         bias_k = bias_v = None
         add_zero_attn = False
-        key_padding_mask = attention_mask.ne(1)
-        need_weights = output_attentions
 
         attn_output, attn_weights = F.multi_head_attention_forward(
             query,
@@ -521,10 +531,9 @@ class WavLMAttention(nn.Module):
             self.out_proj.weight,
             self.out_proj.bias,
             self.training,
-            # self.training or self.dropout_module.apply_during_inference,
             key_padding_mask,
-            need_weights,
-            attn_mask_rel_pos,
+            output_attentions,
+            relative_position_mask_bias,
             use_separate_proj_weight=True,
             q_proj_weight=self.q_proj.weight,
             k_proj_weight=self.k_proj.weight,
@@ -534,16 +543,13 @@ class WavLMAttention(nn.Module):
         # [Seq_Len, Batch Size, ...] -> [Batch Size, Seq_Len, ...]
         attn_output = attn_output.transpose(0, 1)
 
-        return attn_output, attn_weights, position_bias
+        return attn_output, attn_weights
 
     def compute_bias(self, query_length, key_length):
         context_position = torch.arange(query_length, dtype=torch.long)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position
-        relative_position_bucket = self._relative_positions_bucket(
-            relative_position,
-            bidirectional=True
-        )
+        relative_position_bucket = self._relative_positions_bucket(relative_position, bidirectional=True)
         relative_position_bucket = relative_position_bucket.to(self.rel_attn_embed.weight.device)
         values = self.rel_attn_embed(relative_position_bucket)
         values = values.permute([2, 0, 1])
@@ -564,11 +570,10 @@ class WavLMAttention(nn.Module):
         max_exact = num_buckets // 2
         is_small = relative_positions < max_exact
 
-        relative_postion_if_large = max_exact + (
-                torch.log(relative_positions.float() / max_exact)
-                / math.log(max_distance / max_exact)
-                * (num_buckets - max_exact)
-        ).to(torch.long)
+        relative_positions_if_large = torch.log(relative_positions.float() / max_exact)
+        relative_positions_if_large = relative_positions_if_large / math.log(max_distance / max_exact)
+        relative_positions_if_large = relative_positions_if_large * (num_buckets - max_exact)
+        relative_postion_if_large = (max_exact + relative_positions_if_large).to(torch.long)
         relative_postion_if_large = torch.min(
             relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
         )
@@ -620,7 +625,11 @@ class WavLMEncoderLayer(nn.Module):
     def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False, index=0):
         attn_residual = hidden_states
         hidden_states, attn_weights, position_bias = self.attention(
-            hidden_states, attention_mask=attention_mask, position_bias=position_bias, output_attentions=output_attentions, index=index,
+            hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
+            index=index,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
@@ -656,7 +665,10 @@ class WavLMEncoderLayerStableLayerNorm(nn.Module):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, position_bias = self.attention(
-            hidden_states, attention_mask=attention_mask, position_bias=position_bias, output_attentions=output_attentions
+            hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
@@ -731,7 +743,11 @@ class WavLMEncoder(nn.Module):
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, position_bias=position_bias, output_attentions=output_attentions, index=i
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        position_bias=position_bias,
+                        output_attentions=output_attentions,
+                        index=i,
                     )
 
                 hidden_states, position_bias = layer_outputs[:2]
@@ -817,7 +833,10 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions, position_bias=position_bias
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        output_attentions=output_attentions,
+                        position_bias=position_bias,
                     )
                 hidden_states, position_bias = layer_outputs[:2]
 
@@ -907,6 +926,57 @@ class WavLMGumbelVectorQuantizer(nn.Module):
         codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Adapter with Wav2Vec2->WavLM
+class WavLMAdapter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        # feature dim might need to be down-projected
+        if config.output_hidden_size != config.hidden_size:
+            self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
+            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
+        else:
+            self.proj = self.proj_layer_norm = None
+
+        self.layers = nn.ModuleList(WavLMAdapterLayer(config) for _ in range(config.num_adapter_layers))
+        self.layerdrop = config.layerdrop
+
+    def forward(self, hidden_states):
+        # down project hidden_states if necessary
+        if self.proj is not None and self.proj_layer_norm is not None:
+            hidden_states = self.proj(hidden_states)
+            hidden_states = self.proj_layer_norm(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+
+        for layer in self.layers:
+            layerdrop_prob = np.random.random()
+            if not self.training or (layerdrop_prob > self.layerdrop):
+                hidden_states = layer(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2AdapterLayer with Wav2Vec2->WavLM
+class WavLMAdapterLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.output_hidden_size,
+            2 * config.output_hidden_size,
+            config.adapter_kernel_size,
+            stride=config.adapter_stride,
+            padding=1,
+        )
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        return hidden_states
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->WavLM, wav2vec2->wavlm

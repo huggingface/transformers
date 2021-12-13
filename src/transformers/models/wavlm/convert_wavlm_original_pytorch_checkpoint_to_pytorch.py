@@ -26,7 +26,9 @@ from transformers import WavLMConfig, WavLMForPreTraining, logging
 # Step 3. cd unilm
 # Step 4. ln -s $(realpath wavlm/modules.py) ./  # create simlink
 # import classes
-from unilm.wavlm.WavLM import WavLM as WavLMOrig, WavLMConfig as WavLMConfigOrig
+from unilm.wavlm.WavLM import WavLM as WavLMOrig
+from unilm.wavlm.WavLM import WavLMConfig as WavLMConfigOrig
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -176,9 +178,9 @@ def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_p
 
     # load the pre-trained checkpoints
     checkpoint = torch.load(checkpoint_path)
-    cfg = WavLMConfigOrig(checkpoint['cfg'])
+    cfg = WavLMConfigOrig(checkpoint["cfg"])
     model = WavLMOrig(cfg)
-    model.load_state_dict(checkpoint['model'])
+    model.load_state_dict(checkpoint["model"])
     model.eval()
 
     if config_path is not None:

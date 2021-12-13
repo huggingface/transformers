@@ -32,7 +32,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor, WavLMModel, WavLMForSequenceClassification
+    from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor, WavLMForSequenceClassification, WavLMModel
 
 
 class WavLMModelTester:
@@ -286,9 +286,7 @@ class WavLMModelTester:
 
 @require_torch
 class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (WavLMModel, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
-    )
+    all_model_classes = (WavLMModel, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -485,7 +483,6 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @slow
 class WavLMModelIntegrationTest(unittest.TestCase):
-
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -497,7 +494,9 @@ class WavLMModelIntegrationTest(unittest.TestCase):
 
     def test_inference_base(self):
         model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/wavlm-base-plus", return_attention_mask=True)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "microsoft/wavlm-base-plus", return_attention_mask=True
+        )
 
         input_speech = self._load_datasamples(2)
 
@@ -507,19 +506,20 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            hidden_states_slice = model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
+            hidden_states_slice = (
+                model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
+            )
 
-        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor([
-            [[0.0554, 0.1138],
-             [0.0555, 0.1144]],
-            [[0.0200, 0.1240],
-             [0.0059, 0.0607]]
-        ])
+        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
+            [[[0.0554, 0.1138], [0.0555, 0.1144]], [[0.0200, 0.1240], [0.0059, 0.0607]]]
+        )
         self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
 
     def test_inference_large(self):
         model = WavLMModel.from_pretrained("microsoft/wavlm-large").to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/wavlm-base-plus", return_attention_mask=True)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "microsoft/wavlm-base-plus", return_attention_mask=True
+        )
 
         input_speech = self._load_datasamples(2)
 
@@ -529,12 +529,11 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            hidden_states_slice = model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
+            hidden_states_slice = (
+                model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
+            )
 
-        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor([
-            [[0.2122, 0.0500],
-             [0.2118, 0.0563]],
-            [[0.1353, 0.1818],
-             [0.2453, 0.0595]]
-        ])
+        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
+            [[[0.2132, 0.0486], [0.2119, 0.0571]], [[0.1386, 0.1837], [0.2455, 0.0614]]]
+        )
         self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
