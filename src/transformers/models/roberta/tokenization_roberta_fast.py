@@ -177,38 +177,34 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             **kwargs,
         )
 
-        mapping_tokenizers_components = {
-            "pre_tokenizer": pre_tokenizers,
-            "decoder": decoders,
-            "post_processor": processors,
-        }
-        for tokenizer_component in mapping_tokenizers_components.keys():
-            tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
-            if not tokenizer_component_instance:
-                continue
+        # the pre_tokenizer is already updated in the GPT2TokenizerFast `__init__`
+        tokenizer_component = "post_processor"
+        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
+        if not tokenizer_component_instance:
+            continue
 
-            state = json.loads(tokenizer_component_instance.__getstate__())
+        state = json.loads(tokenizer_component_instance.__getstate__())
 
-            # The lists 'sep' and 'cls' must be cased in tuples for the object `post_processor_class`
-            if "sep" in state:
-                state["sep"] = tuple(state["sep"])
-            if "cls" in state:
-                state["cls"] = tuple(state["cls"])
+        # The lists 'sep' and 'cls' must be cased in tuples for the object `post_processor_class`
+        if "sep" in state:
+            state["sep"] = tuple(state["sep"])
+        if "cls" in state:
+            state["cls"] = tuple(state["cls"])
 
-            changes_to_apply = False
+        changes_to_apply = False
 
-            if state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-                state["add_prefix_space"] = add_prefix_space
-                changes_to_apply = True
+        if state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            state["add_prefix_space"] = add_prefix_space
+            changes_to_apply = True
 
-            if state.get("trim_offsets", trim_offsets) != trim_offsets:
-                state["trim_offsets"] = trim_offsets
-                changes_to_apply = True
+        if state.get("trim_offsets", trim_offsets) != trim_offsets:
+            state["trim_offsets"] = trim_offsets
+            changes_to_apply = True
 
-            if changes_to_apply:
-                component_class = getattr(mapping_tokenizers_components[tokenizer_component], state.pop("type"))
-                new_value = component_class(**state)
-                setattr(self.backend_tokenizer, tokenizer_component, new_value)
+        if changes_to_apply:
+            component_class = getattr(processors, state.pop("type"))
+            new_value = component_class(**state)
+            setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
     @property
     def mask_token(self) -> str:
