@@ -51,8 +51,9 @@ _SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _HIDDEN_STATES_START_POSITION = 2
 
 WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/wavlm-large-1500h-cv",
-    "microsoft/wavlm-large-multi-lingual-1500h-cv",
+    "microsoft/wavlm-base",
+    "microsoft/wavlm-base-plus",
+    "microsoft/wavlm-large",
     # See all WavLM models at https://huggingface.co/models?filter=wavlm
 ]
 
