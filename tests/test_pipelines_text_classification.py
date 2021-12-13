@@ -73,6 +73,8 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if tokenizer is None:
+            self.skipTest("This test cannot work without a tokenizer, Perceiver ?")
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
         return text_classifier, ["HuggingFace is in", "This is another test"]
 
