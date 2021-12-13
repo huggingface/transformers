@@ -118,7 +118,7 @@ class PushToHubCallback(Callback):
                 **self.model_card_args,
             )
             model_card = train_summary.to_model_card()
-            with open(os.path.join(self.output_dir, "README.md"), "w") as f:
+            with (self.output_dir / "README.md").open("w") as f:
                 f.write(model_card)
             _, self.last_job = self.repo.push_to_hub(
                 commit_message=f"Training in progress epoch {epoch}", blocking=False
@@ -136,6 +136,6 @@ class PushToHubCallback(Callback):
             model=self.model, model_name=self.hub_model_id, keras_history=self.training_history, **self.model_card_args
         )
         model_card = train_summary.to_model_card()
-        with open(os.path.join(self.output_dir, "README.md"), "w") as f:
+        with (self.output_dir / "README.md").open("w") as f:
             f.write(model_card)
         self.repo.push_to_hub(commit_message="End of training", blocking=True)
