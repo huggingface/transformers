@@ -288,7 +288,7 @@ class AdamW(Optimizer):
             Decoupled weight decay to apply.
         correct_bias (:obj:`bool`, `optional`, defaults to `True`):
             Whether or not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
-        no_deprecation_warning (:obj:`bool`, `optional`, defaults to `False`):
+        no_deprecation_warning (:obj:`bool`, `optional`, defaults to :obj:`False`):
             A flag used to disable the deprecation warning (`True` to disable the warning).
     """
 
