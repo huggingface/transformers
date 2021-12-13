@@ -728,7 +728,6 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         self.max_position_embeddings = config.max_position_embeddings
         self.position_biased_input = getattr(config, "position_biased_input", True)
         self.initializer_range = config.initializer_range
-        self.embeddings_sum = tf.keras.layers.Add()
         if self.embedding_size != config.hidden_size:
             self.embed_proj = tf.keras.layers.Dense(config.hidden_size, bias=False)
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -795,7 +794,6 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         final_embeddings = inputs_embeds
         if self.position_biased_input:
             position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-            position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
             final_embeddings += position_embeds
         if self.type_vocab_size > 0:
             token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)

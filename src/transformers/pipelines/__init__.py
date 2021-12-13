@@ -20,7 +20,7 @@ import json
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -252,6 +252,15 @@ SUPPORTED_TASKS = {
 }
 
 
+def get_supported_tasks() -> List[str]:
+    """
+    Returns a list of supported task strings.
+    """
+    supported_tasks = list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys())
+    supported_tasks.sort()
+    return supported_tasks
+
+
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     tmp = io.BytesIO()
     headers = {}
@@ -320,9 +329,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             return targeted_task, (tokens[1], tokens[3])
         raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
-    raise KeyError(
-        f"Unknown task {task}, available tasks are {list(SUPPORTED_TASKS.keys()) + ['translation_XX_to_YY']}"
-    )
+    raise KeyError(f"Unknown task {task}, available tasks are {get_supported_tasks() + ['translation_XX_to_YY']}")
 
 
 def pipeline(
