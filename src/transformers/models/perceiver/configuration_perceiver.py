@@ -42,7 +42,8 @@ class PerceiverConfig(PretrainedConfig):
         d_latents (:obj:`int`, `optional`, defaults to 1280):
             Dimension of the latent embeddings.
         d_model (:obj:`int`, `optional`, defaults to 768):
-            Dimension of the inputs.
+            Dimension of the inputs. Should only be provided in case [`PerceiverTextPreprocessor`] is used or no
+            preprocessor is provided.
         num_blocks (:obj:`int`, `optional`, defaults to 1):
             Number of blocks in the Transformer encoder.
         num_self_attends_per_block (:obj:`int`, `optional`, defaults to 26):
