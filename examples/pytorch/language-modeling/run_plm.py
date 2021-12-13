@@ -348,7 +348,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = XLNetLMHeadModel.from_config(config)
+        model = XLNetLMHeadModel(config)
 
     model.resize_token_embeddings(len(tokenizer))
 
