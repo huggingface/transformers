@@ -37,7 +37,7 @@ class Wav2Vec2Processor:
     Args:
         feature_extractor (:obj:`Wav2Vec2FeatureExtractor`):
             An instance of :class:`~transformers.Wav2Vec2FeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:obj:`PreTrainedTokenizer`):
+        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             An instance of :class:`~transformers.PreTrainedTokenizer`. The tokenizer is a required input.
     """
 
