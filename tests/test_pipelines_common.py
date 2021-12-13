@@ -108,7 +108,10 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_
         feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
     except Exception:
         try:
-            feature_extractor = feature_extractor_class()
+            if feature_extractor_class is not None:
+                feature_extractor = feature_extractor_class()
+            else:
+                feature_extractor = None
         except Exception:
             feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
