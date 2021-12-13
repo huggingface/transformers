@@ -15,7 +15,7 @@
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
-from ..pipelines import SUPPORTED_TASKS, TASK_ALIASES, Pipeline, pipeline
+from ..pipelines import Pipeline, get_supported_tasks, pipeline
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
@@ -104,7 +104,7 @@ class ServeCommand(BaseTransformersCLICommand):
         serve_parser.add_argument(
             "--task",
             type=str,
-            choices=list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys()),
+            choices=get_supported_tasks(),
             help="The task to run the pipeline on",
         )
         serve_parser.add_argument("--host", type=str, default="localhost", help="Interface the server will listen on.")
