@@ -85,6 +85,8 @@ def get_tiny_config_from_class(configuration_class, model_architecture):
         logger.warning(f"Model tester {model_tester_class.__name__} has no `get_config()`.")
 
     if hasattr(model_tester, "update_config_with_model_class"):
+        # Some models are very specific in testing mode since the config might depend
+        # on `model_architecture`. This is rare: PerceiverConfig only for now.
         config = model_tester.update_config_with_model_class(config, model_architecture)
     return config
 
