@@ -785,12 +785,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
             modality_sizes = None
             inputs_without_pos = None
 
-        # if inputs.size()[-1] != self.config.d_model:
-        #     raise ValueError(
-        #         f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
-        #         "Please update config.d_model appropriately."
-        #     )
-        # else:
         input_shape = inputs.size()
 
         batch_size, seq_length, _ = input_shape
