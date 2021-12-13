@@ -14,14 +14,20 @@
 # limitations under the License.
 """Feature extractor class for ViT."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageFeatureExtractionMixin, is_torch_tensor
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ImageFeatureExtractionMixin,
+    ImageInput,
+    is_torch_tensor,
+)
 from ...utils import logging
 
 
@@ -75,12 +81,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def __call__(
-        self,
-        images: Union[
-            Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
-        ],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).

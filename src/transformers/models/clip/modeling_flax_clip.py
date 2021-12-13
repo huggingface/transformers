@@ -60,6 +60,18 @@ CLIP_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
             model weights.
+        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
+            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
+            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given ``dtype``.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see
+            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
 """
 
 CLIP_TEXT_INPUTS_DOCSTRING = r"""
@@ -262,18 +274,10 @@ class FlaxCLIPAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.dropout = self.config.attention_dropout
 
-        self.k_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.v_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.q_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.out_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
+        self.k_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.v_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.q_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.out_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
 
         self.causal = isinstance(self.config, CLIPTextConfig)
         if self.causal:
@@ -354,11 +358,9 @@ class FlaxCLIPMLP(nn.Module):
         self.fc1 = nn.Dense(
             self.config.intermediate_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.01),
         )
-        self.fc2 = nn.Dense(
-            self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
+        self.fc2 = nn.Dense(self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
 
     def __call__(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -1032,18 +1034,18 @@ class FlaxCLIPModule(nn.Module):
         self.visual_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
         self.text_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
 
         self.logit_scale = self.param(
-            "logit_scale", lambda _, shape: jnp.ones(shape, dtype=self.dtype) * self.config.logit_scale_init_value, []
+            "logit_scale", lambda _, shape: jnp.ones(shape) * self.config.logit_scale_init_value, []
         )
 
     def __call__(

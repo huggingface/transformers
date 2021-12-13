@@ -227,6 +227,11 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_save_load_to_base_pt(self):
         pass
 
+    # FlaxCLIPVisionModel does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
@@ -330,6 +335,11 @@ class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
     # FlaxCLIPVisionModel does not have any base model
     @is_pt_flax_cross_test
     def test_save_load_to_base_pt(self):
+        pass
+
+    # FlaxCLIPVisionModel does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
         pass
 
     @slow

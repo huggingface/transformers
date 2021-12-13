@@ -70,8 +70,8 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
     <https://arxiv.org/abs/2109.10282>`__ it is shown how leveraging large pretrained vision models for optical
     character recognition (OCR) yields a significant performance improvement.
 
-    After such an Vision-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
-    models (see the examples for more information).
+    After such a Vision-Encoder-Text-Decoder model has been trained/fine-tuned, it can be saved/loaded just like any
+    other models (see the examples for more information).
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -94,13 +94,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using a feature extractor (e.g. if you use ViT as the encoder,
             you should use :class:`~transformers.ViTFeatureExtractor`). See
             :meth:`transformers.ViTFeatureExtractor.__call__` for details.
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -130,10 +123,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
@@ -165,8 +154,8 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 class VisionEncoderDecoderModel(PreTrainedModel):
     r"""
     :class:`~transformers.VisionEncoderDecoderModel` is a generic model class that will be instantiated as a
-    transformer architecture with one of the base model classes of the library as encoder and another one as decoder
-    when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
+    transformer architecture with one of the base vision model classes of the library as encoder and another one as
+    decoder when created with the :meth`~transformers.AutoModel.from_pretrained` class method for the encoder and
     :meth`~transformers.AutoModelForCausalLM.from_pretrained` class method for the decoder.
     """
     config_class = VisionEncoderDecoderConfig
@@ -185,6 +174,15 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
+
+        if config.decoder.cross_attention_hidden_size is not None:
+            if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
+                raise ValueError(
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
+                    "it has to be equal to the encoder's `hidden_size`. "
+                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
+                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                )
 
         # initialize with config
         # make sure input & output embeddings is not tied
@@ -243,7 +241,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         # At the moment fast initialization is not supported for composite models
         if kwargs.get("_fast_init", False):
             logger.warning(
-                "Fast initialization is currently not supported for VisionEncoderDecoderModel. Falling back to slow intialization..."
+                "Fast initialization is currently not supported for VisionEncoderDecoderModel. "
+                "Falling back to slow initialization..."
             )
         kwargs["_fast_init"] = False
         return super().from_pretrained(*args, **kwargs)
@@ -336,14 +335,13 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         if encoder is None:
             if encoder_pretrained_model_name_or_path is None:
                 raise ValueError(
-                    f"No `encoder_model` is passed to kwargs: {kwargs_encoder}. "
-                    f"In this case make sure that `encoder_pretrained_model_name_or_path` defined"
+                    "If `encoder_model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has "
+                    "to be defined."
                 )
 
             if "config" not in kwargs_encoder:
                 encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
-
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and casual mask are disabled."
@@ -359,16 +357,18 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         if decoder is None:
             if decoder_pretrained_model_name_or_path is None:
                 raise ValueError(
-                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+                    "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has "
+                    "to be defined."
                 )
 
             if "config" not in kwargs_decoder:
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model."
-                        "Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
-                        "and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
+                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
+                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
+                        "cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -377,11 +377,11 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder."
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
-                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config`"
-                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` "
-                    f"to `.from_encoder_decoder_pretrained(...)`"
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
+                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
+                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)

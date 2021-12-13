@@ -27,8 +27,8 @@ logger = logging.get_logger(__name__)
 class VisionEncoderDecoderConfig(PretrainedConfig):
     r"""
     :class:`~transformers.VisionEncoderDecoderConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.VisionEncoderDecoderModel`. It is used to instantiate an Encoder Decoder model according to
-    the specified arguments, defining the encoder and decoder configs.
+    :class:`~transformers.VisionEncoderDecoderModel`. It is used to instantiate a Vision-Encoder-Text-Decoder model
+    according to the specified arguments, defining the encoder and decoder configs.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.

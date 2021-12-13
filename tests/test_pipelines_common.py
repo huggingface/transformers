@@ -27,12 +27,15 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
     AutoTokenizer,
+    DistilBertForSequenceClassification,
     IBertConfig,
     RobertaConfig,
+    TextClassificationPipeline,
     pipeline,
 )
+from transformers.pipelines import get_task
 from transformers.pipelines.base import _pad
-from transformers.testing_utils import is_pipeline_test, require_torch
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 
 logger = logging.getLogger(__name__)
@@ -166,6 +169,11 @@ class PipelineTestCaseMeta(type):
                 else:
                     tokenizer = None
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
+
+                if tokenizer is None and feature_extractor is None:
+                    self.skipTest(
+                        f"Ignoring {ModelClass}, cannot create a tokenizer or feature_extractor (PerceiverConfig with no FastTokenizer ?)"
+                    )
                 pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
                 if pipeline is None:
                     # The test can disable itself, but it should be very marginal
@@ -180,9 +188,12 @@ class PipelineTestCaseMeta(type):
 
                     # 10 examples with batch size 4 means there needs to be a unfinished batch
                     # which is important for the unbatcher
-                    dataset = [copy.deepcopy(random.choice(examples)) for i in range(10)]
+                    def data(n):
+                        for _ in range(n):
+                            # Need to copy because Conversation object is mutated
+                            yield copy.deepcopy(random.choice(examples))
 
-                    for item in pipeline(dataset, batch_size=4):
+                    for item in pipeline(data(10), batch_size=4):
                         pass
 
                 run_batch_test(pipeline, examples)
@@ -207,6 +218,7 @@ class PipelineTestCaseMeta(type):
                         if not tokenizer_classes:
                             # We need to test even if there are no tokenizers.
                             tokenizer_classes = [None]
+
                         for tokenizer_class in tokenizer_classes:
                             if tokenizer_class is not None:
                                 tokenizer_name = tokenizer_class.__name__
@@ -255,11 +267,83 @@ class CommonPipelineTest(unittest.TestCase):
                 return self.data[i]
 
         text_classifier = pipeline(
-            task="text-classification", model="Narsil/tiny-distilbert-sequence-classification", framework="pt"
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
         )
         dataset = MyDataset()
         for output in text_classifier(dataset):
             self.assertEqual(output, {"label": ANY(str), "score": ANY(float)})
+
+    @require_torch
+    def test_check_task_auto_inference(self):
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+
+        self.assertIsInstance(pipe, TextClassificationPipeline)
+
+    @require_torch
+    def test_pipeline_override(self):
+        class MyPipeline(TextClassificationPipeline):
+            pass
+
+        text_classifier = pipeline(model="hf-internal-testing/tiny-random-distilbert", pipeline_class=MyPipeline)
+
+        self.assertIsInstance(text_classifier, MyPipeline)
+
+    def test_check_task(self):
+        task = get_task("gpt2")
+        self.assertEqual(task, "text-generation")
+
+        with self.assertRaises(RuntimeError):
+            # Wrong framework
+            get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
+
+    @require_torch
+    def test_iterator_data(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+        # When using multiple workers on streamable data it should still work
+        # This will force using `num_workers=1` with a warning for now.
+        results = []
+        for out in pipe(data(10), num_workers=2):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+    @require_tf
+    def test_iterator_data_tf(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
+        out = pipe("This is a test")
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+    @require_torch
+    def test_unbatch_attentions_hidden_states(self):
+        model = DistilBertForSequenceClassification.from_pretrained(
+            "hf-internal-testing/tiny-random-distilbert", output_hidden_states=True, output_attentions=True
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-distilbert")
+        text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+
+        # Used to throw an error because `hidden_states` are a tuple of tensors
+        # instead of the expected tensor.
+        outputs = text_classifier(["This is great !"] * 20, batch_size=32)
+        self.assertEqual(len(outputs), 20)
 
 
 @is_pipeline_test

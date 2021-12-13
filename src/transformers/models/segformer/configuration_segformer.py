@@ -81,6 +81,8 @@ class SegformerConfig(PretrainedConfig):
         reshape_last_stage (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to reshape the features of the last stage back to :obj:`(batch_size, num_channels, height, width)`.
             Only required for the semantic segmentation model.
+        semantic_loss_ignore_index (:obj:`int`, `optional`, defaults to 255):
+            The index that is ignored by the loss function of the semantic segmentation model.
 
     Example::
 
@@ -120,6 +122,7 @@ class SegformerConfig(PretrainedConfig):
         decoder_hidden_size=256,
         is_encoder_decoder=False,
         reshape_last_stage=True,
+        semantic_loss_ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -144,3 +147,4 @@ class SegformerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.decoder_hidden_size = decoder_hidden_size
         self.reshape_last_stage = reshape_last_stage
+        self.semantic_loss_ignore_index = semantic_loss_ignore_index

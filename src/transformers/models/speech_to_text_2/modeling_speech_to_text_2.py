@@ -195,7 +195,8 @@ class Speech2Text2Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -281,7 +282,10 @@ class Speech2Text2Attention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -472,8 +476,9 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
 
         self.layers = nn.ModuleList([Speech2Text2DecoderLayer(config) for _ in range(config.decoder_layers)])
 
-        self.init_weights()
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -739,15 +744,16 @@ class Speech2Text2DecoderWrapper(Speech2Text2PreTrainedModel):
 )
 class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.model = Speech2Text2DecoderWrapper(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.decoder.embed_tokens

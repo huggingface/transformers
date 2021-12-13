@@ -784,7 +784,6 @@ class DetrClassificationHead(nn.Module):
 class DetrPreTrainedModel(PreTrainedModel):
     config_class = DetrConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -895,7 +894,8 @@ class DetrEncoder(DetrPreTrainedModel):
 
         # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -1002,8 +1002,9 @@ class DetrDecoder(DetrPreTrainedModel):
         # in DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
-        self.init_weights()
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -1180,7 +1181,8 @@ class DetrModel(DetrPreTrainedModel):
         self.encoder = DetrEncoder(config)
         self.decoder = DetrDecoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_encoder(self):
         return self.encoder
@@ -1334,7 +1336,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
@@ -1495,7 +1498,8 @@ class DetrForSegmentation(DetrPreTrainedModel):
             hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrSegmentationOutput, config_class=_CONFIG_FOR_DOC)

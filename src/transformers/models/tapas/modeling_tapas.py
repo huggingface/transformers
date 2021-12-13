@@ -419,7 +419,7 @@ class TapasSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -456,7 +456,6 @@ class TapasSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Tapas
 class TapasAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -464,6 +463,7 @@ class TapasAttention(nn.Module):
         self.output = TapasSelfOutput(config)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -482,6 +482,7 @@ class TapasAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,
         hidden_states,
@@ -537,7 +538,6 @@ class TapasOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Tapas
 class TapasLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -553,6 +553,7 @@ class TapasLayer(nn.Module):
         self.intermediate = TapasIntermediate(config)
         self.output = TapasOutput(config)
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states,
@@ -617,6 +618,7 @@ class TapasLayer(nn.Module):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
@@ -875,7 +877,8 @@ class TapasModel(TapasPreTrainedModel):
 
         self.pooler = TapasPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1014,7 +1017,8 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         self.tapas = TapasModel(config, add_pooling_layer=False)
         self.cls = TapasOnlyMLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1066,7 +1070,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             >>> labels = tokenizer(table=table, queries="How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
 
             >>> outputs = model(**inputs, labels=labels)
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1144,7 +1148,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         if config.num_aggregation_labels > 0:
             self.aggregation_classifier = nn.Linear(config.hidden_size, config.num_aggregation_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
@@ -1462,7 +1467,8 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)

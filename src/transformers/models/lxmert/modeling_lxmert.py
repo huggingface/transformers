@@ -356,7 +356,7 @@ class LxmertAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -891,7 +891,8 @@ class LxmertModel(LxmertPreTrainedModel):
         self.embeddings = LxmertEmbeddings(config)
         self.encoder = LxmertEncoder(config)
         self.pooler = LxmertPooler(config)
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1048,7 +1049,8 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             self.answer_head = LxmertVisualAnswerHead(config, self.num_qa_labels)
 
         # Weight initialization
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Loss functions
         self.loss_fcts = {
@@ -1303,7 +1305,8 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         self.answer_head = LxmertVisualAnswerHead(config, self.num_qa_labels)
 
         # Weight initialization
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # Loss function
         self.loss = CrossEntropyLoss()

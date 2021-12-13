@@ -18,9 +18,8 @@ Overview
 
 The LayoutLMV2 model was proposed in `LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding
 <https://arxiv.org/abs/2012.14740>`__ by Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu,
-Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou. LayoutLMV2 improves `LayoutLM
-<https://huggingface.co/transformers/model_doc/layoutlm.html>`__ to obtain state-of-the-art results across several
-document image understanding benchmarks:
+Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou. LayoutLMV2 improves `LayoutLM <layoutlm>`__ to obtain
+state-of-the-art results across several document image understanding benchmarks:
 
 - information extraction from scanned documents: the `FUNSD <https://guillaumejaume.github.io/FUNSD/>`__ dataset (a
   collection of 199 annotated forms comprising more than 30,000 words), the `CORD <https://github.com/clovaai/cord>`__

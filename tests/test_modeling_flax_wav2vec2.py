@@ -17,9 +17,19 @@ import math
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_flax_available
-from transformers.testing_utils import require_datasets, require_flax, require_soundfile, slow
+from transformers.testing_utils import (
+    is_librosa_available,
+    is_pyctcdecode_available,
+    require_datasets,
+    require_flax,
+    require_librosa,
+    require_pyctcdecode,
+    require_soundfile,
+    slow,
+)
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, random_attention_mask
 
@@ -37,6 +47,14 @@ if is_flax_available():
         _compute_mask_indices,
         _sample_negative_indices,
     )
+
+
+if is_pyctcdecode_available():
+    from transformers import Wav2Vec2ProcessorWithLM
+
+
+if is_librosa_available():
+    import librosa
 
 
 class FlaxWav2Vec2ModelTester:
@@ -354,8 +372,6 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 @slow
 class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
@@ -447,3 +463,22 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         # a random wav2vec2 model has not learned to predict the quantized latent states
         # => the cosine similarity between quantized states and predicted states is very likely < 0.1
         self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
+
+    @require_pyctcdecode
+    @require_librosa
+    def test_wav2vec2_with_lm(self):
+        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        sample = next(iter(ds))
+
+        resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
+
+        model = FlaxWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(resampled_audio, return_tensors="np").input_values
+
+        logits = model(input_values).logits
+
+        transcription = processor.batch_decode(np.array(logits)).text
+
+        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")

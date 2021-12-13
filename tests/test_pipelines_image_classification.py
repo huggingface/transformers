@@ -14,7 +14,12 @@
 
 import unittest
 
-from transformers import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, PreTrainedTokenizer, is_vision_available
+from transformers import (
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    PerceiverConfig,
+    PreTrainedTokenizer,
+    is_vision_available,
+)
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -45,6 +50,10 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if isinstance(model.config, PerceiverConfig):
+            self.skipTest(
+                "Perceiver model tester is defined with a language one, which has no feature_extractor, so the automated test cannot work here"
+            )
 
         image_classifier = ImageClassificationPipeline(model=model, feature_extractor=feature_extractor)
         examples = [
@@ -67,7 +76,7 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
         import datasets
 
-        dataset = datasets.load_dataset("Narsil/image_dummy", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         # Accepts URL + PIL.Image + lists
         outputs = image_classifier(

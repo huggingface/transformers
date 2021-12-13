@@ -45,13 +45,22 @@ The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any other
-pipeline but requires an additional argument which is the `task`.
+pipeline but can provide additional quality of life.
 
 Simple call on one item:
 
 .. code-block::
 
     >>> pipe = pipeline("text-classification")
+    >>> pipe("This restaurant is awesome")
+    [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
+
+If you want to use a specific model from the `hub <https://huggingface.co>`__ you can ignore the task if the model on
+the hub already defines it:
+
+.. code-block::
+
+    >>> pipe = pipeline(model="roberta-large-mnli")
     >>> pipe("This restaurant is awesome")
     [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
 
@@ -226,6 +235,32 @@ For users, a rule of thumb is:
       - The larger the GPU the more likely batching is going to be more interesting
 - As soon as you enable batching, make sure you can handle OOMs nicely.
 
+Pipeline custom code
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you want to override a specific pipeline.
+
+Don't hesitate to create an issue for your task at hand, the goal of the pipeline is to be easy to use and support most
+cases, so :obj:`transformers` could maybe support your use case.
+
+
+If you want to try simply you can:
+
+- Subclass your pipeline of choice
+
+.. code-block::
+
+    class MyPipeline(TextClassificationPipeline):
+        def postprocess(...):
+            ...
+            scores = scores * 100
+            ...
+
+    my_pipeline = MyPipeline(model=model, tokenizer=tokenizer, ...)
+    # or if you use `pipeline` function, then:
+    my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
+
+That should enable you to do all the custom code you want.
 
 
 Implementing a pipeline
