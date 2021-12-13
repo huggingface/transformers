@@ -14,9 +14,13 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Let's have a quick look at the 🤗 Transformers library features. The library downloads pretrained models for Natural
-Language Understanding (NLU) tasks, such as analyzing the sentiment of a text, and Natural Language Generation (NLG),
+Let's have a quick look at the 🤗 Transformers library features. The library downloads pretrained models for:
+- Natural Language Understanding (NLU) tasks, such as analyzing the sentiment of a text, and Natural Language Generation (NLG),
 such as completing a prompt with new text or translating in another language.
+- Computer vision tasks, such as image classification, object detection and image segmentation.
+- Audio processing tasks, such as speech-to-text (SST), audio classification and keyword spotting.
+- Tasks that involve multiple modalities (e.g. vision and text) at the same time. Examples include table question answering, 
+information extraction from scanned documents, video classification.
 
 First we will see how to easily leverage the pipeline API to quickly use those pretrained models at inference. Then, we
 will dig a little bit more and see how the library gives you access to those models and helps you preprocess your data.
@@ -36,14 +40,21 @@ The easiest way to use a pretrained model on a given task is to use [`~transform
 
 🤗 Transformers provides the following tasks out of the box:
 
-- Sentiment analysis: is a text positive or negative?
-- Text generation (in English): provide a prompt and the model will generate what follows.
-- Name entity recognition (NER): in an input sentence, label each word with the entity it represents (person, place, etc.)
-- Question answering: provide the model with some context and a question, extract the answer from the context.
-- Filling masked text: given a text with masked words (e.g., replaced by `[MASK]`), fill the blanks.
-- Summarization: generate a summary of a long text.
-- Translation: translate a text in another language.
-- Feature extraction: return a tensor representation of the text.
+* Language: 
+  - Sentiment analysis: is a text positive or negative?
+  - Text generation (in English): provide a prompt and the model will generate what follows.
+  - Name entity recognition (NER): in an input sentence, label each word with the entity it represents (person, place, etc.)
+  - Question answering: provide the model with some context and a question, extract the answer from the context.
+  - Filling masked text: given a text with masked words (e.g., replaced by `[MASK]`), fill the blanks.
+  - Summarization: generate a summary of a long text.
+  - Translation: translate a text in another language.
+  - Feature extraction: return a tensor representation of the text.
+* Vision:
+  - Image classification: classify an image by assigning it a specific label (e.g. "dog").
+  - Object detection: detect objects within an image.
+  - Image segmentation: partitioning an image into multiple segments (e.g. individual persons). 
+Audio:
+- (to do)
 
 Let's see how this work for sentiment analysis (the other tasks are all covered in the [task summary](task_summary)):
 

@@ -15,8 +15,10 @@ specific language governing permissions and limitations under the License.
 [[open-in-colab]]
 
 This page shows the most frequent use-cases when using the library. The models available allow for many different
-configurations and a great versatility in use-cases. The most simple ones are presented here, showcasing usage for
-tasks such as question answering, sequence classification, named entity recognition and others.
+configurations and a great versatility in use-cases. Below, a few examples are presented. We split them up according to
+their modality: language (for tasks such as question answering, sequence classification, named entity recognition), vision
+(for tasks such as image classification, object detection), audio (for tasks such as audio classification, keyword spotting)
+and tasks that involve multiple modalities (e.g. vision and text).
 
 These examples leverage auto-models, which are classes that will instantiate a model according to a given checkpoint,
 automatically selecting the correct model architecture. Please check the [`AutoModel`] documentation
@@ -35,7 +37,7 @@ following:
 In order to do an inference on a task, several mechanisms are made available by the library:
 
 - Pipelines: very easy-to-use abstractions, which require as little as two lines of code.
-- Direct model use: Less abstractions, but more flexibility and power via a direct access to a tokenizer
+- Direct model use: Less abstractions, but more flexibility and power via a direct access to a tokenizer, feature extractor or processor
   (PyTorch/TensorFlow) and full inference capacity.
 
 Both approaches are showcased here.
@@ -50,7 +52,9 @@ This would produce random output.
 
 </Tip>
 
-## Sequence Classification
+## Language
+
+### Sequence Classification
 
 Sequence classification is the task of classifying sequences according to a given number of classes. An example of
 sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune a
@@ -159,7 +163,7 @@ not paraphrase: 94%
 is paraphrase: 6%
 ```
 
-## Extractive Question Answering
+### Extractive Question Answering
 
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune a
@@ -297,7 +301,7 @@ Question: 🤗 Transformers provides interoperability between which frameworks?
 Answer: tensorflow 2. 0 and pytorch
 ```
 
-## Language Modeling
+### Language Modeling
 
 Language modeling is the task of fitting a model to a corpus, which can be domain specific. All popular
 transformer-based models are trained using a variant of language modeling, e.g. BERT with masked language modeling,
@@ -307,7 +311,7 @@ Language modeling can be useful outside of pretraining as well, for example to s
 domain-specific: using a language model trained over a very large corpus, and then fine-tuning it to a news dataset or
 on scientific papers e.g. [LysandreJik/arxiv-nlp](https://huggingface.co/lysandre/arxiv-nlp).
 
-### Masked Language Modeling
+#### Masked Language Modeling
 
 Masked language modeling is the task of masking tokens in a sequence with a masking token, and prompting the model to
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
@@ -422,7 +426,7 @@ Distilled models are smaller than the models they mimic. Using them instead of t
 This prints five sequences, with the top 5 tokens predicted by the model.
 
 
-### Causal Language Modeling
+#### Causal Language Modeling
 
 Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
@@ -498,7 +502,7 @@ This outputs a (hopefully) coherent next token following the original sequence, 
 In the next section, we show how [`generation_utils.GenerationMixin.generate`] can be used to
 generate multiple tokens up to a specified length instead of one token at a time.
 
-### Text Generation
+#### Text Generation
 
 In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a
 continuation from the given context. The following example shows how *GPT-2* can be used in pipelines to generate text.
@@ -586,7 +590,7 @@ For more information on how to apply different decoding strategies for text gene
 generation blog post [here](https://huggingface.co/blog/how-to-generate).
 
 
-## Named Entity Recognition
+### Named Entity Recognition
 
 Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a token
 as a person, an organisation or a location. An example of a named entity recognition dataset is the CoNLL-2003 dataset,
@@ -730,7 +734,7 @@ illustrated below:
 ('[SEP]', 'O')
 ```
 
-## Summarization
+### Summarization
 
 Summarization is the task of summarizing a document or an article into a shorter text. If you would like to fine-tune a
 model on a summarization task, you may leverage the [run_summarization.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization/run_summarization.py)
@@ -824,7 +828,7 @@ counts of "offering a false instrument for filing in the first degree" she has b
 between 1999 and 2002.
 ```
 
-## Translation
+### Translation
 
 Translation is the task of translating a text from one language to another. If you would like to fine-tune a model on a
 translation task, you may leverage the [run_translation.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation/run_translation.py) script.
@@ -886,3 +890,90 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 ```
 
 We get the same translation as with the pipeline example.
+
+## Vision
+
+### Image Classification
+
+Image classification is the task of classifying an image according to a given number of classes. An example of a famous
+image classification dataset/benchmark is [ImageNet](https://image-net.org/), which consists of 14 million images, each labeled with one of 1,000 possible classes.
+If you would like to fine-tune a model on a image classification dataset, you may leverage the [run_image_classification.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/image-classification) script.
+
+Here is an example of using pipelines to do image classification. It leverages a Vision Transformer (ViT) fine-tuned on ImageNet, hence it can classify an image into one of 1,000 possible classes.
+
+This returns a list of the top 5 labels with corresponding scores. Let's check the label with the highest score, as follows:
+
+```py
+>>> from transformers import pipeline
+>>> import requests
+>>> from PIL import Image
+
+>>> classifier = pipeline("image-classification")
+
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> result = classifier(image)[0]
+>>> print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
+label: Egyptian cat, with score: 0.9374
+```
+
+### Object detection
+
+Object detection is the task of detecting objects in an image. Models typically output a bounding box and a corresponding class label for every detected
+object in an image. An example of a famous object detection dataset is [COCO](https://cocodataset.org/#home) (which actually also includes many other tasks such as segmentation and captioning).
+
+Here is an example of using pipelines to do object detection. It leverages a DETR model fine-tuned on COCO.
+Note that it does require to have [timm](https://github.com/rwightman/pytorch-image-models) installed, as DETR leverages a convolutional backbone from that package.
+
+Similar to the [image-classification pipeline](#image-classification), it returns the top 5 detected objects in the image by default. 
+Let's check the object detected with the highest score, as follows:
+
+```py
+>>> from transformers import pipeline
+>>> import requests
+>>> from PIL import Image
+
+>>> classifier = pipeline("object-detection")
+
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> result = classifier(image)[0]
+>>> print(f"detected: {result['label']}, with score: {round(result['score'], 4)}. Bounding box: {result['box']}")
+detected: remote, with score: 0.9982. Bounding box: {'xmin': 40, 'ymin': 70, 'xmax': 175, 'ymax': 117}
+```
+
+## Audio
+
+(to do)
+
+## Multi-modalities
+
+We do have several Transformer-based models in the library that combine several modalities at the same time. Examples of these include:
+
+- [TAPAS](./model_doc/tapas), which can be used for table question answering
+- [LayoutLM](./model_doc/layoutlm), [LayoutLMv2](./model_doc/layoutlmv2), [LayoutXLM](./model_doc/layoutxlm), which can be used for intelligent document processing tasks
+- [TrOCR](./model_doc/trocr), which can be used for optical character recognition
+- [Perceiver](./model_doc/perceiver), which can be used for basically any discriminative task you can think of, e.g. video classification.
+
+We refer to the documentation of the models above in case you want to learn more about them. Below, we illustrate how you can leverage the 
+[table-question-answering pipeline](./main_classes/pipelines/#TableQuestionAnsweringPipeline) for quick inference on a Pandas dataframe, as follows:
+
+```py
+>>> from transformers import pipeline
+>>> import pandas as pd
+
+>>> table_qa = pipeline("table-question-answering")
+
+>>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        'Age': ["56", "45", "59"],
+        'Number of movies': ["87", "53", "69"]
+    }
+>>> table = pd.DataFrame.from_dict(data)
+>>> query = "How many movies has George Clooney played in?"
+
+>>> result = table_qa(table, query)
+>>> print(result['answer'])
+COUNT > 69
+```
