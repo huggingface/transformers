@@ -1,4 +1,4 @@
-name: Build documentation
+name: Update Transformers metadata
 
 on:
   push:
