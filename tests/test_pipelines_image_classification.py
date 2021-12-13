@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_vision,
+    slow,
 )
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
@@ -167,3 +168,48 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         image_classifier = pipeline("image-classification", model="lysandre/tiny-vit-random", tokenizer=tokenizer)
 
         self.assertIs(image_classifier.tokenizer, tokenizer)
+
+    @slow
+    @require_torch
+    def test_perceiver(self):
+        # Perceiver is not tested by `run_pipeline_test` properly.
+        # That is because the type of feature_extractor and model preprocessor need to be kept
+        # in sync, which is not the case in the current design
+        image_classifier = pipeline("image-classification", model="deepmind/vision-perceiver-conv")
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.4385, "label": "tabby, tabby cat"},
+                {"score": 0.321, "label": "tiger cat"},
+                {"score": 0.0502, "label": "Egyptian cat"},
+                {"score": 0.0137, "label": "crib, cot"},
+                {"score": 0.007, "label": "radiator"},
+            ],
+        )
+
+        image_classifier = pipeline("image-classification", model="deepmind/vision-perceiver-fourier")
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.5658, "label": "tabby, tabby cat"},
+                {"score": 0.1309, "label": "tiger cat"},
+                {"score": 0.0722, "label": "Egyptian cat"},
+                {"score": 0.0707, "label": "remote control, remote"},
+                {"score": 0.0082, "label": "computer keyboard, keypad"},
+            ],
+        )
+
+        image_classifier = pipeline("image-classification", model="deepmind/vision-perceiver-learned")
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.3022, "label": "tabby, tabby cat"},
+                {"score": 0.2362, "label": "Egyptian cat"},
+                {"score": 0.1856, "label": "tiger cat"},
+                {"score": 0.0324, "label": "remote control, remote"},
+                {"score": 0.0096, "label": "quilt, comforter, comfort, puff"},
+            ],
+        )
