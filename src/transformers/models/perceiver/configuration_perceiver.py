@@ -90,7 +90,8 @@ class PerceiverConfig(PretrainedConfig):
         samples_per_patch (:obj:`int`, `optional`, defaults to 16):
             Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
         output_shape (:obj:`List[int]`, `optional`, defaults to :obj:`[1, 16, 224, 224]`):
-            Shape of the output for the multimodal autoencoding model.
+            Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
+            autoencoding model. This excludes the channel dimension.
 
     Example::
 
