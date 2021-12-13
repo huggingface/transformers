@@ -856,6 +856,7 @@ if is_torch_available():
             "DistilBertForQuestionAnswering",
             "DistilBertForSequenceClassification",
             "DistilBertForTokenClassification",
+            "DistilBertLMHeadModel",
             "DistilBertModel",
             "DistilBertPreTrainedModel",
         ]
@@ -2776,6 +2777,7 @@ if TYPE_CHECKING:
             DistilBertForQuestionAnswering,
             DistilBertForSequenceClassification,
             DistilBertForTokenClassification,
+            DistilBertLMHeadModel,
             DistilBertModel,
             DistilBertPreTrainedModel,
         )
