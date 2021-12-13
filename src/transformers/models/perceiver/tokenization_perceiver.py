@@ -87,7 +87,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         self._utf_vocab_size = 2 ** 8  # utf is 8 bits
 
         # define special tokens dict
-        self.special_tokens_encoder: Dict[int, str] = {
+        self.special_tokens_encoder: Dict[str, int] = {
             self.pad_token: 0,
             self.bos_token: 1,
             self.eos_token: 2,
@@ -96,7 +96,15 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             self.sep_token: 5,
         }
         self._num_special_tokens = len(self.special_tokens_encoder)
-        self.special_tokens_decoder: Dict[str, int] = {v: k for k, v in self.special_tokens_encoder.items()}
+        self.special_tokens_decoder: Dict[int, str] = {v: k for k, v in self.special_tokens_encoder.items()}
+
+    def get_vocab(self) -> Dict[str, int]:
+        vocab = self.special_tokens_encoder.copy()
+        vocab.update(self.added_tokens_encoder)
+        for i in range(self._utf_vocab_size):
+            token = chr(i)
+            vocab[token] = i + len(self.special_tokens_encoder)
+        return vocab
 
     @property
     def vocab_size(self):

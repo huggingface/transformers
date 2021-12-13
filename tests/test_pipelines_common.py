@@ -169,6 +169,11 @@ class PipelineTestCaseMeta(type):
                 else:
                     tokenizer = None
                 feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
+
+                if tokenizer is None and feature_extractor is None:
+                    self.skipTest(
+                        f"Ignoring {ModelClass}, cannot create a tokenizer or feature_extractor (PerceiverConfig with no FastTokenizer ?)"
+                    )
                 pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
                 if pipeline is None:
                     # The test can disable itself, but it should be very marginal
@@ -213,6 +218,7 @@ class PipelineTestCaseMeta(type):
                         if not tokenizer_classes:
                             # We need to test even if there are no tokenizers.
                             tokenizer_classes = [None]
+
                         for tokenizer_class in tokenizer_classes:
                             if tokenizer_class is not None:
                                 tokenizer_name = tokenizer_class.__name__
