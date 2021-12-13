@@ -199,7 +199,7 @@ class MultiHeadSelfAttention(nn.Module):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = query.size()
+        bs = query.shape[0]
         # k_length = key.size(1)
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
@@ -349,7 +349,7 @@ class TransformerBlock(nn.Module):
         ffn_output = self.ffn(attention_output)  # (bs, seq_length, dim)
         ffn_output = self.output_layer_norm(ffn_output + attention_output)  # (bs, seq_length, dim)
 
-        outputs = (ffn_output,) + outputs
+        outputs = outputs + (ffn_output,)  # The order here is different from that of BERT classes!!!
         return outputs
 
 
