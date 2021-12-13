@@ -153,6 +153,17 @@ class UniSpeechSatConfig(PretrainedConfig):
             instance of :class:`~transformers.UniSpeechSatForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
+        tdnn_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(512, 512, 512, 512, 1500)`):
+            A tuple of integers defining the number of output channels of each 1D convolutional layer in the `TDNN`
+            module of the `XVector` model. The length of `tdnn_dim` defines the number of `TDNN` layers.
+        tdnn_kernel (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 3, 3, 1, 1)`):
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the `TDNN` module of the
+            `XVector` model. The length of `tdnn_kernel` has to match the length of `tdnn_dim`.
+        tdnn_dilation (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(1, 2, 3, 1, 1)`):
+            A tuple of integers defining the dilation factor of each 1D convolutional layer in `TDNN` module of the
+            `XVector` model. The length of `tdnn_dilation` has to match the length of `tdnn_dim`.
+        xvector_output_dim (:obj:`int`, `optional`, defaults to 512):
+            Dimensionality of the `XVector` embedding vectors.
 
     Example::
 

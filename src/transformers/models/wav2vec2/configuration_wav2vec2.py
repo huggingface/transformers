@@ -80,10 +80,10 @@ class Wav2Vec2Config(PretrainedConfig):
             feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
         conv_stride (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature extractor. The length
-            of `conv_stride` defines the number of convolutional layers and has to match the the length of `conv_dim`.
+            of `conv_stride` defines the number of convolutional layers and has to match the length of `conv_dim`.
         conv_kernel (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(10, 3, 3, 3, 3, 3, 3)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature extractor. The
-            length of `conv_kernel` defines the number of convolutional layers and has to match the the length of
+            length of `conv_kernel` defines the number of convolutional layers and has to match the length of
             `conv_dim`.
         conv_bias (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether the 1D convolutional layers have a bias.
@@ -153,6 +153,17 @@ class Wav2Vec2Config(PretrainedConfig):
             instance of :class:`~transformers.Wav2Vec2ForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
+        tdnn_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(512, 512, 512, 512, 1500)`):
+            A tuple of integers defining the number of output channels of each 1D convolutional layer in the `TDNN`
+            module of the `XVector` model. The length of `tdnn_dim` defines the number of `TDNN` layers.
+        tdnn_kernel (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 3, 3, 1, 1)`):
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the `TDNN` module of the
+            `XVector` model. The length of `tdnn_kernel` has to match the length of `tdnn_dim`.
+        tdnn_dilation (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(1, 2, 3, 1, 1)`):
+            A tuple of integers defining the dilation factor of each 1D convolutional layer in `TDNN` module of the
+            `XVector` model. The length of `tdnn_dilation` has to match the length of `tdnn_dim`.
+        xvector_output_dim (:obj:`int`, `optional`, defaults to 512):
+            Dimensionality of the `XVector` embedding vectors.
         add_adapter (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether a convolutional network should be stacked on top of the Wav2Vec2 Encoder. Can be very useful for
             warm-starting Wav2Vec2 for SpeechEncoderDecoder models.
@@ -166,8 +177,6 @@ class Wav2Vec2Config(PretrainedConfig):
         output_hidden_size (:obj:`int`, `optional`):
             Dimensionality of the encoder output layer. If not defined, this defaults to `hidden-size`. Only relevant
             if ``add_adapter is True``.
-        tdnn_proj_size (:obj:`int`, `optional`, defaults to 512):
-            Number of convolutional filters in each TDNN layer of :class:`Wav2Vec2ForXVector`.
 
     Example::
 

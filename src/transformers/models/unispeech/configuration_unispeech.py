@@ -215,10 +215,6 @@ class UniSpeechConfig(PretrainedConfig):
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,
-        tdnn_dim=(512, 512, 512, 512, 1500),
-        tdnn_kernel=(5, 3, 3, 1, 1),
-        tdnn_dilation=(1, 2, 3, 1, 1),
-        xvector_output_dim=512,
         num_ctc_classes=80,
         pad_token_id=0,
         bos_token_id=1,
@@ -292,9 +288,3 @@ class UniSpeechConfig(PretrainedConfig):
 
         # pretraining loss
         self.replace_prob = replace_prob
-
-        # XVector model parameters
-        self.tdnn_dim = list(tdnn_dim)
-        self.tdnn_kernel = list(tdnn_kernel)
-        self.tdnn_dilation = list(tdnn_dilation)
-        self.xvector_output_dim = xvector_output_dim
