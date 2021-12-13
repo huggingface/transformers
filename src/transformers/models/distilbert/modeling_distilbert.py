@@ -787,7 +787,7 @@ class DistilBertLMHeadModel(DistilBertPreTrainedModel):
         Returns the position embeddings
         """
         return self.distilbert.get_position_embeddings()
-    
+
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
