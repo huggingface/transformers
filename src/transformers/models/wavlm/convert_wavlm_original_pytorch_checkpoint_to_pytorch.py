@@ -19,7 +19,7 @@ import argparse
 
 import torch
 
-from transformers import WavLMConfig, logging
+from transformers import WavLMConfig, WavLMModel, logging
 
 # Step 1. clone https://github.com/microsoft/unilm
 # Step 2. git checkout to https://github.com/microsoft/unilm/commit/b94ec76c36f02fb2b0bf0dcb0b8554a2185173cd
