@@ -230,7 +230,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoding = tokenizer_r(text_of_1_token, return_offsets_mapping=True, add_special_tokens=False)
                 self.assertEqual(encoding.offset_mapping[0], (1, len(text_of_1_token)))
 
-    def test_change_add_prefix_space_arg(self):
+    def test_change_add_prefix_space_and_trim_offsets_args(self):
         for trim_offsets, add_prefix_space in itertools.product([True, False], repeat=2):
             tokenizer_r = self.rust_tokenizer_class.from_pretrained(
                 self.tmpdirname, use_fast=True, add_prefix_space=add_prefix_space, trim_offsets=trim_offsets
@@ -238,13 +238,9 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             pre_tokenizer_state = json.loads(tokenizer_r.backend_tokenizer.pre_tokenizer.__getstate__())
             post_processor_state = json.loads(tokenizer_r.backend_tokenizer.post_processor.__getstate__())
-            decoder_state = json.loads(tokenizer_r.backend_tokenizer.decoder.__getstate__())
 
             self.assertEqual(pre_tokenizer_state["add_prefix_space"], add_prefix_space)
             self.assertEqual(pre_tokenizer_state["trim_offsets"], trim_offsets)
 
             self.assertEqual(post_processor_state["add_prefix_space"], add_prefix_space)
             self.assertEqual(post_processor_state["trim_offsets"], trim_offsets)
-
-            self.assertEqual(decoder_state["add_prefix_space"], add_prefix_space)
-            self.assertEqual(decoder_state["trim_offsets"], trim_offsets)
