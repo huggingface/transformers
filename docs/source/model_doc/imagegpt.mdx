@@ -28,10 +28,13 @@ ResNet, and 99.0% accuracy with full fine-tuning, matching the top supervised pr
 competitive with self-supervised benchmarks on ImageNet when substituting pixels for a VQVAE encoding, achieving 69.0%
 top-1 accuracy on a linear probe of our features.*
 
-The figure below summarizes the approach (taken from the [original
-paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V2.pdf)):
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/imagegpt_architecture.png"
+alt="drawing" width="600"/> 
 
-![ImageGPT](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/imagegpt_architecture.png)
+<small> Summary of the approach. Taken from the [original paper](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V2.pdf). </small>
+
+This model was contributed by [nielsr](https://huggingface.co/nielsr), based on [this issue](https://github.com/openai/image-gpt/issues/7). The original code can be found
+[here](https://github.com/openai/image-gpt).
 
 Tips:
 
@@ -67,9 +70,6 @@ Tips:
 | MiT-b3 | [3, 4, 18, 3] | [64, 128, 320, 512] | 768 | 45.2 | 83.1 |
 | MiT-b4 | [3, 8, 27, 3] | [64, 128, 320, 512] | 768 | 62.6 | 83.6 |
 | MiT-b5 | [3, 6, 40, 3] | [64, 128, 320, 512] | 768 | 82.0 | 83.8 |
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr), based on [this issue](https://github.com/openai/image-gpt/issues/7). The original code can be found
-[here](https://github.com/openai/image-gpt).
 
 ## ImageGPTConfig
 
