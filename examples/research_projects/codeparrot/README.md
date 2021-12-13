@@ -31,6 +31,8 @@ Before you run any of the scripts make sure you are logged in and can push to th
 huggingface-cli login
 ```
 
+Additionally, sure you have git-lfs installed. You can find instructions for how to install it [here](https://git-lfs.github.com/).
+
 ## Dataset
 The source of the dataset is the GitHub dump available on Google's [BigQuery](https://cloud.google.com/blog/topics/public-datasets/github-on-bigquery-analyze-all-the-open-source-code). The database was queried for all Python files with less than 1MB in size resulting in a 180GB dataset with over 20M files. The dataset is available on the Hugging Face Hub [here](https://huggingface.co/datasets/transformersbook/codeparrot).
 
@@ -96,7 +98,7 @@ If you want to train the small model you need to make some modifications:
 accelerate launch scripts/codeparrot_training.py \
 --model_ckpt lvwerra/codeparrot-small \
 --train_batch_size 12 \
---eval_batch_size 12 \
+--valid_batch_size 12 \
 --learning_rate 5e-4 \
 --num_warmup_steps 2000 \
 --gradient_accumulation 1 \
@@ -125,7 +127,8 @@ python scripts/human_eval.py --model_ckpt lvwerra/codeparrot \
 --do_sample True \
 --temperature 0.2 \
 --top_p 0.95 \
---n_samples=200
+--n_samples=200 \
+--HF_ALLOW_CODE_EVAL="0"
 ```
 
 The results as well as reference values are shown in the following table:
