@@ -333,7 +333,7 @@ class TrainingArguments:
         optim (:obj:`str`, `optional`, defaults to :obj:`adamw_hf`):
             The optimizer to use: adamw_hf, adamw_torch, adafactor, or apex_fused_adam.
         adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            This argument is deprecated. Use ``optim`` instead. Whether or not to use the
+            This argument is deprecated. Use ``--optim adafactor`` instead. Whether or not to use the
             :class:`~transformers.Adafactor` optimizer instead of :class:`~transformers.AdamW`.
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
