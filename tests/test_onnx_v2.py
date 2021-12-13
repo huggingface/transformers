@@ -225,10 +225,10 @@ class OnnxExportTestCaseV2(TestCase):
         onnx_config = onnx_config_class_constructor(model.config)
 
         with NamedTemporaryFile("w") as output:
-            onnx_inputs, onnx_outputs = export(
-                tokenizer, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
-            )
             try:
+                onnx_inputs, onnx_outputs = export(
+                    tokenizer, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
+                )
                 validate_model_outputs(
                     onnx_config,
                     tokenizer,
@@ -237,8 +237,8 @@ class OnnxExportTestCaseV2(TestCase):
                     onnx_outputs,
                     onnx_config.atol_for_validation,
                 )
-            except ValueError as ve:
-                self.fail(f"{name}, {feature} -> {ve}")
+            except (RuntimeError, ValueError) as e:
+                self.fail(f"{name}, {feature} -> {e}")
 
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
     @slow

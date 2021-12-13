@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import dataclasses
 from abc import ABC, abstractmethod
 from collections import OrderedDict
@@ -121,7 +122,7 @@ class OnnxConfig(ABC):
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
         common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
-        return common_outputs
+        return copy.deepcopy(common_outputs)
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
@@ -398,7 +399,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        common_outputs = super(OnnxConfigWithPast, self).outputs
         # Renaming the outputs axes properly.
         for name, axes_names in common_outputs.items():
             sequence_name = "encoder_sequence" if "encoder" in name else "decoder_sequence"

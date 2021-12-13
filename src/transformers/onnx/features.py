@@ -41,7 +41,7 @@ else:
 
 def supported_features_mapping(
     *supported_features: str, onnx_config_cls: Type[OnnxConfig] = None
-) -> Dict[str, Callable[[PretrainedConfig, str], OnnxConfig]]:
+) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
     """
     Generate the mapping between supported the features and their corresponding OnnxConfig for a given model.
 
@@ -206,7 +206,7 @@ class FeaturesManager:
     @staticmethod
     def get_supported_features_for_model_type(
         model_type: str, model_name: Optional[str] = None
-    ) -> Dict[str, Callable[[PretrainedConfig, str], OnnxConfig]]:
+    ) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
         """
         Try to retrieve the feature -> OnnxConfig constructor map from the model type.
 
