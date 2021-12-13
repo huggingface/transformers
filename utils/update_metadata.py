@@ -17,12 +17,14 @@ import argparse
 import collections
 import importlib.util
 import os
-import pandas as pd
 import re
 import tempfile
 
+import pandas as pd
 from datasets import Dataset
+
 from huggingface_hub import Repository
+
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/update_metadata.py
@@ -60,10 +62,18 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("text2text-generation", "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES", "AutoModelForSeq2SeqLM"),
     ("text-classification", "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForSequenceClassification"),
     ("automatic-speech-recognition", "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES", "AutoModelForSpeechSeq2Seq"),
-    ("table-question-answering", "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES", "AutoModelForTableQuestionAnswering"),
+    (
+        "table-question-answering",
+        "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES",
+        "AutoModelForTableQuestionAnswering",
+    ),
     ("token-classification", "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES", "AutoModelForTokenClassification"),
     ("multiple-choice", "MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES", "AutoModelForMultipleChoice"),
-    ("next-sentence-prediction", "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES", "AutoModelForNextSentencePrediction"),
+    (
+        "next-sentence-prediction",
+        "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES",
+        "AutoModelForNextSentencePrediction",
+    ),
 ]
 
 
@@ -81,7 +91,9 @@ def get_frameworks_table():
     """
     # Dictionary model names to config.
     config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
-    model_prefix_to_model_type = {config.replace("Config", ""): model_type for model_type, config in config_maping_names.items()}
+    model_prefix_to_model_type = {
+        config.replace("Config", ""): model_type for model_type, config in config_maping_names.items()
+    }
 
     # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
     pt_models = collections.defaultdict(bool)
@@ -108,17 +120,17 @@ def get_frameworks_table():
                     break
                 # Try again after removing the last word in the name
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
-    
+
     all_models = set(list(pt_models.keys()) + list(tf_models.keys()) + list(flax_models.keys()))
     all_models = list(all_models)
     all_models.sort()
-    
+
     data = {"model_type": all_models}
     data["pytorch"] = [pt_models[t] for t in all_models]
     data["tensorflow"] = [tf_models[t] for t in all_models]
     data["flax"] = [flax_models[t] for t in all_models]
-    
-    # Now let's use the auto-mapping names to make sure 
+
+    # Now let's use the auto-mapping names to make sure
     processors = {}
     for t in all_models:
         if t in transformers_module.models.auto.processing_auto.PROCESSOR_MAPPING_NAMES:
@@ -130,9 +142,9 @@ def get_frameworks_table():
         else:
             # Default to AutoTokenizer if a model has nothing, for backward compatibility.
             processors[t] = "AutoTokenizer"
-    
+
     data["processor"] = [processors[t] for t in all_models]
-    
+
     return pd.DataFrame(data)
 
 
@@ -164,7 +176,7 @@ def update_pipeline_and_auto_class_table(table):
 
             # Add pipeline tag and auto model class for those models
             table.update({model_name: (pipeline_tag, cls) for model_name in model_names})
-    
+
     return table
 
 
@@ -173,14 +185,19 @@ def update_metadata(token, commit_sha):
     Update the metada for the Transformers repo.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
-        repo = Repository(tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", use_auth_token=token)
+        repo = Repository(
+            tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", use_auth_token=token
+        )
 
         frameworks_table = get_frameworks_table()
         frameworks_dataset = Dataset.from_pandas(frameworks_table)
         frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
 
         tags_dataset = Dataset.from_json(os.path.join(tmp_dir, "pipeline_tags.json"))
-        table = {tags_dataset[i]["model_class"]: (tags_dataset[i]["pipeline_tag"], tags_dataset[i]["auto_class"]) for i in range(len(tags_dataset))}
+        table = {
+            tags_dataset[i]["model_class"]: (tags_dataset[i]["pipeline_tag"], tags_dataset[i]["auto_class"])
+            for i in range(len(tags_dataset))
+        }
         table = update_pipeline_and_auto_class_table(table)
 
         # Sort the model classes to avoid some nondeterministic updates to create false update commits.
