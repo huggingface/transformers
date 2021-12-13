@@ -334,21 +334,21 @@ PyTorch and TensorFlow: any model saved as before can be loaded back either in P
 If you would like to load your saved model in the other framework, first make sure it is installed:
 
 ```bash
-pip install tensorflow
-===PT-TF-SPLIT===
 pip install torch
+===PT-TF-SPLIT===
+pip install tensorflow
 ```
 
 Then, use the corresponding Auto class to load it like this:
 
 ```py
->>> from transformers import TFAutoModel
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModel.from_pretrained(pt_save_directory, from_pt=True)
-===PT-TF-SPLIT===
 >>> from transformers import AutoModel
 >>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
 >>> pt_model = AutoModel.from_pretrained(tf_save_directory, from_tf=True)
+===PT-TF-SPLIT===
+>>> from transformers import TFAutoModel
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> tf_model = TFAutoModel.from_pretrained(pt_save_directory, from_pt=True)
 ```
 
 Lastly, you can also ask the model to return all hidden states and all attention weights if you need them:
