@@ -782,6 +782,27 @@ class DistilBertLMHeadModel(DistilBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_position_embeddings(self) -> nn.Embedding:
+        """
+        Returns the position embeddings
+        """
+        return self.distilbert.get_position_embeddings()
+    
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        """
+        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
+        config.max_position_embeddings`.
+
+        Arguments:
+            new_num_position_embeddings (:obj:`int`):
+                The number of new position embedding matrix. If position embeddings are learned, increasing the size
+                will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
+                end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
+                size will add correct vectors at the end following the position encoding algorithm, whereas reducing
+                the size will remove vectors from the end.
+        """
+        self.distilbert.resize_position_embeddings(new_num_position_embeddings)
+
     def get_output_embeddings(self):
         return self.vocab_projector
 
