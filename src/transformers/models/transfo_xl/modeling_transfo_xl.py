@@ -673,10 +673,12 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
     Args:
-        losses (`torch.FloatTensor` of shape *(batch_size, sequence_length-1)*, *optional*, returned when `labels` is provided):
-            Language modeling losses (not reduced).
+        loss (`torch.FloatTensor` of shape *()*, *optional*, returned when `labels` is provided)
+            Reduced language modeling loss.
         prediction_scores (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
+        losses (`torch.FloatTensor` of shape *(batch_size, sequence_length-1)*, `optional`, returned when `labels` is provided)
+            Language modeling losses (not reduced).
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
@@ -696,6 +698,7 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     prediction_scores: torch.FloatTensor = None
+    losses: Optional[torch.FloatTensor] = None
     mems: List[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1107,19 +1110,21 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         prediction_scores = softmax_output.view(bsz, tgt_len, -1) if labels is None else ()
 
         if labels is not None:
-            loss = softmax_output.view(bsz, tgt_len - 1)
+            losses = softmax_output.view(bsz, tgt_len - 1)
             # Avoids from incorporating padding (-100) tokens into loss value
-            loss = loss[loss != 0].mean()
+            loss = losses[losses != 0].mean()
         else:
-            loss = None
+            losses, loss = None, None
 
         if not return_dict:
-            output = (prediction_scores,) + transformer_outputs[1:]
+            output = (prediction_scores, losses) if losses is not None else (prediction_scores,)
+            output += transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TransfoXLLMHeadModelOutput(
             loss=loss,
             prediction_scores=prediction_scores,
+            losses=losses,
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
