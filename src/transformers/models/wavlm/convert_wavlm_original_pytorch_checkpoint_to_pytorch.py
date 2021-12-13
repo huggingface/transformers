@@ -19,7 +19,7 @@ import argparse
 
 import torch
 
-from transformers import WavLMConfig, WavLMForPreTraining, logging
+from transformers import WavLMConfig, logging
 
 # Step 1. clone https://github.com/microsoft/unilm
 # Step 2. git checkout to https://github.com/microsoft/unilm/commit/b94ec76c36f02fb2b0bf0dcb0b8554a2185173cd
@@ -188,7 +188,7 @@ def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_p
     else:
         config = WavLMConfig()
 
-    hf_wavlm = WavLMForPreTraining(config)
+    hf_wavlm = WavLMModel(config)
 
     recursively_load_weights(model, hf_wavlm)
 
