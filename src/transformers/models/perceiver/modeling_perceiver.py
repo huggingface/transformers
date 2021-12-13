@@ -735,7 +735,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         self.output_postprocessor = output_postprocessor
         self.embeddings = PerceiverEmbeddings(config)
         self.encoder = PerceiverEncoder(
-            config, kv_dim=input_preprocessor.num_channels if input_preprocessor else config.d_model
+            config, kv_dim=input_preprocessor.num_channels if input_preprocessor is not None else config.d_model
         )
         self.decoder = decoder
 
@@ -784,10 +784,13 @@ class PerceiverModel(PerceiverPreTrainedModel):
         else:
             modality_sizes = None
             inputs_without_pos = None
+            if inputs.size()[-1] != self.config.d_model:
+                raise ValueError(
+                    f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
+                    "Make sure to set config.d_model appropriately."
+                )
 
-        input_shape = inputs.size()
-
-        batch_size, seq_length, _ = input_shape
+        batch_size, seq_length, _ = inputs.size()
         device = inputs.device
 
         # If no attention mask is provided, make them all ones
