@@ -36,12 +36,12 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutput,
+    CausalLMOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
-    CausalLMOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
