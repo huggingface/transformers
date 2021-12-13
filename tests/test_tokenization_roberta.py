@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import itertools
 import json
 import os
 import unittest
@@ -196,3 +197,54 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertSequenceEqual(
                     tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
+
+    def test_offsets_mapping_with_add_prefix_space(self):
+        # Test which aims to verify that the offsets are well adapted to the argument `add_prefix_space`.
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                text_of_1_token = "hello"  # this is a token in the vocabulary of `pretrained_name`
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, use_fast=True, add_prefix_space=True
+                )
+                encoding = tokenizer_r(text_of_1_token, return_offsets_mapping=True, add_special_tokens=False)
+                self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, use_fast=True, add_prefix_space=False
+                )
+                encoding = tokenizer_r(text_of_1_token, return_offsets_mapping=True, add_special_tokens=False)
+                self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
+
+                text_of_1_token = f" {text_of_1_token}"
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, use_fast=True, add_prefix_space=True
+                )
+                encoding = tokenizer_r(text_of_1_token, return_offsets_mapping=True, add_special_tokens=False)
+                self.assertEqual(encoding.offset_mapping[0], (1, len(text_of_1_token)))
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, use_fast=True, add_prefix_space=False
+                )
+                encoding = tokenizer_r(text_of_1_token, return_offsets_mapping=True, add_special_tokens=False)
+                self.assertEqual(encoding.offset_mapping[0], (1, len(text_of_1_token)))
+
+    def test_change_add_prefix_space_arg(self):
+        for trim_offsets, add_prefix_space in itertools.product([True, False], repeat=2):
+            tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                self.tmpdirname, use_fast=True, add_prefix_space=add_prefix_space, trim_offsets=trim_offsets
+            )
+
+            pre_tokenizer_state = json.loads(tokenizer_r.backend_tokenizer.pre_tokenizer.__getstate__())
+            post_processor_state = json.loads(tokenizer_r.backend_tokenizer.post_processor.__getstate__())
+            decoder_state = json.loads(tokenizer_r.backend_tokenizer.decoder.__getstate__())
+
+            self.assertEqual(pre_tokenizer_state["add_prefix_space"], add_prefix_space)
+            self.assertEqual(pre_tokenizer_state["trim_offsets"], trim_offsets)
+
+            self.assertEqual(post_processor_state["add_prefix_space"], add_prefix_space)
+            self.assertEqual(post_processor_state["trim_offsets"], trim_offsets)
+
+            self.assertEqual(decoder_state["add_prefix_space"], add_prefix_space)
+            self.assertEqual(decoder_state["trim_offsets"], trim_offsets)
