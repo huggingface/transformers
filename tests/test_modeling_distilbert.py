@@ -252,6 +252,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DistilBertModel,
+            DistilBertLMHeadModel,
             DistilBertForMaskedLM,
             DistilBertForMultipleChoice,
             DistilBertForQuestionAnswering,
