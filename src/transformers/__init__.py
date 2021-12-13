@@ -607,6 +607,7 @@ if is_torch_available():
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
             "AutoModelForAudioClassification",
+            "AutoModelForAudioFrameClassification",
             "AutoModelForCausalLM",
             "AutoModelForCTC",
             "AutoModelForImageClassification",
@@ -622,6 +623,7 @@ if is_torch_available():
             "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
+            "AutoModelForXVector",
             "AutoModelWithLMHead",
         ]
     )
@@ -2465,6 +2467,7 @@ if TYPE_CHECKING:
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
             AutoModelForAudioClassification,
+            AutoModelForAudioFrameClassification,
             AutoModelForCausalLM,
             AutoModelForCTC,
             AutoModelForImageClassification,
@@ -2480,6 +2483,7 @@ if TYPE_CHECKING:
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
+            AutoModelForXVector,
             AutoModelWithLMHead,
         )
         from .models.bart import (

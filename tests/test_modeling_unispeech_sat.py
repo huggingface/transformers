@@ -825,7 +825,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
-        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
+        predicted_labels = (outputs.logits > 0).long()
 
         expected_labels = [[1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 1], [1, 0, 0, 0]]
         # s3prl logits for the same batch
@@ -839,13 +839,13 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertListEqual(predicted_ids[:, :4].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits[:, :4], expected_logits, atol=1e-3))
+        self.assertListEqual(predicted_labels[:, :4].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-3))
 
     def test_inference_speaker_verification(self):
         model = UniSpeechSatForXVector.from_pretrained("anton-l/unispeech-sat-base-plus-sv").to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "anton-l/unispeech-sat-base-plus-sv", return_attention_mask=True
+            "anton-l/unispeech-sat-base-plus-sv", return_attention_mask=False
         )
         input_data = self._load_superb("si", 4)
 

@@ -379,6 +379,15 @@ class AutoModelForAudioClassification:
         requires_backends(cls, ["torch"])
 
 
+class AutoModelForAudioFrameClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
 class AutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -506,6 +515,15 @@ class AutoModelForTableQuestionAnswering:
 
 
 class AutoModelForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+
+class AutoModelForXVector:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

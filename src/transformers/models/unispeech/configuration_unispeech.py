@@ -239,10 +239,6 @@ class UniSpeechConfig(PretrainedConfig):
         self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.classifier_proj_size = classifier_proj_size
-        self.tdnn_dim = list(tdnn_dim)
-        self.tdnn_kernel = list(tdnn_kernel)
-        self.tdnn_dilation = list(tdnn_dilation)
-        self.xvector_output_dim = xvector_output_dim
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -279,3 +275,9 @@ class UniSpeechConfig(PretrainedConfig):
 
         # pretraining loss
         self.replace_prob = replace_prob
+
+        # XVector model parameters
+        self.tdnn_dim = list(tdnn_dim)
+        self.tdnn_kernel = list(tdnn_kernel)
+        self.tdnn_dilation = list(tdnn_dilation)
+        self.xvector_output_dim = xvector_output_dim

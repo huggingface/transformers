@@ -16,14 +16,13 @@
 
 import math
 from dataclasses import dataclass
-from itertools import permutations
 from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -1587,27 +1586,6 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
         for param in self.unispeech_sat.parameters():
             param.requires_grad = False
 
-    def pit_loss_single_permutation(self, logits, loss_mask, labels):
-        bce_loss = BCEWithLogitsLoss(reduction="none")
-        loss = bce_loss(logits, labels)
-        loss = loss * loss_mask
-        loss = loss.mean(dim=2).sum(dim=1)
-        loss = torch.unsqueeze(loss, dim=1)
-        return loss
-
-    def pit_loss(self, logits, attention_mask, labels):
-        label_permutations = permutations(range(self.config.num_labels))
-        loss_mask = self._get_feature_vector_attention_mask(logits.shape[1], attention_mask)
-        losses = []
-        for p in label_permutations:
-            labels_perm = labels[:, :, p]
-            loss_perm = self.pit_loss_single_permutation(logits, loss_mask, labels_perm)
-            losses.append(loss_perm)
-        loss = torch.cat(losses, dim=1)
-        min_loss, min_idx = loss.min(dim=1)
-        loss = min_loss.sum() / loss_mask.sum()
-        return loss
-
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
@@ -1623,7 +1601,6 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        labels=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1653,16 +1630,12 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
 
         logits = self.classifier(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.pit_loss(logits, attention_mask, labels)
-
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return output
 
         return TokenClassifierOutput(
-            loss=loss,
+            loss=None,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
