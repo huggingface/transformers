@@ -648,7 +648,6 @@ class WavLMEncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->WavLM
 class WavLMEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -736,7 +735,6 @@ class WavLMEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderStableLayerNorm with Wav2Vec2->WavLM
 class WavLMEncoderStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
