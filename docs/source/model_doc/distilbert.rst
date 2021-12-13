@@ -82,7 +82,7 @@ DistilBertLMHeadModel
 
 .. autoclass:: transformers.DistilBertLMHeadModel
     :members: forward
-    
+
 
 DistilBertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -187,11 +187,12 @@ class MultiHeadSelfAttention(nn.Module):
             value: torch.tensor(bs, seq_length, dim)
             mask: torch.tensor(bs, seq_length)
             encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-                the model is configured as a decoder.
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                if the model is configured as a decoder.
             encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-                the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
+                in the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
@@ -303,11 +304,12 @@ class TransformerBlock(nn.Module):
             x: torch.tensor(bs, seq_length, dim)
             attn_mask: torch.tensor(bs, seq_length)
             encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-                the model is configured as a decoder.
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                if the model is configured as a decoder.
             encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-                the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
+                in the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
@@ -809,12 +811,14 @@ class DistilBertLMHeadModel(DistilBertPreTrainedModel):
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
             ignored (masked), the loss is only computed for the tokens with labels n ``[0, ..., config.vocab_size]``
+
         Returns:
         """
         assert use_cache is not True, "use_cache is not supported by DistilBERT!"
