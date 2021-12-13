@@ -226,6 +226,13 @@ class PipelineTestCaseMeta(type):
                         if not tokenizer_classes:
                             # We need to test even if there are no tokenizers.
                             tokenizer_classes = [None]
+                        else:
+                            # Remove the non defined tokenizers
+                            # ByT5 and Perceiver are bytes-level and don't define
+                            # FastTokenizer, we can just ignore those.
+                            tokenizer_classes = [
+                                tokenizer_class for tokenizer_class in tokenizer_classes if tokenizer_class is not None
+                            ]
 
                         for tokenizer_class in tokenizer_classes:
                             if tokenizer_class is not None:

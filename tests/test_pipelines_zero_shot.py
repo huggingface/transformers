@@ -32,8 +32,6 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        if tokenizer is None:
-            self.skipTest("This test cannot work without a tokenizer, Perceiver ?")
         classifier = ZeroShotClassificationPipeline(
             model=model, tokenizer=tokenizer, candidate_labels=["polics", "health"]
         )
