@@ -41,7 +41,7 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
-    CausalLMOutput
+    CausalLMOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -170,15 +170,15 @@ class MultiHeadSelfAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self, 
-        query, 
-        key, 
-        value, 
-        mask, 
-        head_mask=None, 
+        self,
+        query,
+        key,
+        value,
+        mask,
+        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        output_attentions=False
+        output_attentions=False,
     ):
         """
         Parameters:
@@ -290,13 +290,13 @@ class TransformerBlock(nn.Module):
         self.output_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
     def forward(
-        self, 
-        x, 
-        attn_mask=None, 
-        head_mask=None, 
+        self,
+        x,
+        attn_mask=None,
+        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        output_attentions=False
+        output_attentions=False,
     ):
         """
         Parameters:
@@ -342,7 +342,9 @@ class TransformerBlock(nn.Module):
                 encoder_attention_mask,
                 output_attentions,
             )
-            attention_output = self.sa_layer_norm(cross_attention_outputs[0] + attention_output) # (bs, seq_length, dim)
+            attention_output = self.sa_layer_norm(
+                cross_attention_outputs[0] + attention_output
+            )  # (bs, seq_length, dim)
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
         # Feed Forward Network
@@ -360,15 +362,15 @@ class Transformer(nn.Module):
         self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
 
     def forward(
-        self, 
-        x, 
-        attn_mask=None, 
-        head_mask=None, 
-        encoder_hidden_states=None, 
-        encoder_attention_mask=None, 
-        output_attentions=False, 
-        output_hidden_states=False, 
-        return_dict=None
+        self,
+        x,
+        attn_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=None,
     ):  # docstyle-ignore
         """
         Parameters:
@@ -401,12 +403,12 @@ class Transformer(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
             layer_outputs = layer_module(
-                x=hidden_state, 
-                attn_mask=attn_mask, 
-                head_mask=head_mask[i], 
+                x=hidden_state,
+                attn_mask=attn_mask,
+                head_mask=head_mask[i],
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions
+                output_attentions=output_attentions,
             )
             hidden_state = layer_outputs[-1]
 
@@ -626,7 +628,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
-        
+
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         # IMPORTANT!!! This prevents the model see tokens in the future
@@ -780,7 +782,7 @@ class DistilBertLMHeadModel(DistilBertPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.vocab_projector
-    
+
     def set_output_embeddings(self, new_embeddings):
         self.vocab_projector = new_embeddings
 
@@ -817,7 +819,7 @@ class DistilBertLMHeadModel(DistilBertPreTrainedModel):
         """
         assert use_cache is not True, "use_cache is not supported by DistilBERT!"
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
