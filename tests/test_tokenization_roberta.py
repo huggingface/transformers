@@ -240,7 +240,6 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             post_processor_state = json.loads(tokenizer_r.backend_tokenizer.post_processor.__getstate__())
 
             self.assertEqual(pre_tokenizer_state["add_prefix_space"], add_prefix_space)
-            self.assertEqual(pre_tokenizer_state["trim_offsets"], trim_offsets)
 
             self.assertEqual(post_processor_state["add_prefix_space"], add_prefix_space)
             self.assertEqual(post_processor_state["trim_offsets"], trim_offsets)
