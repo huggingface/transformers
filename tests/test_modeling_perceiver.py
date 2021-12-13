@@ -131,7 +131,7 @@ class PerceiverModelTester:
     def prepare_config_and_inputs(self, model_class=None):
         config = self.get_config()
         if model_class is not None:
-            config = self.update_config_with_model_class(model_class)
+            config = self.update_config_with_model_class(config, model_class)
 
         input_mask = None
         sequence_labels = None
