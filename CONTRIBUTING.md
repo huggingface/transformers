@@ -275,8 +275,7 @@ Follow these steps to start contributing:
    CircleCI does not run the slow tests, but github actions does every night!
 6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_bert.py` for an
    example.
-7. Due to the rapidly growing repository, it is important to make sure that no file that would significantly weigh down
-   the repository are added. This includes images, videos and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
+7. Due to the rapidly growing repository, it is important to make sure that no files that would significantly weigh down the repository are added. This includes images, videos and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
    the ones hosted on [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) in which to place these files and reference 
    them by URL.
 
