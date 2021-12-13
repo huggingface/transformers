@@ -302,7 +302,7 @@ class AdamW(Optimizer):
         correct_bias: bool = True,
         no_deprecation_warning: bool = False,
     ):
-        if no_deprecation_warning is False:
+        if not no_deprecation_warning:
             warnings.warn(
                 "HuggingFace AdamW is deprecated and will be removed in a future version. Use the"
                 "PyTorch implementation torch.optim.AdamW instead.",
