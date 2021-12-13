@@ -304,7 +304,7 @@ class AdamW(Optimizer):
     ):
         if not no_deprecation_warning:
             warnings.warn(
-                "HuggingFace AdamW is deprecated and will be removed in a future version. Use the"
+                "This implementation of AdamW is deprecated and will be removed in a future version. Use the"
                 "PyTorch implementation torch.optim.AdamW instead.",
                 FutureWarning,
             )
