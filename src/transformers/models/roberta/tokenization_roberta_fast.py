@@ -16,7 +16,7 @@
 import json
 from typing import List, Optional
 
-from tokenizers import decoders, pre_tokenizers, processors
+from tokenizers import processors
 
 from ...tokenization_utils_base import AddedToken
 from ...utils import logging
