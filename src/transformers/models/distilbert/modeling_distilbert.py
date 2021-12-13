@@ -815,12 +815,8 @@ class DistilBertLMHeadModel(DistilBertPreTrainedModel):
             ignored (masked), the loss is only computed for the tokens with labels n ``[0, ..., config.vocab_size]``
         Returns:
         """
-        assert use_cache != True, "use_cache is not supported by DistilBERT!"
-        if return_dict is not None:
-            return_dict = return_dict
-        else:
-            return_dict = self.config.use_return_dict
-        # return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        assert use_cache is not True, "use_cache is not supported by DistilBERT!"
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
