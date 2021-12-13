@@ -106,6 +106,10 @@ class WavLMConfig(PretrainedConfig):
             masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
         mask_time_length (:obj:`int`, `optional`, defaults to 10):
             Length of vector span along the time axis.
+        mask_time_min_masks (:obj:`int`, `optional`, defaults to 2),:
+            The minimum number of masks of length ``mask_feature_length`` generated along the time axis, each time
+            step, irrespectively of ``mask_feature_prob``. Only relevant if
+            ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''
         mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
             Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
             be masked. Approximately ``mask_time_prob * hidden_size // mask_time_length`` feature vectors will be
@@ -140,8 +144,21 @@ class WavLMConfig(PretrainedConfig):
             instance of :class:`~transformers.WavLMForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
-        replace_prob (:obj:`float`, `optional`, defaults to 0.5):
-            Propability that transformer feature is replaced by quantized feature for pretraining.
+        add_adapter (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether a convolutional network should be stacked on top of the Wav2Vec2 Encoder. Can be very useful for
+            warm-starting Wav2Vec2 for SpeechEncoderDecoder models.
+        adapter_kernel_size (:obj:`int`, `optional`, defaults to 3):
+            Kernel size of the convolutional layers in the adapter network. Only relevant if ``add_adapter is True``.
+        adapter_stride (:obj:`int`, `optional`, defaults to 2):
+            Stride of the convolutional layers in the adapter network. Only relevant if ``add_adapter is True``.
+        num_adapter_layers (:obj:`int`, `optional`, defaults to 3):
+            Number of convolutional layers that should be used in the adapter network. Only relevant if ``add_adapter
+            is True``.
+        output_hidden_size (:obj:`int`, `optional`):
+            Dimensionality of the encoder output layer. If not defined, this defaults to `hidden-size`. Only relevant
+            if ``add_adapter is True``.
+
+    Example::
 
     Example::
 
@@ -184,10 +201,12 @@ class WavLMConfig(PretrainedConfig):
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
         num_buckets=320,
+        max_bucket_distance=800,
         do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
+        mask_time_min_masks=2,
         mask_feature_prob=0.0,
         mask_feature_length=10,
         num_codevectors_per_group=320,
@@ -205,7 +224,11 @@ class WavLMConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        replace_prob=0.5,
+        add_adapter=False,
+        adapter_kernel_size=3,
+        adapter_stride=2,
+        num_adapter_layers=3,
+        output_hidden_size=None,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -217,6 +240,7 @@ class WavLMConfig(PretrainedConfig):
         self.conv_kernel = list(conv_kernel)
         self.conv_bias = conv_bias
         self.num_buckets = num_buckets
+        self.max_bucket_distance = max_bucket_distance
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.num_feat_extract_layers = len(self.conv_dim)
@@ -254,6 +278,7 @@ class WavLMConfig(PretrainedConfig):
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
 
@@ -271,5 +296,9 @@ class WavLMConfig(PretrainedConfig):
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
 
-        # pretraining loss
-        self.replace_prob = replace_prob
+        # adapter
+        self.add_adapter = add_adapter
+        self.adapter_kernel_size = adapter_kernel_size
+        self.adapter_stride = adapter_stride
+        self.num_adapter_layers = num_adapter_layers
+        self.output_hidden_size = output_hidden_size or hidden_size

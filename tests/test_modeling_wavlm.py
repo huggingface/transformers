@@ -17,7 +17,6 @@
 import math
 import unittest
 
-import numpy as np
 import pytest
 from datasets import load_dataset
 
@@ -32,7 +31,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor, WavLMForSequenceClassification, WavLMModel
+    from transformers import Wav2Vec2FeatureExtractor, WavLMForCTC, WavLMForSequenceClassification, WavLMModel
 
 
 class WavLMModelTester:
@@ -160,7 +159,7 @@ class WavLMModelTester:
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
-        model = WavLMModel(config=config)
+        model = WavLMForCTC(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -214,7 +213,7 @@ class WavLMModelTester:
 
     def check_ctc_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
-        model = WavLMModel(config=config)
+        model = WavLMForCTC(config=config)
         model.to(torch_device)
         model.train()
 
@@ -265,7 +264,7 @@ class WavLMModelTester:
         loss.backward()
 
     def check_labels_out_of_vocab(self, config, input_values, *args):
-        model = WavLMModel(config)
+        model = WavLMForCTC(config)
         model.to(torch_device)
         model.train()
 
@@ -286,7 +285,7 @@ class WavLMModelTester:
 
 @require_torch
 class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (WavLMModel, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (WavLMForCTC, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -341,6 +340,8 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    # WavLM uses PyTorch's multi-head-attention class
+    # and thus can't retain gradients on attentions
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -371,15 +372,11 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
 
         # Encoder-/Decoder-only models
         hidden_states = outputs.hidden_states[0]
-        attentions = outputs.attentions[0]
-
         hidden_states.retain_grad()
-        attentions.retain_grad()
 
         output.flatten()[0].backward(retain_graph=True)
 
         self.assertIsNotNone(hidden_states.grad)
-        self.assertIsNotNone(attentions.grad)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -400,6 +397,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
                     "label_embeddings_concat",
+                    "rel_attn_embed",
                 ]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):
@@ -428,51 +426,6 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
             module.codevectors.data.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
-
-    def test_mask_feature_prob_ctc(self):
-        model = WavLMModel.from_pretrained(
-            "hf-internal-testing/tiny-random-wavlm-sat", mask_feature_prob=0.2, mask_feature_length=2
-        )
-        model.to(torch_device).train()
-        processor = Wav2Vec2Processor.from_pretrained(
-            "hf-internal-testing/tiny-random-wavlm-sat", return_attention_mask=True
-        )
-
-        batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-        batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-        logits = model(
-            input_values=batch["input_values"].to(torch_device),
-            attention_mask=batch["attention_mask"].to(torch_device),
-        ).logits
-
-        self.assertEqual(logits.shape, (4, 1498, 32))
-
-    def test_mask_time_prob_ctc(self):
-        model = WavLMModel.from_pretrained(
-            "hf-internal-testing/tiny-random-wavlm-sat", mask_time_prob=0.2, mask_time_length=2
-        )
-        model.to(torch_device).train()
-        processor = Wav2Vec2Processor.from_pretrained(
-            "hf-internal-testing/tiny-random-wavlm-sat", return_attention_mask=True
-        )
-
-        batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-        batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-
-        logits = model(
-            input_values=batch["input_values"].to(torch_device),
-            attention_mask=batch["attention_mask"].to(torch_device),
-        ).logits
-
-        self.assertEqual(logits.shape, (4, 1498, 32))
 
     @slow
     def test_model_from_pretrained(self):
