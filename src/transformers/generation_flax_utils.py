@@ -243,7 +243,8 @@ class FlaxGenerationMixin:
         # set init values
         if max_length is not None and max_new_tokens is not None:
             raise ValueError("Both `max_new_tokens` and `max_length` are defined which is incorrect, use only one.")
-        if max_length is None:
+        prompt_length = 1 if self.config.is_encoder_decoder else input_ids.shape[1]
+        max_length = prompt_length + max_new_tokens if max_new_tokens is not None else self.config.max_length
             if max_new_tokens is None:
                 max_length = self.config.max_length
             else:
