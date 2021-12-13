@@ -289,7 +289,7 @@ class AdamW(Optimizer):
         correct_bias (:obj:`bool`, `optional`, defaults to `True`):
             Whether or not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
         no_deprecation_warning (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            A flag used to disable the deprecation warning (`True` to disable the warning).
+            A flag used to disable the deprecation warning (set to :obj:`True` to disable the warning).
     """
 
     def __init__(
