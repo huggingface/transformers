@@ -130,6 +130,8 @@ class PerceiverModelTester:
 
     def prepare_config_and_inputs(self, model_class=None):
         config = self.get_config()
+        if model_class is not None:
+            config = self.update_config_with_model_class(model_class)
 
         input_mask = None
         sequence_labels = None
@@ -190,6 +192,24 @@ class PerceiverModelTester:
             samples_per_patch=self.samples_per_patch,
             num_labels=self.num_labels,
         )
+
+    def update_config_with_model_class(self, config, model_class):
+        # Perceiver is a bit specific since `d_model` needs to be defined
+        # ahead of time in the config, but the actual desired `d_model` might
+        # depend on the model class we want to use so this is an escape hatch
+        # to enable adjusting `d_model` after we know which head we intend to
+        # use
+        if model_class.__name__ == "PerceiverForImageClassificationLearned":
+            config.d_model = 512
+        elif model_class.__name__ == "PerceiverForImageClassificationFourier":
+            config.d_model = 261
+        elif model_class.__name__ == "PerceiverForImageClassificationConvProcessing":
+            config.d_model = 322
+        elif model_class.__name__ == "PerceiverForOpticalFlow":
+            config.d_model = 322
+        elif model_class.__name__ == "PerceiverForMultimodalAutoencoding":
+            config.d_model = 409
+        return config
 
     def get_pipeline_config(self):
         config = self.get_config()

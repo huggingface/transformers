@@ -54,7 +54,7 @@ def get_checkpoint_from_architecture(architecture):
         logger.warning(f"Can't retrieve checkpoint from {architecture.__name__}")
 
 
-def get_tiny_config_from_class(configuration_class):
+def get_tiny_config_from_class(configuration_class, model_architecture):
     if "OpenAIGPT" in configuration_class.__name__:
         # This is the only file that is inconsistent with the naming scheme.
         # Will rename this file if we decide this is the way to go
@@ -77,11 +77,16 @@ def get_tiny_config_from_class(configuration_class):
     model_tester = model_tester_class(parent=None)
 
     if hasattr(model_tester, "get_pipeline_config"):
-        return model_tester.get_pipeline_config()
+        config = model_tester.get_pipeline_config()
     elif hasattr(model_tester, "get_config"):
-        return model_tester.get_config()
+        config = model_tester.get_config()
     else:
+        config = None
         logger.warning(f"Model tester {model_tester_class.__name__} has no `get_config()`.")
+
+    if hasattr(model_tester, "update_config_with_model_class"):
+        config = model_tester.update_config_with_model_class(config, model_architecture)
+    return config
 
 
 @lru_cache(maxsize=100)
@@ -100,11 +105,14 @@ def get_tiny_tokenizer_from_checkpoint(checkpoint):
     return tokenizer
 
 
-def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config):
+def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_extractor_class):
     try:
         feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
     except Exception:
-        feature_extractor = None
+        try:
+            feature_extractor = feature_extractor_class()
+        except Exception:
+            feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
 
@@ -168,7 +176,9 @@ class PipelineTestCaseMeta(type):
                         self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
                 else:
                     tokenizer = None
-                feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
+                feature_extractor = get_tiny_feature_extractor_from_checkpoint(
+                    checkpoint, tiny_config, feature_extractor_class
+                )
 
                 if tokenizer is None and feature_extractor is None:
                     self.skipTest(
@@ -209,7 +219,7 @@ class PipelineTestCaseMeta(type):
 
                     for model_architecture in model_architectures:
                         checkpoint = get_checkpoint_from_architecture(model_architecture)
-                        tiny_config = get_tiny_config_from_class(configuration)
+                        tiny_config = get_tiny_config_from_class(configuration, model_architecture)
                         tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
                         feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
                         feature_extractor_name = (
