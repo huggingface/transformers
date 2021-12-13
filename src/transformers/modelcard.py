@@ -789,9 +789,7 @@ def extract_hyperparameters_from_keras(model):
     import tensorflow as tf
 
     hyperparameters = dict()
-
     hyperparameters["optimizer"] = model.optimizer.get_config()
-
     hyperparameters["training_precision"] = tf.keras.mixed_precision.global_policy().name
 
     return hyperparameters

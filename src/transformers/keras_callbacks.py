@@ -71,7 +71,6 @@ class PushToHubCallback(Callback):
         if "/" not in hub_model_id:
             hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
 
-        # TODO Is it okay to store the hub token as a callback attribute like this?
         self.hub_token = hub_token
         self.output_dir = output_dir
         self.hub_model_id = hub_model_id
@@ -88,6 +87,7 @@ class PushToHubCallback(Callback):
             clone_from=self.hub_model_id,
             use_auth_token=self.hub_token if self.hub_token else True,
         )
+        self.hub_token = None  # For security, don't store the token as a property any longer than we have to
         self.training_history = []
 
     def on_train_batch_end(self, batch, logs=None):
@@ -114,7 +114,6 @@ class PushToHubCallback(Callback):
             if self.checkpoint:
                 checkpoint_dir = os.path.join(self.output_dir, "checkpoint")
                 self.model._save_checkpoint(checkpoint_dir, epoch)
-            # TODO Is there a better choice for model_name here?
             train_summary = TrainingSummary.from_keras(
                 model=self.model,
                 model_name=self.hub_model_id,
@@ -122,8 +121,8 @@ class PushToHubCallback(Callback):
                 **self.model_card_args,
             )
             model_card = train_summary.to_model_card()
-            print("Model card:")
-            print(model_card)
+            with open(os.path.join(self.output_dir, "README.md"), "w") as f:
+                f.write(model_card)
             _, self.last_job = self.repo.push_to_hub(
                 commit_message=f"Training in progress epoch {epoch}", blocking=False
             )
@@ -140,6 +139,6 @@ class PushToHubCallback(Callback):
             model=self.model, model_name=self.hub_model_id, keras_history=self.training_history, **self.model_card_args
         )
         model_card = train_summary.to_model_card()
-        print("Model card:")
-        print(model_card)
+        with open(os.path.join(self.output_dir, "README.md"), "w") as f:
+            f.write(model_card)
         self.repo.push_to_hub(commit_message="End of training", blocking=True)
