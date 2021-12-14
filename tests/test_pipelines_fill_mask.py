@@ -104,6 +104,32 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             ],
         )
 
+        outputs = unmasker("My name is <mask> <mask>", top_k=2)
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                [
+                    {
+                        "score": 2.2e-05,
+                        "token": 35676,
+                        "token_str": " Maul",
+                        "sequence": "<s>My name is Maul<mask></s>",
+                    },
+                    {"score": 2.2e-05, "token": 16416, "token_str": "ELS", "sequence": "<s>My name isELS<mask></s>"},
+                ],
+                [
+                    {
+                        "score": 2.2e-05,
+                        "token": 35676,
+                        "token_str": " Maul",
+                        "sequence": "<s>My name is<mask> Maul</s>",
+                    },
+                    {"score": 2.2e-05, "token": 16416, "token_str": "ELS", "sequence": "<s>My name is<mask>ELS</s>"},
+                ],
+            ],
+        )
+
     @slow
     @require_torch
     def test_large_model_pt(self):
