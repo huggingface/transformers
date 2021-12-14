@@ -546,7 +546,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_XVECTOR_MAPPING_NAMES = OrderedDict(
+MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForXVector"),
@@ -597,7 +597,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODE
 MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
 )
-MODEL_FOR_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_XVECTOR_MAPPING_NAMES)
+MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
 
 
 class AutoModel(_BaseAutoModelClass):
@@ -755,11 +755,11 @@ AutoModelForAudioFrameClassification = auto_class_update(
 )
 
 
-class AutoModelForXVector(_BaseAutoModelClass):
+class AutoModelForAudioXVector(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_XVECTOR_MAPPING
 
 
-AutoModelForXVector = auto_class_update(AutoModelForXVector, head_doc="audio retrieval via x-vector")
+AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

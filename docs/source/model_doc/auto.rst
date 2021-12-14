@@ -202,10 +202,10 @@ AutoModelForSpeechSeq2Seq
     :members:
 
 
-AutoModelForXVector
+AutoModelForAudioXVector
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.AutoModelForXVector
+.. autoclass:: transformers.AutoModelForAudioXVector
     :members:
 
 

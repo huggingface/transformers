@@ -430,6 +430,21 @@ class AutoModelForAudioFrameClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForAudioXVector:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class AutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
@@ -621,15 +636,6 @@ class AutoModelForVision2Seq:
 
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-
-class AutoModelForXVector:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
 
 class AutoModelWithLMHead:
