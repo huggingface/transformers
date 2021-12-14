@@ -46,7 +46,7 @@ Most users with just 2 GPUs already enjoy the increased training speed up thanks
 ## ZeRO Data Parallel
 
 ZeRO-powered data parallelism (ZeRO-DP) is described on the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
-![DeepSpeed-Image-1](/imgs/parallelism-zero.png)
+![DeepSpeed-Image-1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png)
 
 It can be difficult to wrap one's head around it, but in reality the concept is quite simple. This is just the usual DataParallel (DP), except, instead of replicating the full model params, gradients and optimizer states, each GPU stores only a slice of it.  And then at run-time when the full layer params are needed just for the given layer, all GPUs synchronize to give each other parts that they miss - this is it.
 
@@ -150,7 +150,7 @@ Pipeline Parallel (PP) is almost identical to a naive MP, but it solves the GPU 
 
 The following illustration from the [GPipe paper](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.html) shows the naive MP on the top, and PP on the bottom:
 
-![mp-pp](/imgs/parallelism-gpipe-bubble.png)
+![mp-pp](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-gpipe-bubble.png)
 
 It's easy to see from the bottom diagram how PP has less dead zones, where GPUs are idle. The idle parts are referred to as the "bubble".
 
@@ -203,7 +203,7 @@ Implementations:
 Other approaches:
 
 DeepSpeed, Varuna and SageMaker use the concept of an [Interleaved Pipeline](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)
-![interleaved-pipeline-execution](/imgs/parallelism-sagemaker-interleaved-pipeline.png)
+![interleaved-pipeline-execution](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-sagemaker-interleaved-pipeline.png)
 
 Here the bubble (idle time) is further minimized by prioritizing backward passes.
 
@@ -221,16 +221,16 @@ The main building block of any transformer is a fully connected `nn.Linear` foll
 Following the Megatron's paper notation, we can write the dot-product part of it as `Y = GeLU(XA)`, where `X` and `Y` are the input and output vectors, and `A` is the weight matrix.
 
 If we look at the computation in matrix form, it's easy to see how the matrix multiplication can be split between multiple GPUs:
-![Parallel GEMM](/imgs/parallelism-tp-parallel_gemm.png)
+![Parallel GEMM](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_gemm.png)
 
 If we split the weight matrix `A` column-wise across `N` GPUs and perform matrix multiplications `XA_1` through `XA_n` in parallel, then we will end up with `N` output vectors `Y_1, Y_2, ..., Y_n` which can be fed into `GeLU` independently:
-![independent GeLU](/imgs/parallelism-tp-independent-gelu.png)
+![independent GeLU](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-independent-gelu.png)
 
 Using this principle, we can update an MLP of arbitrary depth, without the need for any synchronization between GPUs until the very end, where we need to reconstruct the output vector from shards. The Megatron-LM paper authors provide a helpful illustration for that:
-![parallel shard processing](/imgs/parallelism-tp-parallel_shard_processing.png)
+![parallel shard processing](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_shard_processing.png)
 
 Parallelizing the multi-headed attention layers is even simpler, since they are already inherently parallel, due to having multiple independent heads!
-![parallel self-attention](/imgs/parallelism-tp-parallel_self_attention.png)
+![parallel self-attention](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_self_attention.png)
 
 Special considerations: TP requires very fast network, and therefore it's not advisable to do TP across more than one node. Practically, if a node has 4 GPUs, the highest TP degree is therefore 4. If you need a TP degree of 8, you need to use nodes that have at least 8 GPUs.
 
@@ -258,7 +258,7 @@ Implementations:
 
 The following diagram from the DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/) demonstrates how one combines DP with PP.
 
-![dp-pp-2d](/imgs/parallelism-zero-dp-pp.png)
+![dp-pp-2d](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero-dp-pp.png)
 
 Here it's important to see how DP rank 0 doesn't see GPU2 and DP rank 1 doesn't see GPU3. To DP there is just GPUs 0 and 1 where it feeds data as if there were just 2 GPUs. GPU0 "secretly" offloads some of its load to GPU2 using PP. And GPU1 does the same by enlisting GPU3 to its aid.
 
@@ -277,7 +277,7 @@ Implementations:
 
 To get an even more efficient training a 3D parallelism is used where PP is combined with TP and DP. This can be seen in the following diagram.
 
-![dp-pp-tp-3d](/imgs/parallelism-deepspeed-3d.png)
+![dp-pp-tp-3d](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-deepspeed-3d.png)
 
 This diagram is from a blog post [3D parallelism: Scaling to trillion-parameter models](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/), which is a good read as well.
 
@@ -342,7 +342,7 @@ We have 10 batches of 512 length. If we parallelize them by attribute dimension 
 
 It is similar with tensor model parallelism or naive layer-wise model parallelism.
 
-![flex-flow-soap](/imgs/parallelism-flexflow.jpeg)
+![flex-flow-soap](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-flexflow.jpeg)
 
 The significance of this framework is that it takes resources like (1) GPU/TPU/CPU vs. (2) RAM/DRAM vs. (3) fast-intra-connect/slow-inter-connect and it automatically optimizes all these  algorithmically deciding which parallelisation to use where.
 
