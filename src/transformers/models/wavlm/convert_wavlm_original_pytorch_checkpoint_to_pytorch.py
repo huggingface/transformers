@@ -96,7 +96,7 @@ def recursively_load_weights(fairseq_model, hf_model):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.wavlm.feature_extractor
+    feature_extractor = hf_model.feature_extractor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -111,7 +111,6 @@ def recursively_load_weights(fairseq_model, hf_model):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "wavlm." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:

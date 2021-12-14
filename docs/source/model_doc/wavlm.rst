@@ -10,30 +10,29 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-UniSpeech-SAT
+WavLM
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The UniSpeech-SAT model was proposed in `UniSpeech-SAT: Universal Speech Representation Learning with Speaker Aware
-Pre-Training <https://arxiv.org/abs/2110.05752>`__ by Sanyuan Chen, Yu Wu, Chengyi Wang, Zhengyang Chen, Zhuo Chen,
-Shujie Liu, Jian Wu, Yao Qian, Furu Wei, Jinyu Li, Xiangzhan Yu .
+The WavLM model was proposed in `WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing
+<https://arxiv.org/abs/2110.13900>`__ by Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo Chen,
+Jinyu Li, Naoyuki Kanda, Takuya Yoshioka, Xiong Xiao, Jian Wu, Long Zhou, Shuo Ren, Yanmin Qian, Yao Qian, Jian Wu,
+Michael Zeng, Furu Wei.
 
 The abstract from the paper is the following:
 
-*Self-supervised learning (SSL) is a long-standing goal for speech processing, since it utilizes large-scale unlabeled
-data and avoids extensive human labeling. Recent years witness great successes in applying self-supervised learning in
-speech recognition, while limited exploration was attempted in applying SSL for modeling speaker characteristics. In
-this paper, we aim to improve the existing SSL framework for speaker representation learning. Two methods are
-introduced for enhancing the unsupervised speaker information extraction. First, we apply the multi-task learning to
-the current SSL framework, where we integrate the utterance-wise contrastive loss with the SSL objective function.
-Second, for better speaker discrimination, we propose an utterance mixing strategy for data augmentation, where
-additional overlapped utterances are created unsupervisely and incorporate during training. We integrate the proposed
-methods into the HuBERT framework. Experiment results on SUPERB benchmark show that the proposed system achieves
-state-of-the-art performance in universal representation learning, especially for speaker identification oriented
-tasks. An ablation study is performed verifying the efficacy of each proposed method. Finally, we scale up training
-dataset to 94 thousand hours public audio data and achieve further performance improvement in all SUPERB tasks.*
+*Self-supervised learning (SSL) achieves great success in speech recognition, while limited exploration has been
+attempted for other speech processing tasks. As speech signal contains multi-faceted information including speaker
+identity, paralinguistics, spoken content, etc., learning universal representations for all speech tasks is
+challenging. In this paper, we propose a new pre-trained model, WavLM, to solve full-stack downstream speech tasks.
+WavLM is built based on the HuBERT framework, with an emphasis on both spoken content modeling and speaker identity
+preservation. We first equip the Transformer structure with gated relative position bias to improve its capability on
+recognition tasks. For better speaker discrimination, we propose an utterance mixing training strategy, where
+additional overlapped utterances are created unsupervisely and incorporated during model training. Lastly, we scale up
+the training dataset from 60k hours to 94k hours. WavLM Large achieves state-of-the-art performance on the SUPERB
+benchmark, and brings significant improvements for various speech processing tasks on their representative benchmarks.*
 
 Tips:
 
@@ -43,8 +42,10 @@ Tips:
   using :class:`~transformers.Wav2Vec2CTCTokenizer`.
 - WavLM performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
 
+Relevant checkpoints can be found under https://huggingface.co/models?other=wavlm.
+
 This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__. The Authors' code can be
-found `here <https://github.com/microsoft/UniSpeech/tree/main/UniSpeech-SAT>`__.
+found `here <https://github.com/microsoft/unilm/tree/master/wavlm>`__.
 
 
 WavLMConfig

@@ -1374,7 +1374,6 @@ if is_torch_available():
         [
             "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "WavLMForCTC",
-            "WavLMForPreTraining",
             "WavLMForSequenceClassification",
             "WavLMModel",
             "WavLMPreTrainedModel",
@@ -3216,7 +3215,6 @@ if TYPE_CHECKING:
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             WavLMForCTC,
-            WavLMForPreTraining,
             WavLMForSequenceClassification,
             WavLMModel,
             WavLMPreTrainedModel,
