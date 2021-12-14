@@ -77,11 +77,14 @@ def get_tiny_config_from_class(configuration_class):
     model_tester = model_tester_class(parent=None)
 
     if hasattr(model_tester, "get_pipeline_config"):
-        return model_tester.get_pipeline_config()
+        config = model_tester.get_pipeline_config()
     elif hasattr(model_tester, "get_config"):
-        return model_tester.get_config()
+        config = model_tester.get_config()
     else:
+        config = None
         logger.warning(f"Model tester {model_tester_class.__name__} has no `get_config()`.")
+
+    return config
 
 
 @lru_cache(maxsize=100)
@@ -100,11 +103,17 @@ def get_tiny_tokenizer_from_checkpoint(checkpoint):
     return tokenizer
 
 
-def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config):
+def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_extractor_class):
     try:
         feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
     except Exception:
-        feature_extractor = None
+        try:
+            if feature_extractor_class is not None:
+                feature_extractor = feature_extractor_class()
+            else:
+                feature_extractor = None
+        except Exception:
+            feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
 
@@ -168,7 +177,9 @@ class PipelineTestCaseMeta(type):
                         self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
                 else:
                     tokenizer = None
-                feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
+                feature_extractor = get_tiny_feature_extractor_from_checkpoint(
+                    checkpoint, tiny_config, feature_extractor_class
+                )
 
                 if tokenizer is None and feature_extractor is None:
                     self.skipTest(
@@ -218,6 +229,13 @@ class PipelineTestCaseMeta(type):
                         if not tokenizer_classes:
                             # We need to test even if there are no tokenizers.
                             tokenizer_classes = [None]
+                        else:
+                            # Remove the non defined tokenizers
+                            # ByT5 and Perceiver are bytes-level and don't define
+                            # FastTokenizer, we can just ignore those.
+                            tokenizer_classes = [
+                                tokenizer_class for tokenizer_class in tokenizer_classes if tokenizer_class is not None
+                            ]
 
                         for tokenizer_class in tokenizer_classes:
                             if tokenizer_class is not None:

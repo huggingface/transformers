@@ -1268,6 +1268,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        pixel_values=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1296,6 +1297,10 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
+        if inputs is not None and pixel_values is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs is None and pixel_values is not None:
+            inputs = pixel_values
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1399,6 +1404,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        pixel_values=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1427,6 +1433,10 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
+        if inputs is not None and pixel_values is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs is None and pixel_values is not None:
+            inputs = pixel_values
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
