@@ -429,7 +429,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = WavLMModel.from_pretrained("microsoft/wavlm-sat-base-plus")
+        model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus")
         self.assertIsNotNone(model)
 
 
