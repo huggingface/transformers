@@ -211,3 +211,14 @@ This command is the same and will work for:
 - a training on TPUs
 
 Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
+
+
+## Language specificities
+
+
+For `japanese` language, the `SacreBLEU` utility needs to use a specific argument
+`--tokenizer ja-mecab`.
+In order to use this argument in this script, you need to edit `run_translation.py`
+and modify `metric.compute(...)` into `metric.compute(..., tokenizer="ja-mecab")`.
+
+Other arguments to `SacreBLEU` can be passed in the same fashion.
