@@ -221,4 +221,4 @@ For `japanese` language, the `SacreBLEU` utility needs to use a specific argumen
 In order to use this argument in this script, you need to edit `run_translation.py`
 and modify `metric.compute(...)` into `metric.compute(..., tokenizer="ja-mecab")`.
 
-Other arguments to `SacreBLEU` can be passed in the same fashion.
+Other arguments to `SacreBLEU` arguments can be passed in the same fashion.
