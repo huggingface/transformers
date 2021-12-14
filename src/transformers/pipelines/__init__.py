@@ -125,18 +125,21 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "superb/wav2vec2-base-superb-ks"}},
+        "type": "audio",
     },
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
         "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
+        "type": "multimodal",
     },
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
+        "type": "multimodal",
     },
     "text-classification": {
         "impl": TextClassificationPipeline,
@@ -148,6 +151,7 @@ SUPPORTED_TASKS = {
                 "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
         },
+        "type": "text",
     },
     "token-classification": {
         "impl": TokenClassificationPipeline,
@@ -159,6 +163,7 @@ SUPPORTED_TASKS = {
                 "tf": "dbmdz/bert-large-cased-finetuned-conll03-english",
             },
         },
+        "type": "text",
     },
     "question-answering": {
         "impl": QuestionAnsweringPipeline,
@@ -167,6 +172,7 @@ SUPPORTED_TASKS = {
         "default": {
             "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
         },
+        "type": "text",
     },
     "table-question-answering": {
         "impl": TableQuestionAnsweringPipeline,
@@ -179,18 +185,21 @@ SUPPORTED_TASKS = {
                 "tf": "google/tapas-base-finetuned-wtq",
             },
         },
+        "type": "text",
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
+        "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
+        "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
     "translation": {
@@ -202,18 +211,21 @@ SUPPORTED_TASKS = {
             ("en", "de"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
             ("en", "ro"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
         },
+        "type": "text",
     },
     "text2text-generation": {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
+        "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
+        "type": "text",
     },
     "zero-shot-classification": {
         "impl": ZeroShotClassificationPipeline,
@@ -224,32 +236,47 @@ SUPPORTED_TASKS = {
             "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
             "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
         },
+        "type": "text",
     },
     "conversational": {
         "impl": ConversationalPipeline,
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
+        "type": "text",
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
         "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+        "type": "image",
     },
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
         "tf": (),
         "pt": (AutoModelForImageSegmentation,) if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
+        "type": "image",
     },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": "facebook/detr-resnet-50"}},
+        "type": "image",
     },
 }
+
+NO_FEATURE_EXTRACTOR_TASKS = set()
+NO_TOKENIZER_TASKS = set()
+for task, values in SUPPORTED_TASKS.items():
+    if values["type"] == "text":
+        NO_FEATURE_EXTRACTOR_TASKS.add(task)
+    elif values["type"] in {"audio", "image"}:
+        NO_TOKENIZER_TASKS.add(task)
+    elif values["type"] != "multimodal":
+        raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
 
 def get_supported_tasks() -> List[str]:
@@ -528,12 +555,14 @@ def pipeline(
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
 
-    if task in {"audio-classification", "image-classification"}:
+    if task in NO_TOKENIZER_TASKS:
         # These will never require a tokenizer.
         # the model on the other hand might have a tokenizer, but
         # the files could be missing from the hub, instead of failing
         # on such repos, we just force to not load it.
         load_tokenizer = False
+    if task in NO_FEATURE_EXTRACTOR_TASKS:
+        load_feature_extractor = False
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)

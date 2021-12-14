@@ -44,7 +44,9 @@ class FillMaskPipeline(Pipeline):
 
     .. note::
 
-        This pipeline only works for inputs with exactly one token masked.
+        This pipeline only works for inputs with exactly one token masked. Experimental: We added support for multiple
+        masks. The returned values are raw model output, and correspond to disjoint probabilities where one might
+        expect joint probabilities (See `discussion <https://github.com/huggingface/transformers/pull/10222>`__).
     """
 
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
@@ -59,13 +61,7 @@ class FillMaskPipeline(Pipeline):
     def _ensure_exactly_one_mask_token(self, input_ids: GenericTensor) -> np.ndarray:
         masked_index = self.get_masked_index(input_ids)
         numel = np.prod(masked_index.shape)
-        if numel > 1:
-            raise PipelineException(
-                "fill-mask",
-                self.model.base_model_prefix,
-                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
-            )
-        elif numel < 1:
+        if numel < 1:
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
@@ -98,46 +94,53 @@ class FillMaskPipeline(Pipeline):
             top_k = target_ids.shape[0]
         input_ids = model_outputs["input_ids"][0]
         outputs = model_outputs["logits"]
-        result = []
 
         if self.framework == "tf":
-            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
+            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()[:, 0]
 
-            # Fill mask pipeline supports only one ${mask_token} per sample
+            outputs = outputs.numpy()
 
-            logits = outputs[0, masked_index.item(), :]
-            probs = tf.nn.softmax(logits)
+            logits = outputs[0, masked_index, :]
+            probs = tf.nn.softmax(logits, axis=-1)
             if target_ids is not None:
-                probs = tf.gather_nd(probs, tf.reshape(target_ids, (-1, 1)))
+                probs = tf.gather_nd(tf.squeeze(probs, 0), target_ids.reshape(-1, 1))
+                probs = tf.expand_dims(probs, 0)
 
             topk = tf.math.top_k(probs, k=top_k)
             values, predictions = topk.values.numpy(), topk.indices.numpy()
         else:
-            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False).squeeze(-1)
             # Fill mask pipeline supports only one ${mask_token} per sample
 
-            logits = outputs[0, masked_index.item(), :]
-            probs = logits.softmax(dim=0)
+            logits = outputs[0, masked_index, :]
+            probs = logits.softmax(dim=-1)
             if target_ids is not None:
                 probs = probs[..., target_ids]
 
             values, predictions = probs.topk(top_k)
 
-        for v, p in zip(values.tolist(), predictions.tolist()):
-            tokens = input_ids.numpy()
-            if target_ids is not None:
-                p = target_ids[p].tolist()
-            tokens[masked_index] = p
-            # Filter padding out:
-            tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
-            result.append(
-                {
-                    "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
-                    "score": v,
-                    "token": p,
-                    "token_str": self.tokenizer.decode(p),
-                }
-            )
+        result = []
+        single_mask = values.shape[0] == 1
+        for i, (_values, _predictions) in enumerate(zip(values.tolist(), predictions.tolist())):
+            row = []
+            for v, p in zip(_values, _predictions):
+                # Copy is important since we're going to modify this array in place
+                tokens = input_ids.numpy().copy()
+                if target_ids is not None:
+                    p = target_ids[p].tolist()
+
+                tokens[masked_index[i]] = p
+                # Filter padding out:
+                tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
+                # Originally we skip special tokens to give readable output.
+                # For multi masks though, the other [MASK] would be removed otherwise
+                # making the output look odd, so we add them back
+                sequence = self.tokenizer.decode(tokens, skip_special_tokens=single_mask)
+                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode(p), "sequence": sequence}
+                row.append(proposition)
+            result.append(row)
+        if single_mask:
+            return result[0]
         return result
 
     def get_target_ids(self, targets, top_k=None):
