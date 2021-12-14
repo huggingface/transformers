@@ -673,6 +673,9 @@ class TrainingSummary:
 
         if keras_history is not None:
             _, eval_lines, eval_results = parse_keras_history(keras_history)
+        else:
+            eval_lines = []
+            eval_results = dict()
         hyperparameters = extract_hyperparameters_from_keras(model)
 
         return cls(
