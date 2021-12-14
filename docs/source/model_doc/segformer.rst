@@ -35,14 +35,14 @@ and efficiency than previous counterparts. For example, SegFormer-B4 achieves 50
 being 5x smaller and 2.2% better than the previous best method. Our best model, SegFormer-B5, achieves 84.0% mIoU on
 Cityscapes validation set and shows excellent zero-shot robustness on Cityscapes-C.*
 
-This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
-<https://github.com/NVlabs/SegFormer>`__.
-
 The figure below illustrates the architecture of SegFormer. Taken from the `original paper
 <https://arxiv.org/abs/2105.15203>`__.
 
 .. image:: https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/segformer_architecture.png
   :width: 600
+
+This model was contributed by `nielsr <https://huggingface.co/nielsr>`__. The original code can be found `here
+<https://github.com/NVlabs/SegFormer>`__.
 
 Tips:
 

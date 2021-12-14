@@ -499,7 +499,7 @@ class PerceiverLayer(nn.Module):
 class PerceiverEncoder(nn.Module):
     """The Perceiver Encoder: a scalable, fully attentional encoder."""
 
-    def __init__(self, config):
+    def __init__(self, config, kv_dim=None):
         super().__init__()
         self.config = config
 
@@ -523,7 +523,7 @@ class PerceiverEncoder(nn.Module):
             v_channels=config.v_channels,
             num_heads=config.num_cross_attention_heads,
             q_dim=config.d_latents,
-            kv_dim=config.d_model,
+            kv_dim=kv_dim,
             widening_factor=config.cross_attention_widening_factor,
             use_query_residual=config.use_query_residual,
         )
@@ -734,7 +734,9 @@ class PerceiverModel(PerceiverPreTrainedModel):
         self.input_preprocessor = input_preprocessor
         self.output_postprocessor = output_postprocessor
         self.embeddings = PerceiverEmbeddings(config)
-        self.encoder = PerceiverEncoder(config)
+        self.encoder = PerceiverEncoder(
+            config, kv_dim=input_preprocessor.num_channels if input_preprocessor is not None else config.d_model
+        )
         self.decoder = decoder
 
         # Initialize weights and apply final processing
@@ -782,16 +784,13 @@ class PerceiverModel(PerceiverPreTrainedModel):
         else:
             modality_sizes = None
             inputs_without_pos = None
+            if inputs.size()[-1] != self.config.d_model:
+                raise ValueError(
+                    f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
+                    "Make sure to set config.d_model appropriately."
+                )
 
-        if inputs.size()[-1] != self.config.d_model:
-            raise ValueError(
-                f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
-                "Please update config.d_model appropriately."
-            )
-        else:
-            input_shape = inputs.size()
-
-        batch_size, seq_length, _ = input_shape
+        batch_size, seq_length, _ = inputs.size()
         device = inputs.device
 
         # If no attention mask is provided, make them all ones
@@ -874,20 +873,22 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        text_preprocessor = PerceiverTextPreprocessor(config)
+
         trainable_position_encoding_kwargs_decoder = dict(
-            num_channels=config.d_model, index_dims=config.max_position_embeddings
+            num_channels=text_preprocessor.num_channels, index_dims=config.max_position_embeddings
         )
 
         self.perceiver = PerceiverModel(
             config,
-            input_preprocessor=PerceiverTextPreprocessor(config),
+            input_preprocessor=text_preprocessor,
             decoder=PerceiverBasicDecoder(
                 config,
                 output_num_channels=config.d_latents,
                 output_index_dims=config.max_position_embeddings,  # we need to define the seq_len of the inputs beforehand
-                num_channels=config.d_model,
+                num_channels=text_preprocessor.num_channels,
                 qk_channels=8 * 32,
-                v_channels=config.d_model,
+                v_channels=text_preprocessor.num_channels,
                 num_heads=8,
                 use_query_residual=False,
                 final_project=False,
@@ -915,6 +916,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        input_ids=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -922,6 +924,10 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
+        if inputs is not None and input_ids is not None:
+            raise ValueError("You cannot use both `inputs` and `input_ids`")
+        elif inputs is None and input_ids is not None:
+            inputs = input_ids
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -994,6 +1000,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        input_ids=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1015,6 +1022,10 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
             >>> outputs = model(inputs=inputs)
             >>> logits = outputs.logits
         """
+        if inputs is not None and input_ids is not None:
+            raise ValueError("You cannot use both `inputs` and `input_ids`")
+        elif inputs is None and input_ids is not None:
+            inputs = input_ids
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1121,6 +1132,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        pixel_values=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1149,6 +1161,11 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
+        if inputs is not None and pixel_values is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs is None and pixel_values is not None:
+            inputs = pixel_values
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1251,6 +1268,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        pixel_values=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1279,6 +1297,10 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
+        if inputs is not None and pixel_values is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs is None and pixel_values is not None:
+            inputs = pixel_values
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1382,6 +1404,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         output_hidden_states=None,
         labels=None,
         return_dict=None,
+        pixel_values=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1410,6 +1433,10 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             >>> predicted_class_idx = logits.argmax(-1).item()
             >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
+        if inputs is not None and pixel_values is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs is None and pixel_values is not None:
+            inputs = pixel_values
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1486,22 +1513,24 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
             concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
         )
 
+        image_preprocessor = PerceiverImagePreprocessor(
+            config,
+            prep_type="patches",
+            spatial_downsample=1,
+            conv_after_patching=True,
+            conv_after_patching_in_channels=54,
+            temporal_downsample=2,
+            position_encoding_type="fourier",
+            # position_encoding_kwargs
+            fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_preprocessor,
+        )
+
         self.perceiver = PerceiverModel(
             config,
-            input_preprocessor=PerceiverImagePreprocessor(
-                config,
-                prep_type="patches",
-                spatial_downsample=1,
-                conv_after_patching=True,
-                conv_after_patching_in_channels=54,
-                temporal_downsample=2,
-                position_encoding_type="fourier",
-                # position_encoding_kwargs
-                fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_preprocessor,
-            ),
+            input_preprocessor=image_preprocessor,
             decoder=PerceiverOpticalFlowDecoder(
                 config,
-                num_channels=config.d_model,
+                num_channels=image_preprocessor.num_channels,
                 output_image_shape=config.train_size,
                 rescale_factor=100.0,
                 # decoder kwargs
@@ -1849,7 +1878,13 @@ class PerceiverAbstractDecoder(nn.Module, metaclass=abc.ABCMeta):
 
 
 class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
-    """Baseline projection decoder (no cross-attention)."""
+    """
+    Baseline projection decoder (no cross-attention).
+
+    Args:
+        config ([`PerceiverConfig`]):
+            Model configuration.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -1868,11 +1903,38 @@ class PerceiverProjectionDecoder(PerceiverAbstractDecoder):
 
 class PerceiverBasicDecoder(PerceiverAbstractDecoder):
     """
-    Cross-attention-based decoder.
+    Cross-attention-based decoder. This class can be used to decode the final hidden states of the latents using a
+    cross-attention operation, in which the latents produce keys and values.
 
-    Here, `output_num_channels` refers to the number of output channels. `num_channels` refers to the number of
-    channels of the output queries.
+    The shape of the output of this class depends on how one defines the output queries (also called decoder queries).
 
+    Args:
+        config ([`PerceiverConfig`]):
+            Model configuration.
+        output_num_channels (:obj:`int`, `optional`):
+            The number of channels in the output. Will only be used in case `final_project` is set to `True`.
+        position_encoding_type (:obj:`str`, `optional`, defaults to "trainable"):
+            The type of position encoding to use. Can be either "trainable", "fourier", or "none".
+        output_index_dims (:obj:`int`, `optional`):
+            The number of dimensions of the output queries. Ignored if 'position_encoding_type' == 'none'.
+        num_channels (:obj:`int`, `optional`):
+            The number of channels of the decoder queries. Ignored if 'position_encoding_type' == 'none'.
+        qk_channels (:obj:`int`, `optional`):
+            The number of channels of the queries and keys in the cross-attention layer.
+        v_channels (:obj:`int`, `optional`, defaults to 128):
+            The number of channels of the values in the cross-attention layer.
+        num_heads (:obj:`int`, `optional`, defaults to 1):
+            The number of attention heads in the cross-attention layer.
+        widening_factor (:obj:`int`, `optional`, defaults to 1):
+            The widening factor of the cross-attention layer.
+        use_query_residual (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use a residual connection between the query and the output of the cross-attention layer.
+        concat_preprocessed_input (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to concatenate the preprocessed input to the query.
+        final_project (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to project the output of the cross-attention layer to a target dimension.
+        position_encoding_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to only use this class to define output queries.
     """
 
     def __init__(
@@ -2019,9 +2081,13 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
 
 class PerceiverClassificationDecoder(PerceiverAbstractDecoder):
     """
-    Cross-attention based classification decoder. Light-weight wrapper of `BasicDecoder` for logit output. Will turn
-    the output of the Perceiver encoder which is of shape (batch_size, num_latents, d_latents) to a tensor of shape
-    (batch_size, num_labels). The queries are of shape (batch_size, 1, num_labels).
+    Cross-attention based classification decoder. Light-weight wrapper of [`PerceiverBasicDecoder`] for logit output.
+    Will turn the output of the Perceiver encoder which is of shape (batch_size, num_latents, d_latents) to a tensor of
+    shape (batch_size, num_labels). The queries are of shape (batch_size, 1, num_labels).
+
+    Args:
+        config ([`PerceiverConfig`]):
+            Model configuration.
     """
 
     def __init__(self, config, **decoder_kwargs):
@@ -2084,8 +2150,16 @@ class PerceiverOpticalFlowDecoder(PerceiverAbstractDecoder):
 
 class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
     """
-    Cross-attention based video-autoencoding decoder. Light-weight wrapper of `BasicDecoder` with video reshaping
-    logic.
+    Cross-attention based video-autoencoding decoder. Light-weight wrapper of [`PerceiverBasicDecoder`] with video
+    reshaping logic.
+
+    Args:
+        config ([`PerceiverConfig`]):
+            Model configuration.
+        output_shape (:obj:`List[int]`):
+            Shape of the output as (batch_size, num_frames, height, width), excluding the channel dimension.
+        position_encoding_type (:obj:`str`):
+            The type of position encoding to use. Can be either "trainable", "fourier", or "none".
     """
 
     def __init__(self, config, output_shape, position_encoding_type, **decoder_kwargs):
@@ -2149,10 +2223,28 @@ def restructure(modality_sizes: ModalitySizeType, inputs: torch.Tensor) -> Mappi
 
 class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     """
-    Multimodal decoding by composing uni-modal decoders. The modalities argument of the constructor is a dictionary
+    Multimodal decoding by composing uni-modal decoders. The `modalities` argument of the constructor is a dictionary
     mapping modality name to the decoder of that modality. That decoder will be used to construct queries for that
-    modality. However, there is a shared cross attention across all modalities, using the concatenated per-modality
-    query vectors.
+    modality. Modality-specific queries are padded with trainable modality-specific parameters, after which they are
+    concatenated along the time dimension.
+
+    Next, there is a shared cross attention operation across all modalities.
+
+    Args:
+        config ([`PerceiverConfig`]):
+            Model configuration.
+        modalities (:obj:`Dict[str, PerceiverAbstractDecoder]`):
+            Dictionary mapping modality name to the decoder of that modality.
+        num_outputs (:obj:`int`):
+            The number of outputs of the decoder.
+        output_num_channels (:obj:`int`):
+            The number of channels in the output.
+        min_padding_size (:obj:`int`, `optional`, defaults to 2):
+            The minimum padding size for all modalities. The final output will have num_channels equal to the maximum
+            channels across all modalities plus min_padding_size.
+        subsampled_index_dims (:obj:`Dict[str, PerceiverAbstractDecoder]`, `optional`):
+            Dictionary mapping modality name to the subsampled index dimensions to use for the decoder query of that
+            modality.
     """
 
     def __init__(
@@ -2540,10 +2632,19 @@ class AbstractPreprocessor(nn.Module):
 
 
 class PerceiverTextPreprocessor(AbstractPreprocessor):
-    """Text preprocessing for Perceiver Encoder."""
+    """
+    Text preprocessing for Perceiver Encoder. Can be used to embed `inputs` and add positional encodings.
+
+    The dimensionality of the embeddings is determined by the `d_model` attribute of the configuration.
+
+    Args:
+        config ([`PerceiverConfig`]):
+            Model configuration.
+    """
 
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embeddings = nn.Embedding(num_embeddings=config.vocab_size, embedding_dim=config.d_model)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
 
@@ -2562,10 +2663,15 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
 
 
 class PerceiverEmbeddingDecoder(nn.Module):
-    """Module to decode embeddings (for masked language modeling)."""
+    """
+    Module to decode embeddings (for masked language modeling).
+
+    Args:
+        config ([`PerceiverConfig`]):
+            Model configuration.
+    """
 
     def __init__(self, config):
-        """Constructs the module."""
         super().__init__()
         self.config = config
         self.vocab_size = config.vocab_size
@@ -2581,7 +2687,8 @@ class PerceiverEmbeddingDecoder(nn.Module):
 
 class PerceiverMultimodalPostprocessor(nn.Module):
     """
-    Multimodal postprocessing for Perceiver.
+    Multimodal postprocessing for Perceiver. Can be used to combine modality-specific postprocessors into a single
+    postprocessor.
 
     Args:
           modalities (:obj:`Dict[str, PostprocessorType]`):
@@ -2617,7 +2724,7 @@ class PerceiverClassificationPostprocessor(nn.Module):
     Classification postprocessing for Perceiver. Can be used to convert the decoder output to classification logits.
 
     Args:
-        config (:obj:`PerceiverConfig`):
+        config ([`PerceiverConfig`]):
             Model configuration.
         in_channels (:obj:`int`):
             Number of channels in the input.
@@ -2637,7 +2744,7 @@ class PerceiverAudioPostprocessor(nn.Module):
     Audio postprocessing for Perceiver. Can be used to convert the decoder output to audio features.
 
     Args:
-        config (:obj:`PerceiverConfig`):
+        config ([`PerceiverConfig`]):
             Model configuration.
         in_channels (:obj:`int`):
             Number of channels in the input.
@@ -2662,8 +2769,8 @@ class PerceiverAudioPostprocessor(nn.Module):
 
 class PerceiverProjectionPostprocessor(nn.Module):
     """
-    Projection postprocessing for Perceiver. Can be used to convert the project the channels of the decoder output to a
-    lower dimension.
+    Projection postprocessing for Perceiver. Can be used to project the channels of the decoder output to a lower
+    dimension.
 
     Args:
         in_channels (:obj:`int`):
@@ -2690,7 +2797,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
     position encoding kwargs are set equal to the `out_channels`.
 
     Args:
-        config (:obj:`PerceiverConfig`):
+        config ([`PerceiverConfig`]):
             Model configuration.
         prep_type (:obj:`str`, `optional`, defaults to :obj:`"conv"`):
             Preprocessing type. Can be "conv1x1", "conv", "patches", "pixels".
@@ -2915,7 +3022,7 @@ class PerceiverOneHotPreprocessor(AbstractPreprocessor):
     One-hot preprocessor for Perceiver Encoder. Can be used to add a dummy index dimension to the input.
 
     Args:
-        config (:obj:`PerceiverConfig`):
+        config ([`PerceiverConfig`]):
             Model configuration.
     """
 
@@ -2941,7 +3048,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
     Audio preprocessing for Perceiver Encoder.
 
     Args:
-        config (:obj:`PerceiverConfig`):
+        config ([`PerceiverConfig`]):
             Model configuration.
         prep_type (:obj:`str`, `optional`, defaults to :obj:`"patches"`):
             Preprocessor type to use. Only "patches" is supported.

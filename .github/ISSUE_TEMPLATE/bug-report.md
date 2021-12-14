@@ -28,17 +28,18 @@ assignees: ''
 Models:
 
 - ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: @LysandreJik
-- encoder-decoder models (For example, BlenderBot, BART, Marian, Pegasus, T5, ByT5): @patrickvonplaten, @patil-suraj
-- Longformer, Reformer, TransfoXL, XLNet, FNet: @patrickvonplaten
+- T5, BART, Marian, Pegasus, EncoderDecoder: @patrickvonplaten
+- Blenderbot, MBART: @patil-suraj
+- Longformer, Reformer, TransfoXL, XLNet, FNet, BigBird: @patrickvonplaten
 - FSMT: @stas00
 - Funnel: @sgugger
 - GPT-2, GPT: @patrickvonplaten, @LysandreJik
 - RAG, DPR: @patrickvonplaten, @lhoestq
 - TensorFlow: @Rocketknight1
-- JAX/Flax: @patil-suraj @patrickvonplaten 
+- JAX/Flax: @patil-suraj
 - TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: @NielsRogge
 - GPT-Neo, GPT-J, CLIP: @patil-suraj
-- Wav2Vec2, HuBERT, SpeechEncoderDecoder: @patrickvonplaten, @anton-l
+- Wav2Vec2, HuBERT, SpeechEncoderDecoder, UniSpeech, UniSpeechSAT, SEW, SEW-D, Speech2Text: @patrickvonplaten, @anton-l
 
 If the model isn't in the list, ping @LysandreJik who will redirect you to the correct contributor.
 
@@ -47,7 +48,7 @@ Library:
 - Benchmarks: @patrickvonplaten
 - Deepspeed: @stas00
 - Ray/raytune: @richardliaw, @amogkam
-- Text generation: @patrickvonplaten
+- Text generation: @patrickvonplaten @narsil
 - Tokenizers: @LysandreJik
 - Trainer: @sgugger
 - Pipelines: @Narsil

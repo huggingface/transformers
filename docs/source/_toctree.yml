@@ -61,6 +61,8 @@
     title: Debugging
   - local: serialization
     title: Exporting transformers models
+  - local: pr_checks
+    title: Checks on a Pull Request
   title: Advanced guides
 - sections:
   - local: bertology
@@ -204,6 +206,8 @@
       title: MegatronGPT2
     - local: model_doc/mobilebert
       title: MobileBERT
+    - local: model_doc/mluke
+      title: mLUKE
     - local: model_doc/mpnet
       title: MPNet
     - local: model_doc/mt5
@@ -272,6 +276,8 @@
       title: UniSpeech-SAT
     - local: model_doc/visionencoderdecoder
       title: Vision Encoder Decoder Models
+    - local: model_doc/vision_text_dual_encoder
+      title: Vision Text Dual Encoder
     - local: model_doc/vit
       title: Vision Transformer (ViT)
     - local: model_doc/visual_bert
