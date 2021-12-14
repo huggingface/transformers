@@ -1400,10 +1400,10 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.model = BlenderbotDecoderWrapper(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
