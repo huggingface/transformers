@@ -150,7 +150,7 @@ class XVectorOutput(ModelOutput):
             Classification loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
             Classification hidden states before AMSoftmax.
-        class_vectors (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
+        embeddings (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
             Utterance embeddings used for vector similarity-based retrieval.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
@@ -167,7 +167,7 @@ class XVectorOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    class_vectors: torch.FloatTensor = None
+    embeddings: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1937,8 +1937,8 @@ class TDNNLayer(nn.Module):
         # self.conv = nn.Conv1d(
         #    self.in_conv_dim,
         #    self.out_conv_dim,
-        #    kernel_size=config.tdnn_kernel[layer_id],
-        #    dilation=config.tdnn_dilation[layer_id],
+        #    kernel_size=self.kernel_size,
+        #    dilation=self.dilation,
         #    bias=True,
         # )
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
@@ -2081,21 +2081,21 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             std_features = torch.stack(std_features)
         statistic_pooling = torch.cat([mean_features, std_features], dim=-1)
 
-        class_vectors = self.feature_extractor(statistic_pooling)
-        logits = self.classifier(class_vectors)
+        output_embeddings = self.feature_extractor(statistic_pooling)
+        logits = self.classifier(output_embeddings)
 
         loss = None
         if labels is not None:
             loss = self.objective(logits, labels)
 
         if not return_dict:
-            output = (logits, class_vectors) + outputs[_HIDDEN_STATES_START_POSITION:]
+            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return XVectorOutput(
             loss=loss,
             logits=logits,
-            class_vectors=class_vectors,
+            embeddings=output_embeddings,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

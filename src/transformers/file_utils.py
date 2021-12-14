@@ -1133,7 +1133,9 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
         >>> # audio file is decoded on the fly
         >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
         >>> logits = model(**inputs).logits
-        >>> TODO: logits to speaker turns
+        >>> probabilities = torch.sigmoid(logits[0])
+        >>> # `labels` is a one-hot array of shape (num_frames, num_speakers)
+        >>> labels = (probabilities > 0.5).long()
 """
 
 
@@ -1151,9 +1153,13 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> # audio file is decoded on the fly
-        >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
-        >>> logits = model(**inputs).logits
-        >>> TODO: cosine sim example
+        >>> inputs = feature_extractor(dataset[:2]["audio"]["array"], return_tensors="pt")
+        >>> embeddings = model(**inputs).embeddings
+        >>> embeddings = torch.nn.functional.normalize(embeddings, dim=-1).cpu()
+
+        >>> # the resulting embeddings can be used for cosine similarity-based retrieval
+        >>> cosine_sim = torch.nn.CosineSimilarity(dim=-1)
+        >>> similarity = cosine_sim(embeddings[0], embeddings[0])
 """
 
 PT_SAMPLE_DOCSTRINGS = {
@@ -1168,7 +1174,7 @@ PT_SAMPLE_DOCSTRINGS = {
     "CTC": PT_SPEECH_CTC_SAMPLE,
     "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
     "AudioFrameClassification": PT_SPEECH_FRAME_CLASS_SAMPLE,
-    "XVector": PT_SPEECH_XVECTOR_SAMPLE,
+    "AudioXVector": PT_SPEECH_XVECTOR_SAMPLE,
 }
 
 
@@ -1462,8 +1468,8 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["CTC"]
         elif "AudioFrameClassification" in model_class:
             code_sample = sample_docstrings["AudioFrameClassification"]
-        elif "XVector" in model_class:
-            code_sample = sample_docstrings["XVector"]
+        elif "AudioXVector" in model_class:
+            code_sample = sample_docstrings["AudioXVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:

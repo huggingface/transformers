@@ -1419,14 +1419,14 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             attention_mask = inputs.attention_mask.to(torch_device)
             with torch.no_grad():
                 outputs = model(input_values, attention_mask=attention_mask, labels=labels)
-        output_vectors = torch.nn.functional.normalize(outputs.class_vectors, dim=-1).cpu()
+        embeddings = torch.nn.functional.normalize(outputs.embeddings, dim=-1).cpu()
 
         cosine_sim = torch.nn.CosineSimilarity(dim=-1)
         # id10002 vs id10002
-        self.assertAlmostEqual(cosine_sim(output_vectors[1], output_vectors[2]).numpy(), 0.9758, 3)
+        self.assertAlmostEqual(cosine_sim(embeddings[1], embeddings[2]).numpy(), 0.9758, 3)
         # id10006 vs id10002
-        self.assertAlmostEqual(cosine_sim(output_vectors[0], output_vectors[1]).numpy(), 0.7579, 3)
+        self.assertAlmostEqual(cosine_sim(embeddings[0], embeddings[1]).numpy(), 0.7579, 3)
         # id10002 vs id10004
-        self.assertAlmostEqual(cosine_sim(output_vectors[2], output_vectors[3]).numpy(), 0.7484, 3)
+        self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).numpy(), 0.7484, 3)
 
         self.assertAlmostEqual(outputs.loss.item(), 18.0354, 3)
