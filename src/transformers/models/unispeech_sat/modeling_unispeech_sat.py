@@ -1675,6 +1675,7 @@ class AMSoftmaxLoss(nn.Module):
         self.loss = nn.CrossEntropyLoss()
 
     def forward(self, hidden_states, labels):
+        labels = labels.flatten()
         weight = nn.functional.normalize(self.weight, dim=0)
         hidden_states = nn.functional.normalize(hidden_states, dim=1)
         cos_theta = torch.mm(hidden_states, weight)

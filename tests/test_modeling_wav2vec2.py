@@ -98,6 +98,10 @@ class Wav2Vec2ModelTester:
         do_stable_layer_norm=False,
         num_adapter_layers=1,
         adapter_stride=2,
+        tdnn_dim=(32, 32),
+        tdnn_kernel=(5, 3),
+        tdnn_dilation=(1, 2),
+        xvector_output_dim=32,
         scope=None,
     ):
         self.parent = parent
@@ -128,6 +132,10 @@ class Wav2Vec2ModelTester:
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
         self.scope = scope
+        self.tdnn_dim = tdnn_dim
+        self.tdnn_kernel = tdnn_kernel
+        self.tdnn_dilation = tdnn_dilation
+        self.xvector_output_dim = xvector_output_dim
 
         output_seq_length = self.seq_length
         for kernel, stride in zip(self.conv_kernel, self.conv_stride):
@@ -170,6 +178,10 @@ class Wav2Vec2ModelTester:
             vocab_size=self.vocab_size,
             num_adapter_layers=self.num_adapter_layers,
             adapter_stride=self.adapter_stride,
+            tdnn_dim=self.tdnn_dim,
+            tdnn_kernel=self.tdnn_kernel,
+            tdnn_dilation=self.tdnn_dilation,
+            xvector_output_dim=self.xvector_output_dim,
         )
 
     def create_and_check_model(self, config, input_values, attention_mask):
@@ -334,6 +346,29 @@ class Wav2Vec2ModelTester:
 
         loss.backward()
 
+    def check_xvector_training(self, config, input_values, *args):
+        config.ctc_zero_infinity = True
+        model = Wav2Vec2ForXVector(config=config)
+        model.to(torch_device)
+        model.train()
+
+        # freeze everything but the classification head
+        model.freeze_base_model()
+
+        input_values = input_values[:3]
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+
+        loss = model(input_values, labels=labels).loss
+        self.parent.assertFalse(torch.isinf(loss).item())
+
+        loss.backward()
+
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = Wav2Vec2ForCTC(config)
         model.to(torch_device)
@@ -399,6 +434,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_seq_classifier_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
+
+    def test_xvector_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_xvector_training(*config_and_inputs)
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -575,7 +614,15 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
+        (
+            Wav2Vec2ForCTC,
+            Wav2Vec2Model,
+            Wav2Vec2ForMaskedLM,
+            Wav2Vec2ForSequenceClassification,
+            Wav2Vec2ForPreTraining,
+            Wav2Vec2ForAudioFrameClassification,
+            Wav2Vec2ForXVector,
+        )
         if is_torch_available()
         else ()
     )
@@ -623,6 +670,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_seq_classifier_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
+
+    def test_xvector_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_xvector_training(*config_and_inputs)
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1405,7 +1456,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         input_data = self._load_superb("si", 4)
 
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
-        labels = torch.tensor([5, 1, 1, 3], device=torch_device)
+        labels = torch.tensor([5, 1, 1, 3], device=torch_device).T
 
         with torch.no_grad():
             input_values = inputs.input_values.to(torch_device)
@@ -1420,6 +1471,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # id10006 vs id10002
         self.assertAlmostEqual(cosine_sim(embeddings[0], embeddings[1]).numpy(), 0.7579, 3)
         # id10002 vs id10004
-        self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).numpy(), 0.7484, 3)
+        self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).numpy(), 0.7594, 3)
 
-        self.assertAlmostEqual(outputs.loss.item(), 18.0354, 3)
+        self.assertAlmostEqual(outputs.loss.item(), 17.7963, 3)
