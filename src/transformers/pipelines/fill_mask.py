@@ -125,7 +125,8 @@ class FillMaskPipeline(Pipeline):
         for i, (_values, _predictions) in enumerate(zip(values.tolist(), predictions.tolist())):
             row = []
             for v, p in zip(_values, _predictions):
-                tokens = input_ids.numpy()
+                # Copy is important since we're going to modify this array in place
+                tokens = input_ids.numpy().copy()
                 if target_ids is not None:
                     p = target_ids[p].tolist()
 
