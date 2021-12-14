@@ -1373,9 +1373,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
 
     def test_inference_diarization(self):
-        model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(
-            torch_device
-        )
+        model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sd")
         input_data = self._load_superb("sd", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
@@ -1403,8 +1401,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_speaker_verification(self):
         model = Wav2Vec2ForXVector.from_pretrained("anton-l/wav2vec2-base-superb-sv").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "anton-l/wav2vec2-base-superb-sv")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sv")
         input_data = self._load_superb("si", 4)
 
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
