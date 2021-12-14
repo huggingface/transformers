@@ -789,7 +789,10 @@ def extract_hyperparameters_from_keras(model):
     import tensorflow as tf
 
     hyperparameters = dict()
-    hyperparameters["optimizer"] = model.optimizer.get_config()
+    if hasattr(model, "optimizer") and model.optimizer is not None:
+        hyperparameters["optimizer"] = model.optimizer.get_config()
+    else:
+        hyperparameters["optimizer"] = None
     hyperparameters["training_precision"] = tf.keras.mixed_precision.global_policy().name
 
     return hyperparameters
