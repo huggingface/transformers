@@ -57,10 +57,7 @@ WavLMConfig
 WavLM specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.models.unispeech_sat.modeling_unispeech_sat.WavLMBaseModelOutput
-    :members: 
-
-.. autoclass:: transformers.models.unispeech_sat.modeling_unispeech_sat.WavLMForPreTrainingOutput
+.. autoclass:: transformers.models.wavlm.modeling_wavlm.WavLMBaseModelOutput
     :members: 
 
 
@@ -82,11 +79,4 @@ WavLMForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.WavLMForSequenceClassification
-    :members: forward
-
-
-WavLMForPreTraining
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.WavLMForPreTraining
     :members: forward

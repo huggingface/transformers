@@ -5138,11 +5138,6 @@ class WavLMForCTC:
         requires_backends(self, ["torch"])
 
 
-class WavLMForPreTraining:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class WavLMForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
