@@ -1134,7 +1134,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
         >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
         >>> logits = model(**inputs).logits
         >>> probabilities = torch.sigmoid(logits[0])
-        >>> # `labels` is a one-hot array of shape (num_frames, num_speakers)
+        >>> # labels is a one-hot array of shape (num_frames, num_speakers)
         >>> labels = (probabilities > 0.5).long()
 """
 
@@ -1159,7 +1159,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
 
         >>> # the resulting embeddings can be used for cosine similarity-based retrieval
         >>> cosine_sim = torch.nn.CosineSimilarity(dim=-1)
-        >>> similarity = cosine_sim(embeddings[0], embeddings[0])
+        >>> similarity = cosine_sim(embeddings[0], embeddings[1])
 """
 
 PT_SAMPLE_DOCSTRINGS = {
@@ -1468,7 +1468,7 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["CTC"]
         elif "AudioFrameClassification" in model_class:
             code_sample = sample_docstrings["AudioFrameClassification"]
-        elif "AudioXVector" in model_class:
+        elif "XVector" in model_class and modality == "audio":
             code_sample = sample_docstrings["AudioXVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]

@@ -1696,18 +1696,11 @@ class TDNNLayer(nn.Module):
         self.kernel_size = config.tdnn_kernel[layer_id]
         self.dilation = config.tdnn_dilation[layer_id]
 
-        # self.conv = nn.Conv1d(
-        #    self.in_conv_dim,
-        #    self.out_conv_dim,
-        #    kernel_size=self.kernel_size,
-        #    dilation=self.dilation,
-        #    bias=True,
-        # )
+        # TODO: replace with Conv1D
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
     def forward(self, hidden_states):
-        # hidden_states = self.conv(hidden_states)
         hidden_states = hidden_states.unsqueeze(1)
         hidden_states = nn.functional.unfold(
             hidden_states,
@@ -1717,6 +1710,7 @@ class TDNNLayer(nn.Module):
         )
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.kernel(hidden_states)
+
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
@@ -1822,11 +1816,9 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
             hidden_states = outputs[0]
 
         hidden_states = self.projector(hidden_states)
-        # hidden_states = hidden_states.transpose(1, 2)
 
         for tdnn_layer in self.tdnn:
             hidden_states = tdnn_layer(hidden_states)
-        # hidden_states = hidden_states.transpose(1, 2)
 
         # Statistic Pooling
         if attention_mask is None:

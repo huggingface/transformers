@@ -56,8 +56,9 @@ def convert_xvector(base_model_name, hf_config, downstream_dict):
     for i, kernel_size in enumerate(hf_config.tdnn_kernel):
         # kernel = torch.tensor(downstream_dict[f"model.framelevel_feature_extractor.module.{i}.kernel.weight"])
         # prev_dim = hf_config.tdnn_dim[i - 1] if i > 0 else hf_config.tdnn_dim[i]
-        # model.tdnn[i].conv.weight.data = kernel.reshape(prev_dim, hf_config.tdnn_dim[i], kernel_size).transpose(0, 1)
+        # model.tdnn[i].conv.weight.data = kernel.reshape(prev_dim, kernel_size, hf_config.tdnn_dim[i]).permute(2, 0, 1)
         # model.tdnn[i].conv.bias.data = downstream_dict[f"model.framelevel_feature_extractor.module.{i}.kernel.bias"]
+
         model.tdnn[i].kernel.weight.data = downstream_dict[
             f"model.framelevel_feature_extractor.module.{i}.kernel.weight"
         ]

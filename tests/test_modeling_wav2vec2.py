@@ -1373,45 +1373,41 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
 
     def test_inference_diarization(self):
-        from datasets import load_dataset
-
-        model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)
+        model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(
+            torch_device
+        )
         processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sd")
-        # TODO: switch to a dummy dataset
-        dataset = load_dataset("superb", "sd", split="test")[:4]
-        input_data = [x["array"] for x in dataset["audio"]]
-
-        inputs = processor(input_data, return_tensors="pt", padding=True)
+        input_data = self._load_superb("sd", 4)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
         with torch.no_grad():
             outputs = model(input_values, attention_mask=attention_mask)
-        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
+        # labels is a one-hot array of shape (num_frames, num_speakers)
+        labels = (outputs.logits > 0).long()
 
-        expected_labels = [[0, 1, 1, 1], [1, 1, 1, 1], [0, 1, 0, 1], [1, 1, 1, 1]]
         # s3prl logits for the same batch
         expected_logits = torch.tensor(
             [
-                [-0.8862, -0.0150, 0.4839, 0.4209],
-                [-0.6491, 1.1820, 1.4570, 1.6945],
-                [-0.0380, -0.5519, -0.4160, 0.2971],
-                [-0.3680, 0.6111, 0.1588, 0.1133],
+                [[-5.2807, -5.1272], [-5.4059, -4.7757], [-5.2764, -4.9621], [-5.0117, -4.5851]],
+                [[-1.7643, -0.5462], [-1.7369, -0.2649], [-1.5066, -0.6200], [-4.5703, -2.4863]],
+                [[-0.8656, -0.4783], [-0.8899, -0.3289], [-0.9267, -0.5781], [-0.7817, -0.4619]],
+                [[-4.8625, -2.5316], [-5.2339, -2.2155], [-4.9835, -2.0344], [-4.4727, -1.8421]],
             ],
             device=torch_device,
         )
-
-        self.assertListEqual(predicted_ids[:, :4].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits[:, :4], expected_logits, atol=1e-3))
+        self.assertEqual(labels[0, :, 0].sum(), 555)
+        self.assertEqual(labels[0, :, 1].sum(), 299)
+        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-3))
 
     def test_inference_speaker_verification(self):
         model = Wav2Vec2ForXVector.from_pretrained("anton-l/wav2vec2-base-superb-sv").to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "anton-l/wav2vec2-base-superb-sv", return_attention_mask=True
-        )
+            "anton-l/wav2vec2-base-superb-sv")
         input_data = self._load_superb("si", 4)
 
-        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
         labels = torch.tensor([5, 1, 1, 3], device=torch_device)
 
         with torch.no_grad():
