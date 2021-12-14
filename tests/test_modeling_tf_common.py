@@ -1392,8 +1392,8 @@ class TFModelPushToHubTester(unittest.TestCase):
         )
         model = TFBertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.push_to_hub("test-model-card-tf")
-            self.assertTrue(os.path.isfile(os.path.join("test-model-card-tf", "README.md")))
+            model.push_to_hub(os.path.join(tmp_dir, "test-model-tf"))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "test-model-card-tf", "README.md")))
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
