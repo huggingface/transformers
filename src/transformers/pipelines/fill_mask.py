@@ -44,9 +44,8 @@ class FillMaskPipeline(Pipeline):
 
     .. note::
 
-        This pipeline only works for inputs with exactly one token masked.
-        Experimental: We added support for multiple masks. The returned values are
-        raw model output, and correspond to disjoint probabilities where one might
+        This pipeline only works for inputs with exactly one token masked. Experimental: We added support for multiple
+        masks. The returned values are raw model output, and correspond to disjoint probabilities where one might
         expect joint probabilities (See `discussion <https://github.com/huggingface/transformers/pull/10222>`__).
     """
 
