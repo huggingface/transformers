@@ -193,63 +193,107 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-        encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, seq_length, is_pair, framework
-        )
-
-        # Generate decoder inputs - need sequence length > 1 to avoid optimisations from ONNX
-        decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, 2, is_pair, framework
-        )
-        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
-        common_inputs = dict(**encoder_inputs, **decoder_inputs)
-
-        if self.use_past:
-            if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
-            else:
-                import torch
-            batch = common_inputs["input_ids"].shape[0]
-            encoder_seq_length = common_inputs["input_ids"].shape[1]
-            # decoder_seq_length = ordered_inputs["decoder_input_ids"].shape[1]
-            num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
-            encoder_shape = (
-                batch,
-                num_encoder_attention_heads,
-                encoder_seq_length,
-                self._config.hidden_size // num_encoder_attention_heads,
-            )
-            # Here decoder_seq_length is 1 because only the last decoder_input_ids are used when using pre-computed
-            # past_key_values
-            decoder_shape = (
-                batch,
-                num_decoder_attention_heads,
-                1,
-                self._config.hidden_size // num_decoder_attention_heads,
+        if self.task in ["default", "seq2seq-lm"]:
+            encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+                tokenizer, batch_size, seq_length, is_pair, framework
             )
 
-            common_inputs["past_key_values"] = []
-            # If the number of encoder and decoder layers are present in the model configuration, both are considered
-            num_encoder_layers, num_decoder_layers = self.num_layers
-            min_num_layers = min(num_encoder_layers, num_decoder_layers)
-            max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
-            remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+            # Generate decoder inputs
+            decoder_seq_length = seq_length if not self.use_past else 1
+            decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+                tokenizer, batch_size, decoder_seq_length, is_pair, framework
+            )
+            decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+            common_inputs = dict(**encoder_inputs, **decoder_inputs)
 
-            for _ in range(min_num_layers):
-                # For encoder-decoder models, past_key_values contains pre-computed values for both the encoder and the
-                # decoder layers, hence a tuple of 4 tensors instead of 2
-                common_inputs["past_key_values"].append(
-                    (
-                        torch.zeros(decoder_shape),
-                        torch.zeros(decoder_shape),
-                        torch.zeros(encoder_shape),
-                        torch.zeros(encoder_shape),
-                    )
+            if self.use_past:
+                if not is_torch_available():
+                    raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                else:
+                    import torch
+                batch, encoder_seq_length = common_inputs["input_ids"].shape
+                decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
+                num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
+                encoder_shape = (
+                    batch,
+                    num_encoder_attention_heads,
+                    encoder_seq_length,
+                    self._config.hidden_size // num_encoder_attention_heads,
+                )
+                decoder_past_length = decoder_seq_length + 3
+                decoder_shape = (
+                    batch,
+                    num_decoder_attention_heads,
+                    decoder_past_length,
+                    self._config.hidden_size // num_decoder_attention_heads,
                 )
 
-            # TODO: test this.
-            shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
-            for _ in range(min_num_layers, max_num_layers):
-                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+                common_inputs["decoder_attention_mask"] = torch.cat(
+                    [common_inputs["decoder_attention_mask"], torch.ones(batch, decoder_past_length)], dim=1
+                )
+
+                common_inputs["past_key_values"] = []
+                # If the number of encoder and decoder layers are present in the model configuration, both are considered
+                num_encoder_layers, num_decoder_layers = self.num_layers
+                min_num_layers = min(num_encoder_layers, num_decoder_layers)
+                max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
+                remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+
+                for _ in range(min_num_layers):
+                    common_inputs["past_key_values"].append(
+                        (
+                            torch.zeros(decoder_shape),
+                            torch.zeros(decoder_shape),
+                            torch.zeros(encoder_shape),
+                            torch.zeros(encoder_shape),
+                        )
+                    )
+
+                # TODO: test this.
+                shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
+                for _ in range(min_num_layers, max_num_layers):
+                    common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+
+        elif self.task == "causal-lm":
+            common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+                tokenizer, batch_size, seq_length, is_pair, framework
+            )
+
+            if self.use_past:
+                if not is_torch_available():
+                    raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                else:
+                    import torch
+
+                    batch, seqlen = common_inputs["input_ids"].shape
+                    # Not using the same length for past_key_values
+                    past_key_values_length = seqlen + 2
+                    num_encoder_layers, _ = self.num_layers
+                    num_encoder_attention_heads, _ = self.num_attention_heads
+                    past_shape = (
+                        batch,
+                        num_encoder_attention_heads,
+                        past_key_values_length,
+                        self._config.hidden_size // num_encoder_attention_heads,
+                    )
+
+                    common_inputs["attention_mask"] = torch.cat(
+                        [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                    )
+                    common_inputs["past_key_values"] = [
+                        (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_encoder_layers)
+                    ]
+        else:
+            common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
+                tokenizer, batch_size, seq_length, is_pair, framework
+            )
 
         return common_inputs
+
+    def _flatten_past_key_values_(self, flattened_output, name, idx, t):
+        if self.task in ["default", "seq2seq-lm"]:
+            flattened_output = super()._flatten_past_key_values_(flattened_output, name, idx, t)
+        else:
+            flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
+                flattened_output, name, idx, t
+            )

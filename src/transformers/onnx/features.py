@@ -153,6 +153,13 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=LongformerOnnxConfig,
         ),
+        "marian": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls=MarianOnnxConfig,
+        ),
         "roberta": supported_features_mapping(
             "default",
             "masked-lm",
