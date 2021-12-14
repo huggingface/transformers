@@ -417,14 +417,14 @@ class TrainingSummary:
             task: TASK_TAG_TO_NAME_MAPPING[task] for task in _listify(self.tasks) if task in TASK_TAG_TO_NAME_MAPPING
         }
 
+        model_index["results"] = []
+
         if len(task_mapping) == 0 and len(dataset_mapping) == 0:
-            return model_index
+            return [model_index]
         if len(task_mapping) == 0:
             task_mapping = {None: None}
         if len(dataset_mapping) == 0:
             dataset_mapping = {None: None}
-
-        model_index["results"] = []
 
         # One entry per dataset and per task
         all_possibilities = [(task_tag, ds_tag) for task_tag in task_mapping for ds_tag in dataset_mapping]
