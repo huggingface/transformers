@@ -148,10 +148,21 @@ class Text2TextGenerationPipeline(Pipeline):
             input_length = model_inputs["input_ids"].shape[-1]
         elif self.framework == "tf":
             input_length = tf.shape(model_inputs["input_ids"])[-1].numpy()
+        elif self.framework == "flax":
+            input_length = model_inputs["input_ids"].shape[-1]
+        else:
+            raise ValueError("Unhandled framework")
 
         generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
         generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
+        if self.framework == "flax":
+            # Workaround the fact specific to flax.
+            # Should `forced_bos_token_id` become `decoder_start_token_id`?
+            if "forced_bos_token_id" in model_inputs:
+                model_inputs["decoder_start_token_id"] = model_inputs.pop("forced_bos_token_id")
+            elif "decoder_start_token_id" not in model_inputs:
+                model_inputs["decoder_start_token_id"] = self.tokenizer.bos_token_id
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         return {"output_ids": output_ids}
 
@@ -160,9 +171,13 @@ class Text2TextGenerationPipeline(Pipeline):
         if return_type == ReturnType.TENSORS:
             record = {f"{self.return_name}_token_ids": model_outputs}
         elif return_type == ReturnType.TEXT:
+            if self.framework == "flax":
+                output_ids = model_outputs["output_ids"].sequences[0]
+            else:
+                output_ids = model_outputs["output_ids"][0]
             record = {
                 f"{self.return_name}_text": self.tokenizer.decode(
-                    model_outputs["output_ids"][0],
+                    output_ids,
                     skip_special_tokens=True,
                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )

@@ -157,6 +157,7 @@ class FlaxGenerationMixin:
         self,
         input_ids: jnp.ndarray,
         max_length: Optional[int] = None,
+        max_new_tokens: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -194,6 +195,9 @@ class FlaxGenerationMixin:
                 The sequence used as a prompt for the generation.
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
+            max_new_tokens (:obj:`int`, `optional`, defaults to None):
+                The maximum amount of tokens to generate (will override :obj:`max_length` and both cannot be defined at
+                the same time.
             do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             temperature (:obj:`float`, `optional`, defaults to 1.0):
@@ -237,12 +241,24 @@ class FlaxGenerationMixin:
             >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
         # set init values
-        max_length = max_length if max_length is not None else self.config.max_length
+        if max_length is not None and max_new_tokens is not None:
+            raise ValueError("Both `max_new_tokens` and `max_length` are defined which is incorrect, use only one.")
+        prompt_length = 1 if self.config.is_encoder_decoder else input_ids.shape[1]
+        max_length = prompt_length + max_new_tokens if max_new_tokens is not None else self.config.max_length
+            if max_new_tokens is None:
+                max_length = self.config.max_length
+            else:
+                if self.config.is_encoder_decoder:
+                    # Is it though ?
+                    seq_len = 1
+                else:
+                    seq_len = input_ids.shape[1]
+                max_length = seq_len + max_new_tokens
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id else self.config.decoder_start_token_id
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 

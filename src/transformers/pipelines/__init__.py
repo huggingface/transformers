@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import http_get, is_tf_available, is_torch_available
+from ..file_utils import http_get, is_flax_available, is_tf_available, is_torch_available
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
@@ -107,6 +107,10 @@ if is_torch_available():
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FlaxAutoModel, FlaxAutoModelForSequenceClassification
+
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
@@ -136,12 +140,14 @@ SUPPORTED_TASKS = {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
+        "flax": (FlaxAutoModel,) if is_flax_available() else (),
         "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
     },
     "text-classification": {
         "impl": TextClassificationPipeline,
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+        "flax": (),
         "default": {
             "model": {
                 "pt": "distilbert-base-uncased-finetuned-sst-2-english",
@@ -219,6 +225,7 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotClassificationPipeline,
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForSequenceClassification,) if is_flax_available() else (),
         "default": {
             "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
             "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
@@ -414,8 +421,8 @@ def pipeline(
             :obj:`config` is loaded (if it is a string). However, if :obj:`config` is also not given or not a string,
             then the default feature extractor for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
-            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
-            must be installed.
+            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow or :obj:`"flax"` for
+            Jax. The specified framework must be installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
@@ -512,7 +519,7 @@ def pipeline(
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None
     # Will load the correct model if possible
-    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
+    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"], "flax": targeted_task.get("flax", ())}
     framework, model = infer_framework_load_model(
         model,
         model_classes=model_classes,

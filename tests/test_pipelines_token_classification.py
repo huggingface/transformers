@@ -17,6 +17,7 @@ import unittest
 import numpy as np
 
 from transformers import (
+    FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     AutoModelForTokenClassification,
@@ -28,6 +29,7 @@ from transformers.pipelines import AggregationStrategy, TokenClassificationArgum
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
+    require_flax,
     require_tf,
     require_torch,
     require_torch_gpu,
@@ -44,6 +46,7 @@ VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is 
 class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
@@ -591,6 +594,21 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def test_small_model_tf(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        model_name = "Narsil/small2"
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="flax", model_kwargs={"from_pt": True}
+        )
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),

@@ -4,6 +4,12 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers import (
+    FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+)
+
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
@@ -21,12 +27,9 @@ if TYPE_CHECKING:
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 if is_torch_available():
     import torch
-
-    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
@@ -135,10 +138,16 @@ class QuestionAnsweringPipeline(Pipeline):
             **kwargs,
         )
 
+        types = {}
+        if MODEL_FOR_QUESTION_ANSWERING_MAPPING is not None:
+            types.update(MODEL_FOR_QUESTION_ANSWERING_MAPPING.items())
+        if TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING is not None:
+            types.update(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items())
+        if FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING is not None:
+            types.update(FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items())
+
+        self.check_model_type(types)
         self._args_parser = QuestionAnsweringArgumentHandler()
-        self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
-        )
 
     @staticmethod
     def create_sample(
@@ -363,6 +372,11 @@ class QuestionAnsweringPipeline(Pipeline):
                         if tensor.dtype == torch.int32:
                             tensor = tensor.long()
                         fw_args[k] = tensor.unsqueeze(0)
+                    elif self.framework == "flax":
+                        tensor = np.array(v)
+                        fw_args[k] = np.expand_dims(tensor, axis=0)
+                    else:
+                        raise NotImplementedError(f"Unsupported framework {self.framework}")
                 else:
                     others[k] = v
             split_features.append({"fw_args": fw_args, "others": others})
@@ -398,7 +412,10 @@ class QuestionAnsweringPipeline(Pipeline):
             undesired_tokens = np.abs(np.array(feature["p_mask"]) - 1)
 
             if feature_["fw_args"].get("attention_mask", None) is not None:
-                undesired_tokens = undesired_tokens & feature_["fw_args"]["attention_mask"].numpy()
+                attention_mask = feature_["fw_args"]["attention_mask"]
+                if self.framework != "flax":
+                    attention_mask = attention_mask.numpy()
+                undesired_tokens = undesired_tokens & attention_mask
 
             # Generate mask
             undesired_tokens_mask = undesired_tokens == 0.0

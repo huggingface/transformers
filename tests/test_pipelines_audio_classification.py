@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_datasets,
+    require_flax,
     require_tf,
     require_torch,
     require_torchaudio,
@@ -126,4 +127,9 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @require_tf
     @unittest.skip("Audio classification is not implemented for TF")
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Audio classification is not implemented for flax")
+    def test_small_model_flax(self):
         pass

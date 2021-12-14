@@ -15,6 +15,8 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -26,10 +28,12 @@ from transformers import (
     BlenderbotSmallTokenizer,
     Conversation,
     ConversationalPipeline,
+    FlaxAutoModelForCausalLM,
+    MBartConfig,
     TFAutoModelForCausalLM,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch, slow, torch_device
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -53,8 +57,19 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         if TF_MODEL_FOR_CAUSAL_LM_MAPPING
         else []
     )
+    flax_model_mapping = dict(
+        list(FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
+        if FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        else [] + list(FLAX_MODEL_FOR_CAUSAL_LM_MAPPING.items())
+        if FLAX_MODEL_FOR_CAUSAL_LM_MAPPING
+        else []
+    )
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if isinstance(model.config, MBartConfig):
+            self.skipTest(
+                "MBart is ForConditional, but expects explicity `decoder_start_token_id` to choose a language, so it will yield an error when being used as a conversational pipeline, which is totally fine."
+            )
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
         return conversation_agent, [Conversation("Hi there!")]
 
@@ -177,6 +192,15 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
     def test_small_model_tf(self):
         tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
         model = TFAutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small")
+        conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
+        conversation = Conversation("hello")
+        output = conversation_agent(conversation)
+        self.assertEqual(output, Conversation(past_user_inputs=["hello"], generated_responses=["Hi"]))
+
+    @require_flax
+    def test_small_model_flax(self):
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-small")
+        model = FlaxAutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-small", from_pt=True)
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
         conversation = Conversation("hello")
         output = conversation_agent(conversation)

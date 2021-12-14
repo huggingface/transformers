@@ -66,6 +66,10 @@ class FeatureExtractionPipeline(Pipeline):
             return model_outputs[0].tolist()
         elif self.framework == "tf":
             return model_outputs[0].numpy().tolist()
+        elif self.framework == "flax":
+            return model_outputs[0].tolist()
+        else:
+            raise ValueError(f"Unsupported framework {self.framework}")
 
     def __call__(self, *args, **kwargs):
         """

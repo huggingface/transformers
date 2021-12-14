@@ -1065,14 +1065,14 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         if block_id == to_end_block_id - 2:
             illegal_blocks.append(1)
 
-        selected_random_blokcs = []
+        selected_random_blocks = []
 
         for i in range(to_end_block_id - to_start_block_id):
             if perm_block[i] not in illegal_blocks:
-                selected_random_blokcs.append(perm_block[i])
-            if len(selected_random_blokcs) == num_rand_blocks:
+                selected_random_blocks.append(perm_block[i])
+            if len(selected_random_blocks) == num_rand_blocks:
                 break
-        return np.array(selected_random_blokcs, dtype=np.int32)
+        return np.array(selected_random_blocks, dtype=np.int32)
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->BigBird
@@ -1445,6 +1445,42 @@ class FlaxBigBirdModule(nn.Module):
             dtype=self.dtype,
         )
 
+    def _pad_to_block_size(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        pad_token_id,
+    ):
+        """A helper function to pad tokens and mask to work with implementation of BigBird block-sparse attention."""
+        # padding
+        block_size = self.config.block_size  # * 6
+
+        input_shape = input_ids.shape
+        batch_size, seq_len = input_shape[:2]
+
+        padding_len = (block_size - seq_len % block_size) % block_size
+        if padding_len > 0:
+            logger.info(
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.block_size`: {block_size}"
+            )
+            if input_ids is not None:
+                input_ids = jnp.pad(input_ids, [(0, 0), (0, padding_len)], constant_values=pad_token_id)
+            if position_ids is not None:
+                # pad with position_id = pad_token_id as in modeling_bigbird.BigBirdEmbeddings
+                position_ids = jnp.pad(position_ids, [(0, 0), (0, padding_len)], constant_values=pad_token_id)
+
+            attention_mask = jnp.pad(
+                attention_mask, [(0, 0), (0, padding_len)], constant_values=False
+            )  # no attention on the padding tokens
+            token_type_ids = jnp.pad(
+                token_type_ids, [(0, 0), (0, padding_len)], constant_values=0
+            )  # pad with token_type_id = 0
+
+        return input_ids, attention_mask, token_type_ids, position_ids
+
     def __call__(
         self,
         input_ids,
@@ -1456,6 +1492,14 @@ class FlaxBigBirdModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+        if self.config.attention_type == "block_sparse":
+            (input_ids, attention_mask, token_type_ids, position_ids,) = self._pad_to_block_size(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                pad_token_id=self.config.pad_token_id,
+            )
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )

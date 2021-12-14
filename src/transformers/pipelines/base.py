@@ -31,11 +31,20 @@ import numpy as np
 from packaging import version
 
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
+from ..file_utils import ModelOutput, add_end_docstrings, is_flax_available, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
+from .utils import (  # noqa: F401
+    DataLoader,
+    Dataset,
+    KeyDataset,
+    PipelineDataset,
+    PipelineIterator,
+    no_collate_fn,
+    pad_collate_fn,
+)
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -45,14 +54,13 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TFAutoModel
 
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FlaxAutoModel
+
 if is_torch_available():
     import torch
-    from torch.utils.data import DataLoader, Dataset, IterableDataset
 
     from ..models.auto.modeling_auto import AutoModel
-else:
-    Dataset = None
-    KeyDataset = None
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -60,80 +68,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-
-def no_collate_fn(items):
-    if len(items) != 1:
-        raise ValueError("This collate_fn is meant to be used with batch_size=1")
-    return items[0]
-
-
-def _pad(items, key, padding_value, padding_side):
-    batch_size = len(items)
-    if isinstance(items[0][key], torch.Tensor):
-        # Others include `attention_mask` etc...
-        shape = items[0][key].shape
-        dim = len(shape)
-        if dim == 4:
-            # This is probable image so padding shouldn't be necessary
-            # B, C, H, W
-            return torch.cat([item[key] for item in items], dim=0)
-        max_length = max(item[key].shape[1] for item in items)
-        dtype = items[0][key].dtype
-
-        if dim == 2:
-            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
-        elif dim == 3:
-            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
-
-        for i, item in enumerate(items):
-            if dim == 2:
-                if padding_side == "left":
-                    tensor[i, -len(item[key][0]) :] = item[key][0].clone()
-                else:
-                    tensor[i, : len(item[key][0])] = item[key][0].clone()
-            elif dim == 3:
-                if padding_side == "left":
-                    tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
-                else:
-                    tensor[i, : len(item[key][0]), :] = item[key][0].clone()
-        return tensor
-    else:
-        return [item[key] for item in items]
-
-
-def pad_collate_fn(tokenizer, feature_extractor):
-    padding_side = "right"
-    if tokenizer is None and feature_extractor is None:
-        raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")
-    if tokenizer is not None:
-        if tokenizer.pad_token_id is None:
-            raise ValueError(
-                "Pipeline with tokenizer without pad_token cannot do batching. You can try to set it with "
-                "`pipe.tokenizer.pad_token_id = model.config.eos_token_id`."
-            )
-        else:
-            padding_value = tokenizer.pad_token_id
-            padding_side = tokenizer.padding_side
-    if feature_extractor is not None:
-        # Feature extractor can be images, where no padding is expected
-        padding_value = getattr(feature_extractor, "padding_value", None)
-        padding_side = getattr(feature_extractor, "padding_side", None)
-
-    def inner(items):
-        keys = set(items[0].keys())
-        for item in items:
-            if set(item.keys()) != keys:
-                raise ValueError(
-                    f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} != {keys})"
-                )
-        # input_values, input_pixels, input_ids, ...
-        padded = {
-            key: _pad(items, key, padding_value if key.startswith("input_") else 0, padding_side) for key in keys
-        }
-        return padded
-
-    return inner
 
 
 def infer_framework_load_model(
@@ -181,11 +115,15 @@ def infer_framework_load_model(
         class_tuple = ()
         look_pt = is_torch_available() and framework in {"pt", None}
         look_tf = is_tf_available() and framework in {"tf", None}
+        look_flax = is_flax_available() and framework in {"flax", None}
         if model_classes:
             if look_pt:
                 class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
             if look_tf:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
+            if look_flax:
+                class_tuple = class_tuple + model_classes.get("flax", (FlaxAutoModel,))
+
         if config.architectures:
             classes = []
             for architecture in config.architectures:
@@ -196,6 +134,10 @@ def infer_framework_load_model(
                         classes.append(_class)
                 if look_tf:
                     _class = getattr(transformers_module, f"TF{architecture}", None)
+                    if _class is not None:
+                        classes.append(_class)
+                if look_flax:
+                    _class = getattr(transformers_module, f"Flax{architecture}", None)
                     if _class is not None:
                         classes.append(_class)
             class_tuple = class_tuple + tuple(classes)
@@ -230,7 +172,12 @@ def infer_framework_load_model(
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    if model.__class__.__name__.startswith("TF"):
+        framework = "tf"
+    elif model.__class__.__name__.startswith("Flax"):
+        framework = "flax"
+    else:
+        framework = "pt"
     return framework, model
 
 
@@ -678,129 +625,6 @@ PIPELINE_INIT_ARGS = r"""
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
 
-if is_torch_available():
-
-    class PipelineDataset(Dataset):
-        def __init__(self, dataset, process, params):
-            self.dataset = dataset
-            self.process = process
-            self.params = params
-
-        def __len__(self):
-            return len(self.dataset)
-
-        def __getitem__(self, i):
-            item = self.dataset[i]
-            processed = self.process(item, **self.params)
-            return processed
-
-    class PipelineIterator(IterableDataset):
-        def __init__(self, loader, infer, params, loader_batch_size=None):
-            """
-            Roughly equivalent to
-
-            .. code-block::
-                for item in loader:
-                    yield infer(item, **params)
-
-            Arguments:
-                loader (:obj:`torch.utils.data.DataLoader` or any iterator):
-                    The iterator that will be used to apply :obj:`infer` on.
-                infer (any function):
-                    The function to apply of each element of :obj:`loader`.
-                params (:obj:`dict`):
-                    The parameters passed to :obj:`infer` along with every item
-                loader_batch_size (:obj:`int`, `optional`):
-                    If specified, the items of :obj:`loader` are supposed to come as batch, and are loader_batched here
-                    making it roughly behave as
-
-
-                    .. code-block::
-
-                        for items in loader:
-                            for i in loader_batch_size:
-                                item = items[i]
-                                yield infer(item, **params)
-            """
-            self.loader = loader
-            self.infer = infer
-            self.params = params
-            if loader_batch_size == 1:
-                # Let's spare some time by deactivating altogether
-                loader_batch_size = None
-            self.loader_batch_size = loader_batch_size
-
-            # Internal bookkeeping
-            self._loader_batch_index = None
-            self._loader_batch_data = None
-
-        def __len__(self):
-            return len(self.loader)
-
-        def __iter__(self):
-            self.iterator = iter(self.loader)
-            return self
-
-        def loader_batch_item(self):
-            if isinstance(self._loader_batch_data, torch.Tensor):
-                result = self._loader_batch_data[self._loader_batch_index]
-            else:
-                loader_batched = {}
-                for k, element in self._loader_batch_data.items():
-                    if k in {"hidden_states", "past_key_values", "attentions"} and isinstance(element, tuple):
-                        if isinstance(element[0], torch.Tensor):
-                            loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
-                        elif isinstance(element[0], np.ndarray):
-                            loader_batched[k] = tuple(
-                                np.expand_dims(el[self._loader_batch_index], 0) for el in element
-                            )
-                    elif isinstance(element[self._loader_batch_index], torch.Tensor):
-                        loader_batched[k] = element[self._loader_batch_index].unsqueeze(0)
-                    elif isinstance(element[self._loader_batch_index], np.ndarray):
-                        loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
-                    else:
-                        loader_batched[k] = element[self._loader_batch_index]
-                result = self._loader_batch_data.__class__(loader_batched)
-            self._loader_batch_index += 1
-            return result
-
-        def __next__(self):
-            if self._loader_batch_index is not None and self._loader_batch_index < self.loader_batch_size:
-                return self.loader_batch_item()
-
-            item = next(self.iterator)
-            processed = self.infer(item, **self.params)
-            if self.loader_batch_size is not None:
-                if isinstance(processed, torch.Tensor):
-                    first_tensor = processed
-                else:
-                    key = list(processed.keys())[0]
-                    first_tensor = processed[key]
-                if isinstance(first_tensor, list):
-                    observed_batch_size = len(first_tensor)
-                else:
-                    observed_batch_size = first_tensor.shape[0]
-                if 0 < observed_batch_size < self.loader_batch_size:
-                    # Could be last batch so we can't unroll as many
-                    # elements.
-                    self.loader_batch_size = observed_batch_size
-                self._loader_batch_data = processed
-                self._loader_batch_index = 0
-                return self.loader_batch_item()
-            else:
-                return processed
-
-    class KeyDataset(Dataset):
-        def __init__(self, dataset: Dataset, key: str):
-            self.dataset = dataset
-            self.key = key
-
-        def __len__(self):
-            return len(self.dataset)
-
-        def __getitem__(self, i):
-            return self.dataset[i][self.key]
-
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class Pipeline(_ScikitCompat):
@@ -847,6 +671,10 @@ class Pipeline(_ScikitCompat):
         self.modelcard = modelcard
         self.framework = framework
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+        # if self.framework == "flax":
+        #     import jax
+
+        #     self.model.__call__ = jax.jit(self.model.__call__)
         self.binary_output = binary_output
 
         # Special handling
@@ -950,10 +778,12 @@ class Pipeline(_ScikitCompat):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
             return inputs.to(device)
+        elif isinstance(inputs, np.ndarray):
+            return torch.from_numpy(inputs).to(device)
         else:
             return inputs
 
-    def check_model_type(self, supported_models: Union[List[str], dict]):
+    def check_model_type(self, supported_models: Dict):
         """
         Check if the model class is in supported by the pipeline.
 
@@ -961,18 +791,9 @@ class Pipeline(_ScikitCompat):
             supported_models (:obj:`List[str]` or :obj:`dict`):
                 The list of models supported by the pipeline, or a dictionary with model class values.
         """
-        if not isinstance(supported_models, list):  # Create from a model mapping
-            supported_models_names = []
-            for config, model in supported_models.items():
-                # Mapping can now contain tuples of models for the same configuration.
-                if isinstance(model, tuple):
-                    supported_models_names.extend([_model.__name__ for _model in model])
-                else:
-                    supported_models_names.append(model.__name__)
-            supported_models = supported_models_names
-        if self.model.__class__.__name__ not in supported_models:
+        if type(self.model.config) not in supported_models:
             logger.error(
-                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}."
+                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {[v.__name__ for v in supported_models.values()]}."
             )
 
     @abstractmethod
@@ -1035,12 +856,27 @@ class Pipeline(_ScikitCompat):
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
+            elif self.framework == "flax":
+                from jax.numpy import DeviceArray
+
+                model_outputs = self._forward(model_inputs, **forward_params)
+                # Back to numpy
+                model_outputs = model_outputs.__class__(
+                    **{k: v.to_py() if isinstance(v, DeviceArray) else v for k, v in model_outputs.items()}
+                )
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs
 
     def get_iterator(
-        self, inputs, num_workers: int, batch_size: int, preprocess_params, forward_params, postprocess_params
+        self,
+        inputs,
+        num_workers: int,
+        batch_size: int,
+        preprocess_params,
+        forward_params,
+        postprocess_params,
+        align_to: Optional[int] = None,
     ):
         if isinstance(inputs, collections.abc.Sized):
             dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
@@ -1056,15 +892,24 @@ class Pipeline(_ScikitCompat):
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
+        collate_fn = (
+            no_collate_fn
+            if batch_size == 1
+            else pad_collate_fn(self.tokenizer, self.feature_extractor, align_to=align_to)
+        )
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
-    def __call__(self, inputs, *args, num_workers=0, batch_size=1, **kwargs):
+    def __call__(self, inputs, *args, num_workers=0, batch_size=1, align_to=None, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
+
+        if align_to is None and self.framework == "flax":
+            # For flax, we align by default to 8 to avoid as much as possible
+            # recompilation
+            align_to = 8
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
 
         # Fuse __init__ params and __call__ params without modifying the __init__ ones.
@@ -1081,7 +926,7 @@ class Pipeline(_ScikitCompat):
         if isinstance(inputs, list):
             if self.framework == "pt":
                 final_iterator = self.get_iterator(
-                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params, align_to
                 )
                 outputs = [output for output in final_iterator]
                 return outputs
@@ -1089,16 +934,12 @@ class Pipeline(_ScikitCompat):
                 return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
         elif Dataset is not None and isinstance(inputs, Dataset):
             return self.get_iterator(
-                inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+                inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params, align_to
             )
         elif isinstance(inputs, types.GeneratorType):
-            if self.framework == "pt":
-                return self.get_iterator(
-                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
-                )
-            else:
-                # TODO make the get_iterator work also for `tf` (and `flax`).
-                return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
+            return self.get_iterator(
+                inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params, align_to
+            )
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
@@ -1110,9 +951,3 @@ class Pipeline(_ScikitCompat):
         model_outputs = self.forward(model_inputs, **forward_params)
         outputs = self.postprocess(model_outputs, **postprocess_params)
         return outputs
-
-    def iterate(self, inputs, preprocess_params, forward_params, postprocess_params):
-        # This function should become `get_iterator` again, this is a temporary
-        # easy solution.
-        for input_ in inputs:
-            yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)

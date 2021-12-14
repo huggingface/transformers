@@ -1,6 +1,12 @@
 from typing import List, Union
 
-from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
+from ..file_utils import (
+    add_end_docstrings,
+    is_flax_available,
+    is_torch_available,
+    is_vision_available,
+    requires_backends,
+)
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -12,6 +18,11 @@ if is_vision_available():
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+if is_flax_available():
+    import jax
+
+from .utils import softmax
+
 
 logger = logging.get_logger(__name__)
 
@@ -33,7 +44,7 @@ class ImageClassificationPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
+            raise ValueError(f"The {self.__class__} is not available in TF.")
 
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
@@ -77,7 +88,7 @@ class ImageClassificationPipeline(Pipeline):
 
     def preprocess(self, image):
         image = load_image(image)
-        model_inputs = self.feature_extractor(images=image, return_tensors="pt")
+        model_inputs = self.feature_extractor(images=image, return_tensors=self.framework)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -87,8 +98,14 @@ class ImageClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs, top_k=5):
         if top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
-        probs = model_outputs.logits.softmax(-1)[0]
-        scores, ids = probs.topk(top_k)
+        if self.framework == "pt":
+            probs = model_outputs.logits.softmax(-1)[0]
+            scores, ids = probs.topk(top_k)
+        elif self.framework == "flax":
+            probs = softmax(model_outputs.logits)[0]
+            scores, ids = jax.lax.top_k(probs, top_k)
+        else:
+            raise NotImplementedError(f"Framework {self.framework} is not implemented")
 
         scores = scores.tolist()
         ids = ids.tolist()

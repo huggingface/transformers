@@ -14,8 +14,14 @@
 
 import unittest
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+from transformers import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    TextGenerationPipeline,
+    pipeline,
+)
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -24,6 +30,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
@@ -51,6 +58,40 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 [
                     {
                         "generated_text": "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                    }
+                ],
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        # Ctrl is not ported to flax yet, so use a different model
+        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-gpt2", framework="flax")
+        text_generator.model.config.pad_token_id = text_generator.model.config.eos_token_id
+
+        # Using `do_sample=False` to force deterministic output
+        outputs = text_generator("This is a test", do_sample=False)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": "This is a test factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors"
+                }
+            ],
+        )
+
+        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "generated_text": "This is a test factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors"
+                    }
+                ],
+                [
+                    {
+                        "generated_text": "This is a second test stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs"
                     }
                 ],
             ],
@@ -133,7 +174,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         # They already work.
         if tokenizer.model_max_length < 10000:
             # Handling of large generations
-            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
+            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError, TypeError)):
                 text_generator("This is a test" * 500, max_new_tokens=20)
 
             outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)

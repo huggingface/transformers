@@ -22,6 +22,8 @@ from abc import abstractmethod
 from functools import lru_cache
 from unittest import skipIf
 
+import numpy as np
+
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     TOKENIZER_MAPPING,
@@ -34,8 +36,8 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import get_task
-from transformers.pipelines.base import _pad
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
+from transformers.pipelines.utils import _pad
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_flax, require_tf, require_torch
 
 
 logger = logging.getLogger(__name__)
@@ -136,6 +138,11 @@ class ANY:
         return f"ANY({self._type.__name__})"
 
 
+def data(n: int):
+    for _ in range(n):
+        yield "This is a test"
+
+
 class PipelineTestCaseMeta(type):
     def __new__(mcs, name, bases, dct):
         def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class):
@@ -211,7 +218,7 @@ class PipelineTestCaseMeta(type):
 
             return test
 
-        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
+        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping"), ("flax", "flax_model_mapping")]:
             mapping = dct.get(key, {})
             if mapping:
                 for configuration, model_architectures in mapping.items():
@@ -258,9 +265,10 @@ class PipelineTestCaseMeta(type):
         def inner(self):
             raise NotImplementedError("Not implemented test")
 
-        # Force these 2 methods to exist
+        # Force these 3 methods to exist
         dct["test_small_model_pt"] = dct.get("test_small_model_pt", inner)
         dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
+        dct["test_small_model_flax"] = dct.get("test_small_model_flax", inner)
 
         return type.__new__(mcs, name, bases, dct)
 
@@ -316,18 +324,17 @@ class CommonPipelineTest(unittest.TestCase):
 
     @require_torch
     def test_iterator_data(self):
-        def data(n: int):
-            for _ in range(n):
-                yield "This is a test"
-
         pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
 
         results = []
-        for out in pipe(data(10)):
+        for out in pipe(data(10), batch_size=2):
             self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
 
+    @require_torch
+    def test_iterator_data_num_workers(self):
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="pt")
         # When using multiple workers on streamable data it should still work
         # This will force using `num_workers=1` with a warning for now.
         results = []
@@ -338,14 +345,25 @@ class CommonPipelineTest(unittest.TestCase):
 
     @require_tf
     def test_iterator_data_tf(self):
-        def data(n: int):
-            for _ in range(n):
-                yield "This is a test"
-
         pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
         out = pipe("This is a test")
+        self.assertEqual(nested_simplify(out), [{"label": "LABEL_0", "score": 0.504}])
         results = []
-        for out in pipe(data(10)):
+        for out in pipe(data(10), batch_size=2):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
+    @require_torch
+    @require_flax
+    def test_iterator_data_flax(self):
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-distilbert", framework="flax", model_kwargs={"from_pt": True}
+        )
+        out = pipe("This is a test")
+        self.assertEqual(nested_simplify(out), [{"label": "LABEL_0", "score": 0.504}])
+        results = []
+        for out in pipe(data(10), batch_size=2):
             self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
@@ -399,6 +417,73 @@ class PipelinePadTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
+            )
+        )
+
+    def test_pipeline_padding_np(self):
+        items = [
+            {
+                "label": "label1",
+                "input_ids": np.array([[1, 23, 24, 2]]),
+                "attention_mask": np.array([[0, 1, 1, 0]]),
+            },
+            {
+                "label": "label2",
+                "input_ids": np.array([[1, 23, 24, 43, 44, 2]]),
+                "attention_mask": np.array([[0, 1, 1, 1, 1, 0]]),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            np.allclose(
+                _pad(items, "input_ids", 10, "right"),
+                np.array([[1, 23, 24, 2, 10, 10], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            np.allclose(
+                _pad(items, "input_ids", 10, "left"),
+                np.array([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            np.allclose(_pad(items, "attention_mask", 0, "right"), np.array([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]]))
+        )
+
+    @require_tf
+    def test_pipeline_padding_tf(self):
+        import tensorflow as tf
+
+        items = [
+            {
+                "label": "label1",
+                "input_ids": tf.constant([[1, 23, 24, 2]]),
+                "attention_mask": tf.constant([[0, 1, 1, 0]]),
+            },
+            {
+                "label": "label2",
+                "input_ids": tf.constant([[1, 23, 24, 43, 44, 2]]),
+                "attention_mask": tf.constant([[0, 1, 1, 1, 1, 0]]),
+            },
+        ]
+
+        self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
+        self.assertTrue(
+            tf.experimental.numpy.allclose(
+                _pad(items, "input_ids", 10, "right"),
+                tf.constant([[1, 23, 24, 2, 10, 10], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            tf.experimental.numpy.allclose(
+                _pad(items, "input_ids", 10, "left"),
+                tf.constant([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
+            )
+        )
+        self.assertTrue(
+            tf.experimental.numpy.allclose(
+                _pad(items, "attention_mask", 0, "right"), tf.constant([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
             )
         )
 

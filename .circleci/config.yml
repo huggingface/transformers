@@ -470,6 +470,69 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
+    run_tests_pipelines_flax:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            RUN_PIPELINE_TESTS: yes
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-flax-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,testing,sentencepiece,flax,jax]
+            - save_cache:
+                  key: v0.4-flax-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_flax -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+    
+    run_tests_pipelines_flax_all:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+            RUN_PIPELINE_TESTS: yes
+            TRANSFORMERS_IS_CI: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-flax-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,testing,sentencepiece,flax,jax]
+            - save_cache:
+                  key: v0.4-flax-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_flax -m is_pipeline_test tests | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_pipelines_tf:
         working_directory: ~/transformers
         docker:

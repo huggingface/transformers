@@ -24,6 +24,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_pipeline_test,
+    require_flax,
     require_pandas,
     require_tensorflow_probability,
     require_tf,
@@ -144,6 +145,11 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
                     "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
                 },
             )
+
+    @require_flax
+    @unittest.skip("Table question answering not implemented in Flax")
+    def test_small_model_flax(self):
+        pass
 
     @require_torch
     @require_torch_scatter
