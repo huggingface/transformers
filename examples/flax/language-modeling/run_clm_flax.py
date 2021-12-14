@@ -253,9 +253,9 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     steps_per_epoch = len(dataset) // batch_size
 
     if shuffle:
-        batch_idx = np.random.permutation(len(dataset))
+        batch_idx = jax.random.permutation(rng, len(dataset))
     else:
-        batch_idx = np.arange(len(dataset))
+        batch_idx = jnp.arange(len(dataset))
 
     batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
     batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
