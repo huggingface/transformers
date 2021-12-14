@@ -45,6 +45,9 @@ class FillMaskPipeline(Pipeline):
     .. note::
 
         This pipeline only works for inputs with exactly one token masked.
+        Experimental: We added support for multiple masks. The returned values are
+        raw model output, and correspond to disjoint probabilities where one might
+        expect joint probabilities (See `discussion <https://github.com/huggingface/transformers/pull/10222>`__).
     """
 
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
@@ -59,12 +62,6 @@ class FillMaskPipeline(Pipeline):
     def _ensure_exactly_one_mask_token(self, input_ids: GenericTensor) -> np.ndarray:
         masked_index = self.get_masked_index(input_ids)
         numel = np.prod(masked_index.shape)
-        # if numel > 1:
-        #     raise PipelineException(
-        #         "fill-mask",
-        #         self.model.base_model_prefix,
-        #         f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
-        #     )
         if numel < 1:
             raise PipelineException(
                 "fill-mask",
