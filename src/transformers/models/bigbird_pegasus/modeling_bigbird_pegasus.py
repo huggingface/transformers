@@ -2117,7 +2117,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2862,13 +2862,13 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BigBirdPegasus, 'facebook/bart-large'->"google/bigbird-pegasus-large-arxiv"
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with BartDecoderWrapper->BigBirdPegasusDecoderWrapper, BartForCausalLM->BigBirdPegasusForCausalLM, BartPreTrainedModel->BigBirdPegasusPreTrainedModel, BartTokenizer->PegasusTokenizer, 'facebook/bart-large'->"google/bigbird-pegasus-large-arxiv"
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.model = BigBirdPegasusDecoderWrapper(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -2917,7 +2917,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.BigBirdPegasusTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -2985,9 +2985,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForCausalLM
+            >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
 
-            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+            >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
             >>> model = BigBirdPegasusForCausalLM.from_pretrained("google/bigbird-pegasus-large-arxiv", add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")

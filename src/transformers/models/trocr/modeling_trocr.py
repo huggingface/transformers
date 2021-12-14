@@ -777,10 +777,10 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
 )
 class TrOCRForCausalLM(TrOCRPreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.model = TrOCRDecoderWrapper(config)
 
         self.output_projection = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

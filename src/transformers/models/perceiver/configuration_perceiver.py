@@ -42,7 +42,8 @@ class PerceiverConfig(PretrainedConfig):
         d_latents (:obj:`int`, `optional`, defaults to 1280):
             Dimension of the latent embeddings.
         d_model (:obj:`int`, `optional`, defaults to 768):
-            Dimension of the inputs.
+            Dimension of the inputs. Should only be provided in case [`PerceiverTextPreprocessor`] is used or no
+            preprocessor is provided.
         num_blocks (:obj:`int`, `optional`, defaults to 1):
             Number of blocks in the Transformer encoder.
         num_self_attends_per_block (:obj:`int`, `optional`, defaults to 26):
@@ -90,7 +91,8 @@ class PerceiverConfig(PretrainedConfig):
         samples_per_patch (:obj:`int`, `optional`, defaults to 16):
             Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
         output_shape (:obj:`List[int]`, `optional`, defaults to :obj:`[1, 16, 224, 224]`):
-            Shape of the output for the multimodal autoencoding model.
+            Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
+            autoencoding model. This excludes the channel dimension.
 
     Example::
 
