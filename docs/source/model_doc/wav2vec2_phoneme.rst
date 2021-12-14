@@ -33,8 +33,8 @@ Tips:
 
 - Wav2Vec2Phoneme uses the exact same architecture as Wav2Vec2
 - Wav2Vec2Phoneme is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
-- Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be decoded
-  using :class:`~transformers.Wav2Vec2CTCTokenizer`.
+- Wav2Vec2Phoneme model was trained using connectionist temporal classification (CTC) so the model output has to be
+  decoded using :class:`~transformers.Wav2Vec2PhonemeCTCTokenizer`.
 - Wav2Vec2Phoneme can be fine-tuned on multiple language at once and decode unseen languages in a single forward pass
   to a sequence of phonemes
 - By default the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
@@ -54,5 +54,5 @@ Wav2Vec2PhonemeCTCTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.Wav2Vec2PhonemeCTCTokenizer
-    :members:
+    :members: __call__, batch_decode, decode, phonemize, 
 
