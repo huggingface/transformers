@@ -48,6 +48,7 @@ Ready-made configurations include the following models:
 - GPT Neo
 - LayoutLM
 - Longformer
+- Marian
 - mBART
 - OpenAI GPT-2
 - RoBERTa
