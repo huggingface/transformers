@@ -176,9 +176,11 @@ Supported models
 26. :doc:`DistilBERT <model_doc/distilbert>` (from HuggingFace), released together with the paper `DistilBERT, a
     distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`__ by Victor
     Sanh, Lysandre Debut and Thomas Wolf. The same method has been applied to compress GPT2 into `DistilGPT2
-    <https://github.com/huggingface/transformers/tree/master/examples/research_projects/distillation>`__, RoBERTa into `DistilRoBERTa
-    <https://github.com/huggingface/transformers/tree/master/examples/research_projects/distillation>`__, Multilingual BERT into
-    `DistilmBERT <https://github.com/huggingface/transformers/tree/master/examples/research_projects/distillation>`__ and a German
+    <https://github.com/huggingface/transformers/tree/master/examples/research_projects/distillation>`__, RoBERTa into
+    `DistilRoBERTa
+    <https://github.com/huggingface/transformers/tree/master/examples/research_projects/distillation>`__, Multilingual
+    BERT into `DistilmBERT
+    <https://github.com/huggingface/transformers/tree/master/examples/research_projects/distillation>`__ and a German
     version of DistilBERT.
 27. :doc:`DPR <model_doc/dpr>` (from Facebook) released with the paper `Dense Passage Retrieval for Open-Domain
     Question Answering <https://arxiv.org/abs/2004.04906>`__ by Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick
