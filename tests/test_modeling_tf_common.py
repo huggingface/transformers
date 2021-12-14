@@ -1395,8 +1395,6 @@ class TFModelPushToHubTester(unittest.TestCase):
             model.push_to_hub("test-model-card-tf")
             self.assertTrue(os.path.isfile(os.path.join("test-model-card-tf", "README.md")))
 
-
-
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
