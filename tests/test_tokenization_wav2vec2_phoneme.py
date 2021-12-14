@@ -15,7 +15,6 @@
 """Tests for the Wav2Vec2Phoneme tokenizer."""
 import json
 import os
-import tempfile
 import unittest
 from typing import Tuple
 
@@ -41,7 +40,6 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
 
-        self.tmpdirname = tempfile.mkdtemp()
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
