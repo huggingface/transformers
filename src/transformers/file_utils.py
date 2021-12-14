@@ -2415,11 +2415,8 @@ class PushToHubMixin:
             base_model_card_args = {
                 "output_dir": repo_path_or_name,
                 "model_name": Path(repo_path_or_name).name,
-                "keras_history": self.history,
             }
             base_model_card_args.update(model_card_kwargs)
-            print("Args:")
-            print(base_model_card_args)
             self.create_model_card(**base_model_card_args)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)

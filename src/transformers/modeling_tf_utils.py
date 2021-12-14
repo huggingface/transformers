@@ -929,7 +929,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def create_model_card(
         self,
-        history,
         output_dir,
         model_name: str,
         language: Optional[str] = None,
@@ -943,7 +942,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     ):
         training_summary = TrainingSummary.from_keras(
             self,
-            keras_history=history,
+            keras_history=self.history,
             language=language,
             license=license,
             tags=tags,
