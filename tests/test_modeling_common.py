@@ -2193,6 +2193,7 @@ class ModelPushToHubTester(unittest.TestCase):
         model = BertModel(config)
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(os.path.join(tmp_dir, "test-model"), push_to_hub=True, use_auth_token=self._token)
+
             new_model = BertModel.from_pretrained(f"{USER}/test-model")
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 self.assertTrue(torch.equal(p1, p2))
