@@ -85,6 +85,8 @@ class PushToHubCallback(Callback):
         self.model_card_args = model_card_args
 
     def on_train_begin(self, logs=None):
+        # Although we can access model.history, we have no guarantees that the History callback will fire before this
+        # one, so we keep track of it here too
         self.training_history = []
 
     def on_train_batch_end(self, batch, logs=None):

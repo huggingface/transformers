@@ -931,7 +931,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self,
         history,
         output_dir,
-        model_name,
+        model_name: str,
         language: Optional[str] = None,
         license: Optional[str] = None,
         tags: Optional[str] = None,
