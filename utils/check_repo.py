@@ -102,6 +102,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "PerceiverForMultimodalAutoencoding",
+    "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
     "SegformerForSemanticSegmentation",
     "BeitForSemanticSegmentation",
@@ -116,6 +118,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DPRReader",
     "FlaubertForQuestionAnswering",
     "GPT2DoubleHeadsModel",
+    "LukeForMaskedLM",
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",
@@ -459,6 +462,11 @@ def find_all_documented_objects():
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
+        documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
+            content = f.read()
+        raw_doc_objs = re.findall("\[\[autodoc\]\]\s+(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
     return documented_obj
 

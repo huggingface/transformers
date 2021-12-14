@@ -237,6 +237,22 @@ except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
 
+_pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
+try:
+    _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
+    logger.debug(f"Successfully imported pyctcdecode version {_pyctcdecode_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pyctcdecode_available = False
+
+
+_librosa_available = importlib.util.find_spec("librosa") is not None
+try:
+    _librosa_version = importlib_metadata.version("librosa")
+    logger.debug(f"Successfully imported librosa version {_librosa_version}")
+except importlib_metadata.PackageNotFoundError:
+    _librosa_available = False
+
+
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
@@ -311,6 +327,14 @@ def is_torch_available():
     return _torch_available
 
 
+def is_pyctcdecode_available():
+    return _pyctcdecode_available
+
+
+def is_librosa_available():
+    return _librosa_available
+
+
 def is_torch_cuda_available():
     if is_torch_available():
         import torch
@@ -321,34 +345,52 @@ def is_torch_cuda_available():
 
 
 def is_torch_bf16_available():
-    if is_torch_available():
-        import torch
-
-        # since currently no utility function is available we build our own.
-        # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
-        # with additional check for torch version
-        # to succeed:
-        # 1. the hardware needs to support bf16 (arch >= Ampere)
-        # 2. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
-        # 3. CUDA >= 11
-        # 4. torch.autocast exists
-        # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
-        # really only correct for the 0th gpu (or currently set default device if different from 0)
-
-        if not torch.cuda.is_available() or torch.version.cuda is None:
-            return False
-        if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
-            return False
-        if int(torch.version.cuda.split(".")[0]) < 11:
-            return False
-        if not version.parse(torch.__version__) >= version.parse("1.10"):
-            return False
-        if not hasattr(torch, "autocast"):
-            return False
-
-        return True
-    else:
+    if not is_torch_available():
         return False
+
+    import torch
+
+    # since currently no utility function is available we build our own.
+    # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
+    # with additional check for torch version
+    # to succeed:
+    # 1. the hardware needs to support bf16 (arch >= Ampere)
+    # 2. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
+    # 3. CUDA >= 11
+    # 4. torch.autocast exists
+    # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
+    # really only correct for the 0th gpu (or currently set default device if different from 0)
+
+    if not torch.cuda.is_available() or torch.version.cuda is None:
+        return False
+    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+        return False
+    if int(torch.version.cuda.split(".")[0]) < 11:
+        return False
+    if version.parse(torch.__version__) < version.parse("1.10"):
+        return False
+    if not hasattr(torch, "autocast"):
+        return False
+
+    return True
+
+
+def is_torch_tf32_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if not torch.cuda.is_available() or torch.version.cuda is None:
+        return False
+    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+        return False
+    if int(torch.version.cuda.split(".")[0]) < 11:
+        return False
+    if version.parse(torch.__version__) < version.parse("1.7"):
+        return False
+
+    return True
 
 
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
@@ -718,6 +760,12 @@ PYTESSERACT_IMPORT_ERROR = """
 `pip install pytesseract`
 """
 
+# docstyle-ignore
+PYCTCDECODE_IMPORT_ERROR = """
+{0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
+`pip install pyctcdecode`
+"""
+
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -727,6 +775,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),

@@ -17,6 +17,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
+import contextlib
 import inspect
 import math
 import os
@@ -26,6 +27,7 @@ import shutil
 import sys
 import time
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -59,7 +61,7 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -239,7 +241,7 @@ class Trainer:
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
+        callbacks (List of :class:`~transformers.TrainerCallback`, `optional`):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
             detailed in :doc:`here <callback>`.
 
@@ -1434,19 +1436,26 @@ class Trainer:
 
             best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
             if os.path.exists(best_model_path):
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(best_model_path, map_location="cpu")
-                # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
+                if self.deepspeed:
+                    # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
+                    deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
+                    self.model = deepspeed_engine.module
+                    self.model_wrapped = deepspeed_engine
+                    self.deepspeed = deepspeed_engine
+                    self.optimizer = optimizer
+                    self.lr_scheduler = lr_scheduler
+                    self.deepspeed.load_checkpoint(
+                        self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+                    )
+                else:
+                    # We load the model state dict on the CPU to avoid an OOM error.
+                    state_dict = torch.load(best_model_path, map_location="cpu")
+                    # If the model is on the GPU, it still works!
+                    self._load_state_dict_in_model(state_dict)
             else:
                 logger.warn(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                     "on multiple nodes, you should activate `--save_on_each_node`."
-                )
-
-            if self.deepspeed:
-                self.deepspeed.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
         # add remaining tr_loss
@@ -1805,8 +1814,8 @@ class Trainer:
         """
         Prepares one :obj:`data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
         """
-        if isinstance(data, dict):
-            return type(data)(**{k: self._prepare_input(v) for k, v in data.items()})
+        if isinstance(data, Mapping):
+            return type(data)({k: self._prepare_input(v) for k, v in data.items()})
         elif isinstance(data, (tuple, list)):
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
@@ -1829,6 +1838,21 @@ class Trainer:
             inputs["mems"] = self._past
 
         return inputs
+
+    def autocast_smart_context_manager(self):
+        """
+        A helper wrapper that creates an appropriate context manager for :obj:`autocast` while feeding it the desired
+        arguments, depending on the situation.
+        """
+        if self.use_amp:
+            if version.parse(torch.__version__) >= version.parse("1.10"):
+                ctx_manager = autocast(dtype=self.amp_dtype)
+            else:
+                ctx_manager = autocast()
+        else:
+            ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
+
+        return ctx_manager
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
@@ -1856,10 +1880,7 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        if self.use_amp:
-            with autocast(dtype=self.amp_dtype):
-                loss = self.compute_loss(model, inputs)
-        else:
+        with self.autocast_smart_context_manager():
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
@@ -1970,6 +1991,9 @@ class Trainer:
                 # if false it will not be saved.
                 # This must be called on all ranks
                 self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
+
+            # save a deepspeed checkpoint as well (this is very fast)
+            self.deepspeed.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
@@ -2500,10 +2524,7 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    if self.use_amp:
-                        with autocast(dtype=self.amp_dtype):
-                            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                    else:
+                    with self.autocast_smart_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
@@ -2513,10 +2534,7 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    if self.use_amp:
-                        with autocast(dtype=self.amp_dtype):
-                            outputs = model(**inputs)
-                    else:
+                    with self.autocast_smart_context_manager():
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)

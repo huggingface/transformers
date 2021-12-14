@@ -201,14 +201,14 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
         patching_specs: List[PatchingSpec] = None,
         use_past: bool = False,
     ):
-        super().__init__(config, task=task, patching_specs=patching_specs)
+        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
         if not getattr(self._config, "pad_token_id", None):
             # TODO: how to do that better?
             self._config.pad_token_id = 0
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict({"input_ids": {0: "batch"}})
+        common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
             self.fill_with_past_key_values_(common_inputs, direction="inputs")
             common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
@@ -247,23 +247,23 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
             else:
                 import torch
 
-                batch = common_inputs["input_ids"].shape[0]
+                batch, seqlen = common_inputs["input_ids"].shape
+                # Not using the same length for past_key_values
+                past_key_values_length = seqlen + 2
+                past_shape = (
+                    batch,
+                    self.num_attention_heads,
+                    past_key_values_length,
+                    self._config.hidden_size // self.num_attention_heads,
+                )
                 ordered_inputs["past_key_values"] = [
-                    (
-                        torch.zeros(
-                            (batch, self.num_attention_heads, 1, self._config.hidden_size // self.num_attention_heads)
-                        ),
-                        torch.zeros(
-                            (batch, self.num_attention_heads, 1, self._config.hidden_size // self.num_attention_heads)
-                        ),
-                    )
-                    for _ in range(self.num_layers)
+                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
                 ]
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
             )
 
         return ordered_inputs

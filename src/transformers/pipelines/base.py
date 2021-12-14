@@ -644,11 +644,11 @@ class _ScikitCompat(ABC):
 
 PIPELINE_INIT_ARGS = r"""
     Arguments:
-        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+        model (:class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
             :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
             TensorFlow.
-        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             :class:`~transformers.PreTrainedTokenizer`.
         modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):

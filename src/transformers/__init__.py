@@ -44,6 +44,7 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
+    is_pyctcdecode_available,
     is_pytorch_quantization_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -92,6 +93,7 @@ _import_structure = {
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
         "DataCollatorWithPadding",
+        "DefaultDataCollator",
         "default_data_collator",
     ],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
@@ -116,6 +118,7 @@ _import_structure = {
         "is_flax_available",
         "is_psutil_available",
         "is_py3nvml_available",
+        "is_pyctcdecode_available",
         "is_scipy_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
@@ -244,12 +247,14 @@ _import_structure = {
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
+    "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
+    "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -308,6 +313,7 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
@@ -378,6 +384,7 @@ if is_sentencepiece_available():
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
     _import_structure["models.mbart50"].append("MBart50Tokenizer")
+    _import_structure["models.mluke"].append("MLukeTokenizer")
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
@@ -489,6 +496,7 @@ if is_vision_available():
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+    _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
@@ -950,6 +958,7 @@ if is_torch_available():
         [
             "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GPTJForCausalLM",
+            "GPTJForQuestionAnswering",
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
@@ -1035,6 +1044,7 @@ if is_torch_available():
             "LukeForEntityClassification",
             "LukeForEntityPairClassification",
             "LukeForEntitySpanClassification",
+            "LukeForMaskedLM",
             "LukeModel",
             "LukePreTrainedModel",
         ]
@@ -1128,6 +1138,21 @@ if is_torch_available():
     )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
+    )
+    _import_structure["models.perceiver"].extend(
+        [
+            "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PerceiverForImageClassificationConvProcessing",
+            "PerceiverForImageClassificationFourier",
+            "PerceiverForImageClassificationLearned",
+            "PerceiverForMaskedLM",
+            "PerceiverForMultimodalAutoencoding",
+            "PerceiverForOpticalFlow",
+            "PerceiverForSequenceClassification",
+            "PerceiverLayer",
+            "PerceiverModel",
+            "PerceiverPreTrainedModel",
+        ]
     )
     _import_structure["models.prophetnet"].extend(
         [
@@ -1920,6 +1945,7 @@ if is_flax_available():
             "FlaxBartPreTrainedModel",
         ]
     )
+
     _import_structure["models.beit"].extend(
         [
             "FlaxBeitForImageClassification",
@@ -1955,6 +1981,13 @@ if is_flax_available():
     )
     _import_structure["models.blenderbot"].extend(
         ["FlaxBlenderbotForConditionalGeneration", "FlaxBlenderbotModel", "FlaxBlenderbotPreTrainedModel"]
+    )
+    _import_structure["models.blenderbot_small"].extend(
+        [
+            "FlaxBlenderbotSmallForConditionalGeneration",
+            "FlaxBlenderbotSmallModel",
+            "FlaxBlenderbotSmallPreTrainedModel",
+        ]
     )
     _import_structure["models.clip"].extend(
         [
@@ -2079,6 +2112,7 @@ if TYPE_CHECKING:
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
         DataCollatorWithPadding,
+        DefaultDataCollator,
         default_data_collator,
     )
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -2107,6 +2141,7 @@ if TYPE_CHECKING:
         is_flax_available,
         is_psutil_available,
         is_py3nvml_available,
+        is_pyctcdecode_available,
         is_scipy_available,
         is_sentencepiece_available,
         is_sklearn_available,
@@ -2239,6 +2274,7 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
+    from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -2284,6 +2320,7 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
+    from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -2357,6 +2394,7 @@ if TYPE_CHECKING:
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
+        from .models.mluke import MLukeTokenizer
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
@@ -2440,6 +2478,7 @@ if TYPE_CHECKING:
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
+        from .models.perceiver import PerceiverFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
@@ -2823,6 +2862,7 @@ if TYPE_CHECKING:
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
+            GPTJForQuestionAnswering,
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
@@ -2892,6 +2932,7 @@ if TYPE_CHECKING:
             LukeForEntityClassification,
             LukeForEntityPairClassification,
             LukeForEntitySpanClassification,
+            LukeForMaskedLM,
             LukeModel,
             LukePreTrainedModel,
         )
@@ -2973,6 +3014,19 @@ if TYPE_CHECKING:
             PegasusForConditionalGeneration,
             PegasusModel,
             PegasusPreTrainedModel,
+        )
+        from .models.perceiver import (
+            PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PerceiverForImageClassificationConvProcessing,
+            PerceiverForImageClassificationFourier,
+            PerceiverForImageClassificationLearned,
+            PerceiverForMaskedLM,
+            PerceiverForMultimodalAutoencoding,
+            PerceiverForOpticalFlow,
+            PerceiverForSequenceClassification,
+            PerceiverLayer,
+            PerceiverModel,
+            PerceiverPreTrainedModel,
         )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3575,6 +3629,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tf_objects import *
 
     if is_flax_available():
+
         from .generation_flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
@@ -3661,6 +3716,11 @@ if TYPE_CHECKING:
             FlaxBlenderbotForConditionalGeneration,
             FlaxBlenderbotModel,
             FlaxBlenderbotPreTrainedModel,
+        )
+        from .models.blenderbot_small import (
+            FlaxBlenderbotSmallForConditionalGeneration,
+            FlaxBlenderbotSmallModel,
+            FlaxBlenderbotSmallPreTrainedModel,
         )
         from .models.clip import (
             FlaxCLIPModel,

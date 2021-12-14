@@ -1,4 +1,5 @@
 import collections
+import types
 
 import numpy as np
 
@@ -9,7 +10,7 @@ from ..file_utils import (
     is_torch_available,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline, PipelineException
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline, PipelineException
 
 
 if is_torch_available():
@@ -58,6 +59,8 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
                         f"If keyword argument `table` is a list of dictionaries, each dictionary should have a `table` "
                         f"and `query` key, but only dictionary has keys {table[0].keys()} `table` and `query` keys."
                     )
+            elif Dataset is not None and isinstance(table, Dataset) or isinstance(table, types.GeneratorType):
+                return table
             else:
                 raise ValueError(
                     f"Invalid input. Keyword argument `table` should be either of type `dict` or `list`, but "

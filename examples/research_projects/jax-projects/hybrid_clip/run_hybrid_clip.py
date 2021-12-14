@@ -20,7 +20,7 @@ The script can be used to train CLIP like models for languages other than englis
 a text encoder pre-trained in the desired language. Currently this script support the following vision
 and text models:
 Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://huggingface.co/models?filter=clip)
-Text models: BERT, ROBERTa (https://huggingface.co/models?filter=masked-lm)
+Text models: BERT, ROBERTa (https://huggingface.co/models?filter=fill-mask)
 """
 
 import json

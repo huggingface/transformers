@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import dataclasses
 from abc import ABC, abstractmethod
 from collections import OrderedDict
@@ -125,7 +126,7 @@ class OnnxConfig(ABC):
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
         common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
-        return common_outputs
+        return copy.deepcopy(common_outputs)
 
     @property
     def values_override(self) -> Optional[Mapping[str, Any]]:
@@ -174,10 +175,10 @@ class OnnxConfig(ABC):
     @property
     def atol_for_validation(self) -> float:
         """
-        What absolute tolerance value to use during model conversion validation
+        What absolute tolerance value to use during model conversion validation.
 
         Returns:
-            Float absolute tolerance value
+            Float absolute tolerance value.
         """
         return 1e-5
 
@@ -305,6 +306,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     @property
     def num_layers(self) -> int:
+        """
+        The number of layers attribute retrieved from the model config. Override this for model configs where the
+        number of layers attribute is not called `num_layers`.
+        """
         if not hasattr(self._config, "num_layers"):
             raise AttributeError(
                 "could not find the number of layers attribute in the model configuration, override the num_layers property of the model OnnxConfig to solve this"
@@ -313,6 +318,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     @property
     def num_attention_heads(self) -> int:
+        """
+        The number of attention heads attribute retrieved from the model config. Override this for model configs where
+        the number of attention heads attribute is not called `num_attention_heads`.
+        """
         if not hasattr(self._config, "num_attention_heads"):
             raise AttributeError(
                 "could not find the number of attention heads attribute in the model configuration, override the num_attention_heads property of the model OnnxConfig to solve this"
@@ -328,6 +337,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
 
+        # TODO: should we set seq_length = 1 when self.use_past = True?
         common_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
 
         if self.use_past:
@@ -336,18 +346,19 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             else:
                 import torch
 
-            batch = common_inputs["input_ids"].shape[0]
-            seqlen = common_inputs["input_ids"].shape[1]
+            batch, seqlen = common_inputs["input_ids"].shape
+            # Not using the same length for past_key_values
+            past_key_values_length = seqlen + 2
             shape = (
                 batch,
                 self.num_attention_heads,
-                seqlen,
+                past_key_values_length,
                 self._config.hidden_size // self.num_attention_heads,
             )
 
             if "attention_mask" in common_inputs:
                 common_inputs["attention_mask"] = torch.cat(
-                    [common_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+                    [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
                 )
 
             common_inputs["past_key_values"] = []
@@ -357,6 +368,15 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         return common_inputs
 
     def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+        """
+        Fill the input_or_ouputs mapping with past_key_values dynamic axes considering.
+
+        Args:
+            inputs_or_outputs: The mapping to fill.
+            direction: either "inputs" or "outputs", it specifies whether input_or_outputs is the input mapping or the
+                output mapping, this is important for axes naming.
+
+        """
         if direction not in ["inputs", "outputs"]:
             raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
 
@@ -383,7 +403,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        common_outputs = super(OnnxConfigWithPast, self).outputs
         # Renaming the outputs axes properly.
         for name, axes_names in common_outputs.items():
             sequence_name = "encoder_sequence" if "encoder" in name else "decoder_sequence"
@@ -393,6 +413,9 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 # We reset the value as the order in common_outputs (OrderedDict) is lost otherwise
                 else:
                     axes_names[axis_idx] = name
+        if self.use_past:
+            self.fill_with_past_key_values_(common_outputs, direction="outputs")
+
         return common_outputs
 
     @property
@@ -438,8 +461,9 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         )
 
         # Generate decoder inputs
+        decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, 1, is_pair, framework
+            tokenizer, batch_size, decoder_seq_length, is_pair, framework
         )
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
         common_inputs = dict(**encoder_inputs, **decoder_inputs)
@@ -451,7 +475,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 import torch
             batch = common_inputs["input_ids"].shape[0]
             encoder_seq_length = common_inputs["input_ids"].shape[1]
-            # decoder_seq_length = ordered_inputs["decoder_input_ids"].shape[1]
+            decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
             num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
             encoder_shape = (
                 batch,
@@ -459,12 +483,11 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                 encoder_seq_length,
                 self._config.hidden_size // num_encoder_attention_heads,
             )
-            # Here decoder_seq_length is 1 because only the last decoder_input_ids are used when using pre-computed
-            # past_key_values
             decoder_shape = (
                 batch,
                 num_decoder_attention_heads,
-                1,
+                # Not using the same length for past_key_values
+                decoder_seq_length + 3,
                 self._config.hidden_size // num_decoder_attention_heads,
             )
 

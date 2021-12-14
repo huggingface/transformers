@@ -1764,7 +1764,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
             >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
             >>> loss = outputs.loss
-            >>> prediction_logits = output.logits
+            >>> prediction_logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

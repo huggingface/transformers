@@ -138,11 +138,9 @@ def get_model_table_from_auto_modules():
     widths = [len(c) + 2 for c in columns]
     widths[0] = max([len(name) for name in model_names]) + 2
 
-    # Rst table per se
-    table = ".. rst-class:: center-aligned-table\n\n"
-    table += "+" + "+".join(["-" * w for w in widths]) + "+\n"
-    table += "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
-    table += "+" + "+".join(["=" * w for w in widths]) + "+\n"
+    # Build the table per se
+    table = "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
+    table += "|" + "|".join(["-" * w for w in widths]) + "|\n"
 
     check = {True: "✅", False: "❌"}
     for name in model_names:
@@ -156,26 +154,25 @@ def get_model_table_from_auto_modules():
             check[flax_models[prefix]],
         ]
         table += "|" + "|".join([_center_text(l, w) for l, w in zip(line, widths)]) + "|\n"
-        table += "+" + "+".join(["-" * w for w in widths]) + "+\n"
     return table
 
 
 def check_model_table(overwrite=False):
     """Check the model table in the index.rst is consistent with the state of the lib and maybe `overwrite`."""
     current_table, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.rst"),
-        start_prompt="    This table is updated automatically from the auto module",
-        end_prompt=".. toctree::",
+        filename=os.path.join(PATH_TO_DOCS, "index.mdx"),
+        start_prompt="<!--This table is updated automatically from the auto modules",
+        end_prompt="<!-- End table-->",
     )
     new_table = get_model_table_from_auto_modules()
 
     if current_table != new_table:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.rst"), "w", encoding="utf-8", newline="\n") as f:
+            with open(os.path.join(PATH_TO_DOCS, "index.mdx"), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [new_table] + lines[end_index:])
         else:
             raise ValueError(
-                "The model table in the `index.rst` has not been updated. Run `make fix-copies` to fix this."
+                "The model table in the `index.mdx` has not been updated. Run `make fix-copies` to fix this."
             )
 
 

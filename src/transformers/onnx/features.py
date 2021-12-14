@@ -1,7 +1,7 @@
 from functools import partial, reduce
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple, Type
 
-from .. import is_torch_available
+from .. import PretrainedConfig, is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
@@ -16,8 +16,11 @@ from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
+from ..utils import logging
 from .config import OnnxConfig
 
+
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 if is_torch_available():
     from transformers import PreTrainedModel
@@ -31,10 +34,25 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
     )
+else:
+    logger.warning(
+        "The ONNX export features are only supported for PyTorch, you will not be able to export models without it."
+    )
 
 
-def supported_features_mapping(*supported_features, onnx_config_cls=None):
-    """Generates the mapping between supported features and their corresponding OnnxConfig."""
+def supported_features_mapping(
+    *supported_features: str, onnx_config_cls: Type[OnnxConfig] = None
+) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
+    """
+    Generate the mapping between supported the features and their corresponding OnnxConfig for a given model.
+
+    Args:
+        *supported_features: The names of the supported features.
+        onnx_config_cls: The OnnxConfig class corresponding to the model.
+
+    Returns:
+        The dictionary mapping a feature to an OnnxConfig constructor.
+    """
     if onnx_config_cls is None:
         raise ValueError("A OnnxConfig class must be provided")
 
@@ -50,16 +68,19 @@ def supported_features_mapping(*supported_features, onnx_config_cls=None):
 
 
 class FeaturesManager:
-    _TASKS_TO_AUTOMODELS = {
-        "default": AutoModel,
-        "masked-lm": AutoModelForMaskedLM,
-        "causal-lm": AutoModelForCausalLM,
-        "seq2seq-lm": AutoModelForSeq2SeqLM,
-        "sequence-classification": AutoModelForSequenceClassification,
-        "token-classification": AutoModelForTokenClassification,
-        "multiple-choice": AutoModelForMultipleChoice,
-        "question-answering": AutoModelForQuestionAnswering,
-    }
+    if is_torch_available():
+        _TASKS_TO_AUTOMODELS = {
+            "default": AutoModel,
+            "masked-lm": AutoModelForMaskedLM,
+            "causal-lm": AutoModelForCausalLM,
+            "seq2seq-lm": AutoModelForSeq2SeqLM,
+            "sequence-classification": AutoModelForSequenceClassification,
+            "token-classification": AutoModelForTokenClassification,
+            "multiple-choice": AutoModelForMultipleChoice,
+            "question-answering": AutoModelForQuestionAnswering,
+        }
+    else:
+        _TASKS_TO_AUTOMODELS = {}
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
     _SUPPORTED_MODEL_TYPE = {
@@ -123,13 +144,6 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig,
         ),
-        "marian": supported_features_mapping(
-            "default",
-            "default-with-past",
-            "seq2seq-lm",
-            "seq2seq-lm-with-past",
-            onnx_config_cls=MarianOnnxConfig,
-        ),
         "longformer": supported_features_mapping(
             "default",
             "masked-lm",
@@ -164,22 +178,19 @@ class FeaturesManager:
         ),
         "gpt2": supported_features_mapping(
             "default",
+            "default-with-past",
             "causal-lm",
+            "causal-lm-with-past",
             "sequence-classification",
             "token-classification",
-            "default-with-past",
-            "causal-lm-with-past",
-            "sequence-classification-with-past",
-            "token-classification-with-past",
             onnx_config_cls=GPT2OnnxConfig,
         ),
         "gpt-neo": supported_features_mapping(
             "default",
-            "causal-lm",
-            "sequence-classification",
             "default-with-past",
+            "causal-lm",
             "causal-lm-with-past",
-            "sequence-classification-with-past",
+            "sequence-classification",
             onnx_config_cls=GPTNeoOnnxConfig,
         ),
         "layoutlm": supported_features_mapping(
@@ -196,7 +207,17 @@ class FeaturesManager:
     @staticmethod
     def get_supported_features_for_model_type(
         model_type: str, model_name: Optional[str] = None
-    ) -> Dict[str, OnnxConfig]:
+    ) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
+        """
+        Try to retrieve the feature -> OnnxConfig constructor map from the model type.
+
+        Args:
+            model_type: The model type to retrieve the supported features for.
+            model_name: The name attribute of the model object, only used for the exception message.
+
+        Returns:
+            The dictionary mapping each feature to a corresponding OnnxConfig constructor.
+        """
         model_type = model_type.lower()
         if model_type not in FeaturesManager._SUPPORTED_MODEL_TYPE:
             model_type_and_model_name = f"{model_type} ({model_name})" if model_name else model_type
@@ -212,7 +233,16 @@ class FeaturesManager:
         return feature.replace("-with-past", "")
 
     @staticmethod
-    def get_model_class_for_feature(feature: str):
+    def get_model_class_for_feature(feature: str) -> Type:
+        """
+        Attempt to retrieve an AutoModel class from a feature name.
+
+        Args:
+            feature: The feature required.
+
+        Returns:
+            The AutoModel class corresponding to the feature.
+        """
         task = FeaturesManager.feature_to_task(feature)
         if task not in FeaturesManager._TASKS_TO_AUTOMODELS:
             raise KeyError(
@@ -226,10 +256,11 @@ class FeaturesManager:
         Attempt to retrieve a model from a model's name and the feature to be enabled.
 
         Args:
-            feature: The feature required
-            model: The name of the model to export
+            feature: The feature required.
+            model: The name of the model to export.
 
         Returns:
+            The instance of the model.
 
         """
         model_class = FeaturesManager.get_model_class_for_feature(feature)
@@ -238,19 +269,18 @@ class FeaturesManager:
     @staticmethod
     def check_supported_model_or_raise(model: PreTrainedModel, feature: str = "default") -> Tuple[str, Callable]:
         """
-        Check whether or not the model has the requested features
+        Check whether or not the model has the requested features.
 
         Args:
-            model: The model to export
-            feature: The name of the feature to check if it is available
+            model: The model to export.
+            feature: The name of the feature to check if it is available.
 
         Returns:
-            (str) The type of the model (OnnxConfig) The OnnxConfig instance holding the model export properties
+            (str) The type of the model (OnnxConfig) The OnnxConfig instance holding the model export properties.
 
         """
         model_type = model.config.model_type.replace("_", "-")
         model_name = getattr(model, "name", "")
-        model_name = f"({model_name})" if model_name else ""
         model_features = FeaturesManager.get_supported_features_for_model_type(model_type, model_name=model_name)
         if feature not in model_features:
             raise ValueError(

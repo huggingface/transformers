@@ -18,6 +18,7 @@ Fine-tuning the library models for summarization.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
@@ -815,6 +816,13 @@ def main():
         # Print metrics
         desc = f"Predict Loss: {pred_metrics['loss']} | {rouge_desc})"
         logger.info(desc)
+
+        # save final metrics in json
+        if jax.process_index() == 0:
+            rouge_metrics = {f"test_{metric_name}": value for metric_name, value in rouge_metrics.items()}
+            path = os.path.join(training_args.output_dir, "test_results.json")
+            with open(path, "w") as f:
+                json.dump(rouge_metrics, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":

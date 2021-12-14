@@ -231,6 +231,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
+
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
             tokenizer, batch_size, seq_length, is_pair, framework
         )
@@ -245,8 +246,15 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
             else:
                 import torch
 
-                batch = common_inputs["input_ids"].shape[0]
-                past_shape = (batch, self.num_attention_heads, 1, self._config.hidden_size // self.num_attention_heads)
+                batch, seqlen = common_inputs["input_ids"].shape
+                # Not using the same length for past_key_values
+                past_key_values_length = seqlen + 2
+                past_shape = (
+                    batch,
+                    self.num_attention_heads,
+                    past_key_values_length,
+                    self._config.hidden_size // self.num_attention_heads,
+                )
                 ordered_inputs["past_key_values"] = [
                     (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
                 ]
@@ -254,7 +262,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, 1)], dim=1
+                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
             )
 
         return ordered_inputs
