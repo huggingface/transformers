@@ -29,10 +29,11 @@ jobs:
 
       - name: Setup environment
         run: |
+          pip install --upgrade pip
           sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
 
           pip install git+https://github.com/huggingface/doc-builder
-          pip install git+https://github.com/huggingface/transformers#egg=transformers[dev]
+          pip install .[dev]
 
           export TORCH_VERSION=$(python -c "from torch import version; print(version.__version__.split('+')[0])")
           pip install torch-scatter -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html
