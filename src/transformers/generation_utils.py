@@ -377,11 +377,11 @@ class GenerationMixin:
         # extract model specific input
         model_specific_kwarg_inputs = set(ENCODER_MODEL_INPUT_NAMES) & set(model_kwargs.keys())
 
-        # There are five possible scenarios
+        # There are 5 possible scenarios
         if inputs is not None and len(model_specific_kwarg_inputs) == 0:
             # 1. `inputs` are passed and no model-specific keyword inputs
             # -> return input
-            return inputs
+            return inputs, model_kwargs
         elif inputs is not None and len(model_specific_kwarg_inputs) > 0:
             # 2. `inputs` are passed as well as model-specific keyword inputs
             # -> not allowed, raise Error
@@ -394,11 +394,22 @@ class GenerationMixin:
         elif inputs is None and len(model_specific_kwarg_inputs) == 0:
             # 3. no `inputs` and no model-specific keyword inputs are passed
             # -> try to create `input_ids` from BOS
-            return self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
+            inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
+            return inputs, model_kwargs
         elif inputs is None and len(model_specific_kwarg_inputs) == 1:
             # 4. no `inputs` are passed and exactly one model-specific keyword input
             # -> return that model-specific keyword input tensor
-            return model_kwargs[model_specific_kwarg_inputs.pop()]
+            model_input_name = model_specific_kwarg_inputs.pop()
+
+            # make sure model is encoder decoder if not `input_ids`
+            if not self.config.is_encoder_decoder and model_input_name != "input_ids":
+                raise ValueError(
+                    f"If {model_input_name} is passed as model-specific keyword "
+                    "input then model has to be an encoder-decoder and not a "
+                    f"{self.__class__.__name__}."
+                )
+            inputs = model_kwargs.pop(model_input_name)
+            return inputs, model_kwargs
         else:
             # 5. no `inputs` are passed and multiple model-specific keyword inputs
             # -> not allowed, raise Error
@@ -906,9 +917,10 @@ class GenerationMixin:
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
-        # Define inputs, after those two lines `inputs` cannot be None
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
-        inputs = self._prepare_model_inputs(inputs, bos_token_id, **model_kwargs)
+        # Define inputs
+        inputs, model_kwargs = self._prepare_model_inputs(inputs, bos_token_id, **model_kwargs)
+        # Now `inputs` cannot be `None` and model_kwargs cannot contain any model inputs anymore
 
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
@@ -963,9 +975,6 @@ class GenerationMixin:
 
             if "encoder_outputs" not in model_kwargs or not isinstance(model_kwargs["encoder_outputs"], ModelOutput):
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
-        else:
-            if "inputs_embeds" in model_kwargs:
-                raise ValueError("For decoder-only generation, one must pass `input_ids`.")
 
         # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
         if max_length is None and max_new_tokens is not None:
