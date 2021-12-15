@@ -1190,8 +1190,8 @@ This model uses learned position embeddings. In other words, this model is not g
 the structure of images. As shown in the paper, this model can achieve a top-1 accuracy of 72.7 on ImageNet.
 
 :class:`~transformers.PerceiverForImageClassificationLearned` uses
-:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with :obj:`prep_type="conv1x1"`) to
-preprocess the input images, and
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with :obj:`prep_type="conv1x1"`)
+to preprocess the input images, and
 :class:`~transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to decode the latent
 representation of :class:`~transformers.PerceiverModel` into classification logits.
 """,
@@ -1329,8 +1329,8 @@ This model uses fixed 2D Fourier position embeddings. As shown in the paper, thi
 79.0 on ImageNet, and 84.5 when pre-trained on a large-scale dataset (i.e. JFT).
 
 :class:`~transformers.PerceiverForImageClassificationLearned` uses
-:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with :obj:`prep_type="pixels"`) to
-preprocess the input images, and
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with :obj:`prep_type="pixels"`)
+to preprocess the input images, and
 :class:`~transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to decode the latent
 representation of :class:`~transformers.PerceiverModel` into classification logits.
 """,
@@ -1730,11 +1730,11 @@ the same number of channels to make concatenation along the time dimension possi
 encoder.
 
 :class:`~transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` is used to decode the latent
-representation of :class:`~transformers.PerceiverModel`. This decoder uses each modality-specific decoder to construct queries. The
-decoder queries are created based on the inputs after preprocessing. However, autoencoding an entire video in a single
-forward pass is computationally infeasible, hence one only uses parts of the decoder queries to do cross-attention with
-the latent representation. This is determined by the subsampled indices for each modality, which can be provided as
-additional input to the forward pass of :class:`~transformers.PerceiverForMultimodalAutoencoding`.
+representation of :class:`~transformers.PerceiverModel`. This decoder uses each modality-specific decoder to construct
+queries. The decoder queries are created based on the inputs after preprocessing. However, autoencoding an entire video
+in a single forward pass is computationally infeasible, hence one only uses parts of the decoder queries to do
+cross-attention with the latent representation. This is determined by the subsampled indices for each modality, which
+can be provided as additional input to the forward pass of :class:`~transformers.PerceiverForMultimodalAutoencoding`.
 
 :class:`~transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` also pads the decoder queries of
 the different modalities to the same number of channels, in order to concatenate them along the time dimension. Next,
