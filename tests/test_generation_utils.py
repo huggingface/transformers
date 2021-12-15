@@ -31,7 +31,7 @@ if is_torch_available():
         BartTokenizer,
         GPT2LMHeadModel,
         GPT2Tokenizer,
-        Speech2TextModel,
+        Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
         VisionEncoderDecoderModel,
         top_k_top_p_filtering,
@@ -1733,13 +1733,13 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_generate_input_ids_as_kwarg(self):
         article = """I need input_ids to generate"""
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=15).to(torch_device)
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
         output_sequences_kwargs = model.generate(input_ids=input_ids).cpu()
         output_sequences = model.generate(input_ids).cpu()
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
-        self.assertEqual(output_sequences.shape, (1, 10))
+        self.assertEqual(output_sequences.shape, (1, 15))
 
     def test_generate_input_ids_as_encoder_kwarg(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -1773,31 +1773,33 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_generate_input_values_as_encoder_kwarg(self):
         input_values = floats_tensor((2, 250))
-        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-vision-encoder-decoder").to(
+        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder").to(
             torch_device
         )
-        output_sequences_kwargs = model.generate(input_values=input_values, max_length=10).cpu()
-        output_sequences = model.generate(input_values, max_length=10).cpu()
+        output_sequences_kwargs = model.generate(input_values=input_values, max_length=5).cpu()
+        output_sequences = model.generate(input_values, max_length=5).cpu()
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
-        self.assertEqual(output_sequences.shape, (1, 10))
+        self.assertEqual(output_sequences.shape, (2, 5))
 
-    def test_generate_input_vectors_as_encoder_kwarg(self):
-        input_vectors = floats_tensor((3, 20, 5))
-        model = Speech2TextModel.from_pretrained("hf-internal-testing/tiny-random-speech_to_text").to(torch_device)
-        output_sequences_kwargs = model.generate(input_vectors=input_vectors, max_length=10).cpu()
-        output_sequences = model.generate(input_vectors, max_length=10).cpu()
+    def test_generate_input_features_as_encoder_kwarg(self):
+        input_features = floats_tensor((3, 20, 24))
+        model = Speech2TextForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-random-speech_to_text"
+        ).to(torch_device)
+        output_sequences_kwargs = model.generate(input_features=input_features, max_length=5).cpu()
+        output_sequences = model.generate(input_features, max_length=5).cpu()
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
-        self.assertEqual(output_sequences.shape, (1, 10))
+        self.assertEqual(output_sequences.shape, (3, 5))
 
     def test_generate_pixel_values_as_encoder_kwarg(self):
         pixel_values = floats_tensor((2, 3, 30, 30))
         model = VisionEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-vision-encoder-decoder").to(
             torch_device
         )
-        output_sequences_kwargs = model.generate(input_vectors=pixel_values, max_length=10).cpu()
-        output_sequences = model.generate(pixel_values, max_length=10).cpu()
+        output_sequences_kwargs = model.generate(pixel_values=pixel_values, max_length=5).cpu()
+        output_sequences = model.generate(pixel_values, max_length=5).cpu()
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
-        self.assertEqual(output_sequences.shape, (1, 10))
+        self.assertEqual(output_sequences.shape, (2, 5))
