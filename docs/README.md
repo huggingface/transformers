@@ -109,7 +109,7 @@ Sections that were moved:
 
 Use the relative style to link to the new file so that the versioned docs continue to work.
 
-For an example of a rich moved section please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/master/docs/source/main_classes/trainer.mdx).
+For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/master/docs/source/main_classes/trainer.mdx).
 
 
 ## Preview the documentation in a pull request
