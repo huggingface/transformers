@@ -29,7 +29,7 @@ jobs:
 
       - name: Setup environment
         run: |
-          pip install --upgrade pip
+          pip install --upgrade pip!=21.3
           sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
 
           pip install git+https://github.com/huggingface/doc-builder
