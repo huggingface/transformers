@@ -810,15 +810,16 @@ class PerceiverModel(PerceiverPreTrainedModel):
             >>> # EXAMPLE 2: using the Perceiver to classify images
             >>> # - we define an ImagePreprocessor, which can be used to embed images
             >>> preprocessor=PerceiverImagePreprocessor(
-                            config,
-                            prep_type="conv1x1",
-                            spatial_downsample=1,
-                            out_channels=256,
-                            position_encoding_type="trainable",
-                            concat_or_add_pos="concat",
-                            project_pos_dim=256,
-                            trainable_position_encoding_kwargs=dict(num_channels=256, index_dims=config.image_size ** 2),
-                        )
+            ...              config,
+            ...              prep_type="conv1x1",
+            ...              spatial_downsample=1,
+            ...              out_channels=256,
+            ...              position_encoding_type="trainable",
+            ...              concat_or_add_pos="concat",
+            ...              project_pos_dim=256,
+            ...              trainable_position_encoding_kwargs=dict(num_channels=256, index_dims=config.image_size ** 2,
+            ...              ),
+            ... )
 
             >>> model = PerceiverModel(
             ...         config,
@@ -1188,10 +1189,11 @@ Example use of Perceiver for image classification, for tasks such as ImageNet.
 This model uses learned position embeddings. In other words, this model is not given any privileged information about
 the structure of images. As shown in the paper, this model can achieve a top-1 accuracy of 72.7 on ImageNet.
 
-`PerceiverForImageClassificationLearned` uses
-`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "conv1x1") to
-preprocess the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to
-decode the latent representation of `~transformers.PerceiverModel` into classification logits.
+:class:`~transformers.PerceiverForImageClassificationLearned` uses
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with :obj:`prep_type="conv1x1"`)
+to preprocess the input images, and
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to decode the latent
+representation of :class:`~transformers.PerceiverModel` into classification logits.
 """,
     PERCEIVER_START_DOCSTRING,
 )
@@ -1326,10 +1328,11 @@ Example use of Perceiver for image classification, for tasks such as ImageNet.
 This model uses fixed 2D Fourier position embeddings. As shown in the paper, this model can achieve a top-1 accuracy of
 79.0 on ImageNet, and 84.5 when pre-trained on a large-scale dataset (i.e. JFT).
 
-`PerceiverForImageClassificationLearned` uses
-`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "pixels") to
-preprocess the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to
-decode the latent representation of `~transformers.PerceiverModel` into classification logits.
+:class:`~transformers.PerceiverForImageClassificationLearned` uses
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with :obj:`prep_type="pixels"`)
+to preprocess the input images, and
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to decode the latent
+representation of :class:`~transformers.PerceiverModel` into classification logits.
 """,
     PERCEIVER_START_DOCSTRING,
 )
@@ -1461,10 +1464,11 @@ Example use of Perceiver for image classification, for tasks such as ImageNet.
 This model uses a 2D conv+maxpool preprocessing network. As shown in the paper, this model can achieve a top-1 accuracy
 of 82.1 on ImageNet.
 
-`PerceiverForImageClassificationLearned` uses
-`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "conv") to preprocess
-the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to decode the
-latent representation of `~transformers.PerceiverModel` into classification logits.
+:class:`~transformers.PerceiverForImageClassificationLearned` uses
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with :obj:`prep_type="conv"`) to
+preprocess the input images, and
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder` to decode the latent
+representation of :class:`~transformers.PerceiverModel` into classification logits.
 """,
     PERCEIVER_START_DOCSTRING,
 )
@@ -1592,10 +1596,11 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
 
 @add_start_docstrings(
     """
-Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI. `PerceiverForOpticalFlow` uses
-`transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type` = "patches") to
-preprocess the input images, and `transformers.models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder` to
-decode the latent representation of `~transformers.PerceiverModel`.
+Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI.
+:class:`~transformers.PerceiverForOpticalFlow` uses
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor` (with `prep_type="patches"`) to
+preprocess the input images, and :class:`~transformers.models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder`
+to decode the latent representation of :class:`~transformers.PerceiverModel`.
 
 As input, one concatenates 2 subsequent frames along the channel dimension and extract a 3 x 3 patch around each pixel
 (leading to 3 x 3 x 3 x 2 = 54 values for each pixel). Fixed Fourier position encodings are used to encode the position
@@ -1717,25 +1722,26 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     """
 Example use of Perceiver for multimodal (video) autoencoding, for tasks such as Kinetics-700.
 
-`PerceiverForMultimodalAutoencoding` uses
-`transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor` to preprocess the 3 modalities:
-images, audio and class labels. This preprocessor uses modality-specific preprocessors to preprocess every modality
-separately, after which they are concatenated. Trainable position embeddings are used to pad each modality to the same
-number of channels to make concatenation along the time dimension possible. Next, one applies the Perceiver encoder.
+:class:`~transformers.PerceiverForMultimodalAutoencoding` uses
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor` to preprocess the 3
+modalities: images, audio and class labels. This preprocessor uses modality-specific preprocessors to preprocess every
+modality separately, after which they are concatenated. Trainable position embeddings are used to pad each modality to
+the same number of channels to make concatenation along the time dimension possible. Next, one applies the Perceiver
+encoder.
 
-`transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` is used to decode the latent
-representation of `~transformers.PerceiverModel`. This decoder uses each modality-specific decoder to construct
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` is used to decode the latent
+representation of :class:`~transformers.PerceiverModel`. This decoder uses each modality-specific decoder to construct
 queries. The decoder queries are created based on the inputs after preprocessing. However, autoencoding an entire video
 in a single forward pass is computationally infeasible, hence one only uses parts of the decoder queries to do
 cross-attention with the latent representation. This is determined by the subsampled indices for each modality, which
-can be provided as additional input to the forward pass of `PerceiverForMultimodalAutoencoding`.
+can be provided as additional input to the forward pass of :class:`~transformers.PerceiverForMultimodalAutoencoding`.
 
-`transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` also pads the decoder queries of the
-different modalities to the same number of channels, in order to concatenate them along the time dimension. Next,
-cross-attention is performed with the latent representation of `PerceiverModel`.
+:class:`~transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder` also pads the decoder queries of
+the different modalities to the same number of channels, in order to concatenate them along the time dimension. Next,
+cross-attention is performed with the latent representation of :class:`~transformers.PerceiverModel`.
 
-Finally, `transformers.models.perceiver.modeling_perceiver.PerceiverMultiModalPostprocessor` is used to turn this
-tensor into an actual video. It first splits up the output into the different modalities, and then applies the
+Finally, :class:`~transformers.models.perceiver.modeling_perceiver.PerceiverMultiModalPostprocessor` is used to turn
+this tensor into an actual video. It first splits up the output into the different modalities, and then applies the
 respective postprocessor for each modality.
 
 Note that, by masking the classification label during evaluation (i.e. simply providing a tensor of zeros for the
