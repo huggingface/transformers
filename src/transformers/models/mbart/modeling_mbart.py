@@ -1665,10 +1665,10 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart
 class MBartForCausalLM(MBartPreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.model = MBartDecoderWrapper(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1793,7 +1793,7 @@ class MBartForCausalLM(MBartPreTrainedModel):
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
 
-            >>> last_hidden_states = outputs.last_hidden_state
+            >>> logits = outputs.logits
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

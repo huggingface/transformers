@@ -2335,6 +2335,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        **model_card_kwargs
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
@@ -2409,6 +2410,14 @@ class PushToHubMixin:
         )
         # Save the files in the cloned repo
         self.save_pretrained(repo_path_or_name)
+        if hasattr(self, "history") and hasattr(self, "create_model_card"):
+            # This is a Keras model and we might be able to fish out its History and make a model card out of it
+            base_model_card_args = {
+                "output_dir": repo_path_or_name,
+                "model_name": Path(repo_path_or_name).name,
+            }
+            base_model_card_args.update(model_card_kwargs)
+            self.create_model_card(**base_model_card_args)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
