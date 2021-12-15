@@ -1724,3 +1724,81 @@ class GenerationIntegrationTests(unittest.TestCase):
         # cannot generate from `inputs_embeds` for decoder only
         with self.assertRaises(ValueError):
             model.generate(inputs_embeds=inputs_embeds)
+
+    def test_generate_input_ids_as_kwarg(self):
+        article = """I need input_ids to generate"""
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        output_sequences_kwargs = model.generate(input_ids=input_ids)
+        output_sequences = model.generate(input_ids)
+
+        self.assertEqual(output_sequences, output_sequences_kwargs)
+        self.assertEqual(output_sequences.shape, (1, 10))
+
+    def test_generate_input_ids_as_encoder_kwarg(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=5).to(
+            torch_device
+        )
+        model.config.eos_token_id = None
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        output_sequences_kwargs = model.generate(input_ids=input_ids)
+        output_sequences = model.generate(input_ids)
+
+        self.assertEqual(output_sequences, output_sequences_kwargs)
+        self.assertEqual(output_sequences.shape, (1, 5))
+
+    def test_generate_inputs_and_encoder_kwargs(self):
+        article = """I need input_ids to generate"""
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        with self.assertRaises(ValueError):
+            model.generate(input_ids, input_ids=input_ids)
+
+    def test_generate_too_many_encoder_kwargs(self):
+        article = """I need input_ids to generate"""
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        with self.assertRaises(ValueError):
+            model.generate(input_ids=input_ids, input_values=input_ids)
+
+    def test_generate_input_values_as_encoder_kwarg(self):
+        article = """I need input_ids to generate"""
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        output_sequences_kwargs = model.generate(None, input_ids=input_ids)
+        output_sequences = model.generate(input_ids)
+
+        self.assertEqual(2, 3)
+        self.assertEqual(output_sequences, output_sequences_kwargs)
+        self.assertEqual(output_sequences.shape, (1, 10))
+
+    def test_generate_input_vectors_as_encoder_kwarg(self):
+        article = """I need input_ids to generate"""
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        output_sequences_kwargs = model.generate(None, input_ids=input_ids)
+        output_sequences = model.generate(input_ids)
+
+        self.assertEqual(2, 3)
+        self.assertEqual(output_sequences, output_sequences_kwargs)
+        self.assertEqual(output_sequences.shape, (1, 10))
+
+    def test_generate_pixel_values_as_encoder_kwarg(self):
+        article = """I need input_ids to generate"""
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        output_sequences_kwargs = model.generate(None, input_ids=input_ids)
+        output_sequences = model.generate(input_ids)
+
+        self.assertEqual(2, 3)
+        self.assertEqual(output_sequences, output_sequences_kwargs)
+        self.assertEqual(output_sequences.shape, (1, 10))
