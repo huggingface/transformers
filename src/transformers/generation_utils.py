@@ -405,8 +405,8 @@ class GenerationMixin:
         elif inputs is None and len(model_input_kwarg_names) == 1:
             # 4. no `inputs` are passed and exactly one model-specific keyword input
             # -> return that model-specific keyword input tensor
-            model_input_name, input_tensor = next(iter(model_kwargs.items()))
-            model_kwargs.pop(model_input_name)
+            model_input_name = model_input_kwarg_names.pop()
+            input_tensor = model_kwargs.pop(model_input_name)
 
             # make sure model is encoder decoder if not `input_ids`
             if not self.config.is_encoder_decoder and model_input_name != "input_ids":
