@@ -244,7 +244,7 @@ Follow these steps to start contributing:
    Finally run the following command from the root of the repository:
 
    ```bash
-   $ doc-builder build transformers docs/source/ --output_dir ~/tmp/test-build
+   $ doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
    ```
 
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
