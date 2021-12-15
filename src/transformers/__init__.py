@@ -176,6 +176,7 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.bertv2": [],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
@@ -707,6 +708,7 @@ if is_torch_available():
             "load_tf_weights_in_bert",
         ]
     )
+    _import_structure["models.bertv2"].extend(["BertV2Model"]),
     _import_structure["models.bert_generation"].extend(
         [
             "BertGenerationDecoder",
