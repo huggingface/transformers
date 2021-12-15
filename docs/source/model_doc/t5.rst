@@ -191,10 +191,8 @@ language modeling head on top of the decoder.
         labels = target_encoding.input_ids
 
         # replace padding token id's of the labels by -100
-        labels = [
-                   [(label if label != tokenizer.pad_token_id else -100) for label in labels_example] for labels_example in labels
-        ] 
         labels = torch.tensor(labels)
+        labels[labels == tokenizer.pad_token_id] = -100
 
         # forward pass
         loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss
