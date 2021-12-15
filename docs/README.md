@@ -244,8 +244,6 @@ Multi-line code blocks can be useful for displaying examples. They are done betw
 ```
 ````
 
-In a docstring, the line before the code block will be considered as the example title. It should be something simple like "Example:".
-
 We follow the [doctest](https://docs.python.org/3/library/doctest.html) syntax for the examples to automatically test
 the results stay consistent with the library.
 
