@@ -1002,8 +1002,12 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
             >>> tokenizer = PerceiverTokenizer.from_pretrained('deepmind/language-perceiver')
             >>> model = PerceiverForMaskedLM.from_pretrained('deepmind/language-perceiver')
 
-            >>> inputs = tokenizer("The capital of France is [MASK].", padding="max_length", return_tensors="pt")
-            >>> labels = tokenizer("The capital of France is Paris.", padding="max_length", return_tensors="pt")["input_ids"]
+            >>> # training
+            >>> text = "This is an incomplete sentence where some words are missing."
+            >>> inputs = tokenizer(text, padding="max_length", return_tensors="pt")
+            >>> # mask " missing."
+            >>> inputs['input_ids'][0, 52:61] = tokenizer.mask_token_id
+            >>> labels = tokenizer(text, padding="max_length", return_tensors="pt").input_ids
 
             >>> outputs = model(**inputs, labels=labels)
             >>> loss = outputs.loss
