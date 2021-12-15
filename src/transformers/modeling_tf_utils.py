@@ -47,7 +47,6 @@ from .file_utils import (
     is_remote_url,
 )
 from .generation_tf_utils import TFGenerationMixin
-from .modelcard import TrainingSummary
 from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
@@ -940,6 +939,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dataset: Optional[Union[str, List[str]]] = None,
         dataset_args: Optional[Union[str, List[str]]] = None,
     ):
+        # Avoids a circular import by doing this when necessary.
+        from .modelcard import TrainingSummary
+
         training_summary = TrainingSummary.from_keras(
             self,
             keras_history=self.history,
