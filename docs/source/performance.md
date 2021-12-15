@@ -162,6 +162,29 @@ Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
 ## Software
 
+
+### Anatomy of Model's Operations
+
+Transformers architecture includes 3 main groups of operations grouped below by compute-intensity.
+
+1. **Tensor Contractions**
+
+    Linear layers and components of Multi-Head Attention all do batched **matrix-matrix multiplications**. These operations are the most compute-intensive part of training a transformer.
+
+2. **Statistical Normalizations**
+
+    Softmax and layer normalization are less compute-intensive than tensor contractions, and involve one or more **reduction operations**, the result of which is then applied via a map.
+
+3. **Element-wise Operators**
+
+    These are the remaining operators: **biases, dropout, activations, and residual connections**. These are the least compute-intensive operations.
+
+This knowledge can be helpful to know when analyzing performance bottlenecks.
+
+This summary is derived from [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+
+
+
 ### Anatomy of Model's Memory
 
 The components on GPU memory are the following:
