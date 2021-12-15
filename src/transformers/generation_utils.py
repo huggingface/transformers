@@ -685,7 +685,6 @@ class GenerationMixin:
     @torch.no_grad()
     def generate(
         self,
-        # input_ids: Optional[torch.LongTensor] = None,
         inputs: Optional[torch.Tensor] = None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
@@ -734,9 +733,9 @@ class GenerationMixin:
 
         Parameters:
 
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                The sequence used as a prompt for the generation. If :obj:`None` the method initializes it with
-                :obj:`bos_token_id` and a batch size of 1.
+            inputs (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)` or :obj:`(batch_size, sequence_length, feature_dim)`, `optional`)
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If :obj:`None` the
+                method initializes it with :obj:`bos_token_id` and a batch size of 1.
             max_length (:obj:`int`, `optional`, defaults to :obj:`model.config.max_length`):
                 The maximum length of the sequence to be generated.
             max_new_tokens (:obj:`int`, `optional`, defaults to None):
