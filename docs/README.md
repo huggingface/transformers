@@ -86,6 +86,32 @@ It should build the static app that will be available under `/docs/_build/html`
 Accepted files are reStructuredText (.rst) and Markdown (.md). Create a file with its extension and put it
 in the source directory. You can then link it to the toc-tree by putting the filename without the extension.
 
+## Renaming section headers and moving sections
+
+It helps to keep the old links working when renaming section header and/or moving sections from one document to another. This is because the old links are likely to be used in Issues, Forums and Social media and it'd be make for a much more superior user experience if users reading those months later could still easily navigate to the originally intended information.
+
+Therefore we simply keep a little map of moved sections at the end of the document where the original section was. The key is to preserve the original anchor.
+
+So if you renamed a section from: "Section A" to "Section B", then you can add at the end of the file:
+
+```
+Sections that were moved:
+
+[ <a href="#section-b">Section A</a><a id="section-a"></a> ]
+```
+and of course if you moved it to another file, then:
+
+```
+Sections that were moved:
+
+[ <a href="../new-file#section-b">Section A</a><a id="section-a"></a> ]
+```
+
+Use the relative style to link to the new file so that the versioned docs continue to work.
+
+For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/master/docs/source/main_classes/trainer.mdx).
+
+
 ## Preview the documentation in a pull request
 
 Once you have made your pull request, you can check what the documentation will look like after it's merged by
