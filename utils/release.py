@@ -31,7 +31,6 @@ REPLACE_PATTERNS = {
 REPLACE_FILES = {
     "init": "src/transformers/__init__.py",
     "setup": "setup.py",
-    "doc": "docs/source/conf.py",
 }
 README_FILE = "README.md"
 CUSTOM_JS_FILE = "docs/source/_static/js/custom.js"
