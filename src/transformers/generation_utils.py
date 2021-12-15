@@ -377,33 +377,36 @@ class GenerationMixin:
         """
         This function extracts the model-specific `inputs` for generation.
         """
-        # extract model specific input
-        model_specific_kwarg_inputs = set(ENCODER_MODEL_INPUT_NAMES) & set(model_kwargs.keys())
+        # filter model input names that are `None`
+        model_kwargs = {k: v for k, v in model_kwargs.items() if k not in ENCODER_MODEL_INPUT_NAMES or v is not None}
+        # extract keyword arguments that are model input specific
+        model_input_kwarg_names = set(ENCODER_MODEL_INPUT_NAMES) & set(model_kwargs.keys())
 
         # There are 5 possible scenarios
-        if inputs is not None and len(model_specific_kwarg_inputs) == 0:
+        if inputs is not None and len(model_input_kwarg_names) == 0:
             # 1. `inputs` are passed and no model-specific keyword inputs
             # -> return input
             model_input_name = None
-            return inputs, model_input_name
-        elif inputs is not None and len(model_specific_kwarg_inputs) > 0:
+            return inputs, model_input_name, model_kwargs
+        elif inputs is not None and len(model_input_kwarg_names) > 0:
             # 2. `inputs` are passed as well as model-specific keyword inputs
             # -> not allowed, raise Error
             raise ValueError(
                 f"`inputs`: {inputs}` were passed alongside "
-                f"{model_specific_kwarg_inputs} which is not allowed."
-                f"Make sure to not pass any of {model_specific_kwarg_inputs} "
+                f"{model_input_kwarg_names} which is not allowed."
+                f"Make sure to not pass any of {model_input_kwarg_names} "
                 "when `inputs` is defined."
             )
-        elif inputs is None and len(model_specific_kwarg_inputs) == 0:
+        elif inputs is None and len(model_input_kwarg_names) == 0:
             # 3. no `inputs` and no model-specific keyword inputs are passed
             # -> try to create `input_ids` from BOS
-            inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
-            return inputs, "input_ids"
-        elif inputs is None and len(model_specific_kwarg_inputs) == 1:
+            input_tensor = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
+            return input_tensor, "input_ids", model_kwargs
+        elif inputs is None and len(model_input_kwarg_names) == 1:
             # 4. no `inputs` are passed and exactly one model-specific keyword input
             # -> return that model-specific keyword input tensor
-            model_input_name = model_specific_kwarg_inputs.pop()
+            model_input_name, input_tensor = next(iter(model_kwargs.items()))
+            model_kwargs.pop(model_input_name)
 
             # make sure model is encoder decoder if not `input_ids`
             if not self.config.is_encoder_decoder and model_input_name != "input_ids":
@@ -412,14 +415,14 @@ class GenerationMixin:
                     "input then model has to be an encoder-decoder and not a "
                     f"{self.__class__.__name__}."
                 )
-            return model_kwargs.pop(model_input_name), model_input_name
+            return input_tensor, model_input_name, model_kwargs
         else:
             # 5. no `inputs` are passed and multiple model-specific keyword inputs
             # -> not allowed, raise Error
             raise ValueError(
                 f"Can only pass one of {ENCODER_MODEL_INPUT_NAMES}, "
-                f"but passed {model_specific_kwarg_inputs}."
-                f"Make sure to only pass one of {model_specific_kwarg_inputs}."
+                f"but passed {model_input_kwarg_names}."
+                f"Make sure to only pass one of {model_input_kwarg_names}."
             )
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
@@ -976,7 +979,7 @@ class GenerationMixin:
         # model_input_name is defined if model-specific keyword input is passed
         # otherwise model_input_name is None
         # all model-specific keyword inputs are removed from `model_kwargs`
-        inputs_tensor, model_input_name = self._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
+        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
         batch_size = inputs_tensor.shape[0]
 
         # 3. Define other model kwargs
