@@ -1597,7 +1597,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
-            logtis_processor=logits_processor,
+            logits_processor=logits_processor,
         )
 
         if num_beams == 1:
