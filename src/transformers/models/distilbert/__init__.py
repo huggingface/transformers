@@ -36,6 +36,7 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_distilbert"] = [
         "DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "DistilBertForCausalLM",
         "DistilBertForMaskedLM",
         "DistilBertForMultipleChoice",
         "DistilBertForQuestionAnswering",
@@ -84,6 +85,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DistilBertForCausalLM,
             DistilBertForMaskedLM,
             DistilBertForMultipleChoice,
             DistilBertForQuestionAnswering,
