@@ -130,58 +130,6 @@ def pre_release_work(patch=False):
         clean_master_ref_in_model_list()
 
 
-def update_custom_js(version, patch=False):
-    """Update the version table in the custom.js file."""
-    with open(CUSTOM_JS_FILE, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-    index = 0
-
-    # First let's put the right version
-    while not lines[index].startswith("const stableVersion ="):
-        index += 1
-    lines[index] = f'const stableVersion = "v{version}"\n'
-
-    # Then update the dictionary
-    while not lines[index].startswith("const versionMapping = {"):
-        index += 1
-
-    # We go until the end
-    while not lines[index].startswith("}"):
-        search = re.search(r'^(\s+)"": "([^"]+) \(stable\)",\s*\n$', lines[index])
-        if search is not None:
-            indent, old_versions = search.groups()
-            if patch:
-                # We add the patch to the current stable doc
-                old_versions = f"{old_versions}/v{version}"
-                lines[index] = f'{indent}"": "{old_versions} (stable)",\n'
-            else:
-                # We only keep the last of the micro versions associated to that particular release
-                old_version = old_versions.split("/")[-1]
-                lines[index] = f'{indent}"": "v{version} (stable)",\n{indent}"{old_version}": "{old_versions}",\n'
-        index += 1
-
-    with open(CUSTOM_JS_FILE, "w", encoding="utf-8", newline="\n") as f:
-        lines = f.writelines(lines)
-
-
-def update_deploy_sh(version, commit):
-    with open(DEPLOY_SH_FILE, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-
-    index = len(lines) - 1
-    while len(lines[index]) <= 1:
-        index -= 1
-
-    search = re.search(r'^deploy_doc\s+"(\S+)"\s+#\s+(v\S+)\s+', lines[index])
-    old_commit, old_version = search.groups()
-    lines[
-        index
-    ] = f'deploy_doc "{old_commit}" {old_version}\ndeploy_doc "{commit}"  # v{version} Latest stable release'
-
-    with open(DEPLOY_SH_FILE, "w", encoding="utf-8", newline="\n") as f:
-        f.writelines(lines)
-
-
 def post_release_work():
     """Do all the necesarry post-release steps."""
     # First let's get the current version
@@ -202,10 +150,6 @@ def post_release_work():
 
     print(f"Updating version to {version}.")
     global_version_update(version)
-
-    print("Updating doc deployment and version navbar in the source documentation.")
-    update_custom_js(current_version)
-    update_deploy_sh(current_version, commit)
 
 
 def post_patch_work():
@@ -236,10 +180,6 @@ def post_patch_work():
             version = default_version
         if len(commit) == 0:
             commit = version_commit
-
-    print("Updating doc deployment and version navbar in the source documentation.")
-    update_custom_js(version, patch=True)
-    update_deploy_sh(version, commit)
 
 
 if __name__ == "__main__":
