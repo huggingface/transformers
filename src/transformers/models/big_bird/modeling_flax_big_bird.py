@@ -266,7 +266,7 @@ class FlaxBigBirdSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask=None,
+        layer_head_mask,
         deterministic=True,
         output_attentions: bool = False,
     ):
@@ -1134,7 +1134,7 @@ class FlaxBigBirdAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask=None,
+        layer_head_mask,
         deterministic=True,
         output_attentions: bool = False,
     ):
@@ -1222,7 +1222,7 @@ class FlaxBigBirdLayer(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask=None,
+        layer_head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
@@ -1474,6 +1474,9 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
 
+        if head_mask is None:
+            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
@@ -1485,7 +1488,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
-            head_mask,
+            jnp.array(head_mask, dtype="i4"),
             not train,
             output_attentions,
             output_hidden_states,

@@ -244,7 +244,7 @@ class FlaxBertSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask=None,
+        layer_head_mask,
         deterministic=True,
         output_attentions: bool = False,
     ):
@@ -331,7 +331,7 @@ class FlaxBertAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask=None,
+        layer_head_mask,
         deterministic=True,
         output_attentions: bool = False,
     ):
@@ -407,7 +407,7 @@ class FlaxBertLayer(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask=None,
+        layer_head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
@@ -671,7 +671,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones_like(input_ids)
 
         if head_mask is None:
-            head_mask = jnp.ones([self.config.num_hidden_layers, self.config.num_attention_heads])
+            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
         # Handle any PRNG if needed
         rngs = {}
