@@ -69,6 +69,10 @@ import shutil
 from distutils.core import Command
 from pathlib import Path
 
+import site
+import sys
+site.ENABLE_USER_SITE = "--user" in sys.argv[1:]
+
 from setuptools import find_packages, setup
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
