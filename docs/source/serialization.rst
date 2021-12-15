@@ -453,7 +453,7 @@ Models with transformer based architecture, i.e.,
 such as `distilBERT <https://huggingface.co/transformers/v4.0.1/model_doc/distilbert.html>`_ 
 and `roBERTa <https://huggingface.co/roberta-base>`_ will run best in Inf1 for non-generative tasks such as Extractive Question Answering, Sequence Classification, NER. 
 Alternatively, text generation tasks can be adapted to run on Inf1, according to this tutorial using `MarianMT <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html>`_.
-More information about models that perform well out of the box on Inferentia can be found in the `Model Architecture Fit section of the Neuron documentation <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia>`_.
+More information about models that can be converted out of the box for Inf1 can be found in the `Model Architecture Fit section of the Neuron documentation <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia>`_.
 
 
 Dependencies
