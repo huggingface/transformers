@@ -359,11 +359,54 @@ BeamSearchOutput = Union[BeamSearchEncoderDecoderOutput, BeamSearchDecoderOnlyOu
 BeamSampleOutput = Union[BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput]
 
 
+ENCODER_MODEL_INPUT_NAMES = ["input_ids", "inputs_embeds", "input_values", "input_features", "pixel_values"]
+
+
 class GenerationMixin:
     """
     A class containing all of the functions supporting generation, to be used as a mixin in
     :class:`~transformers.PreTrainedModel`.
     """
+
+    def _prepare_model_inputs(
+        self, inputs: Optional[torch.Tensor] = None, bos_token_id: Optional[int] = None, **model_kwargs
+    ) -> torch.Tensor:
+        """
+        This function extracts the model-specific `inputs` for generation.
+        """
+        # extract model specific input
+        model_specific_kwarg_inputs = set(ENCODER_MODEL_INPUT_NAMES) & set(model_kwargs.keys())
+
+        # There are five possible scenarios
+        if inputs is not None and len(model_specific_kwarg_inputs) == 0:
+            # 1. `inputs` are passed and no model-specific keyword inputs
+            # -> return input
+            return inputs
+        elif inputs is not None and len(model_specific_kwarg_inputs) > 0:
+            # 2. `inputs` are passed as well as model-specific keyword inputs
+            # -> not allowed, raise Error
+            raise ValueError(
+                f"`inputs`: {inputs}` were passed alongside "
+                f"{model_specific_kwarg_inputs} which is not allowed."
+                f"Make sure to not pass any of {model_specific_kwarg_inputs} "
+                "when `inputs` is defined."
+            )
+        elif inputs is None and len(model_specific_kwarg_inputs) == 0:
+            # 3. no `inputs` and no model-specific keyword inputs are passed
+            # -> try to create `input_ids` from BOS
+            return self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
+        elif inputs is None and len(model_specific_kwarg_inputs) == 1:
+            # 4. no `inputs` are passed and exactly one model-specific keyword input
+            # -> return that model-specific keyword input tensor
+            return model_kwargs[model_specific_kwarg_inputs.pop()]
+        else:
+            # 5. no `inputs` are passed and multiple model-specific keyword inputs
+            # -> not allowed, raise Error
+            raise ValueError(
+                f"Can only pass one of {ENCODER_MODEL_INPUT_NAMES}, "
+                f"but passed {model_specific_kwarg_inputs}."
+                f"Make sure to only pass one of {model_specific_kwarg_inputs}."
+            )
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
         """
@@ -393,29 +436,22 @@ class GenerationMixin:
 
     def _prepare_attention_mask_for_generation(
         self,
-        input_ids: torch.Tensor,
+        inputs: torch.Tensor,
         pad_token_id: int,
         eos_token_id: int,
-        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.LongTensor:
-
-        # First if `inputs_embeds` are given, but no `attention_mask` assume that full attention_mask is used
-        if inputs_embeds is not None:
-            return torch.ones((inputs_embeds.shape[0], inputs_embeds.shape[1]), dtype=torch.long, device=self.device)
-
-        # Otherwise, use `input_ids`
-        is_pad_token_in_inputs_ids = (pad_token_id is not None) and (pad_token_id in input_ids)
+        is_input_ids = isinstance(inputs, torch.LongTensor) and len(inputs.shape) == 2
+        is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
-        if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
-            return input_ids.ne(pad_token_id).long()
+        # Check if input is input_ids and padded -> only then is attention_mask defined
+        if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
+            return inputs.ne(pad_token_id).long()
         else:
-            return input_ids.new_ones(input_ids.shape, dtype=torch.long)
+            return torch.ones(inputs.shape[:2], dtype=torch.long, device=self.device)
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
-        self, input_ids: torch.LongTensor, model_kwargs
-    ) -> Dict[str, Any]:
+    def _prepare_encoder_decoder_kwargs_for_generation(self, inputs: torch.Tensor, model_kwargs) -> Dict[str, Any]:
         if "encoder_outputs" not in model_kwargs:
             # retrieve encoder hidden states
             encoder = self.get_encoder()
@@ -424,7 +460,7 @@ class GenerationMixin:
                 for argument, value in model_kwargs.items()
                 if not (argument.startswith("decoder_") or argument.startswith("cross_attn"))
             }
-            model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
+            model_kwargs["encoder_outputs"]: ModelOutput = encoder(inputs, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
@@ -649,7 +685,8 @@ class GenerationMixin:
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        # input_ids: Optional[torch.LongTensor] = None,
+        inputs: Optional[torch.Tensor] = None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
         do_sample: Optional[bool] = None,
@@ -870,6 +907,9 @@ class GenerationMixin:
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
+        # Define inputs, after those two lines `inputs` cannot be None
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+        inputs = self._prepare_model_inputs(inputs, bos_token_id, **model_kwargs)
 
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
@@ -879,7 +919,6 @@ class GenerationMixin:
         )
 
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
-        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
@@ -894,15 +933,10 @@ class GenerationMixin:
         model_kwargs["output_attentions"] = output_attentions
         model_kwargs["output_hidden_states"] = output_hidden_states
 
-        if input_ids is None and "inputs_embeds" not in model_kwargs:
-            # init `input_ids` with bos_token_id
-            input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
-
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
-            inputs_embeds = model_kwargs.get("inputs_embeds", None)
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                input_ids, pad_token_id, eos_token_id, inputs_embeds
+                inputs, pad_token_id, eos_token_id
             )
 
         # special case if pad_token_id is not defined
@@ -911,35 +945,32 @@ class GenerationMixin:
             pad_token_id = eos_token_id
 
         # Storing encoder_input_ids for logits_processor that could use them
-        encoder_input_ids = input_ids if self.config.is_encoder_decoder else None
+        encoder_input_ids = inputs if self.config.is_encoder_decoder else None
 
         if self.config.is_encoder_decoder:
-            # add encoder_outputs to model_kwargs
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+            # inputs are consumed to produce `encoder_outputs`
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(inputs, model_kwargs)
 
-            # set input_ids as decoder_input_ids
+            # If model is encoder-decoder then the input to the model has to be
+            # a token id tensor
             if "decoder_input_ids" in model_kwargs:
-                input_ids = model_kwargs.pop("decoder_input_ids")
+                inputs = model_kwargs.pop("decoder_input_ids")
             else:
                 # if word embeddings are provided directly, infere the batch size from it
-                batch_size = input_ids.shape[0] if input_ids is not None else model_kwargs["inputs_embeds"].shape[0]
-                input_ids = self._prepare_decoder_input_ids_for_generation(
+                batch_size = inputs.shape[0]
+                inputs = self._prepare_decoder_input_ids_for_generation(
                     batch_size, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
                 )
 
             if "encoder_outputs" not in model_kwargs or not isinstance(model_kwargs["encoder_outputs"], ModelOutput):
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
         else:
-            if "inputs_embeds" in model_kwargs and input_ids is None:
+            if "inputs_embeds" in model_kwargs:
                 raise ValueError("For decoder-only generation, one must pass `input_ids`.")
 
         # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
         if max_length is None and max_new_tokens is not None:
-            max_length = (
-                max_new_tokens + input_ids.shape[-1]
-                if input_ids is not None
-                else max_length + model_kwargs["inputs_embeds"].shape[1]
-            )
+            max_length = max_new_tokens + inputs.shape[1]
         elif max_length is not None and max_new_tokens is not None:
             # Both are set, this is odd, raise a warning
             warnings.warn(
@@ -952,10 +983,10 @@ class GenerationMixin:
         # default to config if still None
         max_length = max_length if max_length is not None else self.config.max_length
 
-        if input_ids.shape[-1] >= max_length:
+        if inputs.shape[1] >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
-                f"Input length of {input_ids_string} is {input_ids.shape[-1]}, but ``max_length`` is set to {max_length}. "
+                f"Input length of {input_ids_string} is {inputs.shape[-1]}, but ``max_length`` is set to {max_length}. "
                 "This can lead to unexpected behavior. You should consider increasing ``config.max_length`` or ``max_length``."
             )
 
@@ -1004,7 +1035,7 @@ class GenerationMixin:
 
             # greedy search
             return self.greedy_search(
-                input_ids,
+                inputs,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
@@ -1021,9 +1052,9 @@ class GenerationMixin:
                 top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
             )
 
-            # expand input_ids with `num_return_sequences` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids,
+            # expand inputs with `num_return_sequences` additional sequences per batch
+            inputs, model_kwargs = self._expand_inputs_for_generation(
+                inputs,
                 expand_size=num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
@@ -1031,7 +1062,7 @@ class GenerationMixin:
 
             # sample
             return self.sample(
-                input_ids,
+                inputs,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
@@ -1044,8 +1075,6 @@ class GenerationMixin:
             )
 
         elif is_beam_gen_mode:
-            batch_size = input_ids.shape[0]
-
             length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
             early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
 
@@ -1056,7 +1085,7 @@ class GenerationMixin:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
             beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
+                batch_size=inputs.shape[0],
                 num_beams=num_beams,
                 device=self.device,
                 length_penalty=length_penalty,
@@ -1064,11 +1093,11 @@ class GenerationMixin:
                 num_beam_hyps_to_keep=num_return_sequences,
             )
             # interleave with `num_beams`
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+            inputs, model_kwargs = self._expand_inputs_for_generation(
+                inputs, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
             )
             return self.beam_search(
-                input_ids,
+                inputs,
                 beam_scorer,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
@@ -1085,13 +1114,11 @@ class GenerationMixin:
                 top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
             )
 
-            batch_size = input_ids.shape[0] * num_return_sequences
-
             length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
             beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
+                batch_size=inputs.shape[0] * num_return_sequences,
                 num_beams=num_beams,
                 device=self.device,
                 length_penalty=length_penalty,
@@ -1099,15 +1126,15 @@ class GenerationMixin:
             )
 
             # interleave with `num_beams * num_return_sequences`
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids,
+            inputs, model_kwargs = self._expand_inputs_for_generation(
+                inputs,
                 expand_size=num_beams * num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
 
             return self.beam_sample(
-                input_ids,
+                inputs,
                 beam_scorer,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
@@ -1121,8 +1148,6 @@ class GenerationMixin:
             )
 
         elif is_group_beam_gen_mode:
-            batch_size = input_ids.shape[0]
-
             length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
             early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
 
@@ -1136,7 +1161,7 @@ class GenerationMixin:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
             diverse_beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
+                batch_size=inputs.shape[0],
                 num_beams=num_beams,
                 max_length=stopping_criteria.max_length,
                 device=self.device,
@@ -1146,11 +1171,11 @@ class GenerationMixin:
                 num_beam_groups=num_beam_groups,
             )
             # interleave with `num_beams`
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+            inputs, model_kwargs = self._expand_inputs_for_generation(
+                inputs, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
             )
             return self.group_beam_search(
-                input_ids,
+                inputs,
                 diverse_beam_scorer,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
