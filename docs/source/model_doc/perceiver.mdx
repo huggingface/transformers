@@ -81,9 +81,10 @@ Tips:
 
 - The quickest way to get started with the Perceiver is by checking the [tutorial
   notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Perceiver).
-- Note that the models available in the library only showcase some examples of what you can do with the Perceiver.
-  There are many more use cases, including question answering,
-named-entity recognition, object detection, audio classification, video classification, etc.
+- Refer to the [blog post](https://huggingface.co/blog/perceiver) if you want to fully understand how the model works and
+is implemented in the library. Note that the models available in the library only showcase some examples of what you can do
+with the Perceiver. There are many more use cases, including question answering, named-entity recognition, object detection, 
+audio classification, video classification, etc. 
 
 ## Perceiver specific outputs
 
@@ -102,10 +103,7 @@ named-entity recognition, object detection, audio classification, video classifi
 ## PerceiverTokenizer
 
 [[autodoc]] PerceiverTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
+    - __call__
 
 ## PerceiverFeatureExtractor
 
