@@ -115,9 +115,10 @@ class Wav2Vec2Processor:
         except OSError:
             warnings.warn(
                 f"Loading a tokenizer inside {cls.__name__} from a config that does not"
-                " include a `tokenizer_class` attribute is deprecated and will be removed in v5. Please add the following "
-                " attribute to your `tokenizer_config.json` file to suppress this warning: "
-                " `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`",
+                " include a `tokenizer_class` attribute is deprecated and will be "
+                "removed in v5. Please add `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`"
+                " attribute to either your `config.json` or `tokenizer_config.json` "
+                "file to suppress this warning: ",
                 FutureWarning,
             )
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
