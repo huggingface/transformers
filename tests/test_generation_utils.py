@@ -1773,9 +1773,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_generate_input_values_as_encoder_kwarg(self):
         input_values = floats_tensor((2, 250))
-        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder").to(
-            torch_device
-        )
+        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
+        model = model.to(torch_device)
         output_sequences_kwargs = model.generate(input_values=input_values, max_length=5).cpu()
         output_sequences = model.generate(input_values, max_length=5).cpu()
 
@@ -1784,9 +1783,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_generate_input_features_as_encoder_kwarg(self):
         input_features = floats_tensor((3, 20, 24))
-        model = Speech2TextForConditionalGeneration.from_pretrained(
-            "hf-internal-testing/tiny-random-speech_to_text"
-        ).to(torch_device)
+        model = Speech2TextForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-speech_to_text")
+        model = model.to(torch_device)
         output_sequences_kwargs = model.generate(input_features=input_features, max_length=5).cpu()
         output_sequences = model.generate(input_features, max_length=5).cpu()
 
@@ -1795,9 +1793,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_generate_pixel_values_as_encoder_kwarg(self):
         pixel_values = floats_tensor((2, 3, 30, 30))
-        model = VisionEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-vision-encoder-decoder").to(
-            torch_device
-        )
+        model = VisionEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-vision-encoder-decoder")
+        model = model.to(torch_device)
         output_sequences_kwargs = model.generate(pixel_values=pixel_values, max_length=5).cpu()
         output_sequences = model.generate(pixel_values, max_length=5).cpu()
 
