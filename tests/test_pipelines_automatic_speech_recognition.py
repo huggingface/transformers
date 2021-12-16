@@ -26,14 +26,7 @@ from transformers import (
     Wav2Vec2ForCTC,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.testing_utils import (
-    is_pipeline_test,
-    require_datasets,
-    require_tf,
-    require_torch,
-    require_torchaudio,
-    slow,
-)
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_torchaudio, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -105,7 +98,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 framework="pt",
             )
 
-    @require_datasets
     @require_torch
     @slow
     def test_torch_large(self):
@@ -128,7 +120,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
-    @require_datasets
     @require_torch
     @slow
     def test_torch_speech_encoder_decoder(self):
@@ -148,7 +139,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @slow
     @require_torch
-    @require_datasets
     def test_simple_wav2vec2(self):
         import numpy as np
         from datasets import load_dataset
@@ -177,7 +167,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_torchaudio
-    @require_datasets
     def test_simple_s2t(self):
         import numpy as np
         from datasets import load_dataset
@@ -207,7 +196,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_torchaudio
-    @require_datasets
     def test_xls_r_to_en(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -226,7 +214,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_torchaudio
-    @require_datasets
     def test_xls_r_from_en(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
