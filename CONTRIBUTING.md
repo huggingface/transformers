@@ -178,7 +178,7 @@ Follow these steps to start contributing:
    passes. You should run the tests impacted by your changes like this:
 
    ```bash
-   $ pytest tests/test_to_run.py
+   $ pytest tests/<TEST_TO_RUN>.py
    ```
 
    You can also run the full suite with the following command, but it takes
