@@ -200,35 +200,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-<<<<<<< HEAD
-        (GPTNeoConfig, GPTNeoForCausalLM),
-        (BigBirdConfig, BigBirdForCausalLM),
-        (CamembertConfig, CamembertForCausalLM),
-        (XLMRobertaConfig, XLMRobertaForCausalLM),
-        (RobertaConfig, RobertaForCausalLM),
-        (DistilBertConfig, DistilBertForCausalLM),
-        (BertConfig, BertLMHeadModel),
-        (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
-        (GPT2Config, GPT2LMHeadModel),
-        (TransfoXLConfig, TransfoXLLMHeadModel),
-        (XLNetConfig, XLNetLMHeadModel),
-        (
-            XLMConfig,
-            XLMWithLMHeadModel,
-        ),  # XLM can be MLM and CLM => model should be split similar to BERT; leave here for now
-        (CTRLConfig, CTRLLMHeadModel),
-        (ReformerConfig, ReformerModelWithLMHead),
-        (BertGenerationConfig, BertGenerationDecoder),
-        (XLMProphetNetConfig, XLMProphetNetForCausalLM),
-        (ProphetNetConfig, ProphetNetForCausalLM),
-        (BartConfig, BartForCausalLM),
-        (MBartConfig, MBartForCausalLM),
-        (PegasusConfig, PegasusForCausalLM),
-        (MarianConfig, MarianForCausalLM),
-        (BlenderbotConfig, BlenderbotForCausalLM),
-        (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
-        (MegatronBertConfig, MegatronBertForCausalLM),
-=======
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -238,6 +209,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("big_bird", "BigBirdForCausalLM"),
         ("camembert", "CamembertForCausalLM"),
+        ("distilbert", "DistilBertForCausalLM"),
         ("xlm-roberta", "XLMRobertaForCausalLM"),
         ("roberta", "RobertaForCausalLM"),
         ("bert", "BertLMHeadModel"),
@@ -266,7 +238,6 @@ MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     # Model for Causal Image Modeling mapping
     [
         ("imagegpt", "ImageGPTForCausalImageModeling"),
->>>>>>> master
     ]
 )
 
