@@ -17,6 +17,7 @@
 
 import unittest
 from typing import Dict, List, Tuple
+import tempfile
 
 import numpy as np
 
@@ -270,12 +271,40 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_determinism(self):
+    def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             print("Model class:", model_class)
-            print("Inputs dict:", inputs_dict)
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            out_2 = outputs[0].cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+                model.to(torch_device)
+                with torch.no_grad():
+                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                print("Before outputs:", outputs[0].cpu().numpy().mean())
+                print("After outputs:", after_outputs[0].cpu().numpy().mean())
+                
+                # Make sure we don't have nans
+                out_1 = after_outputs[0].cpu().numpy()
+                out_1[np.isnan(out_1)] = 0
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
+    
+    def test_determinism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device)
             model.eval()

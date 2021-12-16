@@ -255,6 +255,7 @@ class ViltEmbeddings(nn.Module):
         )
 
         print("Shape of image embeddings:", image_embeds.shape)
+        print("First values of image embeds:", image_embeds[0, :3, :3])
 
         # PART 4: concatenate
         embeddings = torch.cat([text_embeds, image_embeds], dim=1)
@@ -762,6 +763,12 @@ class ViltModel(ViltPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
+        print("Shape of sequence output:", sequence_output.shape)
+        print("Sequence output:", sequence_output[0,:3,:3])
+
+        print("Mean of sequence output:", sequence_output.mean())
+        print("Max of sequence output:", sequence_output.max())
+        
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
