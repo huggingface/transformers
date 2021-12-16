@@ -286,6 +286,8 @@
       title: Wav2Vec2
     - local: model_doc/wav2vec2_phoneme
       title: Wav2Vec2Phoneme
+    - local: model_doc/wavlm
+      title: WavLM
     - local: model_doc/xlm
       title: XLM
     - local: model_doc/xlmprophetnet
