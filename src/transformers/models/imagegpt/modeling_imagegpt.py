@@ -495,6 +495,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     config_class = ImageGPTConfig
     load_tf_weights = load_tf_weights_in_imagegpt
     base_model_prefix = "transformer"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def __init__(self, *inputs, **kwargs):

@@ -777,6 +777,13 @@ class FlaxModelTesterMixin:
             for name, type_ in types.items():
                 self.assertEqual(type_, jnp.bfloat16, msg=f"param {name} is not in bf16.")
 
+    def test_model_main_input_name(self):
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "__call__"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name = list(model_signature.parameters.keys())[1]
+            self.assertEqual(model_class.main_input_name, observed_main_input_name)
+
 
 @require_flax
 @is_staging_test
