@@ -284,6 +284,8 @@
       title: VisualBERT
     - local: model_doc/wav2vec2
       title: Wav2Vec2
+    - local: model_doc/wavlm
+      title: WavLM
     - local: model_doc/xlm
       title: XLM
     - local: model_doc/xlmprophetnet
