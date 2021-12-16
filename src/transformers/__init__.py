@@ -654,6 +654,8 @@ if is_torch_available():
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
             "AutoModelForAudioClassification",
+            "AutoModelForAudioFrameClassification",
+            "AutoModelForAudioXVector",
             "AutoModelForCausalLM",
             "AutoModelForCTC",
             "AutoModelForImageClassification",
@@ -1348,9 +1350,11 @@ if is_torch_available():
     _import_structure["models.unispeech_sat"].extend(
         [
             "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechSatForAudioFrameClassification",
             "UniSpeechSatForCTC",
             "UniSpeechSatForPreTraining",
             "UniSpeechSatForSequenceClassification",
+            "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
         ]
@@ -1381,10 +1385,12 @@ if is_torch_available():
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ForAudioFrameClassification",
             "Wav2Vec2ForCTC",
             "Wav2Vec2ForMaskedLM",
             "Wav2Vec2ForPreTraining",
             "Wav2Vec2ForSequenceClassification",
+            "Wav2Vec2ForXVector",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
         ]
@@ -2632,6 +2638,8 @@ if TYPE_CHECKING:
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
             AutoModelForAudioClassification,
+            AutoModelForAudioFrameClassification,
+            AutoModelForAudioXVector,
             AutoModelForCausalLM,
             AutoModelForCTC,
             AutoModelForImageClassification,
@@ -3209,9 +3217,11 @@ if TYPE_CHECKING:
         )
         from .models.unispeech_sat import (
             UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechSatForAudioFrameClassification,
             UniSpeechSatForCTC,
             UniSpeechSatForPreTraining,
             UniSpeechSatForSequenceClassification,
+            UniSpeechSatForXVector,
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
@@ -3236,10 +3246,12 @@ if TYPE_CHECKING:
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ForAudioFrameClassification,
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
             Wav2Vec2ForPreTraining,
             Wav2Vec2ForSequenceClassification,
+            Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
