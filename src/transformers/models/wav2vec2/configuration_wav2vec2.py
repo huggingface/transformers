@@ -277,11 +277,6 @@ class Wav2Vec2Config(PretrainedConfig):
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
         self.use_weighted_layer_sum = use_weighted_layer_sum
-        self.classifier_proj_size = classifier_proj_size
-        self.tdnn_dim = list(tdnn_dim)
-        self.tdnn_kernel = list(tdnn_kernel)
-        self.tdnn_dilation = list(tdnn_dilation)
-        self.xvector_output_dim = xvector_output_dim
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -324,3 +319,12 @@ class Wav2Vec2Config(PretrainedConfig):
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
         self.output_hidden_size = output_hidden_size or hidden_size
+
+        # SequenceClassification-specific parameter. Feel free to ignore for other classes.
+        self.classifier_proj_size = classifier_proj_size
+
+        # XVector-specific parameters. Feel free to ignore for other classes.
+        self.tdnn_dim = list(tdnn_dim)
+        self.tdnn_kernel = list(tdnn_kernel)
+        self.tdnn_dilation = list(tdnn_dilation)
+        self.xvector_output_dim = xvector_output_dim

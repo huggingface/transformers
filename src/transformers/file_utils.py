@@ -1160,6 +1160,9 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
         >>> # the resulting embeddings can be used for cosine similarity-based retrieval
         >>> cosine_sim = torch.nn.CosineSimilarity(dim=-1)
         >>> similarity = cosine_sim(embeddings[0], embeddings[1])
+        >>> threshold = 0.7  # the optimal threshold is dataset-dependent
+        >>> if similarity < threshold:  
+        ...     print("Speakers are not the same!")
 """
 
 PT_SAMPLE_DOCSTRINGS = {

@@ -1697,7 +1697,6 @@ class TDNNLayer(nn.Module):
         self.kernel_size = config.tdnn_kernel[layer_id]
         self.dilation = config.tdnn_dilation[layer_id]
 
-        # TODO: replace with Conv1D
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 

@@ -466,6 +466,7 @@ class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
                     "label_embeddings_concat",
+                    "objective.weight",
                 ]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):
@@ -901,8 +902,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             input_values = inputs.input_values.to(torch_device)
             attention_mask = inputs.attention_mask.to(torch_device)
-            with torch.no_grad():
-                outputs = model(input_values, attention_mask=attention_mask, labels=labels)
+            outputs = model(input_values, attention_mask=attention_mask, labels=labels)
         embeddings = torch.nn.functional.normalize(outputs.embeddings, dim=-1)
 
         cosine_sim = torch.nn.CosineSimilarity(dim=-1)
