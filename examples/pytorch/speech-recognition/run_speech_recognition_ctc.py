@@ -197,7 +197,7 @@ class DataTrainingArguments:
     max_duration_in_seconds: Optional[float] = field(
         default=20.0,
         metadata={
-            "help": "Truncate audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
+            "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
         },
     )
     min_duration_in_seconds: Optional[float] = field(
@@ -551,9 +551,11 @@ def main():
     # via the `feature_extractor`
 
     # make sure that dataset decodes audio with correct sampling rate
-    raw_datasets = raw_datasets.cast_column(
-        data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
-    )
+    dataset_sampling_rate = raw_datasets["train"].features[data_args.audio_column_name].sampling_rate
+    if dataset_sampling_rate != feature_extractor.sampling_rate:
+        raw_datasets = raw_datasets.cast_column(
+            data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+        )
 
     # derive max & min input length for sample rate & max duration
     max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
@@ -599,8 +601,6 @@ def main():
                 input_columns=["input_length"],
             )
 
-        vectorized_datasets = vectorized_datasets.remove_columns("input_length")
-
     # 7. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
     # instantiate a data collator and the trainer
@@ -638,18 +638,18 @@ def main():
         tokenizer.save_pretrained(training_args.output_dir)
         config.save_pretrained(training_args.output_dir)
 
-        # load processor
-        try:
-            processor = AutoProcessor.from_pretrained(training_args.output_dir)
-        except (OSError, KeyError):
-            warnings.warn(
-                "Loading a processor from a feature extractor config that does not"
-                " include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following "
-                " attribute to your `preprocessor_config.json` file to suppress this warning: "
-                " `'processor_class': 'Wav2Vec2Processor'`",
-                FutureWarning,
-            )
-            processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
+    # load processor
+    try:
+        processor = AutoProcessor.from_pretrained(training_args.output_dir)
+    except (OSError, KeyError):
+        warnings.warn(
+            "Loading a processor from a feature extractor config that does not"
+            " include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following "
+            " attribute to your `preprocessor_config.json` file to suppress this warning: "
+            " `'processor_class': 'Wav2Vec2Processor'`",
+            FutureWarning,
+        )
+        processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
@@ -662,7 +662,7 @@ def main():
         compute_metrics=compute_metrics,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=processor.feature_extractor,
+        tokenizer=feature_extractor,
     )
 
     # 8. Finally, we can start training
