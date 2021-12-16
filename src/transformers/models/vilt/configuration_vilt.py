@@ -72,6 +72,7 @@ class ViltConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         max_image_length (:obj:`int`, `optional`, defaults to :obj:`-1`):
             The maximum number of patches to take as input for the Transformer encoder.
+            If set to a positive integer, the encoder will sample :obj:`max_image_length` patches at maximum.
             If set to -1, will not be taken into account.
 
     Example::

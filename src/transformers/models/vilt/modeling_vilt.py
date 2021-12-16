@@ -125,7 +125,7 @@ class ViltEmbeddings(nn.Module):
 
     def visual_embed(self, _x, max_image_length=200, mask_it=False):
         _, _, ph, pw = self.patch_embeddings.projection.weight.shape
-
+        
         x = self.patch_embeddings(_x)
         x_mask = (_x.sum(dim=1) != 0).float()[:, None, :, :]
         x_mask = nn.functional.interpolate(x_mask, size=(x.shape[2], x.shape[3])).long()
@@ -173,6 +173,7 @@ class ViltEmbeddings(nn.Module):
             # if res is 384 x 640, 12 * 20 = 240
             eff = x_h * x_w
             max_image_length = eff.max()
+            print("Max image length:", max_image_length)
         else:
             eff = x_h * x_w
             max_image_length = min(eff.max(), max_image_length)
@@ -201,6 +202,8 @@ class ViltEmbeddings(nn.Module):
                     )
                 )
 
+        print("Length of select:", len(select))
+        
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(B, -1, C)
         x_mask = x_mask[select[:, 0], select[:, 1]].view(B, -1)
@@ -256,6 +259,8 @@ class ViltEmbeddings(nn.Module):
 
         print("Shape of image embeddings:", image_embeds.shape)
         print("First values of image embeds:", image_embeds[0, :3, :3])
+
+        print("Last values of image embeds:", image_embeds[0, -3:, -3:])
 
         # PART 4: concatenate
         embeddings = torch.cat([text_embeds, image_embeds], dim=1)

@@ -1,24 +1,20 @@
-from PIL import Image
-
 import requests
-from transformers import BertTokenizer, ViltConfig, ViltModel, ViTFeatureExtractor
+from PIL import Image
+from transformers import ViltProcessor, ViltConfig, ViltModel
 
-
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-feature_extractor = ViTFeatureExtractor(size=384)
+processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
 
 model = ViltModel(ViltConfig(image_size=384, patch_size=32))
 
-# prepare text
-text = "hello world"
-input_ids = tokenizer(text, return_tensors="pt").input_ids
-
-# prepare image
+# prepare image + text 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-pixel_values = feature_extractor(image, return_tensors="pt").pixel_values
+text = "hello world"
+
+# encode
+encoding = processor(image, text, return_tensors="pt")
 
 # forward pass
-outputs = model(input_ids, pixel_values=pixel_values)
+outputs = model(**encoding)
 
 print(outputs.last_hidden_state.shape)

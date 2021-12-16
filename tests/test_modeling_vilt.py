@@ -448,7 +448,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
