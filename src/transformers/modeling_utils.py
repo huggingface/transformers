@@ -17,7 +17,6 @@
 import inspect
 import os
 import re
-import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -376,8 +375,8 @@ class ModuleUtilsMixin:
         Returns:
             :obj:`int`: The total number of tokens.
         """
-        if self.main_model_input in input_dict:
-            return input_dict[self.main_model_input].numel()
+        if self.main_input_name in input_dict:
+            return input_dict[self.main_input_name].numel()
         else:
             logger.warn(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
