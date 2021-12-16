@@ -98,7 +98,6 @@ _deps = [
     "dataclasses",
     "datasets",
     "deepspeed>=0.5.7",
-    "docutils==0.16.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -133,7 +132,6 @@ _deps = [
     "pytest-xdist",
     "python>=3.6.0",
     "ray[tune]",
-    "recommonmark",
     "regex!=2019.12.17",
     "requests",
     "rouge-score",
@@ -144,13 +142,6 @@ _deps = [
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "librosa",
-    "markdown!=3.3.5",
-    "sphinx-copybutton",
-    "sphinx-markdown-tables",
-    "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
-    "sphinx==3.2.1",
-    "sphinxext-opengraph==0.4.1",
-    "sphinx-intl",
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
@@ -296,17 +287,9 @@ extras["all"] = (
     + extras["codecarbon"]
 )
 
-extras["docs_specific"] = deps_list(
-    "docutils",
-    "markdown",
-    "recommonmark",
-    "sphinx",
-    "sphinx-markdown-tables",
-    "sphinx-rtd-theme",
-    "sphinx-copybutton",
-    "sphinxext-opengraph",
-    "sphinx-intl",
-)
+# Might need to add doc-builder and some specific deps in the future
+extras["docs_specific"] = []
+
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
 
