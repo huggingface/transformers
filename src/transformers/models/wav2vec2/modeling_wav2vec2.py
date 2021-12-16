@@ -1167,6 +1167,13 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        will not be updated during training.
+        """
+        self.feature_extractor._freeze_parameters()
+
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,

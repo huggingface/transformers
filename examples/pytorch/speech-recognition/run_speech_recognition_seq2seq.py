@@ -22,10 +22,10 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional, Union, List, Dict
+from typing import Dict, List, Optional, Union
 
-import torch
 import datasets
+import torch
 from datasets import DatasetDict, load_dataset, load_metric
 
 import transformers
@@ -431,7 +431,9 @@ def main():
     # In a second step ``args.preprocessing_only`` can then be set to `False` to load the
     # cached dataset
     if data_args.preprocessing_only:
-        logger.info(f"Data preprocessing finished. Files cached at {train_dataset.cache_files} and {eval_dataset.cache_files}")
+        logger.info(
+            f"Data preprocessing finished. Files cached at {train_dataset.cache_files} and {eval_dataset.cache_files}"
+        )
         return
 
     def compute_metrics(pred):

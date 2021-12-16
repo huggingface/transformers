@@ -180,6 +180,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     """
     config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
+    supports_gradient_checkpointing = True
 
     def __init__(
         self,
@@ -246,6 +247,11 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        # call both encoder and decoder function on gradient checkpointing
+        self.encoder._set_gradient_checkpointing(module, value=value)
+        self.decoder._set_gradient_checkpointing(module, value=value)
+
     def get_encoder(self):
         return self.encoder
 
@@ -257,6 +263,13 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor of the speech encoder so
+        that its parameters will not be updated during training.
+        """
+        self.encoder.freeze_feature_extractor()
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):

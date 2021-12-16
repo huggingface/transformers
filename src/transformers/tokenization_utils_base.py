@@ -2915,7 +2915,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Load from model defaults
         if return_token_type_ids is None:
-            return_token_type_ids = "token_type_ids" in self.model_input_names
+            return_token_type_ids = "token_type_ids" in self.nodel_input_names
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
 
