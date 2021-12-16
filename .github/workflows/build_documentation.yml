@@ -48,7 +48,7 @@ jobs:
 
           pip install git+https://github.com/huggingface/doc-builder
           cd transformers
-          pip install .
+          pip install .[dev]
           cd ..
 
           export TORCH_VERSION=$(python -c "from torch import version; print(version.__version__.split('+')[0])")
