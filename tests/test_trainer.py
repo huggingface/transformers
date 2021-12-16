@@ -46,7 +46,6 @@ from transformers.testing_utils import (
     get_gpu_count,
     get_tests_dir,
     is_staging_test,
-    require_datasets,
     require_optuna,
     require_ray,
     require_sentencepiece,
@@ -391,7 +390,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
-    @require_datasets
     def test_trainer_with_datasets(self):
         import datasets
 
