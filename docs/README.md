@@ -324,3 +324,11 @@ So using this particular example's output -- if your current section's header us
 If you needed to add yet another sub-level, then pick a character that is not used already. That is you must pick a character that is not in the output of that script.
 
 Here is the full list of characters that can be used in this context: `= - ` : ' " ~ ^ _ * + # < >`
+
+#### Adding an image
+
+Due to the rapidly growing repository, it is important to make sure that no files that would significantly weigh down the repository are added. This includes images, videos and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
+the ones hosted on [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) in which to place these files and reference
+them by URL. We recommend putting them in the following dataset: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
+If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images
+to this dataset.
