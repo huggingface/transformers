@@ -118,11 +118,6 @@ class Embeddings(nn.Module):
         embeddings)
         """
         seq_length = input_ids.size(1)
-<<<<<<< HEAD
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
-        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
-        position_ids = position_ids[:, past_key_values_length : seq_length + past_key_values_length]
-=======
 
         # Setting the position-ids to the registered buffer in constructor, it helps
         # when tracing the model without passing position-ids, solves
@@ -132,7 +127,7 @@ class Embeddings(nn.Module):
         else:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
->>>>>>> master
+            position_ids = position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         word_embeddings = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
@@ -243,7 +238,6 @@ class MultiHeadSelfAttention(nn.Module):
             key = shape(self.k_lin(hidden_states))  # (bs, n_heads, k_length, dim_per_head)
             value = shape(self.v_lin(hidden_states))  # (bs, n_heads, k_length, dim_per_head)
 
-<<<<<<< HEAD
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -262,16 +256,6 @@ class MultiHeadSelfAttention(nn.Module):
         scores.masked_fill_(attention_mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
 
         weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
-=======
-        q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
-
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
-        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
-        mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
-        scores = scores.masked_fill(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
-
-        weights = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
->>>>>>> master
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
         # Mask heads if we want to
