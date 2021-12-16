@@ -764,21 +764,20 @@ class GenerationMixin:
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         multinomial sampling, beam-search decoding, and beam-search multinomial sampling.
 
-        Apart from :obj:`input_ids` and :obj:`attention_mask`, all the arguments below will default to the value of the
-        attribute of the same name inside the :class:`~transformers.PretrainedConfig` of the model. The default values
-        indicated are the default values of those config.
+        Apart from :obj:`inputs`, all the arguments below will default to the value of the attribute of the same name
+        inside the :class:`~transformers.PretrainedConfig` of the model. The default values indicated are the default
+        values of those config.
 
         Most of these parameters are explained in more detail in `this blog post
         <https://huggingface.co/blog/how-to-generate>`__.
 
         Parameters:
 
-            inputs (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, :obj:`(batch_size, sequence_length, feature_dim)` or :obj:`(batch_size, num_channels, height, width)`, `optional`)
+            inputs (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, :obj:`(batch_size, sequence_length, feature_dim)` or :obj:`(batch_size, num_channels, height, width)`, `optional`):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If :obj:`None` the
-                method initializes it with :obj:`bos_token_id` and a batch size of 1. For decoder-only models, such as
-                GPT2, :obj:`inputs` should of in the format of :obj:`input_ids`. For encoder-decoder models `inputs`
-                can represent any of :obj:`input_ids`, :obj:`input_values`, :obj:`input_features`, or
-                :obj:`pixel_values`.
+                method initializes it with :obj:`bos_token_id` and a batch size of 1. For decoder-only models
+                :obj:`inputs` should of in the format of :obj:`input_ids`. For encoder-decoder models `inputs` can
+                represent any of :obj:`input_ids`, :obj:`input_values`, :obj:`input_features`, or :obj:`pixel_values`.
             max_length (:obj:`int`, `optional`, defaults to :obj:`model.config.max_length`):
                 The maximum length of the sequence to be generated.
             max_new_tokens (:obj:`int`, `optional`, defaults to None):
