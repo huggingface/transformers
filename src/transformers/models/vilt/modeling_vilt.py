@@ -123,7 +123,7 @@ class ViltEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def visual_embed(self, pixel_values, max_image_length=200, mask_it=False):
+    def visual_embed(self, pixel_values, max_image_length=200):
         _, _, ph, pw = self.patch_embeddings.projection.weight.shape
 
         print("Shape of pixel values:", pixel_values.shape)
@@ -169,9 +169,6 @@ class ViltEmbeddings(nn.Module):
         )
         x_mask = x_mask.flatten(1)
 
-        if mask_it:
-            x, label = self.mask_tokens(pixel_values, x)
-
         if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
             # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
             # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
@@ -215,18 +212,6 @@ class ViltEmbeddings(nn.Module):
         patch_index = patch_index[select[:, 0], select[:, 1]].view(B, -1, 2)
         pos_embed = pos_embed[select[:, 0], select[:, 1]].view(B, -1, C)
 
-        if mask_it:
-            label = label[select[:, 0], select[:, 1]].view(B, -1, 3)
-
-            label[x_mask == 0] = -100
-            label = torch.cat(
-                [
-                    torch.full((label.shape[0], 1, 3), -100).to(label),
-                    label,
-                ],
-                dim=1,
-            )
-
         cls_tokens = self.cls_token.expand(B, -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
         pos_embed = torch.cat((self.position_embeddings[:, 0, :][:, None, :].expand(B, -1, -1), pos_embed), dim=1)
@@ -235,10 +220,7 @@ class ViltEmbeddings(nn.Module):
 
         x_mask = torch.cat([torch.ones(x_mask.shape[0], 1).to(x_mask), x_mask], dim=1)
 
-        if mask_it:
-            return x, x_mask, (patch_index, (H, W)), label
-        else:
-            return x, x_mask, (patch_index, (H, W)), None
+        return x, x_mask, (patch_index, (H, W))
 
     def forward(self, input_ids, attention_mask, token_type_ids, pixel_values, inputs_embeds):
         # PART 1: text embeddings
@@ -247,9 +229,15 @@ class ViltEmbeddings(nn.Module):
         )
 
         # PART 2: patch embeddings (with interpolated position encodings)
-        image_embeds, image_masks, patch_index, image_labels = self.visual_embed(
+        image_embeds, image_masks, patch_index = self.visual_embed(
             pixel_values, max_image_length=self.config.max_image_length
         )
+
+        print("Shape of text embeddings:", text_embeds.shape)
+        print("Shape of image embeddings:", image_embeds.shape)
+
+        print("Patch index:", patch_index[0].shape)
+        print(patch_index[0][0, 0, :])
 
         # PART 3: add token type embeddings
         # 0 indicates text, 1 indicates patch
