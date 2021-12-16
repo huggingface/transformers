@@ -124,7 +124,7 @@ issues to make sure that nobody is already working on the same thing. If you are
 unsure, it is always a good idea to open an issue to get some feedback.
 
 You will need basic `git` proficiency to be able to contribute to
-`transformers`. `git` is not the easiest tool to use but it has the greatest
+🤗 Transformers. `git` is not the easiest tool to use but it has the greatest
 manual. Type `git --help` in a shell and enjoy. If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
@@ -175,34 +175,26 @@ Follow these steps to start contributing:
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
-   passes:
+   passes. You should run the tests impacted by your changes like this:
+
+   ```bash
+   $ pytest tests/<TEST_TO_RUN>.py
+   ```
+
+   You can also run the full suite with the following command, but it takes
+   a beefy machine to produce a result in a decent amount of time now that
+   Transformers has grown a lot. Here is the command for it:
 
    ```bash
    $ make test
    ```
 
-   Note, that this command uses `-n auto` pytest flag, therefore, it will start as many parallel `pytest` processes as the number of your computer's CPU-cores, and if you have lots of those and a few GPUs and not a great amount of RAM, it's likely to overload your computer. Therefore, to run the test suite, you may want to consider using this command instead:
+   For more information about tests, check out the
+   [dedicated documentation](https://huggingface.co/docs/transformers/testing)
 
-   ```bash
-   $ python -m pytest -n 3 --dist=loadfile -s -v ./tests/
-   ```
-
-   Adjust the value of `-n` to fit the load your hardware can support.
-
-   `transformers` relies on `black` and `isort` to format its source code
-   consistently. After you make changes, format them with:
-
-   ```bash
-   $ make style
-   ```
-
-   `transformers` also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
-   control runs in CI, however you can also run the same checks with:
-
-   ```bash
-   $ make quality
-   ```
-   You can do the automatic style corrections and code verifications that can't be automated in one go:
+   🤗 Transformers relies on `black` and `isort` to format its source code
+   consistently. After you make changes, apply automatic style corrections and code verifications
+   that can't be automated in one go with:
 
    ```bash
    $ make fixup
@@ -210,15 +202,54 @@ Follow these steps to start contributing:
 
    This target is also optimized to only work with files modified by the PR you're working on.
 
-   If you're modifying documents under `docs/source`, make sure to validate that
-   they can still be built. This check also runs in CI. To run a local check
-   make sure you have installed the documentation builder requirements, by
-   running `pip install .[tf,torch,docs]` once from the root of this repository
-   and then run:
+   If you prefer to run the checks one after the other, the following command apply the
+   style corrections:
 
    ```bash
-   $ make docs
+   $ make style
    ```
+
+   🤗 Transformers also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
+   control runs in CI, however you can also run the same checks with:
+
+   ```bash
+   $ make quality
+   ```
+
+   Finally we have a lot of scripts that check we didn't forget to update
+   some files when adding a new model, that you can run with
+
+   ```bash
+   $ make repo-consitency
+   ```
+
+   To learn more about those checks and how to fix any issue with them, check out the
+   [documentation](https://huggingface.co/docs/transformers/pr_checks)
+
+   If you're modifying documents under `docs/source`, make sure to validate that
+   they can still be built. This check also runs in CI. To run a local check
+   make sure you have installed the documentation builder requirements. First you will need to clone the
+   repository containing our tools to build the documentation:
+   
+   ```bash
+   $ pip install git+https://github.com/huggingface/doc-builder
+   ```
+
+   Then, make sure you have all the dependencies to be able to build the doc with:
+   
+   ```bash
+   $ pip install .[docs]
+   ```
+
+   Finally run the following command from the root of the repository:
+
+   ```bash
+   $ doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
+   ```
+
+   This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
+   Markdown files with your favorite editor. You won't be able to see the final rendering on the website
+   before your PR is merged, we are actively working on adding a too for this.
 
    Once you're happy with your changes, add changed files using `git add` and
    make a commit with `git commit` to record your changes locally:
@@ -333,7 +364,7 @@ $ python -m unittest discover -s examples -t examples -v
 
 ### Style guide
 
-For documentation strings, `transformers` follows the [google style](https://google.github.io/styleguide/pyguide.html).
+For documentation strings, 🤗 Transformers follows the [google style](https://google.github.io/styleguide/pyguide.html).
 Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/master/docs#writing-documentation---specification)
 for more information.
 
