@@ -159,7 +159,7 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
-        model_input_names = self.tokenizer.model_input_names if self.tokenizer is not None else ["input_ids"]
+        model_input_names = self.tokenizer.model_input_names if self.tokenizer is not None else ["input_ids", "attention_mask"]
         generation_inputs = {k: v for k, v in inputs.items() if k in model_input_names}
 
         generated_tokens = self.model.generate(
