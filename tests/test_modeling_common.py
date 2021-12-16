@@ -40,7 +40,6 @@ from transformers import (
 )
 from transformers.file_utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
-from transformers.models.auto.configuration_auto import model_type_to_module_name
 from transformers.testing_utils import (
     PASS,
     USER,
