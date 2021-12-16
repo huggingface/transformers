@@ -870,6 +870,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # the input dict (and loss is computed internally)
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
+        elif y is None and "input_ids" in x:
+            # Just make any kind of dummy array to make loss work
+            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
