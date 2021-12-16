@@ -13,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch LUKE model. """
-
 import unittest
 
-from transformers import is_torch_available
+from transformers import LukeConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -27,10 +26,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LukeConfig,
         LukeForEntityClassification,
         LukeForEntityPairClassification,
         LukeForEntitySpanClassification,
+        LukeForMaskedLM,
         LukeModel,
         LukeTokenizer,
     )
@@ -140,12 +139,17 @@ class LukeModelTester:
             )
 
         sequence_labels = None
+        labels = None
+        entity_labels = None
         entity_classification_labels = None
         entity_pair_classification_labels = None
         entity_span_classification_labels = None
 
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            entity_labels = ids_tensor([self.batch_size, self.entity_length], self.entity_vocab_size)
+
             entity_classification_labels = ids_tensor([self.batch_size], self.num_entity_classification_labels)
             entity_pair_classification_labels = ids_tensor(
                 [self.batch_size], self.num_entity_pair_classification_labels
@@ -154,7 +158,27 @@ class LukeModelTester:
                 [self.batch_size, self.entity_length], self.num_entity_span_classification_labels
             )
 
-        config = LukeConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            entity_ids,
+            entity_attention_mask,
+            entity_token_type_ids,
+            entity_position_ids,
+            sequence_labels,
+            labels,
+            entity_labels,
+            entity_classification_labels,
+            entity_pair_classification_labels,
+            entity_span_classification_labels,
+        )
+
+    def get_config(self):
+        return LukeConfig(
             vocab_size=self.vocab_size,
             entity_vocab_size=self.entity_vocab_size,
             entity_emb_size=self.entity_emb_size,
@@ -172,21 +196,6 @@ class LukeModelTester:
             use_entity_aware_attention=self.use_entity_aware_attention,
         )
 
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            entity_ids,
-            entity_attention_mask,
-            entity_token_type_ids,
-            entity_position_ids,
-            sequence_labels,
-            entity_classification_labels,
-            entity_pair_classification_labels,
-            entity_span_classification_labels,
-        )
-
     def create_and_check_model(
         self,
         config,
@@ -198,6 +207,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -225,6 +236,44 @@ class LukeModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_for_masked_lm(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        entity_ids,
+        entity_attention_mask,
+        entity_token_type_ids,
+        entity_position_ids,
+        sequence_labels,
+        labels,
+        entity_labels,
+        entity_classification_labels,
+        entity_pair_classification_labels,
+        entity_span_classification_labels,
+    ):
+        config.num_labels = self.num_entity_classification_labels
+        model = LukeForMaskedLM(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            entity_ids=entity_ids,
+            entity_attention_mask=entity_attention_mask,
+            entity_token_type_ids=entity_token_type_ids,
+            entity_position_ids=entity_position_ids,
+            labels=labels,
+            entity_labels=entity_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.entity_logits.shape, (self.batch_size, self.entity_length, self.entity_vocab_size)
+        )
+
     def create_and_check_for_entity_classification(
         self,
         config,
@@ -236,6 +285,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -268,6 +319,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -300,6 +353,8 @@ class LukeModelTester:
         entity_token_type_ids,
         entity_position_ids,
         sequence_labels,
+        labels,
+        entity_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
         entity_span_classification_labels,
@@ -340,6 +395,8 @@ class LukeModelTester:
             entity_token_type_ids,
             entity_position_ids,
             sequence_labels,
+            labels,
+            entity_labels,
             entity_classification_labels,
             entity_pair_classification_labels,
             entity_span_classification_labels,
@@ -362,6 +419,7 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LukeModel,
+            LukeForMaskedLM,
             LukeForEntityClassification,
             LukeForEntityPairClassification,
             LukeForEntitySpanClassification,
@@ -395,6 +453,18 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
                     dtype=torch.long,
                     device=torch_device,
                 )
+            elif model_class == LukeForMaskedLM:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["entity_labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.entity_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+
         return inputs_dict
 
     def setUp(self):
@@ -413,6 +483,10 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in LUKE_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = LukeModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_entity_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -573,7 +647,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 1, 768))
         self.assertEqual(outputs.entity_last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]])
+        expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     @slow
@@ -605,5 +679,5 @@ class LukeModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 1, 1024))
         self.assertEqual(outputs.entity_last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor([[0.0466, -0.0106, -0.0179]])
+        expected_slice = torch.tensor([[0.0466, -0.0106, -0.0179]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

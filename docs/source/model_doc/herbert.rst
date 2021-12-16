@@ -10,13 +10,13 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-herBERT
+HerBERT
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The herBERT model was proposed in `KLEJ: Comprehensive Benchmark for Polish Language Understanding
+The HerBERT model was proposed in `KLEJ: Comprehensive Benchmark for Polish Language Understanding
 <https://www.aclweb.org/anthology/2020.acl-main.111.pdf>`__ by Piotr Rybak, Robert Mroczkowski, Janusz Tracz, and
 Ireneusz Gawlik. It is a BERT-based Language Model trained on Polish Corpora using only MLM objective with dynamic
 masking of whole words.

@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+import os
+import tempfile
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import FlaubertConfig, is_torch_available
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        FlaubertConfig,
         FlaubertForMultipleChoice,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
@@ -96,7 +95,22 @@ class FlaubertModelTester(object):
             is_impossible_labels = ids_tensor([self.batch_size], 2).float()
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = FlaubertConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            choice_labels,
+            input_mask,
+        )
+
+    def get_config(self):
+        return FlaubertConfig(
             vocab_size=self.vocab_size,
             n_special=self.n_special,
             emb_dim=self.hidden_size,
@@ -113,18 +127,6 @@ class FlaubertModelTester(object):
             initializer_range=self.initializer_range,
             summary_type=self.summary_type,
             use_proj=self.use_proj,
-        )
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_lengths,
-            sequence_labels,
-            token_labels,
-            is_impossible_labels,
-            choice_labels,
-            input_mask,
         )
 
     def create_and_check_flaubert_model(
@@ -323,7 +325,12 @@ class FlaubertModelTester(object):
             choice_labels,
             input_mask,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "lengths": input_lengths}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "lengths": input_lengths,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -399,6 +406,29 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = FlaubertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @slow
+    @require_torch_gpu
+    def test_torchscript_device_change(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+
+            # FlauBertForMultipleChoice behaves incorrectly in JIT environments.
+            if model_class == FlaubertForMultipleChoice:
+                return
+
+            config.torchscript = True
+            model = model_class(config=config)
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            traced_model = torch.jit.trace(
+                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
+            )
+
+            with tempfile.TemporaryDirectory() as tmp:
+                torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
+                loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
+                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
 
 @require_torch

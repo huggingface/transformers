@@ -166,7 +166,7 @@ Values that should be put in `code` should either be surrounded by double backti
 an object using the :obj: syntax: :obj:\`like so\`. Note that argument names and objects like True, None or any strings
 should usually be put in `code`.
 
-When mentionning a class, it is recommended to use the :class: syntax as the mentioned class will be automatically
+When mentioning a class, it is recommended to use the :class: syntax as the mentioned class will be automatically
 linked by Sphinx: :class:\`~transformers.XXXClass\`
 
 When mentioning a function, it is recommended to use the :func: syntax as the mentioned function will be automatically

@@ -32,11 +32,11 @@ import random
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -430,15 +430,15 @@ class EncoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
 
         residual = x
         x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
         return x, attn_weights
@@ -504,7 +504,7 @@ class FSMTEncoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
@@ -600,7 +600,7 @@ class DecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
 
@@ -615,16 +615,16 @@ class DecoderLayer(nn.Module):
             layer_head_mask=cross_attn_layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.encoder_attn_layer_norm(x)
 
         # Fully Connected
         residual = x
         x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
         return (
@@ -641,7 +641,7 @@ class FSMTDecoder(nn.Module):
 
     Args:
         config: FSMTConfig
-        embed_tokens (torch.nn.Embedding): output embedding
+        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: FSMTConfig, embed_tokens: nn.Embedding):
@@ -659,11 +659,14 @@ class FSMTDecoder(nn.Module):
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
 
-        self.output_projection = nn.Linear(
-            self.embed_tokens.weight.shape[1],
-            self.embed_tokens.weight.shape[0],
-            bias=False,
-        )
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(self.embed_tokens.weight, modifier_rank=None):
+                embed_tokens_weight_shape = self.embed_tokens.weight.shape
+        else:
+            embed_tokens_weight_shape = self.embed_tokens.weight.shape
+        self.output_projection = nn.Linear(embed_tokens_weight_shape[1], embed_tokens_weight_shape[0], bias=False)
         self.output_projection.weight = self.embed_tokens.weight
 
     def forward(
@@ -726,7 +729,7 @@ class FSMTDecoder(nn.Module):
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
         # Convert to FSMT output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = x.transpose(0, 1)
@@ -913,7 +916,7 @@ class Attention(nn.Module):
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -929,7 +932,7 @@ class Attention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(
+        attn_probs = nn.functional.dropout(
             attn_weights,
             p=self.dropout,
             training=self.training,
@@ -1000,11 +1003,12 @@ class FSMTModel(PretrainedFSMTModel):
         self.encoder = FSMTEncoder(config, encoder_embed_tokens)
         self.decoder = FSMTDecoder(config, decoder_embed_tokens)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1128,19 +1132,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         base_model = FSMTModel(config)
         self.model = base_model
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self.model.encoder.embed_tokens = new_embeddings
-
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self.model.decoder.embed_tokens = new_embeddings
-
-        # XXX: this is not quite correct, as we have 2 different `new_embeddings`, and
-        # only one return value is expected. Needs to be redesigned in the core to support dual dicts
-        raise NotImplementedError("this method needs re-thinking for models with 2 separate dictionaries")
-
-        return new_embeddings
-
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(FSMT_GENERATION_EXAMPLE)
@@ -1215,7 +1206,16 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        decoder_input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1223,6 +1223,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
@@ -1246,6 +1249,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens
 
+    def set_output_embeddings(self, value):
+        self.model.decoder.embed_tokens = value
+
 
 class SinusoidalPositionalEmbedding(nn.Embedding):
     """
@@ -1267,8 +1273,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             # in ___init__
             super().__init__(num_positions, embedding_dim, padding_idx, _weight=weight)
         else:
-            # in forward
-            weight = weight.to(self.weight.device)
+            # in forward put the weights on the correct dtype and device of the param
+            weight = weight.to(dtype=self.weight.dtype, device=self.weight.device)
             self.weight = nn.Parameter(weight)
         self.weight.detach_()
         self.weight.requires_grad = False

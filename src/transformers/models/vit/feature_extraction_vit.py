@@ -14,14 +14,20 @@
 # limitations under the License.
 """Feature extractor class for ViT."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ImageFeatureExtractionMixin,
+    ImageInput,
+    is_torch_tensor,
+)
 from ...utils import logging
 
 
@@ -38,8 +44,10 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     Args:
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to 224):
-            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 224):
+            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
+            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
+            is set to :obj:`True`.
         resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
             An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
@@ -69,16 +77,11 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.size = size
         self.resample = resample
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def __call__(
-        self,
-        images: Union[
-            Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
-        ],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
@@ -105,7 +108,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
 
-            - **pixel_values** -- Pixel values to be fed to a model.
+            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+              width).
         """
         # Input type checking for clearer error
         valid_images = False
@@ -119,7 +123,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if not valid_images:
             raise ValueError(
-                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
+                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example), "
                 "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
             )
 

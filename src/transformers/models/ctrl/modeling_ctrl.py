@@ -19,8 +19,8 @@ from typing import Tuple
 
 import numpy as np
 import torch
-import torch.nn as nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
@@ -87,7 +87,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     return output, attention_weights
 
 
-class MultiHeadAttention(torch.nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, d_model_size, num_heads):
         super().__init__()
         self.num_heads = num_heads
@@ -95,11 +95,11 @@ class MultiHeadAttention(torch.nn.Module):
 
         self.depth = int(d_model_size / self.num_heads)
 
-        self.Wq = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wk = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wv = torch.nn.Linear(d_model_size, d_model_size)
+        self.Wq = nn.Linear(d_model_size, d_model_size)
+        self.Wk = nn.Linear(d_model_size, d_model_size)
+        self.Wv = nn.Linear(d_model_size, d_model_size)
 
-        self.dense = torch.nn.Linear(d_model_size, d_model_size)
+        self.dense = nn.Linear(d_model_size, d_model_size)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -167,21 +167,21 @@ class MultiHeadAttention(torch.nn.Module):
 
 
 def point_wise_feed_forward_network(d_model_size, dff):
-    return torch.nn.Sequential(torch.nn.Linear(d_model_size, dff), torch.nn.ReLU(), torch.nn.Linear(dff, d_model_size))
+    return nn.Sequential(nn.Linear(d_model_size, dff), nn.ReLU(), nn.Linear(dff, d_model_size))
 
 
-class EncoderLayer(torch.nn.Module):
+class EncoderLayer(nn.Module):
     def __init__(self, d_model_size, num_heads, dff, rate=0.1):
         super().__init__()
 
         self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
 
-        self.layernorm1 = torch.nn.LayerNorm(d_model_size, eps=1e-6)
-        self.layernorm2 = torch.nn.LayerNorm(d_model_size, eps=1e-6)
+        self.layernorm1 = nn.LayerNorm(d_model_size, eps=1e-6)
+        self.layernorm2 = nn.LayerNorm(d_model_size, eps=1e-6)
 
-        self.dropout1 = torch.nn.Dropout(rate)
-        self.dropout2 = torch.nn.Dropout(rate)
+        self.dropout1 = nn.Dropout(rate)
+        self.dropout2 = nn.Dropout(rate)
 
     def forward(
         self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False
@@ -338,7 +338,8 @@ class CTRLModel(CTRLPreTrainedModel):
         )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.w
@@ -355,7 +356,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -499,7 +500,8 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         self.transformer = CTRLModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -516,7 +518,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -615,11 +617,12 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         self.transformer = CTRLModel(config)
         self.classifier = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -690,14 +693,26 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(pooled_logits.view(-1), labels.to(self.dtype).view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[2:]
             return ((loss,) + output) if loss is not None else output

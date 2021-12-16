@@ -20,8 +20,8 @@ RetriBERT model
 import math
 
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
+from torch import nn
 
 from ...file_utils import add_start_docstrings
 from ...modeling_utils import PreTrainedModel
@@ -99,7 +99,8 @@ class RetriBertModel(RetriBertPreTrainedModel):
 
         self.ce_loss = nn.CrossEntropyLoss(reduction="mean")
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def embed_sentences_checkpointed(
         self,

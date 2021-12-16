@@ -132,7 +132,7 @@ class BertJapaneseTokenizer(BertTokenizer):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -272,7 +272,7 @@ class MecabTokenizer:
                 dic_dir = unidic.DICDIR
                 if not os.path.isdir(dic_dir):
                     raise RuntimeError(
-                        "The unidic dictionary itself is not found."
+                        "The unidic dictionary itself is not found. "
                         "See https://github.com/polm/unidic-py for installation."
                     )
 

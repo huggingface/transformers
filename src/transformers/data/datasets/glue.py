@@ -20,7 +20,7 @@ from enum import Enum
 from typing import List, Optional, Union
 
 import torch
-from torch.utils.data.dataset import Dataset
+from torch.utils.data import Dataset
 
 from filelock import FileLock
 

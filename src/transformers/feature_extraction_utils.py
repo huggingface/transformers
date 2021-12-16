@@ -138,7 +138,11 @@ class BatchFeature(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            as_tensor = torch.tensor
+            def as_tensor(value):
+                if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
+                    value = np.array(value)
+                return torch.tensor(value)
+
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
@@ -226,7 +230,7 @@ class FeatureExtractionMixin:
                   :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/feature_extraction_config.json``.
+                  ``./my_model_directory/preprocessor_config.json``.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
                 standard cache should not be used.
@@ -367,7 +371,8 @@ class FeatureExtractionMixin:
             logger.error(err)
             msg = (
                 f"Can't load feature extractor for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
                 f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {FEATURE_EXTRACTOR_NAME} file\n\n"
             )
             raise EnvironmentError(msg)
@@ -465,7 +470,13 @@ class FeatureExtractionMixin:
             :obj:`str`: String containing all the attributes that make up this feature_extractor instance in JSON
             format.
         """
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+        dictionary = self.to_dict()
+
+        for key, value in dictionary.items():
+            if isinstance(value, np.ndarray):
+                dictionary[key] = value.tolist()
+
+        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):
         """

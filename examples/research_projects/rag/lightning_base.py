@@ -28,12 +28,12 @@ from transformers.optimization import (
     get_linear_schedule_with_warmup,
     get_polynomial_decay_schedule_with_warmup,
 )
-from transformers.utils.versions import require_version_examples
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 
-require_version_examples("pytorch_lightning>=1.0.4")
+require_version("pytorch_lightning>=1.0.4")
 
 MODEL_MODES = {
     "base": AutoModel,
@@ -167,8 +167,8 @@ class BaseTransformer(pl.LightningModule):
         effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
         return (self.dataset_size / effective_batch_size) * self.hparams.max_epochs
 
-    def setup(self, mode):
-        if mode == "test":
+    def setup(self, stage):
+        if stage == "test":
             self.dataset_size = len(self.test_dataloader().dataset)
         else:
             self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
@@ -341,6 +341,7 @@ def generic_train(
     args: argparse.Namespace,
     early_stopping_callback=None,
     logger=True,  # can pass WandbLogger() here
+    custom_ddp_plugin=None,
     extra_callbacks=[],
     checkpoint_callback=None,
     logging_callback=None,
@@ -370,18 +371,17 @@ def generic_train(
         train_params["amp_level"] = args.fp16_opt_level
 
     if args.gpus > 1:
-        train_params["distributed_backend"] = "ddp"
+        train_params["accelerator"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
-    train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
-    train_params["profiler"] = extra_train_kwargs.get("profiler", None)
+    train_params["profiler"] = None  # extra_train_kwargs.get("profiler", None) #get unwanted logs
 
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,
-        callbacks=[logging_callback] + extra_callbacks,
+        callbacks=[logging_callback] + extra_callbacks + [checkpoint_callback],
+        plugins=[custom_ddp_plugin],
         logger=logger,
-        checkpoint_callback=checkpoint_callback,
         **train_params,
     )
 

@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import LongformerConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LongformerConfig,
         LongformerForMaskedLM,
         LongformerForMultipleChoice,
         LongformerForQuestionAnswering,
@@ -73,7 +72,7 @@ class LongformerModelTester:
         # because its local attention only attends to `self.attention_window + 1` locations
         # (assuming no token with global attention, otherwise the last dimension of attentions
         # is x + self.attention_window + 1, where x is the number of tokens with global attention)
-        self.key_length = self.attention_window + 1
+        self.key_length = self.attention_window + 2
 
         # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
         # the `test_attention_outputs` and `test_hidden_states_output` tests
@@ -100,7 +99,12 @@ class LongformerModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = LongformerConfig(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return LongformerConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -114,8 +118,6 @@ class LongformerModelTester:
             initializer_range=self.initializer_range,
             attention_window=self.attention_window,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def create_and_check_attention_mask_determinism(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -241,6 +243,8 @@ class LongformerModelTester:
             choice_labels,
         ) = config_and_inputs
         global_attention_mask = torch.zeros_like(input_ids)
+        global_attention_mask[:, -1] = 1
+
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
@@ -274,7 +278,6 @@ class LongformerModelTester:
 class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False  # pruning is not supported
     test_torchscript = False
-    test_sequence_classification_problem_types = True
 
     all_model_classes = (
         (

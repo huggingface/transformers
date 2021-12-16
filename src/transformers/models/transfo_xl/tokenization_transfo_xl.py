@@ -236,7 +236,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         except Exception as e:
             raise ValueError(
                 f"Unable to parse file {pretrained_vocab_file}. Unknown format. "
-                "If you tried to load a model saved through TransfoXLTokenizerFast,"
+                "If you tried to load a model saved through TransfoXLTokenizerFast, "
                 "please note they are not compatible."
             ) from e
 

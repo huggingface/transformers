@@ -79,17 +79,33 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
 
     @staticmethod
-    def zero_mean_unit_var_norm(input_values: List[np.ndarray]) -> List[np.ndarray]:
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+    ) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
-        return [(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-5) for x in input_values]
+        if attention_mask is not None:
+            attention_mask = np.array(attention_mask, np.int32)
+            normed_input_values = []
+
+            for vector, length in zip(input_values, attention_mask.sum(-1)):
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if length < normed_slice.shape[0]:
+                    normed_slice[length:] = padding_value
+
+                normed_input_values.append(normed_slice)
+        else:
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+
+        return normed_input_values
 
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
+        truncation: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -115,6 +131,8 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                   different lengths).
             max_length (:obj:`int`, `optional`):
                 Maximum length of the returned list and optionally padding length (see above).
+            truncation (:obj:`bool`):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value.
 
@@ -152,12 +170,12 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}. "
                     f"Please make sure that the provided `raw_speech` input was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the ``sampling_rate`` argument to this function."
+                "It is strongly recommended to pass the ``sampling_rate`` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -166,19 +184,9 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
 
-        # make sure input is in list format
-        if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
-
         # always return batch
         if not is_batched:
             raw_speech = [raw_speech]
-
-        # zero-mean and unit-variance normalization
-        if self.do_normalize:
-            raw_speech = self.zero_mean_unit_var_norm(raw_speech)
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_values": raw_speech})
@@ -187,9 +195,41 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             encoded_inputs,
             padding=padding,
             max_length=max_length,
+            truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors,
         )
+
+        # convert input values to correct format
+        input_values = padded_inputs["input_values"]
+        if not isinstance(input_values[0], np.ndarray):
+            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
+        elif (
+            not isinstance(input_values, np.ndarray)
+            and isinstance(input_values[0], np.ndarray)
+            and input_values[0].dtype is np.dtype(np.float64)
+        ):
+            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
+        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
+            padded_inputs["input_values"] = input_values.astype(np.float32)
+
+        # convert attention_mask to correct format
+        attention_mask = padded_inputs.get("attention_mask")
+        if attention_mask is not None:
+            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+
+        # zero-mean and unit-variance normalization
+        if self.do_normalize:
+            attention_mask = (
+                attention_mask
+                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                else None
+            )
+            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
+                padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
+            )
+
+        if return_tensors is not None:
+            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs

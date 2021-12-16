@@ -57,6 +57,13 @@ BlenderbotSmallTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+BlenderbotSmallTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BlenderbotSmallTokenizerFast
+    :members:
+
+
 BlenderbotSmallModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -90,3 +97,17 @@ TFBlenderbotSmallForConditionalGeneration
 
 .. autoclass:: transformers.TFBlenderbotSmallForConditionalGeneration
     :members: call
+
+
+FlaxBlenderbotSmallModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBlenderbotSmallModel
+    :members: __call__, encode, decode
+
+
+FlaxBlenderbotForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBlenderbotSmallForConditionalGeneration
+    :members: __call__, encode, decode

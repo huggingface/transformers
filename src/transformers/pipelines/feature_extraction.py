@@ -1,13 +1,6 @@
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Dict
 
-from ..modelcard import ModelCard
-from ..tokenization_utils import PreTrainedTokenizer
-from .base import ArgumentHandler, Pipeline
-
-
-if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
-    from ..modeling_utils import PreTrainedModel
+from .base import GenericTensor, Pipeline
 
 
 # Can't use @add_end_docstrings(PIPELINE_INIT_ARGS) here because this one does not accept `binary_output`
@@ -23,11 +16,11 @@ class FeatureExtractionPipeline(Pipeline):
     `huggingface.co/models <https://huggingface.co/models>`__.
 
     Arguments:
-        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+        model (:class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
             :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
             TensorFlow.
-        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             :class:`~transformers.PreTrainedTokenizer`.
         modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
@@ -48,26 +41,31 @@ class FeatureExtractionPipeline(Pipeline):
             the associated CUDA device id.
     """
 
-    def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        task: str = "",
-    ):
-        super().__init__(
-            model=model,
-            tokenizer=tokenizer,
-            modelcard=modelcard,
-            framework=framework,
-            args_parser=args_parser,
-            device=device,
-            binary_output=True,
-            task=task,
-        )
+    def _sanitize_parameters(self, truncation=None, **kwargs):
+        preprocess_params = {}
+        if truncation is not None:
+            preprocess_params["truncation"] = truncation
+        return preprocess_params, {}, {}
+
+    def preprocess(self, inputs, truncation=None) -> Dict[str, GenericTensor]:
+        return_tensors = self.framework
+        if truncation is None:
+            kwargs = {}
+        else:
+            kwargs = {"truncation": truncation}
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
+        return model_inputs
+
+    def _forward(self, model_inputs):
+        model_outputs = self.model(**model_inputs)
+        return model_outputs
+
+    def postprocess(self, model_outputs):
+        # [0] is the first available tensor, logits or last_hidden_state.
+        if self.framework == "pt":
+            return model_outputs[0].tolist()
+        elif self.framework == "tf":
+            return model_outputs[0].numpy().tolist()
 
     def __call__(self, *args, **kwargs):
         """
@@ -79,4 +77,4 @@ class FeatureExtractionPipeline(Pipeline):
         Return:
             A nested list of :obj:`float`: The features computed by the model.
         """
-        return super().__call__(*args, **kwargs).tolist()
+        return super().__call__(*args, **kwargs)

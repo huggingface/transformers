@@ -91,6 +91,7 @@ class Speech2TextFeatureExtractionTester(unittest.TestCase):
         if equal_length:
             speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
         else:
+            # make sure that inputs increase in size
             speech_inputs = [
                 floats_list((x, self.feature_size))
                 for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
@@ -108,6 +109,10 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
     def setUp(self):
         self.feat_extract_tester = Speech2TextFeatureExtractionTester(self)
+
+    def _check_zero_mean_unit_variance(self, input_vector):
+        self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
+        self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -135,15 +140,111 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
     def test_cepstral_mean_and_variance_normalization(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-        inputs = feature_extractor(speech_inputs, padding=True, return_tensors="np", return_attention_mask=True)
+
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 16, None]
+        for max_length, padding in zip(max_lengths, paddings):
+            inputs = feature_extractor(
+                speech_inputs, padding=padding, max_length=max_length, return_attention_mask=True
+            )
+            input_features = inputs.input_features
+            attention_mask = inputs.attention_mask
+            fbank_feat_lengths = [np.sum(x) for x in attention_mask]
+
+            self._check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]])
+            self._check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]])
+            self._check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]])
+
+    def test_cepstral_mean_and_variance_normalization_np(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 16, None]
+        for max_length, padding in zip(max_lengths, paddings):
+            inputs = feature_extractor(
+                speech_inputs, max_length=max_length, padding=padding, return_tensors="np", return_attention_mask=True
+            )
+            input_features = inputs.input_features
+            attention_mask = inputs.attention_mask
+            fbank_feat_lengths = [np.sum(x) for x in attention_mask]
+
+            self._check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]])
+            self.assertTrue(input_features[0][fbank_feat_lengths[0] :].sum() < 1e-6)
+            self._check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]])
+            self.assertTrue(input_features[0][fbank_feat_lengths[1] :].sum() < 1e-6)
+            self._check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]])
+
+    def test_cepstral_mean_and_variance_normalization_trunc_max_length(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        inputs = feature_extractor(
+            speech_inputs,
+            padding="max_length",
+            max_length=4,
+            truncation=True,
+            return_tensors="np",
+            return_attention_mask=True,
+        )
         input_features = inputs.input_features
         attention_mask = inputs.attention_mask
         fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
 
-        def _check_zero_mean_unit_variance(input_vector):
-            self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
-            self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1])
+        self._check_zero_mean_unit_variance(input_features[2])
 
-        _check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
-        _check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
-        _check_zero_mean_unit_variance(input_features[2, : fbank_feat_lengths[2]])
+    def test_cepstral_mean_and_variance_normalization_trunc_longest(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        inputs = feature_extractor(
+            speech_inputs,
+            padding="longest",
+            max_length=4,
+            truncation=True,
+            return_tensors="np",
+            return_attention_mask=True,
+        )
+        input_features = inputs.input_features
+        attention_mask = inputs.attention_mask
+        fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
+
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
+        self._check_zero_mean_unit_variance(input_features[2])
+
+        # make sure that if max_length < longest -> then pad to max_length
+        self.assertEqual(input_features.shape, (3, 4, 24))
+
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        inputs = feature_extractor(
+            speech_inputs,
+            padding="longest",
+            max_length=16,
+            truncation=True,
+            return_tensors="np",
+            return_attention_mask=True,
+        )
+        input_features = inputs.input_features
+        attention_mask = inputs.attention_mask
+        fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
+
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
+        self._check_zero_mean_unit_variance(input_features[2])
+
+        # make sure that if max_length < longest -> then pad to max_length
+        self.assertEqual(input_features.shape, (3, 6, 24))
+
+    def test_double_precision_pad(self):
+        import torch
+
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
+        py_speech_inputs = np_speech_inputs.tolist()
+
+        for inputs in [py_speech_inputs, np_speech_inputs]:
+            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_features.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_features.dtype == torch.float32)

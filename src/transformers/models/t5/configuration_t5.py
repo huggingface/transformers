@@ -13,8 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration """
+from collections import OrderedDict
+from typing import Any, Dict, Iterable, Mapping, Optional
 
+from transformers import PreTrainedTokenizer, TensorType
+
+from ... import is_torch_available
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -71,11 +77,10 @@ class T5Config(PretrainedConfig):
             the :obj:`"gated-gelu"` feed forward projection. Original T5 uses :obj:`"relu"`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
     """
     model_type = "t5"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
@@ -95,15 +100,8 @@ class T5Config(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
-        gradient_checkpointing=False,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -119,16 +117,109 @@ class T5Config(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-        self.gradient_checkpointing = gradient_checkpointing
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
+
+
+class T5OnnxConfig(OnnxConfigWithPast):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "encoder_sequence"}),
+                ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
+                ("decoder_input_ids", {0: "batch"}),
+                ("decoder_attention_mask", {0: "batch"}),
+            ]
+        )
+
+        if self.use_past:
+            for i in range(0, self._config.num_layers):
+                common_inputs[f"past_key_values.{i}.decoder.key"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.decoder.value"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.encoder.key"] = {0: "batch", 2: "past_sequence"}
+                common_inputs[f"past_key_values.{i}.encoder.value"] = {0: "batch", 2: "past_sequence"}
+
+        return common_inputs
 
     @property
-    def hidden_size(self):
-        return self.d_model
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_outputs = super().outputs
 
-    @property
-    def num_attention_heads(self):
-        return self.num_heads
+        if "last_hidden_state" in common_outputs:
+            common_outputs["last_hidden_state"] = {0: "batch", 1: "decoder_sequence"}
 
-    @property
-    def num_hidden_layers(self):
-        return self.num_layers
+        if self.use_past:
+            for i in range(self._config.num_layers):
+                common_outputs[f"present.{i}.decoder.key"] = {0: "batch", 2: "decoder_sequence"}
+                common_outputs[f"present.{i}.decoder.value"] = {0: "batch", 2: "decoder_sequence"}
+                common_outputs[f"present.{i}.encoder.key"] = {0: "batch", 2: "encoder_sequence"}
+                common_outputs[f"present.{i}.encoder.value"] = {0: "batch", 2: "encoder_sequence"}
+
+        if self.task == "default":
+            common_outputs["encoder_last_hidden_state"] = {0: "batch", 2: "encoder_sequence"}
+
+        return common_outputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+
+        # Generate encoder inputs
+        encoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, seq_length, is_pair, framework)
+
+        # Generate decoder inputs
+        decoder_inputs = super().generate_dummy_inputs(tokenizer, batch_size, 1, is_pair, framework)
+        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+
+        ordered_inputs = dict(**encoder_inputs, **decoder_inputs)
+        if self.use_past:
+            if not is_torch_available():
+                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+            else:
+                import torch
+            batch = encoder_inputs["input_ids"].shape[0]
+            encoder_seq_length = encoder_inputs["input_ids"].shape[1]
+            encoder_shape = (
+                batch,
+                self._config.num_heads,
+                encoder_seq_length,
+                self._config.hidden_size // self._config.num_heads,
+            )
+            decoder_shape = (batch, self._config.num_heads, 1, self._config.hidden_size // self._config.num_heads)
+
+            ordered_inputs["past_key_values"] = []
+            for _ in range(self._config.num_layers):
+                ordered_inputs["past_key_values"].append(
+                    (
+                        torch.zeros(decoder_shape),
+                        torch.zeros(decoder_shape),
+                        torch.zeros(encoder_shape),
+                        torch.zeros(encoder_shape),
+                    )
+                )
+
+        return ordered_inputs
+
+    @staticmethod
+    def flatten_output_collection_property(name: str, field: Iterable[Any]) -> Dict[str, Any]:
+        if name in ["present", "past_key_values"]:
+            flatten_output = {}
+            for idx, t in enumerate(field):
+                flatten_output[f"{name}.{idx}.decoder.key"] = t[0]
+                flatten_output[f"{name}.{idx}.decoder.value"] = t[1]
+                flatten_output[f"{name}.{idx}.encoder.key"] = t[2]
+                flatten_output[f"{name}.{idx}.encoder.value"] = t[3]
+
+            return flatten_output
+
+        return super().flatten_output_collection_property(name, field)

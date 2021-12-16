@@ -61,7 +61,7 @@ Implementation Notes
 - Model predictions are intended to be identical to the original implementation when
   :obj:`force_bos_token_to_be_generated=True`. This only works, however, if the string you pass to
   :func:`fairseq.encode` starts with a space.
-- :meth:`~transformers.BartForConditionalGeneration.generate` should be used for conditional generation tasks like
+- :meth:`~transformers.generation_utils.GenerationMixin.generate` should be used for conditional generation tasks like
   summarization, see the example in that docstrings.
 - Models that load the `facebook/bart-large-cnn` weights will not have a :obj:`mask_token_id`, or be able to perform
   mask-filling tasks.
@@ -74,7 +74,7 @@ The :obj:`facebook/bart-base` and :obj:`facebook/bart-large` checkpoints can be 
 .. code-block::
 
     from transformers import BartForConditionalGeneration, BartTokenizer
-    model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", force_bos_token_to_be_generated=True)
+    model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", forced_bos_token_id=0)
     tok = BartTokenizer.from_pretrained("facebook/bart-large")
     example_english_phrase = "UN Chief Says There Is No <mask> in Syria"
     batch = tok(example_english_phrase, return_tensors='pt')
@@ -131,12 +131,12 @@ BartForQuestionAnswering
 .. autoclass:: transformers.BartForQuestionAnswering
     :members: forward
 
+
 BartForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BartForCausalLM
     :members: forward
-
 
 
 TFBartModel
@@ -151,3 +151,32 @@ TFBartForConditionalGeneration
 
 .. autoclass:: transformers.TFBartForConditionalGeneration
     :members: call
+
+
+FlaxBartModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBartModel
+    :members: __call__, encode, decode
+
+
+FlaxBartForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBartForConditionalGeneration
+    :members: __call__, encode, decode
+
+
+FlaxBartForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBartForSequenceClassification
+    :members: __call__, encode, decode
+
+
+FlaxBartForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBartForQuestionAnswering
+    :members: __call__, encode, decode
+

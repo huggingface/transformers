@@ -22,10 +22,7 @@ from .tokenization_herbert import HerbertTokenizer
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "merges_file": "merges.txt",
-}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -65,18 +62,28 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = HerbertTokenizer
 
-    def __init__(self, vocab_file, merges_file, tokenizer_file=None, **kwargs):
-
-        kwargs["cls_token"] = "<s>"
-        kwargs["unk_token"] = "<unk>"
-        kwargs["pad_token"] = "<pad>"
-        kwargs["mask_token"] = "<mask>"
-        kwargs["sep_token"] = "</s>"
+    def __init__(
+        self,
+        vocab_file=None,
+        merges_file=None,
+        tokenizer_file=None,
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        sep_token="</s>",
+        **kwargs
+    ):
 
         super().__init__(
             vocab_file,
             merges_file,
             tokenizer_file=tokenizer_file,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            sep_token=sep_token,
             **kwargs,
         )
 

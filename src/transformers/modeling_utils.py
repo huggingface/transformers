@@ -18,18 +18,19 @@ import inspect
 import os
 import re
 import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
-from torch import Tensor, device, dtype, nn
+from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
-from torch.nn import functional as F
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
+from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .file_utils import (
-    CONFIG_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
@@ -38,17 +39,38 @@ from .file_utils import (
     ModelOutput,
     PushToHubMixin,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
-from .integrations import deepspeed_config, is_deepspeed_zero3_enabled
 from .utils import logging
+from .utils.versions import require_version_core
 
 
 logger = logging.get_logger(__name__)
+
+
+_init_weights = True
+
+
+@contextmanager
+def no_init_weights(_enable=True):
+    """
+    Context manager to globally disable weight initialization to speed up loading large models.
+
+    TODO(Patrick): Delete safety argument `_enable=True` at next major version. .
+    """
+    global _init_weights
+    if _enable:
+        _init_weights = False
+    try:
+        yield
+    finally:
+        _init_weights = True
+
 
 try:
     from torch.nn import Identity
@@ -182,7 +204,7 @@ class ModuleUtilsMixin:
         return get_parameter_device(self)
 
     @property
-    def dtype(self) -> dtype:
+    def dtype(self) -> torch.dtype:
         """
         :obj:`torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
@@ -211,7 +233,7 @@ class ModuleUtilsMixin:
 
         if self.dtype == torch.float16:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
-        elif self.dtype == torch.float32:
+        elif self.dtype in [torch.bfloat16, torch.float32]:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             raise ValueError(
@@ -333,13 +355,16 @@ class ModuleUtilsMixin:
             :obj:`int`: The number of parameters.
         """
 
-        def parameter_filter(x):
-            return (x.requires_grad or not only_trainable) and not (
-                isinstance(x, torch.nn.Embedding) and exclude_embeddings
-            )
-
-        params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
-        return sum(p.numel() for p in params)
+        if exclude_embeddings:
+            embedding_param_names = [
+                f"{name}.weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
+            ]
+            non_embedding_parameters = [
+                parameter for name, parameter in self.named_parameters() if name not in embedding_param_names
+            ]
+            return sum(p.numel() for p in non_embedding_parameters if p.requires_grad or not only_trainable)
+        else:
+            return sum(p.numel() for p in self.parameters() if p.requires_grad or not only_trainable)
 
     def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
         """
@@ -423,10 +448,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_unexpected = None
     # a list of of tensor names to ignore when saving the model (useful for keys that aren't
-    # trained, but which are deterministic)
+    # trained, but which are deterministic, or tied variables)
     _keys_to_ignore_on_save = None
 
     is_parallelizable = False
+    supports_gradient_checkpointing = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -434,6 +460,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         :obj:`Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
+
+    @property
+    def framework(self) -> str:
+        """
+        :str: Identifies that this is a PyTorch model.
+        """
+        return "pt"
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
@@ -446,6 +479,80 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+
+    def post_init(self):
+        """
+        A method executed at the end of each Transformer model initialization, to execute code that needs the model's
+        modules properly initialized (such as weight initialization).
+        """
+        self.init_weights()
+        self._backward_compatibility_gradient_checkpointing()
+
+    def _backward_compatibility_gradient_checkpointing(self):
+        if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
+            # Remove the attribute now that is has been consumed, so it's no saved in the config.
+            delattr(self.config, "gradient_checkpointing")
+
+    @classmethod
+    def _from_config(cls, config, **kwargs):
+        """
+        All context managers that the model should be initialized under go here.
+
+        Args:
+            torch_dtype (:obj:`torch.dtype`, `optional`):
+                Override the default ``torch.dtype`` and load the model under this dtype.
+        """
+        torch_dtype = kwargs.pop("torch_dtype", None)
+
+        # override default dtype if needed
+        dtype_orig = None
+        if torch_dtype is not None:
+            dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+            # this immediately partitions the model across all gpus, to avoid the overhead in time
+            # and memory copying it on CPU or each GPU first
+            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
+                model = cls(config, **kwargs)
+        else:
+            model = cls(config, **kwargs)
+
+        # restore default dtype if it was modified
+        if dtype_orig is not None:
+            torch.set_default_dtype(dtype_orig)
+
+        return model
+
+    @classmethod
+    def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
+        """
+        Change the default dtype and return the previous one. This is needed when wanting to instantiate the model
+        under specific dtype.
+
+        Args:
+            dtype (:obj:`torch.dtype`):
+                a floating dtype to set to.
+
+        Returns:
+            :obj:`torch.dtype`: the original ``dtype`` that can be used to restore ``torch.set_default_dtype(dtype)``
+            if it was modified. If it wasn't, returns :obj:`None`.
+
+        Note ``set_default_dtype`` currently only works with floating-point types and asserts if for example,
+        ``torch.int64`` is passed. So if a non-float ``dtype`` is passed this functions will throw an exception.
+        """
+        if not dtype.is_floating_point:
+            raise ValueError(
+                f"Can't instantiate {cls.__name__} model under dtype={dtype} since it is not a floating point dtype"
+            )
+
+        logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
+        dtype_orig = torch.get_default_dtype()
+        torch.set_default_dtype(dtype)
+        return dtype_orig
 
     @property
     def base_model(self) -> nn.Module:
@@ -489,6 +596,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return None  # Overwrite for models with output embeddings
 
+    def _init_weights(self, module):
+        """
+        Initialize the weights. This method should be overridden by derived class.
+        """
+        raise NotImplementedError(f"Make sure `_init_weigths` is implemented for {self.__class__}")
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
@@ -504,6 +617,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
 
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
@@ -522,7 +639,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ):
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
-            ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -586,7 +703,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             output_embeddings.weight = input_embeddings.weight
 
         if getattr(output_embeddings, "bias", None) is not None:
-            output_embeddings.bias.data = torch.nn.functional.pad(
+            output_embeddings.bias.data = nn.functional.pad(
                 output_embeddings.bias.data,
                 (
                     0,
@@ -598,7 +715,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
 
@@ -641,8 +758,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
-        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
-    ) -> torch.nn.Embedding:
+        self, old_embeddings: nn.Embedding, new_num_tokens: Optional[int] = None
+    ) -> nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
@@ -677,14 +794,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}."
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. "
                 f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
             )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(
-            self.device, dtype=old_embeddings.weight.dtype
-        )
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        new_embeddings.to(self.device, dtype=old_embeddings.weight.dtype)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -705,8 +821,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return new_embeddings
 
     def _get_resized_lm_head(
-        self, old_lm_head: torch.nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
-    ) -> torch.nn.Linear:
+        self, old_lm_head: nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
+    ) -> nn.Linear:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
         vectors at the end. Reducing the size will remove vectors from the end
@@ -731,54 +847,97 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_lm_head
 
-        old_num_tokens, old_lm_head_dim = (
-            old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
-        )
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
+                old_num_tokens, old_lm_head_dim = (
+                    old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
+                )
+        else:
+            old_num_tokens, old_lm_head_dim = (
+                old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
+            )
 
         if old_num_tokens == new_num_tokens:
             return old_lm_head
 
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
-                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
-                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Linear}."
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. "
+                f"You should either use a different resize function or make sure that `old_lm_head` are an instance of {nn.Linear}."
             )
 
         # Build new lm head
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
-        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias).to(self.device)
+        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias)
+        new_lm_head = new_lm_head.to(self.device, dtype=old_lm_head.weight.dtype)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
-        # Copy old lm head weights to new lm head
-        if not transposed:
-            new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
-        else:
-            new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+        # XXX: put the long block of code in a wrapper
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
 
-        # Copy bias weights to new lm head
-        if has_new_lm_head_bias:
-            new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
+            with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=0):
+                if torch.distributed.get_rank() == 0:
+                    # Copy old lm head weights to new lm head
+                    if not transposed:
+                        new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[
+                            :num_tokens_to_copy, :
+                        ]
+                    else:
+                        new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[
+                            :, :num_tokens_to_copy
+                        ]
+
+                    # Copy bias weights to new lm head
+                    if has_new_lm_head_bias:
+                        new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
+        else:
+            # Copy old lm head weights to new lm head
+            if not transposed:
+                new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+            else:
+                new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+
+            # Copy bias weights to new lm head
+            if has_new_lm_head_bias:
+                new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
 
         return new_lm_head
 
+    def resize_position_embeddings(self, new_num_position_embeddings: int):
+        raise NotImplementedError(
+            f"`resize_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+        )
+
+    def get_position_embeddings(self) -> Union[nn.Embedding, Tuple[nn.Embedding]]:
+        raise NotImplementedError(
+            f"`get_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+        )
+
     def init_weights(self):
         """
-        Initializes and prunes weights if needed.
+        If needed prunes and maybe initializes weights.
         """
-        # Initialize weights
-        self.apply(self._init_weights)
-
         # Prune heads if needed
         if self.config.pruned_heads:
             self.prune_heads(self.config.pruned_heads)
 
-        # Tie weights if needed
-        self.tie_weights()
+        if _init_weights:
+            # Initialize weights
+            self.apply(self._init_weights)
+
+            # Tie weights should be skipped when not initializing all weights
+            # since from_pretrained(...) calls tie weights anyways
+            self.tie_weights()
 
     def prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
@@ -796,6 +955,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self.config.pruned_heads[layer] = list(union_heads)  # Unfortunately we have to store it as list for JSON
 
         self.base_model._prune_heads(heads_to_prune)
+
+    def gradient_checkpointing_enable(self):
+        """
+        Activates gradient checkpointing for the current model.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        if not self.supports_gradient_checkpointing:
+            raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
+        self.apply(partial(self._set_gradient_checkpointing, value=True))
+
+    def gradient_checkpointing_disable(self):
+        """
+        Deactivates gradient checkpointing for the current model.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        if self.supports_gradient_checkpointing:
+            self.apply(partial(self._set_gradient_checkpointing, value=False))
+
+    @property
+    def is_gradient_checkpointing(self) -> bool:
+        """
+        Whether gradient checkpointing is activated for this model or not.
+
+        Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
+        activations".
+        """
+        return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
 
     def save_pretrained(
         self,
@@ -826,6 +1016,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 need to replace :obj:`torch.save` by another method.
             push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it.
+
+                .. warning::
+
+                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
+                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
+                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
+                    instead.
+
             kwargs:
                 Additional key word arguments passed along to the
                 :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
@@ -833,10 +1031,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo = self._create_or_get_repo(save_directory, **kwargs)
+
         os.makedirs(save_directory, exist_ok=True)
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
+
+        # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
+        # we currently don't use this setting automatically, but may start to use with v5
+        dtype = get_parameter_dtype(model_to_save)
+        model_to_save.config.torch_dtype = str(dtype).split(".")[1]
 
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
@@ -851,7 +1059,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
-            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
+            for ignore_key in self._keys_to_ignore_on_save:
+                if ignore_key in state_dict.keys():
+                    del state_dict[ignore_key]
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
@@ -860,10 +1070,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         logger.info(f"Model weights saved in {output_model_file}")
 
         if push_to_hub:
-            saved_files = [output_model_file]
-            if save_config:
-                saved_files.append(os.path.join(save_directory, CONFIG_NAME))
-            url = self._push_to_hub(save_files=saved_files, **kwargs)
+            url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Model pushed to the hub in this commit: {url}")
 
     @classmethod
@@ -900,14 +1107,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
             config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
                     - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
@@ -932,13 +1139,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             from_flax (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a Flax checkpoint save file (see docstring of
                 ``pretrained_model_name_or_path`` argument).
+            ignore_mismatched_sizes (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to raise an error if some of the weights from the checkpoint do not have the same size
+                as the weights of the model (if for instance, you are instantiating a model with 10 labels from a
+                checkpoint with 3 labels).
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str], `optional`):
+            proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -952,10 +1163,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
-            mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
+            mirror(:obj:`str`, `optional`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
+            _fast_init(:obj:`bool`, `optional`, defaults to `:obj:`True`):
+                Whether or not to disable fast initialization.
+            low_cpu_mem_usage(:obj:`bool`, `optional`, defaults to `:obj:`False`):
+                Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
+                This is an experimental feature and a subject to change at any moment.
+            torch_dtype (:obj:`str` or :obj:`torch.dtype`, `optional`):
+                Override the default ``torch.dtype`` and load the model under this dtype. If ``"auto"`` is passed the
+                dtype will be automatically derived from the model's weights.
+
+                .. warning::
+
+                    One should only disable `_fast_init` to ensure backwards compatibility with
+                    ``transformers.__version__ < 4.6.0`` for seeded model initialization. This argument will be removed
+                    at the next major version. See `pull request 11471
+                    <https://github.com/huggingface/transformers/pull/11471>`__ for more information.
+
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -1002,6 +1229,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cache_dir = kwargs.pop("cache_dir", None)
         from_tf = kwargs.pop("from_tf", False)
         from_flax = kwargs.pop("from_flax", False)
+        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -1012,6 +1240,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         mirror = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        _fast_init = kwargs.pop("_fast_init", True)
+        torch_dtype = kwargs.pop("torch_dtype", None)
+        low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", False)
+
+        from_pt = not (from_tf | from_flax)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1026,7 +1259,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                *model_args,
                 cache_dir=cache_dir,
                 return_unused_kwargs=True,
                 force_download=force_download,
@@ -1104,9 +1336,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
+                    f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}\n\n"
                 )
+
+                if revision is not None:
+                    msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
+
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
@@ -1116,34 +1353,70 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             resolved_archive_file = None
 
+        # load pt weights early so that we know which dtype to init the model under
+        if from_pt:
+            if state_dict is None:
+                try:
+                    state_dict = torch.load(resolved_archive_file, map_location="cpu")
+                except Exception as e:
+                    try:
+                        with open(resolved_archive_file) as f:
+                            if f.read().startswith("version"):
+                                raise OSError(
+                                    "You seem to have cloned a repository without having git-lfs installed. Please install "
+                                    "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                                    "you cloned."
+                                )
+                            else:
+                                raise ValueError from e
+                    except (UnicodeDecodeError, ValueError):
+                        raise OSError(
+                            f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
+                            f"at '{resolved_archive_file}'. "
+                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True."
+                        )
+
+            # set dtype to instantiate the model under:
+            # 1. If torch_dtype is not None, we use that dtype
+            # 2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
+            #    weights entry - we assume all weights are of the same dtype
+            # we also may have config.torch_dtype available, but we won't rely on it till v5
+            dtype_orig = None
+            if torch_dtype is not None:
+                if isinstance(torch_dtype, str):
+                    if torch_dtype == "auto":
+                        torch_dtype = next(iter(state_dict.values())).dtype
+                    else:
+                        raise ValueError(
+                            f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
+                        )
+                dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+
+            if low_cpu_mem_usage:
+                # save the keys
+                loaded_state_dict_keys = [k for k in state_dict.keys()]
+                del state_dict  # free CPU memory - will reload again later
+
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
-            with deepspeed.zero.Init(config=deepspeed_config()):
-                model = cls(config, *model_args, **model_kwargs)
+            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
+                with no_init_weights(_enable=_fast_init):
+                    model = cls(config, *model_args, **model_kwargs)
         else:
-            model = cls(config, *model_args, **model_kwargs)
+            with no_init_weights(_enable=_fast_init):
+                model = cls(config, *model_args, **model_kwargs)
 
-        if state_dict is None and not (from_tf or from_flax):
-            try:
-                state_dict = torch.load(resolved_archive_file, map_location="cpu")
-            except Exception:
-                raise OSError(
-                    f"Unable to load weights from pytorch checkpoint file for '{pretrained_model_name_or_path}' "
-                    f"at '{resolved_archive_file}'"
-                    "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
-                )
-
-        missing_keys = []
-        unexpected_keys = []
-        error_msgs = []
+        if from_pt:
+            # restore default dtype
+            if dtype_orig is not None:
+                torch.set_default_dtype(dtype_orig)
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
@@ -1172,103 +1445,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
                 )
                 raise
-        else:
-            # Convert old format to new format if needed from a PyTorch state_dict
-            old_keys = []
-            new_keys = []
-            for key in state_dict.keys():
-                new_key = None
-                if "gamma" in key:
-                    new_key = key.replace("gamma", "weight")
-                if "beta" in key:
-                    new_key = key.replace("beta", "bias")
-                if new_key:
-                    old_keys.append(key)
-                    new_keys.append(new_key)
-            for old_key, new_key in zip(old_keys, new_keys):
-                state_dict[new_key] = state_dict.pop(old_key)
+        elif from_pt:
 
-            # copy state_dict so _load_from_state_dict can modify it
-            metadata = getattr(state_dict, "_metadata", None)
-            state_dict = state_dict.copy()
-            if metadata is not None:
-                state_dict._metadata = metadata
-
-            # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
-            # so we need to apply the function recursively.
-            def load(module: nn.Module, prefix=""):
-                local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-                if is_deepspeed_zero3_enabled():
-                    import deepspeed
-
-                    # because zero3 puts placeholders in model params, this context
-                    # manager gathers (unpartitions) the params of the current layer, then loads from
-                    # the state dict and then re-partitions them again
-                    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
-                        if torch.distributed.get_rank() == 0:
-                            module._load_from_state_dict(*args)
-                else:
-                    module._load_from_state_dict(*args)
-
-                for name, child in module._modules.items():
-                    if child is not None:
-                        load(child, prefix + name + ".")
-
-            # Make sure we are able to load base models as well as derived models (with heads)
-            start_prefix = ""
-            model_to_load = model
-            has_prefix_module = any(s.startswith(cls.base_model_prefix) for s in state_dict.keys())
-            if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
-                start_prefix = cls.base_model_prefix + "."
-            if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
-                model_to_load = getattr(model, cls.base_model_prefix)
-
-            load(model_to_load, prefix=start_prefix)
-
-            if model.__class__.__name__ != model_to_load.__class__.__name__:
-                base_model_state_dict = model_to_load.state_dict().keys()
-                head_model_state_dict_without_base_prefix = [
-                    key.split(cls.base_model_prefix + ".")[-1] for key in model.state_dict().keys()
-                ]
-                missing_keys.extend(head_model_state_dict_without_base_prefix - base_model_state_dict)
-
-            # Some models may have keys that are not in the state by design, removing them before needlessly warning
-            # the user.
-            if cls._keys_to_ignore_on_load_missing is not None:
-                for pat in cls._keys_to_ignore_on_load_missing:
-                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-
-            if cls._keys_to_ignore_on_load_unexpected is not None:
-                for pat in cls._keys_to_ignore_on_load_unexpected:
-                    unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
-
-            if len(unexpected_keys) > 0:
-                logger.warning(
-                    f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
-                )
+            if low_cpu_mem_usage:
+                cls._load_state_dict_into_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file)
             else:
-                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
-            if len(missing_keys) > 0:
-                logger.warning(
-                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                    f"and are newly initialized: {missing_keys}\n"
-                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_state_dict_into_model(
+                    model,
+                    state_dict,
+                    pretrained_model_name_or_path,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    _fast_init=_fast_init,
                 )
-            else:
-                logger.info(
-                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                    f"If your task is similar to the task the model of the checkpoint was trained on, "
-                    f"you can already use {model.__class__.__name__} for predictions without further training."
-                )
-            if len(error_msgs) > 0:
-                error_msg = "\n\t".join(error_msgs)
-                raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -1279,11 +1468,274 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             loading_info = {
                 "missing_keys": missing_keys,
                 "unexpected_keys": unexpected_keys,
+                "mismatched_keys": mismatched_keys,
                 "error_msgs": error_msgs,
             }
             return model, loading_info
 
         return model
+
+    @classmethod
+    def _load_state_dict_into_model(
+        cls, model, state_dict, pretrained_model_name_or_path, ignore_mismatched_sizes=False, _fast_init=True
+    ):
+
+        # Convert old format to new format if needed from a PyTorch state_dict
+        old_keys = []
+        new_keys = []
+        for key in state_dict.keys():
+            new_key = None
+            if "gamma" in key:
+                new_key = key.replace("gamma", "weight")
+            if "beta" in key:
+                new_key = key.replace("beta", "bias")
+            if new_key:
+                old_keys.append(key)
+                new_keys.append(new_key)
+        for old_key, new_key in zip(old_keys, new_keys):
+            state_dict[new_key] = state_dict.pop(old_key)
+
+        # Retrieve missing & unexpected_keys
+        model_state_dict = model.state_dict()
+        expected_keys = list(model_state_dict.keys())
+        loaded_keys = list(state_dict.keys())
+        prefix = model.base_model_prefix
+
+        has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
+        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+
+        # key re-naming operations are never done on the keys
+        # that are loaded, but always on the keys of the newly initialized model
+        remove_prefix_from_model = not has_prefix_module and expects_prefix_module
+        add_prefix_to_model = has_prefix_module and not expects_prefix_module
+
+        if remove_prefix_from_model:
+            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
+            expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
+        elif add_prefix_to_model:
+            expected_keys = [".".join([prefix, s]) for s in expected_keys]
+
+        missing_keys = list(set(expected_keys) - set(loaded_keys))
+        unexpected_keys = list(set(loaded_keys) - set(expected_keys))
+
+        # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
+        # matching the weights in the model.
+        mismatched_keys = []
+        if ignore_mismatched_sizes:
+            for checkpoint_key in loaded_keys:
+                model_key = checkpoint_key
+                if remove_prefix_from_model:
+                    # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
+                    model_key = f"{prefix}.{checkpoint_key}"
+                elif add_prefix_to_model:
+                    # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                    model_key = ".".join(checkpoint_key.split(".")[1:])
+
+                if (
+                    model_key in model_state_dict
+                    and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+                ):
+                    mismatched_keys.append(
+                        (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                    )
+                    del state_dict[checkpoint_key]
+
+        # Some models may have keys that are not in the state by design, removing them before needlessly warning
+        # the user.
+        if cls._keys_to_ignore_on_load_missing is not None:
+            for pat in cls._keys_to_ignore_on_load_missing:
+                missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+        if cls._keys_to_ignore_on_load_unexpected is not None:
+            for pat in cls._keys_to_ignore_on_load_unexpected:
+                unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
+        if _fast_init:
+            # retrieve unintialized modules and initialize
+            uninitialized_modules = model.retrieve_modules_from_names(
+                missing_keys, add_prefix=add_prefix_to_model, remove_prefix=remove_prefix_from_model
+            )
+            for module in uninitialized_modules:
+                model._init_weights(module)
+
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, "_metadata", None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
+
+        error_msgs = []
+
+        # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
+        # so we need to apply the function recursively.
+        def load(module: nn.Module, prefix=""):
+            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+            args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                # because zero3 puts placeholders in model params, this context
+                # manager gathers (unpartitions) the params of the current layer, then loads from
+                # the state dict and then re-partitions them again
+                with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                    if torch.distributed.get_rank() == 0:
+                        module._load_from_state_dict(*args)
+            else:
+                module._load_from_state_dict(*args)
+
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + ".")
+
+        # Make sure we are able to load base models as well as derived models (with heads)
+        start_prefix = ""
+        model_to_load = model
+        if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
+            start_prefix = cls.base_model_prefix + "."
+        if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
+            model_to_load = getattr(model, cls.base_model_prefix)
+            if any(key in expected_keys_not_prefixed for key in loaded_keys):
+                raise ValueError(
+                    "The state dictionary of the model you are training to load is corrupted. Are you sure it was "
+                    "properly saved?"
+                )
+
+        load(model_to_load, prefix=start_prefix)
+
+        if len(error_msgs) > 0:
+            error_msg = "\n\t".join(error_msgs)
+            raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
+
+        if len(unexpected_keys) > 0:
+            logger.warning(
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
+                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+            )
+        else:
+            logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+        if len(missing_keys) > 0:
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized: {missing_keys}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+        elif len(mismatched_keys) == 0:
+            logger.info(
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"If your task is similar to the task the model of the checkpoint was trained on, "
+                f"you can already use {model.__class__.__name__} for predictions without further training."
+            )
+        if len(mismatched_keys) > 0:
+            mismatched_warning = "\n".join(
+                [
+                    f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                    for key, shape1, shape2 in mismatched_keys
+                ]
+            )
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+
+        return model, missing_keys, unexpected_keys, mismatched_keys, error_msgs
+
+    def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
+        module_keys = set([".".join(key.split(".")[:-1]) for key in names])
+
+        # torch.nn.ParameterList is a special case where two parameter keywords
+        # are appended to the module name, *e.g.* bert.special_embeddings.0
+        module_keys = module_keys.union(set([".".join(key.split(".")[:-2]) for key in names if key[-1].isdigit()]))
+
+        retrieved_modules = []
+        # retrieve all modules that has at least one missing weight name
+        for name, module in self.named_modules():
+            if remove_prefix:
+                name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
+            elif add_prefix:
+                name = ".".join([self.base_model_prefix, name]) if len(name) > 0 else self.base_model_prefix
+
+            if name in module_keys:
+                retrieved_modules.append(module)
+
+        return retrieved_modules
+
+    @classmethod
+    def _load_state_dict_into_model_low_mem(cls, model, loaded_state_dict_keys, resolved_archive_file):
+        """
+        This is an experimental function that loads the model using ~1.x model size CPU memory
+
+        Before it gets called we do:
+
+        1. save which state_dict keys we have
+        2. drop state_dict before model is created, since the latter takes 1x model size memory
+
+        Here then we continue:
+
+        3. switch to the meta device all params/buffers that are going to be replaced from the loaded state_dict
+        4. load state_dict 2nd time
+        5. replace the params/buffers from the state_dict
+
+        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
+        """
+
+        require_version_core("torch>=1.9")
+        if is_deepspeed_zero3_enabled():
+            raise ValueError("low_cpu_mem_usage arg cannot be used with DeepSpeed ZeRO-3")
+
+        # a helper util to find the last sub-module and the param/buffer name
+        def find_submodule_and_param_name(model, long_key):
+            split_key = long_key.split(".")
+            submodule = model
+            while len(split_key) > 1:
+                if hasattr(submodule, split_key[0]):
+                    submodule = getattr(submodule, split_key[0])
+                    del split_key[0]
+                else:
+                    submodule = None
+                    break
+            return submodule, split_key[0]
+
+        # dematerialize param storage for keys that are going to be replaced by state_dict, by
+        # putting those on the meta device
+        for k in loaded_state_dict_keys:
+            submodule, param_name = find_submodule_and_param_name(model, k)
+            if submodule is not None:
+                # selectively switch to the meta device only those params/buffers that will
+                # be next replaced from state_dict. This a complex way to do p.to_("meta")
+                # since we have no in-place to_ for tensors.
+                new_val = getattr(submodule, param_name)
+                if isinstance(new_val, torch.nn.Parameter):
+                    # isinstance returns False for Params on meta device, so switch after the check
+                    new_val = torch.nn.Parameter(new_val.to("meta"))
+                else:
+                    new_val = new_val.to("meta")
+                setattr(submodule, param_name, new_val)
+
+        # only now can load state_dict
+        state_dict = torch.load(resolved_archive_file, map_location="cpu")
+
+        # materialize state_dict entries one by one on CPU
+        for k in loaded_state_dict_keys:
+            submodule, param_name = find_submodule_and_param_name(model, k)
+            if submodule is not None:
+                new_val = state_dict[k]
+                if isinstance(getattr(submodule, param_name), torch.nn.Parameter):
+                    new_val = torch.nn.Parameter(new_val)
+                setattr(submodule, param_name, new_val)
+
+        del state_dict
+
+
+# To update the docstring, we need to copy the method, otherwise we change the original docstring.
+PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
+PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
+    object="model", object_class="AutoModel", object_files="model checkpoint"
+)
 
 
 class Conv1D(nn.Module):
@@ -1591,7 +2043,7 @@ class SQuADHead(nn.Module):
         else:
             # during inference, compute the end logits based on beam search
             bsz, slen, hsz = hidden_states.size()
-            start_log_probs = F.softmax(start_logits, dim=-1)  # shape (bsz, slen)
+            start_log_probs = nn.functional.softmax(start_logits, dim=-1)  # shape (bsz, slen)
 
             start_top_log_probs, start_top_index = torch.topk(
                 start_log_probs, self.start_n_top, dim=-1
@@ -1605,7 +2057,7 @@ class SQuADHead(nn.Module):
             )  # shape (bsz, slen, start_n_top, hsz)
             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
             end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-            end_log_probs = F.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
+            end_log_probs = nn.functional.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
 
             end_top_log_probs, end_top_index = torch.topk(
                 end_log_probs, self.end_n_top, dim=1
@@ -1730,7 +2182,7 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
+def unwrap_model(model: nn.Module) -> nn.Module:
     """
     Recursively unwraps a model from potential containers (as used in distributed training).
 
@@ -1744,7 +2196,7 @@ def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
         return model
 
 
-def prune_linear_layer(layer: torch.nn.Linear, index: torch.LongTensor, dim: int = 0) -> torch.nn.Linear:
+def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
 
@@ -1812,8 +2264,8 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
 
 
 def prune_layer(
-    layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[torch.nn.Linear, Conv1D]:
+    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
+) -> Union[nn.Linear, Conv1D]:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
 
@@ -1873,10 +2325,6 @@ def apply_chunking_to_forward(
     """
 
     assert len(input_tensors) > 0, f"{input_tensors} has to be a tuple/list of tensors"
-    tensor_shape = input_tensors[0].shape[chunk_dim]
-    assert all(
-        input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
-    ), "All input tenors have to be of the same shape"
 
     # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
@@ -1887,6 +2335,14 @@ def apply_chunking_to_forward(
         )
 
     if chunk_size > 0:
+        tensor_shape = input_tensors[0].shape[chunk_dim]
+        for input_tensor in input_tensors:
+            if input_tensor.shape[chunk_dim] != tensor_shape:
+                raise ValueError(
+                    f"All input tenors have to be of the same shape: {tensor_shape}, "
+                    f"found shape {input_tensor.shape[chunk_dim]}"
+                )
+
         if input_tensors[0].shape[chunk_dim] % chunk_size != 0:
             raise ValueError(
                 f"The dimension to be chunked {input_tensors[0].shape[chunk_dim]} has to be a multiple of the chunk "

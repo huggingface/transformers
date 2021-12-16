@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+isort:skip_file
+"""
 import os
 import pickle
 import tempfile
@@ -20,12 +23,14 @@ from typing import Callable, Optional
 
 import numpy as np
 
+# Ensure there are no circular imports when importing the parent class
+from transformers import PreTrainedTokenizerFast
+
 from transformers import (
     BatchEncoding,
     BertTokenizer,
     BertTokenizerFast,
     PreTrainedTokenizer,
-    PreTrainedTokenizerFast,
     TensorType,
     TokenSpan,
     is_tokenizers_available,

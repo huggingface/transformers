@@ -108,6 +108,56 @@ class BertConverter(Converter):
         return tokenizer
 
 
+class SplinterConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
+
+        tokenize_chinese_chars = False
+        strip_accents = False
+        do_lower_case = False
+        if hasattr(self.original_tokenizer, "basic_tokenizer"):
+            tokenize_chinese_chars = self.original_tokenizer.basic_tokenizer.tokenize_chinese_chars
+            strip_accents = self.original_tokenizer.basic_tokenizer.strip_accents
+            do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
+
+        tokenizer.normalizer = normalizers.BertNormalizer(
+            clean_text=True,
+            handle_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            lowercase=do_lower_case,
+        )
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        question = str(self.original_tokenizer.question_token)
+        dot = "."
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+        question_token_id = self.original_tokenizer.question_token_id
+        dot_token_id = self.original_tokenizer.convert_tokens_to_ids(".")
+
+        if self.original_tokenizer.padding_side == "right":
+            pair = f"{cls}:0 $A:0 {question} {dot} {sep}:0 $B:1 {sep}:1"
+        else:
+            pair = f"{cls}:0 $A:0 {sep}:0 $B:1 {question} {dot} {sep}:1"
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:0 $A:0 {sep}:0",
+            pair=pair,
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+                (question, question_token_id),
+                (dot, dot_token_id),
+            ],
+        )
+        tokenizer.decoder = decoders.WordPiece(prefix="##")
+
+        return tokenizer
+
+
 class FunnelConverter(Converter):
     def converted(self) -> Tokenizer:
         vocab = self.original_tokenizer.vocab
@@ -296,6 +346,45 @@ class RobertaConverter(Converter):
         return tokenizer
 
 
+class RoFormerConverter(Converter):
+    def converted(self) -> Tokenizer:
+        from .models.roformer.tokenization_utils import JiebaPreTokenizer
+
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
+
+        strip_accents = False
+        do_lower_case = False
+        if hasattr(self.original_tokenizer, "basic_tokenizer"):
+            strip_accents = self.original_tokenizer.basic_tokenizer.strip_accents
+            do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
+
+        tokenizer.normalizer = normalizers.BertNormalizer(
+            clean_text=True,
+            handle_chinese_chars=False,
+            strip_accents=strip_accents,
+            lowercase=do_lower_case,
+        )
+        tokenizer.pre_tokenizer = pre_tokenizers.PreTokenizer.custom(JiebaPreTokenizer(vocab))
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:0 $A:0 {sep}:0",
+            pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
+        )
+        tokenizer.decoder = decoders.WordPiece(prefix="##")
+
+        return tokenizer
+
+
 class DebertaConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer
@@ -373,9 +462,12 @@ class SpmConverter(Converter):
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        return normalizers.Sequence(
-            [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
-        )
+        if not precompiled_charsmap:
+            return normalizers.Sequence([normalizers.Replace(Regex(" {2,}"), " ")])
+        else:
+            return normalizers.Sequence(
+                [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
+            )
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         return pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
@@ -411,7 +503,6 @@ class AlbertConverter(SpmConverter):
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
-            normalizers.Replace(Regex(" {2,}"), " "),
         ]
         if not self.original_tokenizer.keep_accents:
             list_normalizers.append(normalizers.NFKD())
@@ -421,6 +512,7 @@ class AlbertConverter(SpmConverter):
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
 
     def post_processor(self):
@@ -599,7 +691,6 @@ class XLNetConverter(SpmConverter):
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
-            normalizers.Replace(Regex(" {2,}"), " "),
         ]
         if not self.original_tokenizer.keep_accents:
             list_normalizers.append(normalizers.NFKD())
@@ -609,6 +700,7 @@ class XLNetConverter(SpmConverter):
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
 
     def post_processor(self):
@@ -626,6 +718,35 @@ class ReformerConverter(SpmConverter):
     pass
 
 
+class RemBertConverter(SpmConverter):
+    # Inspired from AlbertConverter
+    def normalizer(self, proto):
+        list_normalizers = [
+            normalizers.Replace("``", '"'),
+            normalizers.Replace("''", '"'),
+            normalizers.Replace(Regex(" {2,}"), " "),
+        ]
+        if not self.original_tokenizer.keep_accents:
+            list_normalizers.append(normalizers.NFKD())
+            list_normalizers.append(normalizers.StripAccents())
+        if self.original_tokenizer.do_lower_case:
+            list_normalizers.append(normalizers.Lowercase())
+
+        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        return normalizers.Sequence(list_normalizers)
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="[CLS]:0 $A:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:1 [SEP]:1",
+            special_tokens=[
+                ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
+                ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
+            ],
+        )
+
+
 class BertGenerationConverter(SpmConverter):
     pass
 
@@ -635,9 +756,17 @@ class PegasusConverter(SpmConverter):
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),
             (self.original_tokenizer.eos_token, 0.0),
-            (self.original_tokenizer.mask_token_sent, 0.0),
-            (self.original_tokenizer.mask_token, 0.0),
         ]
+
+        if self.original_tokenizer.mask_token_sent is not None:
+            vocab += [(self.original_tokenizer.mask_token_sent, 0.0)]
+
+        if (
+            self.original_tokenizer.mask_token is not None
+            and self.original_tokenizer.mask_token_id < self.original_tokenizer.offset
+        ):
+            vocab += [(self.original_tokenizer.mask_token, 0.0)]
+
         vocab += [(f"<unk_{i}>", -100.0) for i in range(2, self.original_tokenizer.offset)]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[2:]]
         return vocab
@@ -678,12 +807,118 @@ class T5Converter(SpmConverter):
         )
 
 
+class BigBirdConverter(SpmConverter):
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="[CLS]:0 $A:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:1 [SEP]:1",
+            special_tokens=[
+                ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
+                ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
+            ],
+        )
+
+
+class CLIPConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="</w>",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        return tokenizer
+
+
+class LayoutLMv2Converter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
+
+        tokenize_chinese_chars = False
+        strip_accents = False
+        do_lower_case = True
+        if hasattr(self.original_tokenizer, "basic_tokenizer"):
+            tokenize_chinese_chars = self.original_tokenizer.basic_tokenizer.tokenize_chinese_chars
+            strip_accents = self.original_tokenizer.basic_tokenizer.strip_accents
+            do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
+
+        tokenizer.normalizer = normalizers.BertNormalizer(
+            clean_text=True,
+            handle_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            lowercase=do_lower_case,
+        )
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:0 $A:0 {sep}:0",
+            pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
+        )
+        tokenizer.decoder = decoders.WordPiece(prefix="##")
+
+        return tokenizer
+
+
+class BlenderbotConverter(Converter):
+    def converted(self) -> Tokenizer:
+        ot = self.original_tokenizer
+        vocab = ot.encoder
+        merges = list(ot.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"$A:0 {ot.eos_token}:0",
+            special_tokens=[
+                (ot.eos_token, ot.eos_token_id),
+            ],
+        )
+
+        return tokenizer
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
     "BarthezTokenizer": BarthezConverter,
     "BertTokenizer": BertConverter,
+    "BigBirdTokenizer": BigBirdConverter,
+    "BlenderbotTokenizer": BlenderbotConverter,
     "CamembertTokenizer": CamembertConverter,
+    "CLIPTokenizer": CLIPConverter,
     "ConvBertTokenizer": BertConverter,
     "DebertaTokenizer": DebertaConverter,
     "DistilBertTokenizer": BertConverter,
@@ -691,10 +926,13 @@ SLOW_TO_FAST_CONVERTERS = {
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
     "ElectraTokenizer": BertConverter,
+    "FNetTokenizer": AlbertConverter,
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
+    "LayoutLMv2Tokenizer": BertConverter,
+    "LayoutXLMTokenizer": XLMRobertaConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
@@ -705,12 +943,15 @@ SLOW_TO_FAST_CONVERTERS = {
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
     "ReformerTokenizer": ReformerConverter,
+    "RemBertTokenizer": RemBertConverter,
     "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
+    "RoFormerTokenizer": RoFormerConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
+    "SplinterTokenizer": SplinterConverter,
 }
 
 

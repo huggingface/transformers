@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from torch import nn
 from torch.utils.data import DataLoader
 
 from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
@@ -151,12 +152,12 @@ class SummarizationModule(BaseTransformer):
         lm_logits = outputs["logits"]
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
-            ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            ce_loss_fct = nn.CrossEntropyLoss(ignore_index=pad_token_id)
 
             assert lm_logits.shape[-1] == self.vocab_size
             loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
-            lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
+            lprobs = nn.functional.log_softmax(lm_logits, dim=-1)
             loss, nll_loss = label_smoothed_nll_loss(
                 lprobs, tgt_ids, self.hparams.label_smoothing, ignore_index=pad_token_id
             )

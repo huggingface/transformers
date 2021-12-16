@@ -23,7 +23,6 @@ from typing import List, Optional, Tuple
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -305,7 +304,7 @@ class XLNetRelativeAttention(nn.Module):
                 attn_score = attn_score - 1e30 * torch.einsum("ijbn->bnij", attn_mask)
 
         # attention probability
-        attn_prob = F.softmax(attn_score, dim=3)
+        attn_prob = nn.functional.softmax(attn_score, dim=3)
         attn_prob = self.dropout(attn_prob)
 
         # Mask heads if we want to
@@ -862,7 +861,7 @@ XLNET_START_DOCSTRING = r"""
 
 XLNET_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.XLNetTokenizer`. See
@@ -956,7 +955,8 @@ class XLNetModel(XLNetPreTrainedModel):
         self.layer = nn.ModuleList([XLNetLayer(config) for _ in range(config.n_layer)])
         self.dropout = nn.Dropout(config.dropout)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.word_embedding
@@ -1070,7 +1070,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1208,7 +1208,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
             # `1` indicates not in the same segment [qlen x klen x bsz]
             seg_mat = (token_type_ids[:, None] != cat_ids[None, :]).long()
-            seg_mat = F.one_hot(seg_mat, num_classes=2).to(dtype_float)
+            seg_mat = nn.functional.one_hot(seg_mat, num_classes=2).to(dtype_float)
         else:
             seg_mat = None
 
@@ -1312,7 +1312,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         self.transformer = XLNetModel(config)
         self.lm_loss = nn.Linear(config.d_model, config.vocab_size, bias=True)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_loss
@@ -1494,11 +1495,12 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForSequenceClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1562,7 +1564,10 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels)
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -1598,11 +1603,12 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         self.transformer = XLNetModel(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForTokenClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1695,11 +1701,12 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, 1)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForMultipleChoiceOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1798,11 +1805,12 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         self.transformer = XLNetModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForQuestionAnsweringSimpleOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1859,8 +1867,8 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1871,8 +1879,8 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
@@ -1911,7 +1919,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         self.end_logits = PoolerEndLogits(config)
         self.answer_class = PoolerAnswerClass(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=XLNetForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
@@ -2031,7 +2040,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         else:
             # during inference, compute the end logits based on beam search
             bsz, slen, hsz = hidden_states.size()
-            start_log_probs = F.softmax(start_logits, dim=-1)  # shape (bsz, slen)
+            start_log_probs = nn.functional.softmax(start_logits, dim=-1)  # shape (bsz, slen)
 
             start_top_log_probs, start_top_index = torch.topk(
                 start_log_probs, self.start_n_top, dim=-1
@@ -2045,7 +2054,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             )  # shape (bsz, slen, start_n_top, hsz)
             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
             end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-            end_log_probs = F.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
+            end_log_probs = nn.functional.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
 
             end_top_log_probs, end_top_index = torch.topk(
                 end_log_probs, self.end_n_top, dim=1

@@ -58,7 +58,7 @@ TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class TFAttention(tf.keras.layers.Layer):
-    def __init__(self, nx, n_ctx, config, scale=False, **kwargs):
+    def __init__(self, nx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
@@ -66,7 +66,6 @@ class TFAttention(tf.keras.layers.Layer):
         assert (
             n_state % config.n_head == 0
         ), f"Hidden dimension {n_state} not dividable by number of heads {config.n_head}"
-        self.n_ctx = n_ctx
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -169,10 +168,10 @@ class TFMLP(tf.keras.layers.Layer):
 
 
 class TFBlock(tf.keras.layers.Layer):
-    def __init__(self, n_ctx, config, scale=False, **kwargs):
+    def __init__(self, config, scale=False, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
-        self.attn = TFAttention(nx, n_ctx, config, scale, name="attn")
+        self.attn = TFAttention(nx, config, scale, name="attn")
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.mlp = TFMLP(4 * nx, config, name="mlp")
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
@@ -210,7 +209,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.n_embd, initializer_range=config.initializer_range, name="tokens_embed"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFBlock(config.n_ctx, config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
+        self.h = [TFBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
 
     def build(self, input_shape):
         with tf.name_scope("positions_embed"):
@@ -522,7 +521,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -598,7 +597,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -673,7 +672,6 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             attentions=transformer_outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -857,7 +855,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

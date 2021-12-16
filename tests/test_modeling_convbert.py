@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch ConvBERT model. """
-
-
+import os
+import tempfile
 import unittest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import ConvBertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -31,7 +31,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        ConvBertConfig,
         ConvBertForMaskedLM,
         ConvBertForMultipleChoice,
         ConvBertForQuestionAnswering,
@@ -110,7 +109,12 @@ class ConvBertModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = ConvBertConfig(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return ConvBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -124,8 +128,6 @@ class ConvBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -260,7 +262,6 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_head_masking = False
-    test_sequence_classification_problem_types = True
 
     def setUp(self):
         self.model_tester = ConvBertModelTester(self)
@@ -413,6 +414,29 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads / 2, encoder_seq_length, encoder_key_length],
                 )
+
+    @slow
+    @require_torch_gpu
+    def test_torchscript_device_change(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+
+            # ConvBertForMultipleChoice behaves incorrectly in JIT environments.
+            if model_class == ConvBertForMultipleChoice:
+                return
+
+            config.torchscript = True
+            model = model_class(config=config)
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            traced_model = torch.jit.trace(
+                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
+            )
+
+            with tempfile.TemporaryDirectory() as tmp:
+                torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
+                loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
+                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
 
 @require_torch

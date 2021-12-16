@@ -19,7 +19,8 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import (
-    _BaseLazyModule,
+    _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -29,23 +30,21 @@ from ...file_utils import (
 
 if is_sentencepiece_available():
     from ..t5.tokenization_t5 import T5Tokenizer
+else:
+    from ...utils.dummy_sentencepiece_objects import T5Tokenizer
 
-    MT5Tokenizer = T5Tokenizer
+MT5Tokenizer = T5Tokenizer
 
 if is_tokenizers_available():
     from ..t5.tokenization_t5_fast import T5TokenizerFast
+else:
+    from ...utils.dummy_tokenizers_objects import T5TokenizerFast
 
-    MT5TokenizerFast = T5TokenizerFast
+MT5TokenizerFast = T5TokenizerFast
 
 _import_structure = {
     "configuration_mt5": ["MT5Config"],
 }
-
-if is_sentencepiece_available():
-    _import_structure["."] = ["T5Tokenizer"]  # Fake to get the same objects in both side.
-
-if is_tokenizers_available():
-    _import_structure["."] = ["T5TokenizerFast"]  # Fake to get the same objects in both side.
 
 if is_torch_available():
     _import_structure["modeling_mt5"] = ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"]
@@ -53,19 +52,12 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_mt5"] = ["TFMT5EncoderModel", "TFMT5ForConditionalGeneration", "TFMT5Model"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_mt5"] = ["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]
+
 
 if TYPE_CHECKING:
     from .configuration_mt5 import MT5Config
-
-    if is_sentencepiece_available():
-        from ..t5.tokenization_t5 import T5Tokenizer
-
-        MT5Tokenizer = T5Tokenizer
-
-    if is_tokenizers_available():
-        from ..t5.tokenization_t5_fast import T5TokenizerFast
-
-        MT5TokenizerFast = T5TokenizerFast
 
     if is_torch_available():
         from .modeling_mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
@@ -73,28 +65,15 @@ if TYPE_CHECKING:
     if is_tf_available():
         from .modeling_tf_mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
 
+    if is_flax_available():
+        from .modeling_flax_mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-        def __getattr__(self, name):
-            if name == "MT5Tokenizer":
-                return MT5Tokenizer
-            elif name == "MT5TokenizerFast":
-                return MT5TokenizerFast
-            else:
-                return super().__getattr__(name)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(
+        __name__,
+        globals()["__file__"],
+        _import_structure,
+        extra_objects={"MT5Tokenizer": MT5Tokenizer, "MT5TokenizerFast": MT5TokenizerFast},
+    )

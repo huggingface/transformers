@@ -9,8 +9,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union
 import datasets
 import numpy as np
 import torch
-import torch.nn as nn
 from packaging import version
+from torch import nn
 
 import librosa
 from lang_trans import arabic
@@ -54,9 +54,6 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
-    gradient_checkpointing: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
-    )
     verbose_logging: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to log verbose messages or not."},
@@ -65,7 +62,7 @@ class ModelArguments:
 
 def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
@@ -144,7 +141,7 @@ class Orthography:
     Args:
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to accept lowercase input and lowercase the output when decoding.
-        vocab_file (:obj:`str`, `optional`, defaults to :obj:`None`):
+        vocab_file (:obj:`str`, `optional`):
             File containing the vocabulary.
         word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`"|"`):
             The token used for delimiting words; it needs to be in the vocabulary.
@@ -152,7 +149,7 @@ class Orthography:
             Table to use with `str.translate()` when preprocessing text (e.g., "-" -> " ").
         words_to_remove (:obj:`Set[str]`, `optional`, defaults to :obj:`set()`):
             Words to remove when preprocessing text (e.g., "sil").
-        untransliterator (:obj:`Callable[[str], str]`, `optional`, defaults to :obj:`None`):
+        untransliterator (:obj:`Callable[[str], str]`, `optional`):
             Function that untransliterates text back into native writing system.
     """
 
@@ -349,7 +346,7 @@ def main():
     model = Wav2Vec2ForCTC.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        gradient_checkpointing=model_args.gradient_checkpointing,
+        gradient_checkpointing=training_args.gradient_checkpointing,
         vocab_size=len(processor.tokenizer),
     )
 

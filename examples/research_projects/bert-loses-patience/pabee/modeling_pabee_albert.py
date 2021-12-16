@@ -17,7 +17,7 @@
 import logging
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -270,6 +270,7 @@ class AlbertForSequenceClassificationWithPabee(AlbertPreTrainedModel):
 
                 from transformers import AlbertTokenizer
                 from pabee import AlbertForSequenceClassificationWithPabee
+                from torch import nn
                 import torch
 
                 tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')

@@ -21,9 +21,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...file_utils import (
     ModelOutput,
@@ -344,7 +343,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
                     attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -1e30).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
-        attn_prob = F.softmax(attn_score, dim=1)
+        attn_prob = nn.functional.softmax(attn_score, dim=1)
         attn_prob = self.dropatt(attn_prob)
 
         # Mask heads if we want to
@@ -434,7 +433,7 @@ class AdaptiveEmbedding(nn.Module):
         if self.div_val == 1:
             embed = self.emb_layers[0](inp)
             if self.d_proj != self.d_embed:
-                embed = F.linear(embed, self.emb_projs[0])
+                embed = nn.functional.linear(embed, self.emb_projs[0])
         else:
             param = next(self.parameters())
             inp_flat = inp.view(-1)
@@ -450,7 +449,7 @@ class AdaptiveEmbedding(nn.Module):
 
                 inp_i = inp_flat.index_select(0, indices_i) - l_idx
                 emb_i = self.emb_layers[i](inp_i)
-                emb_i = F.linear(emb_i, self.emb_projs[i])
+                emb_i = nn.functional.linear(emb_i, self.emb_projs[i])
 
                 emb_flat.index_copy_(0, indices_i, emb_i)
 
@@ -820,7 +819,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.word_emb
@@ -872,7 +872,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1022,7 +1022,8 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def tie_weights(self):
         """
@@ -1053,7 +1054,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1171,11 +1172,12 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         self.num_labels = config.num_labels
         self.transformer = TransfoXLModel(config)
         self.score = nn.Linear(config.d_embed, self.num_labels, bias=False)
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -1235,13 +1237,26 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(pooled_logits.view(-1), labels.to(self.dtype).view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output

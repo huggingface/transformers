@@ -18,7 +18,7 @@ the same type as the elements of :obj:`train_dataset` or :obj:`eval_dataset`.
 
 To be able to build batches, data collators may apply some processing (like padding). Some of them (like
 :class:`~transformers.DataCollatorForLanguageModeling`) also apply some random data augmentation (like random masking)
-oin the formed batch.
+on the formed batch.
 
 Examples of use can be found in the :doc:`example scripts <../examples>` or :doc:`example notebooks <../notebooks>`.
 
@@ -27,6 +27,13 @@ Default data collator
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: transformers.data.data_collator.default_data_collator
+
+
+DefaultDataCollator
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.data.data_collator.DefaultDataCollator
+    :members:
 
 
 DataCollatorWithPadding
@@ -54,18 +61,18 @@ DataCollatorForLanguageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForLanguageModeling
-    :members: mask_tokens
+    :members: numpy_mask_tokens, tf_mask_tokens, torch_mask_tokens
 
 
 DataCollatorForWholeWordMask
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForWholeWordMask
-    :members: mask_tokens
+    :members: numpy_mask_tokens, tf_mask_tokens, torch_mask_tokens
 
 
 DataCollatorForPermutationLanguageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForPermutationLanguageModeling
-    :members: mask_tokens
+    :members: numpy_mask_tokens, tf_mask_tokens, torch_mask_tokens

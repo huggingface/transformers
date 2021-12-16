@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import FunnelTokenizer, is_torch_available
+from transformers import FunnelConfig, FunnelTokenizer, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -30,7 +30,6 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         FunnelBaseModel,
-        FunnelConfig,
         FunnelForMaskedLM,
         FunnelForMultipleChoice,
         FunnelForPreTraining,
@@ -127,7 +126,21 @@ class FunnelModelTester:
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
             fake_token_labels = ids_tensor([self.batch_size, self.seq_length], 1)
 
-        config = FunnelConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
+        )
+
+    def get_config(self):
+        return FunnelConfig(
             vocab_size=self.vocab_size,
             block_sizes=self.block_sizes,
             num_decoder_layers=self.num_decoder_layers,
@@ -141,17 +154,6 @@ class FunnelModelTester:
             activation_dropout=self.activation_dropout,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-        )
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            fake_token_labels,
         )
 
     def create_and_check_model(
@@ -360,7 +362,6 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_sequence_classification_problem_types = True
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -399,6 +400,18 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+
+        for param in ["r_w_bias", "r_r_bias", "r_kernel", "r_s_bias", "seg_embed"]:
+            if hasattr(module, param) and getattr(module, param) is not None:
+                weight = getattr(module, param)
+                weight.data.fill_(3)
 
 
 @require_torch
@@ -442,6 +455,18 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
+
+    # overwrite from test_modeling_common
+    def _mock_init_weights(self, module):
+        if hasattr(module, "weight") and module.weight is not None:
+            module.weight.data.fill_(3)
+        if hasattr(module, "bias") and module.bias is not None:
+            module.bias.data.fill_(3)
+
+        for param in ["r_w_bias", "r_r_bias", "r_kernel", "r_s_bias", "seg_embed"]:
+            if hasattr(module, param) and getattr(module, param) is not None:
+                weight = getattr(module, param)
+                weight.data.fill_(3)
 
 
 @require_torch

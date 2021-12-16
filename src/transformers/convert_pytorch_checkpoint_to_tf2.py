@@ -37,6 +37,7 @@ from . import (
     ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     WEIGHTS_NAME,
     XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -75,14 +76,18 @@ from . import (
     TFLxmertForPreTraining,
     TFLxmertVisualFeatureEncoder,
     TFOpenAIGPTLMHeadModel,
+    TFRobertaForCausalLM,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
     TFT5ForConditionalGeneration,
     TFTransfoXLLMHeadModel,
+    TFWav2Vec2Model,
     TFXLMRobertaForMaskedLM,
     TFXLMWithLMHeadModel,
     TFXLNetLMHeadModel,
     TransfoXLConfig,
+    Wav2Vec2Config,
+    Wav2Vec2Model,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
@@ -211,6 +216,7 @@ MODEL_CLASSES = {
     ),
     "roberta": (
         RobertaConfig,
+        TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         RobertaForMaskedLM,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -286,6 +292,12 @@ MODEL_CLASSES = {
         TFElectraForPreTraining,
         ElectraForPreTraining,
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "wav2vec2": (
+        Wav2Vec2Config,
+        TFWav2Vec2Model,
+        Wav2Vec2Model,
+        WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
 }
 
@@ -434,7 +446,7 @@ if __name__ == "__main__":
         type=str,
         help="The config json file corresponding to the pre-trained model. \n"
         "This specifies the model architecture. If not given and "
-        "--pytorch_checkpoint_path is not given or is a shortcut name"
+        "--pytorch_checkpoint_path is not given or is a shortcut name "
         "use the configuration associated to the shortcut name on the AWS",
     )
     parser.add_argument(

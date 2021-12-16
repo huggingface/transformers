@@ -23,16 +23,18 @@ import logging
 import math
 import os
 import random
+from pathlib import Path
 
 import datasets
 import numpy as np
 import torch
 from datasets import load_dataset, load_metric
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
 from accelerate import Accelerator
+from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -48,9 +50,13 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
+from transformers.file_utils import get_full_repo_name
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/translation/requirements.txt")
+
 # You should update this to your particular problem to have better documentation of `model_type`
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -232,7 +238,11 @@ def parse_args():
         help="Model type to use if training from scratch.",
         choices=MODEL_TYPES,
     )
-
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
+    parser.add_argument(
+        "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
+    )
+    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     args = parser.parse_args()
 
     # Sanity checks
@@ -247,8 +257,9 @@ def parse_args():
         extension = args.validation_file.split(".")[-1]
         assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
 
-    if args.output_dir is not None:
-        os.makedirs(args.output_dir, exist_ok=True)
+    if args.push_to_hub:
+        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+
     return args
 
 
@@ -261,7 +272,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -280,6 +291,18 @@ def main():
     # If passed along, set the training seed now.
     if args.seed is not None:
         set_seed(args.seed)
+
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.push_to_hub:
+            if args.hub_model_id is None:
+                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
+            else:
+                repo_name = args.hub_model_id
+            repo = Repository(args.output_dir, clone_from=repo_name)
+        elif args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
+    accelerator.wait_for_everyone()
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -395,13 +418,15 @@ def main():
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 
-    processed_datasets = raw_datasets.map(
-        preprocess_function,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=column_names,
-        load_from_cache_file=not args.overwrite_cache,
-    )
+    with accelerator.main_process_first():
+        processed_datasets = raw_datasets.map(
+            preprocess_function,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
 
     train_dataset = processed_datasets["train"]
     eval_dataset = processed_datasets["validation"]
@@ -549,10 +574,24 @@ def main():
         eval_metric = metric.compute()
         logger.info({"bleu": eval_metric["score"]})
 
+        if args.push_to_hub and epoch < args.num_train_epochs - 1:
+            accelerator.wait_for_everyone()
+            unwrapped_model = accelerator.unwrap_model(model)
+            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            if accelerator.is_main_process:
+                tokenizer.save_pretrained(args.output_dir)
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                )
+
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        if accelerator.is_main_process:
+            tokenizer.save_pretrained(args.output_dir)
+            if args.push_to_hub:
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":

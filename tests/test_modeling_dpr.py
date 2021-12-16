@@ -14,9 +14,10 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import DPRConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -26,7 +27,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader, DPRReaderTokenizer
+    from transformers import DPRContextEncoder, DPRQuestionEncoder, DPRReader, DPRReaderTokenizer
     from transformers.models.dpr.modeling_dpr import (
         DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -104,7 +105,12 @@ class DPRModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = DPRConfig(
+        config = self.get_config()
+
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return DPRConfig(
             projection_dim=self.projection_dim,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -118,8 +124,6 @@ class DPRModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def create_and_check_context_encoder(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -209,6 +213,19 @@ class DPRModelTest(ModelTesterMixin, unittest.TestCase):
     def test_reader_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reader(*config_and_inputs)
+
+    def test_init_changed_config(self):
+        config = self.model_tester.prepare_config_and_inputs()[0]
+
+        model = DPRQuestionEncoder(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            model.save_pretrained(tmp_dirname)
+            model = DPRQuestionEncoder.from_pretrained(tmp_dirname, projection_dim=512)
+
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_from_pretrained(self):

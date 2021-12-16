@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.utils.data.dataset import Dataset
+    from torch.utils.data import Dataset
 
     from transformers import Trainer
 
@@ -99,7 +99,7 @@ def main():
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["eval_success"] is not True:
+        if p.metrics["test_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 
@@ -113,7 +113,7 @@ def main():
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["eval_success"] is not True:
+        if p.metrics["test_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 

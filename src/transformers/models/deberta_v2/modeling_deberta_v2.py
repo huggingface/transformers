@@ -20,7 +20,7 @@ from collections.abc import Sequence
 import numpy as np
 import torch
 from torch import _softmax_backward_data, nn
-from torch.nn import CrossEntropyLoss, LayerNorm
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
@@ -114,6 +114,21 @@ class XSoftmax(torch.autograd.Function):
         inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
         return inputGrad, None, None
 
+    @staticmethod
+    def symbolic(g, self, mask, dim):
+        import torch.onnx.symbolic_helper as sym_help
+        from torch.onnx.symbolic_opset9 import masked_fill, softmax
+
+        mask_cast_value = g.op("Cast", mask, to_i=sym_help.cast_pytorch_to_onnx["Long"])
+        r_mask = g.op(
+            "Cast",
+            g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
+            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+        )
+        output = masked_fill(g, self, r_mask, g.op("Constant", value_t=torch.tensor(float("-inf"))))
+        output = softmax(g, output, dim)
+        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
+
 
 # Copied from transformers.models.deberta.modeling_deberta.DropoutContext
 class DropoutContext(object):
@@ -168,7 +183,7 @@ class XDropout(torch.autograd.Function):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
-class StableDropout(torch.nn.Module):
+class StableDropout(nn.Module):
     """
     Optimized dropout module for stabilizing the training
 
@@ -244,7 +259,7 @@ class DebertaV2Attention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        return_att=False,
+        output_attentions=False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
@@ -252,18 +267,18 @@ class DebertaV2Attention(nn.Module):
         self_output = self.self(
             hidden_states,
             attention_mask,
-            return_att,
+            output_attentions,
             query_states=query_states,
             relative_pos=relative_pos,
             rel_embeddings=rel_embeddings,
         )
-        if return_att:
+        if output_attentions:
             self_output, att_matrix = self_output
         if query_states is None:
             query_states = hidden_states
         attention_output = self.output(self_output, query_states)
 
-        if return_att:
+        if output_attentions:
             return (attention_output, att_matrix)
         else:
             return attention_output
@@ -313,24 +328,24 @@ class DebertaV2Layer(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        return_att=False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
+        output_attentions=False,
     ):
         attention_output = self.attention(
             hidden_states,
             attention_mask,
-            return_att=return_att,
+            output_attentions=output_attentions,
             query_states=query_states,
             relative_pos=relative_pos,
             rel_embeddings=rel_embeddings,
         )
-        if return_att:
+        if output_attentions:
             attention_output, att_matrix = attention_output
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
-        if return_att:
+        if output_attentions:
             return (layer_output, att_matrix)
         else:
             return layer_output
@@ -342,7 +357,7 @@ class ConvLayer(nn.Module):
         kernel_size = getattr(config, "conv_kernel_size", 3)
         groups = getattr(config, "conv_groups", 1)
         self.conv_act = getattr(config, "conv_act", "tanh")
-        self.conv = torch.nn.Conv1d(
+        self.conv = nn.Conv1d(
             config.hidden_size, config.hidden_size, kernel_size, padding=(kernel_size - 1) // 2, groups=groups
         )
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
@@ -400,6 +415,7 @@ class DebertaV2Encoder(nn.Module):
             self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps, elementwise_affine=True)
 
         self.conv = ConvLayer(config) if getattr(config, "conv_kernel_size", 0) > 0 else None
+        self.gradient_checkpointing = False
 
     def get_rel_embedding(self):
         rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
@@ -456,14 +472,32 @@ class DebertaV2Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
-            output_states = layer_module(
-                next_kv,
-                attention_mask,
-                output_attentions,
-                query_states=query_states,
-                relative_pos=relative_pos,
-                rel_embeddings=rel_embeddings,
-            )
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                output_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    next_kv,
+                    attention_mask,
+                    query_states,
+                    relative_pos,
+                    rel_embeddings,
+                )
+            else:
+                output_states = layer_module(
+                    next_kv,
+                    attention_mask,
+                    query_states=query_states,
+                    relative_pos=relative_pos,
+                    rel_embeddings=rel_embeddings,
+                    output_attentions=output_attentions,
+                )
+
             if output_attentions:
                 output_states, att_m = output_states
 
@@ -546,7 +580,7 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-class DisentangledSelfAttention(torch.nn.Module):
+class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
 
@@ -604,7 +638,7 @@ class DisentangledSelfAttention(torch.nn.Module):
         self,
         hidden_states,
         attention_mask,
-        return_att=False,
+        output_attentions=False,
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
@@ -622,7 +656,7 @@ class DisentangledSelfAttention(torch.nn.Module):
                 sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
                 th token.
 
-            return_att (:obj:`bool`, optional):
+            output_attentions (:obj:`bool`, optional):
                 Whether return the attention matrix.
 
             query_states (:obj:`torch.FloatTensor`, optional):
@@ -681,7 +715,7 @@ class DisentangledSelfAttention(torch.nn.Module):
         )
         new_context_layer_shape = context_layer.size()[:-2] + (-1,)
         context_layer = context_layer.view(*new_context_layer_shape)
-        if return_att:
+        if output_attentions:
             return (context_layer, attention_probs)
         else:
             return context_layer
@@ -753,8 +787,6 @@ class DisentangledSelfAttention(torch.nn.Module):
                 r_pos = relative_pos
 
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
-            if query_layer.size(-2) != key_layer.size(-2):
-                pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
 
         if "p2c" in self.pos_att_type:
             p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2))
@@ -763,12 +795,6 @@ class DisentangledSelfAttention(torch.nn.Module):
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
-            if query_layer.size(-2) != key_layer.size(-2):
-                p2c_att = torch.gather(
-                    p2c_att,
-                    dim=-2,
-                    index=pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2))),
-                )
             score += p2c_att / scale
 
         # position->position
@@ -776,12 +802,6 @@ class DisentangledSelfAttention(torch.nn.Module):
             pos_query = pos_query_layer[:, :, att_span:, :]
             p2p_att = torch.matmul(pos_query, pos_key_layer.transpose(-1, -2))
             p2p_att = p2p_att.expand(query_layer.size()[:2] + p2p_att.size()[2:])
-            if query_layer.size(-2) != key_layer.size(-2):
-                p2p_att = torch.gather(
-                    p2p_att,
-                    dim=-2,
-                    index=pos_index.expand(query_layer.size()[:2] + (pos_index.size(-2), p2p_att.size(-1))),
-                )
             p2p_att = torch.gather(
                 p2p_att,
                 dim=-1,
@@ -880,10 +900,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_missing = ["position_ids"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self._register_load_state_dict_pre_hook(self._pre_load_hook)
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -898,24 +915,9 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _pre_load_hook(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-        """
-        Removes the classifier if it doesn't have the correct number of labels.
-        """
-        self_state = self.state_dict()
-        if (
-            ("classifier.weight" in self_state)
-            and ("classifier.weight" in state_dict)
-            and self_state["classifier.weight"].size() != state_dict["classifier.weight"].size()
-        ):
-            logger.warning(
-                f"The checkpoint classifier head has a shape {state_dict['classifier.weight'].size()} and this model "
-                f"classifier head has a shape {self_state['classifier.weight'].size()}. Ignoring the checkpoint "
-                f"weights. You should train your model on new data."
-            )
-            del state_dict["classifier.weight"]
-            if "classifier.bias" in state_dict:
-                del state_dict["classifier.bias"]
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, DebertaV2Encoder):
+            module.gradient_checkpointing = value
 
 
 DEBERTA_START_DOCSTRING = r"""
@@ -938,7 +940,7 @@ DEBERTA_START_DOCSTRING = r"""
 
 DEBERTA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.DebertaV2Tokenizer`. See
@@ -946,14 +948,14 @@ DEBERTA_INPUTS_DOCSTRING = r"""
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
 
@@ -961,12 +963,12 @@ DEBERTA_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
             config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -994,7 +996,8 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
         self.encoder = DebertaV2Encoder(config)
         self.z_steps = 0
         self.config = config
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1011,7 +1014,7 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1077,7 +1080,7 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
                 query_states = layer(
                     hidden_states,
                     attention_mask,
-                    return_att=False,
+                    output_attentions=False,
                     query_states=query_states,
                     relative_pos=rel_pos,
                     rel_embeddings=rel_embeddings,
@@ -1108,7 +1111,8 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         self.deberta = DebertaV2Model(config)
         self.cls = DebertaV2OnlyMLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1118,7 +1122,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1244,12 +1248,13 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         self.pooler = ContextPooler(config)
         output_dim = self.pooler.output_dim
 
-        self.classifier = torch.nn.Linear(output_dim, num_labels)
+        self.classifier = nn.Linear(output_dim, num_labels)
         drop_out = getattr(config, "cls_dropout", None)
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = StableDropout(drop_out)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.deberta.get_input_embeddings()
@@ -1259,7 +1264,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1302,34 +1307,46 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                # regression task
-                loss_fn = torch.nn.MSELoss()
-                logits = logits.view(-1).to(labels.dtype)
-                loss = loss_fn(logits, labels.view(-1))
-            elif labels.dim() == 1 or labels.size(-1) == 1:
-                label_index = (labels >= 0).nonzero()
-                labels = labels.long()
-                if label_index.size(0) > 0:
-                    labeled_logits = torch.gather(logits, 0, label_index.expand(label_index.size(0), logits.size(1)))
-                    labels = torch.gather(labels, 0, label_index.view(-1))
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(labeled_logits.view(-1, self.num_labels).float(), labels.view(-1))
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    # regression task
+                    loss_fn = nn.MSELoss()
+                    logits = logits.view(-1).to(labels.dtype)
+                    loss = loss_fn(logits, labels.view(-1))
+                elif labels.dim() == 1 or labels.size(-1) == 1:
+                    label_index = (labels >= 0).nonzero()
+                    labels = labels.long()
+                    if label_index.size(0) > 0:
+                        labeled_logits = torch.gather(
+                            logits, 0, label_index.expand(label_index.size(0), logits.size(1))
+                        )
+                        labels = torch.gather(labels, 0, label_index.view(-1))
+                        loss_fct = CrossEntropyLoss()
+                        loss = loss_fct(labeled_logits.view(-1, self.num_labels).float(), labels.view(-1))
+                    else:
+                        loss = torch.tensor(0).to(logits)
                 else:
-                    loss = torch.tensor(0).to(logits)
-            else:
-                log_softmax = torch.nn.LogSoftmax(-1)
-                loss = -((log_softmax(logits) * labels).sum(-1)).mean()
+                    log_softmax = nn.LogSoftmax(-1)
+                    loss = -((log_softmax(logits) * labels).sum(-1)).mean()
+            elif self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
-        else:
-            return SequenceClassifierOutput(
-                loss=loss,
-                logits=logits,
-                hidden_states=outputs.hidden_states,
-                attentions=outputs.attentions,
-            )
+
+        return SequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
 
 
 @add_start_docstrings(
@@ -1351,11 +1368,12 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1414,10 +1432,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
 
@@ -1439,11 +1454,12 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
         self.deberta = DebertaV2Model(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1488,8 +1504,8 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -1500,8 +1516,8 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

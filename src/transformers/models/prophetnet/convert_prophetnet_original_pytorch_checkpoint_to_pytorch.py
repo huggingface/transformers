@@ -17,7 +17,7 @@
 
 import argparse
 
-import torch
+from torch import nn
 
 from transformers import ProphetNetForConditionalGeneration, XLMProphetNetForConditionalGeneration, logging
 
@@ -107,15 +107,15 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 param.weight.shape == old_model.in_proj_weight[:embed_dim, :].shape, "Shapes have to match"
                 param.bias.shape == old_model.in_proj_bias[:embed_dim].shape, "Shapes have to match"
                 if attribute == "query_proj":
-                    model.query_proj.weight = torch.nn.Parameter(old_model.in_proj_weight[:embed_dim, :])
-                    model.query_proj.bias = torch.nn.Parameter(old_model.in_proj_bias[:embed_dim])
+                    model.query_proj.weight = nn.Parameter(old_model.in_proj_weight[:embed_dim, :])
+                    model.query_proj.bias = nn.Parameter(old_model.in_proj_bias[:embed_dim])
 
                 elif attribute == "key_proj":
-                    model.key_proj.weight = torch.nn.Parameter(old_model.in_proj_weight[embed_dim : 2 * embed_dim, :])
-                    model.key_proj.bias = torch.nn.Parameter(old_model.in_proj_bias[embed_dim : 2 * embed_dim])
+                    model.key_proj.weight = nn.Parameter(old_model.in_proj_weight[embed_dim : 2 * embed_dim, :])
+                    model.key_proj.bias = nn.Parameter(old_model.in_proj_bias[embed_dim : 2 * embed_dim])
                 elif attribute == "value_proj":
-                    model.value_proj.weight = torch.nn.Parameter(old_model.in_proj_weight[2 * embed_dim :, :])
-                    model.value_proj.bias = torch.nn.Parameter(old_model.in_proj_bias[2 * embed_dim :])
+                    model.value_proj.weight = nn.Parameter(old_model.in_proj_weight[2 * embed_dim :, :])
+                    model.value_proj.bias = nn.Parameter(old_model.in_proj_bias[2 * embed_dim :])
                 is_key_init = True
                 break
             elif attribute == "position_embeddings":
@@ -123,7 +123,7 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                     model.position_embeddings.weight.shape[-1] == old_model.embed_positions.weight.shape[-1]
                 ), "Hidden size has to match"
                 assert model.position_embeddings.weight.shape[0] == 512, "We want 512 position_embeddings."
-                model.position_embeddings.weight = torch.nn.Parameter(old_model.embed_positions.weight[:512, :])
+                model.position_embeddings.weight = nn.Parameter(old_model.embed_positions.weight[:512, :])
                 is_key_init = True
                 break
 

@@ -17,6 +17,7 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
+import functools
 import gc
 import inspect
 import os
@@ -74,19 +75,19 @@ class EvalPrediction(NamedTuple):
     """
 
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: np.ndarray
+    label_ids: Union[np.ndarray, Tuple[np.ndarray]]
 
 
 class EvalLoopOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[np.ndarray]
+    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
     metrics: Optional[Dict[str, float]]
     num_samples: Optional[int]
 
 
 class PredictionOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[np.ndarray]
+    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
     metrics: Optional[Dict[str, float]]
 
 
@@ -124,6 +125,13 @@ class EvaluationStrategy(ExplicitEnum):
     EPOCH = "epoch"
 
 
+class HubStrategy(ExplicitEnum):
+    END = "end"
+    EVERY_SAVE = "every_save"
+    CHECKPOINT = "checkpoint"
+    ALL_CHECKPOINTS = "all_checkpoints"
+
+
 class BestRun(NamedTuple):
     """
     The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
@@ -158,7 +166,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_samples_per_second")]
+    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_per_second")]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -190,14 +198,29 @@ def default_hp_space_ray(trial) -> Dict[str, float]:
     }
 
 
+def default_hp_space_sigopt(trial):
+    return [
+        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformamtion": "log"},
+        {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
+        {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
+        {
+            "categorical_values": ["4", "8", "16", "32", "64"],
+            "name": "per_device_train_batch_size",
+            "type": "categorical",
+        },
+    ]
+
+
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
+    SIGOPT = "sigopt"
 
 
 default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
+    HPSearchBackend.SIGOPT: default_hp_space_sigopt,
 }
 
 
@@ -232,7 +255,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None):
+def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     """
     Measure and return speed performance metrics.
 
@@ -248,8 +271,11 @@ def speed_metrics(split, start_time, num_samples=None):
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
     if num_samples is not None:
-        samples_per_second = 1 / (runtime / num_samples)
+        samples_per_second = num_samples / runtime
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
+    if num_steps is not None:
+        steps_per_second = num_steps / runtime
+        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
     return result
 
 
@@ -401,6 +427,8 @@ class TrainerMemoryTracker:
             self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
             self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
             self.gpu[self.cur_stage] = dict(
+                begin=self.gpu_mem_used_at_start,
+                end=self.gpu_mem_used_now,
                 alloc=(self.gpu_mem_used_now - self.gpu_mem_used_at_start),
                 peaked=max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
             )
@@ -408,6 +436,8 @@ class TrainerMemoryTracker:
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
         self.cpu[self.cur_stage] = dict(
+            begin=self.cpu_mem_used_at_start,
+            end=self.cpu_mem_used_now,
             alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
             peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
         )
@@ -416,7 +446,7 @@ class TrainerMemoryTracker:
         self.cur_stage = None
 
     def update_metrics(self, stage, metrics):
-        """stop tracking for the passed stage"""
+        """updates the metrics"""
         if self.skip_memory_metrics:
             return
 
@@ -436,9 +466,28 @@ class TrainerMemoryTracker:
                     metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
                 if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
+            # if we need additional debug info, enable the following
+            # for t in ["begin", "end"]:
+            #     if stage in self.cpu and t in self.cpu[stage]:
+            #         metrics[f"{stage}_mem_cpu_{t}"] = self.cpu[stage][t]
+            #     if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
+            #         metrics[f"{stage}_mem_gpu_{t}"] = self.gpu[stage][t]
+
+        # since memory can be allocated before init, and it might be difficult to track overall
+        # memory usage, in particular for GPU, let's report memory usage at the point init was called
+        if stages[0] == "init":
+            metrics["before_init_mem_cpu"] = self.cpu["init"]["begin"]
+            if self.torch is not None:
+                metrics["before_init_mem_gpu"] = self.gpu["init"]["begin"]
+            # if we also wanted to report any additional memory allocations in between init and
+            # whatever the next stage was we could also report this:
+            # if self.cpu["init"]["end"] != self.cpu[stage]["begin"]:
+            #     metrics[f"after_init_mem_cpu_delta"] = self.cpu[stage]["begin"] - self.cpu["init"]["end"]
+            # if self.torch is not None and self.gpu["init"]["end"] != self.gpu[stage]["begin"]:
+            #     metrics[f"after_init_mem_gpu_delta"] = self.gpu[stage]["begin"] - self.gpu["init"]["end"]
 
     def stop_and_update_metrics(self, metrics=None):
-        """combine stop + update in one call for simpler code"""
+        """combine stop and metrics update in one call for simpler code"""
         if self.skip_memory_metrics:
             return
 
@@ -463,6 +512,16 @@ def denumpify_detensorize(metrics):
     elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
         return metrics.item()
     return metrics
+
+
+def number_of_arguments(func):
+    """
+    Return the number of arguments of the passed function, even if it's a partial function.
+    """
+    if isinstance(func, functools.partial):
+        total_args = len(inspect.signature(func.func).parameters)
+        return total_args - len(func.args) - len(func.keywords)
+    return len(inspect.signature(func).parameters)
 
 
 class ShardedDDPOption(ExplicitEnum):

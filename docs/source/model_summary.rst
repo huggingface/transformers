@@ -28,6 +28,12 @@ Each one of the models in the library falls into one of the following categories
   * :ref:`multimodal-models`
   * :ref:`retrieval-based-models`
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/H39Z_720T5s" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
 Autoregressive models are pretrained on the classic language modeling task: guess the next token having read all the
 previous ones. They correspond to the decoder of the original transformer model, and a mask is used on top of the full
 sentence so that the attention heads can only see what was before in the text, and not what’s after. Although those
@@ -54,11 +60,17 @@ Multimodal models mix text inputs with other kinds (e.g. images) and are more sp
 
 .. _autoregressive-models:
 
-Autoregressive models
+Decoders or autoregressive models
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models rely on the decoder part of the original transformer and use an attention mask so
 that at each position, the model can only look at the tokens before the attention heads.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/d_ixlCubqQw" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
 
 Original GPT
 -----------------------------------------------------------------------------------------------------------------------
@@ -68,7 +80,7 @@ Original GPT
    <a href="https://huggingface.co/models?filter=openai-gpt">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-openai--gpt-blueviolet">
    </a>
-   <a href="model_doc/gpt.html">
+   <a href="model_doc/gpt">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-openai--gpt-blueviolet">
    </a>
 
@@ -88,7 +100,7 @@ GPT-2
    <a href="https://huggingface.co/models?filter=gpt2">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt2-blueviolet">
    </a>
-   <a href="model_doc/gpt2.html">
+   <a href="model_doc/gpt2">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-gpt2-blueviolet">
    </a>
 
@@ -110,7 +122,7 @@ CTRL
    <a href="https://huggingface.co/models?filter=ctrl">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-ctrl-blueviolet">
    </a>
-   <a href="model_doc/ctrl.html">
+   <a href="model_doc/ctrl">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-ctrl-blueviolet">
    </a>
 
@@ -131,7 +143,7 @@ Transformer-XL
    <a href="https://huggingface.co/models?filter=transfo-xl">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-transfo--xl-blueviolet">
    </a>
-   <a href="model_doc/transformerxl.html">
+   <a href="model_doc/transformerxl">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-transfo--xl-blueviolet">
    </a>
 
@@ -162,7 +174,7 @@ Reformer
    <a href="https://huggingface.co/models?filter=reformer">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-reformer-blueviolet">
    </a>
-   <a href="model_doc/reformer.html">
+   <a href="model_doc/reformer">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-reformer-blueviolet">
    </a>
 
@@ -196,7 +208,7 @@ XLNet
    <a href="https://huggingface.co/models?filter=xlnet">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlnet-blueviolet">
    </a>
-   <a href="model_doc/xlnet.html">
+   <a href="model_doc/xlnet">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlnet-blueviolet">
    </a>
 
@@ -215,12 +227,18 @@ multiple choice classification and question answering.
 
 .. _autoencoding-models:
 
-Autoencoding models
+Encoders or autoencoding models
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models rely on the encoder part of the original transformer and use no mask so the model can
 look at all the tokens in the attention heads. For pretraining, targets are the original sentences and inputs are their
 corrupted versions.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/MUqNwgPjJvQ" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
 
 BERT
 -----------------------------------------------------------------------------------------------------------------------
@@ -230,7 +248,7 @@ BERT
    <a href="https://huggingface.co/models?filter=bert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-bert-blueviolet">
    </a>
-   <a href="model_doc/bert.html">
+   <a href="model_doc/bert">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-bert-blueviolet">
    </a>
 
@@ -259,7 +277,7 @@ ALBERT
    <a href="https://huggingface.co/models?filter=albert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-albert-blueviolet">
    </a>
-   <a href="model_doc/albert.html">
+   <a href="model_doc/albert">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-albert-blueviolet">
    </a>
 
@@ -288,7 +306,7 @@ RoBERTa
    <a href="https://huggingface.co/models?filter=roberta">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-roberta-blueviolet">
    </a>
-   <a href="model_doc/roberta.html">
+   <a href="model_doc/roberta">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-roberta-blueviolet">
    </a>
 
@@ -313,7 +331,7 @@ DistilBERT
    <a href="https://huggingface.co/models?filter=distilbert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-distilbert-blueviolet">
    </a>
-   <a href="model_doc/distilbert.html">
+   <a href="model_doc/distilbert">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-distilbert-blueviolet">
    </a>
 
@@ -338,11 +356,11 @@ ConvBERT
    <a href="https://huggingface.co/models?filter=convbert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-convbert-blueviolet">
    </a>
-   <a href="model_doc/convbert.html">
+   <a href="model_doc/convbert">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-convbert-blueviolet">
    </a>
 
-`ConvBERT: Improving BERT with Span-based Dynamic Convolution <https://arxiv.org/abs/1910.01108>`_, Zihang Jiang,
+`ConvBERT: Improving BERT with Span-based Dynamic Convolution <https://arxiv.org/abs/2008.02496>`_, Zihang Jiang,
 Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng Yan.
 
 Pre-trained language models like BERT and its variants have recently achieved impressive performance in various natural
@@ -368,7 +386,7 @@ XLM
    <a href="https://huggingface.co/models?filter=xlm">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm-blueviolet">
    </a>
-   <a href="model_doc/xlm.html">
+   <a href="model_doc/xlm">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlm-blueviolet">
    </a>
 
@@ -402,7 +420,7 @@ XLM-RoBERTa
    <a href="https://huggingface.co/models?filter=xlm-roberta">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm--roberta-blueviolet">
    </a>
-   <a href="model_doc/xlmroberta.html">
+   <a href="model_doc/xlmroberta">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlm--roberta-blueviolet">
    </a>
 
@@ -424,7 +442,7 @@ FlauBERT
    <a href="https://huggingface.co/models?filter=flaubert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-flaubert-blueviolet">
    </a>
-   <a href="model_doc/flaubert.html">
+   <a href="model_doc/flaubert">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-flaubert-blueviolet">
    </a>
 
@@ -442,7 +460,7 @@ ELECTRA
    <a href="https://huggingface.co/models?filter=electra">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-electra-blueviolet">
    </a>
-   <a href="model_doc/electra.html">
+   <a href="model_doc/electra">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-electra-blueviolet">
    </a>
 
@@ -466,7 +484,7 @@ Funnel Transformer
    <a href="https://huggingface.co/models?filter=funnel">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-funnel-blueviolet">
    </a>
-   <a href="model_doc/funnel.html">
+   <a href="model_doc/funnel">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-funnel-blueviolet">
    </a>
 
@@ -500,7 +518,7 @@ Longformer
    <a href="https://huggingface.co/models?filter=longformer">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-longformer-blueviolet">
    </a>
-   <a href="model_doc/longformer.html">
+   <a href="model_doc/longformer">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-longformer-blueviolet">
    </a>
 
@@ -526,6 +544,12 @@ Sequence-to-sequence models
 
 As mentioned before, these models keep both the encoder and the decoder of the original transformer.
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/0_4KEb08xrE" title="YouTube video player"
+   frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
+   picture-in-picture" allowfullscreen></iframe>
+
 BART
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -534,7 +558,7 @@ BART
    <a href="https://huggingface.co/models?filter=bart">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-bart-blueviolet">
    </a>
-   <a href="model_doc/bart.html">
+   <a href="model_doc/bart">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-bart-blueviolet">
    </a>
 
@@ -561,7 +585,7 @@ Pegasus
    <a href="https://huggingface.co/models?filter=pegasus">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-pegasus-blueviolet">
    </a>
-   <a href="model_doc/pegasus.html">
+   <a href="model_doc/pegasus">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-pegasus-blueviolet">
    </a>
 
@@ -592,7 +616,7 @@ MarianMT
    <a href="https://huggingface.co/models?filter=marian">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-marian-blueviolet">
    </a>
-   <a href="model_doc/marian.html">
+   <a href="model_doc/marian">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-marian-blueviolet">
    </a>
 
@@ -611,7 +635,7 @@ T5
    <a href="https://huggingface.co/models?filter=t5">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-t5-blueviolet">
    </a>
-   <a href="model_doc/t5.html">
+   <a href="model_doc/t5">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-t5-blueviolet">
    </a>
 
@@ -644,7 +668,7 @@ MT5
    <a href="https://huggingface.co/models?filter=mt5">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-mt5-blueviolet">
    </a>
-   <a href="model_doc/mt5.html">
+   <a href="model_doc/mt5">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mt5-blueviolet">
    </a>
 
@@ -665,7 +689,7 @@ MBart
    <a href="https://huggingface.co/models?filter=mbart">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-mbart-blueviolet">
    </a>
-   <a href="model_doc/mbart.html">
+   <a href="model_doc/mbart">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mbart-blueviolet">
    </a>
 
@@ -694,7 +718,7 @@ ProphetNet
    <a href="https://huggingface.co/models?filter=prophetnet">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-prophetnet-blueviolet">
    </a>
-   <a href="model_doc/prophetnet.html">
+   <a href="model_doc/prophetnet">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-prophetnet-blueviolet">
    </a>
 
@@ -719,7 +743,7 @@ XLM-ProphetNet
    <a href="https://huggingface.co/models?filter=xprophetnet">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xprophetnet-blueviolet">
    </a>
-   <a href="model_doc/xlmprophetnet.html">
+   <a href="model_doc/xlmprophetnet">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xprophetnet-blueviolet">
    </a>
 
@@ -757,7 +781,7 @@ model know which part of the input vector corresponds to the text and which to t
 The pretrained model only works for classification.
 
 ..
-    More information in this :doc:`model documentation </model_doc/mmbt.html>`. TODO: write this page
+    More information in this :doc:`model documentation <model_doc/mmbt>`. TODO: write this page
 
 .. _retrieval-based-models:
 
@@ -775,7 +799,7 @@ DPR
    <a href="https://huggingface.co/models?filter=dpr">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-dpr-blueviolet">
    </a>
-   <a href="model_doc/dpr.html">
+   <a href="model_doc/dpr">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-dpr-blueviolet">
    </a>
 
@@ -804,7 +828,7 @@ RAG
    <a href="https://huggingface.co/models?filter=rag">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-rag-blueviolet">
    </a>
-   <a href="model_doc/rag.html">
+   <a href="model_doc/rag">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-rag-blueviolet">
    </a>
 
@@ -853,7 +877,7 @@ Some preselected input tokens are also given global attention: for those few tok
 all tokens and this process is symmetric: all other tokens have access to those specific tokens (on top of the ones in
 their local window). This is shown in Figure 2d of the paper, see below for a sample attention mask:
 
-.. image:: imgs/local_attention_mask.png
+.. image:: /imgs/local_attention_mask.png
    :scale: 50 %
    :align: center
 

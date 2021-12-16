@@ -1,0 +1,246 @@
+name: Self-hosted runner; Nightly (scheduled)
+
+on:
+    push:
+        branches:
+            - nightly_ci*
+    repository_dispatch:
+    schedule:
+        - cron: "0 0 */3 * *"
+
+env:
+    HF_HOME: /mnt/cache
+    TRANSFORMERS_IS_CI: yes
+    RUN_SLOW: yes
+    OMP_NUM_THREADS: 16
+    MKL_NUM_THREADS: 16
+    PYTEST_TIMEOUT: 600
+    SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+
+jobs:
+    run_all_tests_torch_gpu:
+        runs-on: [self-hosted, docker-gpu, single-gpu]
+        container:
+            image: pytorch/pytorch:1.10.0-cuda11.3-cudnn8-runtime
+            options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+        steps:
+            - name: Launcher docker
+              uses: actions/checkout@v2
+
+            - name: NVIDIA-SMI
+              run: |
+                  nvidia-smi
+
+            - name: Install dependencies
+              run: |
+                  apt -y update && apt install -y libsndfile1-dev git
+                  pip install --upgrade pip
+                  pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
+
+            - name: Are GPUs recognized by our DL frameworks
+              run: |
+                utils/print_env_pt.py
+
+            - name: Run all tests on GPU
+              run: |
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_gpu tests
+
+            - name: Failure short reports
+              if: ${{ always() }}
+              run: cat reports/tests_torch_gpu_failures_short.txt
+
+            - name: Run examples tests on GPU
+              if: ${{ always() }}
+              env:
+                  OMP_NUM_THREADS: 16
+                  MKL_NUM_THREADS: 16
+                  RUN_SLOW: yes
+                  HF_HOME: /mnt/cache
+                  TRANSFORMERS_IS_CI: yes
+              run: |
+                  pip install -r examples/pytorch/_tests_requirements.txt
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=examples_torch_gpu examples
+
+            - name: Failure short reports
+              if: ${{ always() }}
+              run: cat reports/examples_torch_gpu_failures_short.txt
+
+            - name: Run all pipeline tests on GPU
+              if: ${{ always() }}
+              env:
+                  RUN_PIPELINE_TESTS: yes
+              run: |
+                  python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
+
+            - name: Failure short reports
+              if: ${{ always() }}
+              run: cat reports/tests_torch_pipeline_gpu_failures_short.txt
+
+            - name: Test suite reports artifacts
+              if: ${{ always() }}
+              uses: actions/upload-artifact@v2
+              with:
+                  name: run_all_tests_torch_gpu_test_reports
+                  path: reports
+
+    run_all_tests_torch_multi_gpu:
+        runs-on: [self-hosted, docker-gpu, multi-gpu]
+        container:
+            image: pytorch/pytorch:1.10.0-cuda11.3-cudnn8-runtime
+            options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+        steps:
+            - name: Launcher docker
+              uses: actions/checkout@v2
+
+            - name: NVIDIA-SMI
+              continue-on-error: true
+              run: |
+                  nvidia-smi
+
+            - name: Install dependencies
+              run: |
+                  apt -y update && apt install -y libsndfile1-dev git
+                  pip install --upgrade pip
+                  pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
+
+            - name: Are GPUs recognized by our DL frameworks
+              run: |
+                utils/print_env_pt.py
+
+            - name: Run all tests on GPU
+              env:
+                  MKL_SERVICE_FORCE_INTEL: 1
+              run: |
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_multi_gpu tests
+
+            - name: Failure short reports
+              if: ${{ always() }}
+              run: cat reports/tests_torch_multi_gpu_failures_short.txt
+
+            - name: Run all pipeline tests on GPU
+              if: ${{ always() }}
+              env:
+                  RUN_PIPELINE_TESTS: yes
+              run: |
+                  python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
+
+            - name: Failure short reports
+              if: ${{ always() }}
+              run: cat reports/tests_torch_pipeline_multi_gpu_failures_short.txt
+
+            - name: Test suite reports artifacts
+              if: ${{ always() }}
+              uses: actions/upload-artifact@v2
+              with:
+                  name: run_all_tests_torch_multi_gpu_test_reports
+                  path: reports
+
+    run_all_tests_torch_cuda_extensions_gpu:
+        runs-on: [self-hosted, docker-gpu, single-gpu]
+        container:
+            image: nvcr.io/nvidia/pytorch:21.03-py3
+            options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+        steps:
+            - name: Launcher docker
+              uses: actions/checkout@v2
+
+            - name: NVIDIA-SMI
+              run: |
+                  nvidia-smi
+
+            - name: Install dependencies
+              run: |
+                  apt -y update && apt install -y libaio-dev
+                  pip install --upgrade pip
+                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
+                  pip install .[testing,deepspeed]
+                  pip install git+https://github.com/microsoft/DeepSpeed
+
+            - name: Are GPUs recognized by our DL frameworks
+              run: |
+                utils/print_env_pt.py
+
+            - name: Run all tests on GPU
+              run: |
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+
+            - name: Failure short reports
+              if: ${{ always() }}
+              run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
+
+            - name: Test suite reports artifacts
+              if: ${{ always() }}
+              uses: actions/upload-artifact@v2
+              with:
+                  name: run_tests_torch_cuda_extensions_gpu_test_reports
+                  path: reports
+
+    run_all_tests_torch_cuda_extensions_multi_gpu:
+        runs-on: [self-hosted, docker-gpu, multi-gpu]
+        container:
+            image: nvcr.io/nvidia/pytorch:21.03-py3
+            options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+        steps:
+            - name: Launcher docker
+              uses: actions/checkout@v2
+
+            - name: NVIDIA-SMI
+              continue-on-error: true
+              run: |
+                  nvidia-smi
+
+            - name: Install dependencies
+              run: |
+                  apt -y update && apt install -y libaio-dev
+                  pip install --upgrade pip
+                  pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
+                  rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
+                  pip install .[testing,fairscale]
+                  pip install git+https://github.com/microsoft/DeepSpeed # testing bleeding edge
+
+            - name: Are GPUs recognized by our DL frameworks
+              run: |
+                utils/print_env_pt.py
+
+            - name: Run all tests on GPU
+              run: |
+                  python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
+
+            - name: Failure short reports
+              if: ${{ always() }}
+              run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
+
+            - name: Test suite reports artifacts
+              if: ${{ always() }}
+              uses: actions/upload-artifact@v2
+              with:
+                  name: run_tests_torch_cuda_extensions_multi_gpu_test_reports
+                  path: reports
+
+    send_results:
+        name: Send results to webhook
+        runs-on: ubuntu-latest
+        if: always()
+        needs: [
+                run_all_tests_torch_gpu,
+                run_all_tests_torch_multi_gpu,
+                run_all_tests_torch_cuda_extensions_gpu,
+                run_all_tests_torch_cuda_extensions_multi_gpu
+        ]
+        steps:
+            - uses: actions/checkout@v2
+
+            - uses: actions/download-artifact@v2
+
+            - name: Send message to Slack
+              env:
+                  CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+                  CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+                  CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+                  CI_SLACK_CHANNEL_ID_PAST_FUTURE: ${{ secrets.CI_SLACK_CHANNEL_ID_PAST_FUTURE }}
+
+              run: |
+                  pip install slack_sdk
+                  python utils/notification_service.py scheduled nightly-torch

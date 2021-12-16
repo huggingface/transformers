@@ -46,8 +46,8 @@ Tips:
 - LED makes use of *global attention* by means of the ``global_attention_mask`` (see
   :class:`~transformers.LongformerModel`). For summarization, it is advised to put *global attention* only on the first
   ``<s>`` token. For question answering, it is advised to put *global attention* on all tokens of the question.
-- To fine-tune LED on all 16384, it is necessary to enable *gradient checkpointing* by setting
-  ``config.gradient_checkpointing = True``.
+- To fine-tune LED on all 16384, it is necessary to enable *gradient checkpointing* by executing
+  ``model.gradient_checkpointing_enable()``.
 - A notebook showing how to evaluate LED, can be accessed `here
   <https://colab.research.google.com/drive/12INTTR6n64TzS4RrXZxMSXfrOd9Xzamo?usp=sharing>`__.
 - A notebook showing how to fine-tune LED, can be accessed `here

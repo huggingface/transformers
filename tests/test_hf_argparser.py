@@ -106,8 +106,12 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--foo", type=int, required=True)
         expected.add_argument("--bar", type=float, required=True)
         expected.add_argument("--baz", type=str, required=True)
-        expected.add_argument("--flag", type=string_to_bool, default=True, const=True, nargs="?")
+        expected.add_argument("--flag", type=string_to_bool, default=False, const=True, nargs="?")
         self.argparsersEqual(parser, expected)
+
+        args = ["--foo", "1", "--baz", "quux", "--bar", "0.5"]
+        (example,) = parser.parse_args_into_dataclasses(args, look_for_args_file=False)
+        self.assertFalse(example.flag)
 
     def test_with_default(self):
         parser = HfArgumentParser(WithDefaultExample)
@@ -122,8 +126,10 @@ class HfArgumentParserTest(unittest.TestCase):
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", type=string_to_bool, default=False, const=True, nargs="?")
-        expected.add_argument("--no_baz", action="store_false", dest="baz")
         expected.add_argument("--baz", type=string_to_bool, default=True, const=True, nargs="?")
+        # A boolean no_* argument always has to come after its "default: True" regular counter-part
+        # and its default must be set to False
+        expected.add_argument("--no_baz", action="store_false", default=False, dest="baz")
         expected.add_argument("--opt", type=string_to_bool, default=None)
         self.argparsersEqual(parser, expected)
 

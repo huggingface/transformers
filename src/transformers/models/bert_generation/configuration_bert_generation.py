@@ -52,8 +52,6 @@ class BertGenerationConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
         position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"absolute"`):
             Type of position embedding. Choose one of :obj:`"absolute"`, :obj:`"relative_key"`,
             :obj:`"relative_key_query"`. For positional embeddings use :obj:`"absolute"`. For more information on
@@ -96,7 +94,6 @@ class BertGenerationConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=1,
-        gradient_checkpointing=False,
         position_embedding_type="absolute",
         use_cache=True,
         **kwargs
@@ -114,6 +111,5 @@ class BertGenerationConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache

@@ -18,7 +18,7 @@ import copy
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import T5Config, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -30,7 +30,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import T5Config, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
+    from transformers import ByT5Tokenizer, T5EncoderModel, T5ForConditionalGeneration, T5Model, T5Tokenizer
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -100,8 +100,20 @@ class T5ModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = T5Config(
-            vocab_size=self.vocab_size,
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
+
+    def get_pipeline_config(self):
+        return T5Config(
+            vocab_size=166,  # t5 forces 100 extra tokens
             d_model=self.hidden_size,
             d_ff=self.d_ff,
             d_kv=self.hidden_size // self.num_attention_heads,
@@ -117,13 +129,22 @@ class T5ModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
         )
 
-        return (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
+    def get_config(self):
+        return T5Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -488,6 +509,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
+    fx_ready_model_classes = all_model_classes
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = True
@@ -530,6 +552,34 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    def test_decoder_model_past_with_3d_attn_mask(self):
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+
+        attention_mask = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.encoder_seq_length, self.model_tester.encoder_seq_length],
+            vocab_size=2,
+        )
+        decoder_attention_mask = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.decoder_seq_length],
+            vocab_size=2,
+        )
+
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -570,6 +620,40 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 opset_version=9,
                 input_names=["input_ids", "decoder_input_ids"],
             )
+
+    def test_generate_with_head_masking(self):
+        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        max_length = config_and_inputs[1].shape[-1] + 3
+        model = T5ForConditionalGeneration(config).eval()
+        model.to(torch_device)
+
+        head_masking = {
+            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
+            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
+            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
+        }
+
+        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
+            head_masks = {name: mask}
+            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
+            if name == "head_mask":
+                head_masks["decoder_head_mask"] = torch.ones(
+                    config.num_decoder_layers, config.num_heads, device=torch_device
+                )
+
+            out = model.generate(
+                config_and_inputs[1],
+                num_beams=1,
+                max_length=max_length,
+                output_attentions=True,
+                return_dict_in_generate=True,
+                **head_masks,
+            )
+            # We check the state of decoder_attentions and cross_attentions just from the last step
+            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
 
 class T5EncoderOnlyModelTester:
@@ -732,6 +816,21 @@ class T5ModelIntegrationTests(unittest.TestCase):
         return T5Tokenizer.from_pretrained("t5-base")
 
     @slow
+    def test_small_generation(self):
+        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
+        model.config.max_length = 8
+        model.config.num_beams = 1
+        model.config.do_sample = False
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
+
+        sequences = model.generate(input_ids)
+
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+        self.assertTrue(output_str == "Hello there!")
+
+    @slow
     def test_small_integration_test(self):
         """
         For comparision run:
@@ -781,6 +880,30 @@ class T5ModelIntegrationTests(unittest.TestCase):
         mtf_score = -(labels.shape[-1] * loss.item())
 
         EXPECTED_SCORE = -59.0293
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_small_byt5_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.9.1
+
+        >>> path_to_byt5_small_checkpoint = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = t5.data.ByteVocabulary()
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = T5ForConditionalGeneration.from_pretrained("google/byt5-small").to(torch_device)
+        tokenizer = ByT5Tokenizer.from_pretrained("google/byt5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
+
+        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -60.7397
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow

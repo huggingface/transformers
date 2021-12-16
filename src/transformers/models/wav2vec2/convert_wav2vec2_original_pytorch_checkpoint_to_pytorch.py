@@ -28,7 +28,7 @@ from transformers import (
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForCTC,
-    Wav2Vec2Model,
+    Wav2Vec2ForPreTraining,
     Wav2Vec2Processor,
     logging,
 )
@@ -50,9 +50,20 @@ MAPPING = {
     "final_layer_norm": "encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "encoder.layer_norm",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
+    "quantizer.weight_proj": "quantizer.weight_proj",
+    "quantizer.vars": "quantizer.codevectors",
+    "project_q": "project_q",
+    "final_proj": "project_hid",
     "w2v_encoder.proj": "lm_head",
     "mask_emb": "masked_spec_embed",
 }
+TOP_LEVEL_KEYS = [
+    "lm_head",
+    "quantizer.weight_proj",
+    "quantizer.codevectors",
+    "project_q",
+    "project_hid",
+]
 
 
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
@@ -64,9 +75,10 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_shape = hf_pointer.shape
 
-    assert (
-        hf_shape == value.shape
-    ), f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+    if hf_shape != value.shape:
+        raise ValueError(
+            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+        )
 
     if weight_type == "weight":
         hf_pointer.weight.data = value
@@ -82,11 +94,11 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
 
 
-def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
+def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.wav2vec2.feature_extractor if is_finetuned else hf_model.feature_extractor
+    feature_extractor = hf_model.wav2vec2.feature_extractor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -101,9 +113,8 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "wav2vec2." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
-
-                if key in name or (key.split("w2v_model.")[-1] == name.split(".")[0] and not is_finetuned):
+                mapped_key = "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+                if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
                         layer_index = name.split(key)[0].split(".")[-2]
@@ -112,10 +123,11 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
                         weight_type = "weight_g"
                     elif "weight_v" in name:
                         weight_type = "weight_v"
-                    elif "weight" in name:
-                        weight_type = "weight"
                     elif "bias" in name:
                         weight_type = "bias"
+                    elif "weight" in name:
+                        # TODO: don't match quantizer.weight_proj
+                        weight_type = "weight"
                     else:
                         weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
@@ -134,28 +146,32 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
@@ -213,7 +229,7 @@ def convert_wav2vec2_checkpoint(
 
         hf_wav2vec = Wav2Vec2ForCTC(config)
     else:
-        hf_wav2vec = Wav2Vec2Model(config)
+        hf_wav2vec = Wav2Vec2ForPreTraining(config)
 
     if is_finetuned:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
@@ -224,7 +240,7 @@ def convert_wav2vec2_checkpoint(
 
     model = model[0].eval()
 
-    recursively_load_weights(model, hf_wav2vec, is_finetuned)
+    recursively_load_weights(model, hf_wav2vec, not is_finetuned)
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
 

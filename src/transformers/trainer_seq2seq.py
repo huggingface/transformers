@@ -15,18 +15,13 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
-from packaging import version
 from torch import nn
-from torch.utils.data.dataset import Dataset
+from torch.utils.data import Dataset
 
-from .integrations import is_deepspeed_zero3_enabled
+from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .trainer_utils import PredictionOutput
 from .utils import logging
-
-
-if version.parse(torch.__version__) >= version.parse("1.6"):
-    from torch.cuda.amp import autocast
 
 
 logger = logging.get_logger(__name__)
@@ -70,8 +65,8 @@ class Seq2SeqTrainer(Trainer):
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
-        self._max_length = max_length
-        self._num_beams = num_beams
+        self._max_length = max_length if max_length is not None else self.args.generation_max_length
+        self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -117,8 +112,8 @@ class Seq2SeqTrainer(Trainer):
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
         """
-        self._max_length = max_length
-        self._num_beams = num_beams
+        self._max_length = max_length if max_length is not None else self.args.generation_max_length
+        self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def prediction_step(
@@ -164,9 +159,15 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
+        if self.tokenizer is not None:
+            generation_inputs = {k: v for k, v in inputs.items() if k in self.tokenizer.model_input_names}
+            # very ugly hack to make it work
+            generation_inputs["input_ids"] = generation_inputs.pop(self.tokenizer.model_input_names[0])
+        else:
+            generation_inputs = {"input_ids": inputs["input_ids"]}
+
         generated_tokens = self.model.generate(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+            **generation_inputs,
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
@@ -174,10 +175,7 @@ class Seq2SeqTrainer(Trainer):
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
         with torch.no_grad():
-            if self.use_amp:
-                with autocast():
-                    outputs = model(**inputs)
-            else:
+            with self.autocast_smart_context_manager():
                 outputs = model(**inputs)
             if has_labels:
                 if self.label_smoother is not None:
@@ -190,22 +188,26 @@ class Seq2SeqTrainer(Trainer):
         if self.args.prediction_loss_only:
             return (loss, None, None)
 
-        labels = inputs["labels"]
-        if labels.shape[-1] < gen_kwargs["max_length"]:
-            labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
+        if has_labels:
+            labels = inputs["labels"]
+            if labels.shape[-1] < gen_kwargs["max_length"]:
+                labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
+        else:
+            labels = None
 
         return (loss, generated_tokens, labels)
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        if self.tokenizer is None:
-            raise ValueError(
-                f"Tensor need to be padded to `max_length={max_length}` but no tokenizer was passed when creating "
-                "this `Trainer`. Make sure to create your `Trainer` with the appropriate tokenizer."
+        if self.tokenizer is not None and hasattr(self.tokenizer, "pad_token_id"):
+            # If PAD token is not defined at least EOS token has to be defined
+            pad_token_id = (
+                self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
             )
-        # If PAD token is not defined at least EOS token has to be defined
-        pad_token_id = (
-            self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
-        )
+        else:
+            if self.model.config.pad_token_id is not None:
+                pad_token_id = self.model.config.pad_token_id
+            else:
+                raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")
 
         padded_tensor = pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device

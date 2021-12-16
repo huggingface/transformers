@@ -20,6 +20,7 @@ import pickle
 
 import numpy as np
 import torch
+from torch import nn
 
 from transformers import ReformerConfig, ReformerModelWithLMHead
 from transformers.utils import logging
@@ -31,10 +32,10 @@ logging.set_verbosity_info()
 def set_param(torch_layer, weight, bias=None):
     # set parameter of one layer
     assert torch_layer.weight.shape == weight.shape, f"{torch_layer} layer.weight does not match"
-    torch_layer.weight = torch.nn.Parameter(weight)
+    torch_layer.weight = nn.Parameter(weight)
     if bias is not None:
         assert torch_layer.bias.shape == bias.shape, f"{torch_layer} layer.bias does not match"
-        torch_layer.bias = torch.nn.Parameter(bias)
+        torch_layer.bias = nn.Parameter(bias)
 
 
 def set_layer_weights_in_torch_lsh(weights, torch_layer, hidden_size):
@@ -153,7 +154,7 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
             assert (
                 position_embeddings.weights[emb_idx].shape == emb_weights.shape
             ), f"{position_embeddings[emb_idx]} emb does not match"
-            position_embeddings.weights[emb_idx] = torch.nn.Parameter(torch.tensor(emb_weights))
+            position_embeddings.weights[emb_idx] = nn.Parameter(torch.tensor(emb_weights))
 
     trax_layer_weights = weights[5]
     assert len(torch_model_reformer.encoder.layers) * 4 == len(

@@ -78,7 +78,7 @@ class Speech2TextConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         max_source_positions (:obj:`int`, `optional`, defaults to 6000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        max_target_positions: (:obj:`int`, `optional`, defaults to 1024):
+        max_target_positions (:obj:`int`, `optional`, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         num_conv_layers (:obj:`int`, `optional`, defaults to 2):
@@ -95,7 +95,7 @@ class Speech2TextConfig(PretrainedConfig):
         input_channels (:obj:`int`, `optional`, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
 
-        Example::
+    Example::
 
         >>> from transformers import Speech2TextModel, Speech2TextConfig
 
@@ -110,6 +110,7 @@ class Speech2TextConfig(PretrainedConfig):
     """
     model_type = "speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -133,7 +134,6 @@ class Speech2TextConfig(PretrainedConfig):
         decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=True,
-        gradient_checkpointing=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -146,15 +146,6 @@ class Speech2TextConfig(PretrainedConfig):
         input_channels=1,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
-
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -173,7 +164,6 @@ class Speech2TextConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
@@ -185,16 +175,17 @@ class Speech2TextConfig(PretrainedConfig):
 
         if len(self.conv_kernel_sizes) != self.num_conv_layers:
             raise ValueError(
-                "Configuration for convolutional module is incorrect."
-                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers`"
-                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`,"
+                "Configuration for convolutional module is incorrect. "
+                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers` "
+                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )

@@ -2,6 +2,9 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
+import io
+import json
+
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
@@ -17,14 +20,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..configuration_utils import PretrainedConfig
-from ..file_utils import is_tf_available, is_torch_available
-from ..modelcard import ModelCard
-from ..models.auto.tokenization_auto import AutoTokenizer
+from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..file_utils import http_get, is_tf_available, is_torch_available
+from ..models.auto.configuration_auto import AutoConfig
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
+from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
     ArgumentHandler,
@@ -35,17 +41,25 @@ from .base import (
     PipelineDataFormat,
     PipelineException,
     get_default_model,
-    infer_framework_from_model,
+    infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
+from .image_classification import ImageClassificationPipeline
+from .image_segmentation import ImageSegmentationPipeline
+from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
-from .token_classification import NerPipeline, TokenClassificationArgumentHandler, TokenClassificationPipeline
+from .token_classification import (
+    AggregationStrategy,
+    NerPipeline,
+    TokenClassificationArgumentHandler,
+    TokenClassificationPipeline,
+)
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 
 
@@ -64,6 +78,7 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
+        TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
     )
 
@@ -78,11 +93,17 @@ if is_torch_available():
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         AutoModel,
+        AutoModelForAudioClassification,
         AutoModelForCausalLM,
+        AutoModelForCTC,
+        AutoModelForImageClassification,
+        AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
+        AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
@@ -99,46 +120,64 @@ TASK_ALIASES = {
     "ner": "token-classification",
 }
 SUPPORTED_TASKS = {
+    "audio-classification": {
+        "impl": AudioClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
+        "default": {"model": {"pt": "superb/wav2vec2-base-superb-ks"}},
+        "type": "audio",
+    },
+    "automatic-speech-recognition": {
+        "impl": AutomaticSpeechRecognitionPipeline,
+        "tf": (),
+        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/wav2vec2-base-960h"}},
+        "type": "multimodal",
+    },
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
-        "tf": TFAutoModel if is_tf_available() else None,
-        "pt": AutoModel if is_torch_available() else None,
+        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
+        "type": "multimodal",
     },
     "text-classification": {
         "impl": TextClassificationPipeline,
-        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
-        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": "distilbert-base-uncased-finetuned-sst-2-english",
                 "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
         },
+        "type": "text",
     },
     "token-classification": {
         "impl": TokenClassificationPipeline,
-        "tf": TFAutoModelForTokenClassification if is_tf_available() else None,
-        "pt": AutoModelForTokenClassification if is_torch_available() else None,
+        "tf": (TFAutoModelForTokenClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": "dbmdz/bert-large-cased-finetuned-conll03-english",
                 "tf": "dbmdz/bert-large-cased-finetuned-conll03-english",
             },
         },
+        "type": "text",
     },
     "question-answering": {
         "impl": QuestionAnsweringPipeline,
-        "tf": TFAutoModelForQuestionAnswering if is_tf_available() else None,
-        "pt": AutoModelForQuestionAnswering if is_torch_available() else None,
+        "tf": (TFAutoModelForQuestionAnswering,) if is_tf_available() else (),
+        "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
             "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
         },
+        "type": "text",
     },
     "table-question-answering": {
         "impl": TableQuestionAnsweringPipeline,
-        "pt": AutoModelForTableQuestionAnswering if is_torch_available() else None,
-        "tf": None,
+        "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
+        "tf": (TFAutoModelForTableQuestionAnswering,) if is_tf_available() else (),
         "default": {
             "model": {
                 "pt": "google/tapas-base-finetuned-wtq",
@@ -146,59 +185,130 @@ SUPPORTED_TASKS = {
                 "tf": "google/tapas-base-finetuned-wtq",
             },
         },
+        "type": "text",
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
-        "tf": TFAutoModelForMaskedLM if is_tf_available() else None,
-        "pt": AutoModelForMaskedLM if is_torch_available() else None,
+        "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
+        "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
+        "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
+        "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
     "translation": {
         "impl": TranslationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
             ("en", "fr"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
             ("en", "de"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
             ("en", "ro"): {"model": {"pt": "t5-base", "tf": "t5-base"}},
         },
+        "type": "text",
     },
     "text2text-generation": {
         "impl": Text2TextGenerationPipeline,
-        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
-        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
+        "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
-        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
-        "pt": AutoModelForCausalLM if is_torch_available() else None,
+        "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
+        "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
+        "type": "text",
     },
     "zero-shot-classification": {
         "impl": ZeroShotClassificationPipeline,
-        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
-        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
             "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
             "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
         },
+        "type": "text",
     },
     "conversational": {
         "impl": ConversationalPipeline,
-        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
-        "pt": AutoModelForCausalLM if is_torch_available() else None,
+        "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
+        "type": "text",
+    },
+    "image-classification": {
+        "impl": ImageClassificationPipeline,
+        "tf": (),
+        "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
+        "default": {"model": {"pt": "google/vit-base-patch16-224"}},
+        "type": "image",
+    },
+    "image-segmentation": {
+        "impl": ImageSegmentationPipeline,
+        "tf": (),
+        "pt": (AutoModelForImageSegmentation,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50-panoptic"}},
+        "type": "image",
+    },
+    "object-detection": {
+        "impl": ObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": "facebook/detr-resnet-50"}},
+        "type": "image",
     },
 }
+
+NO_FEATURE_EXTRACTOR_TASKS = set()
+NO_TOKENIZER_TASKS = set()
+for task, values in SUPPORTED_TASKS.items():
+    if values["type"] == "text":
+        NO_FEATURE_EXTRACTOR_TASKS.add(task)
+    elif values["type"] in {"audio", "image"}:
+        NO_TOKENIZER_TASKS.add(task)
+    elif values["type"] != "multimodal":
+        raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
+
+
+def get_supported_tasks() -> List[str]:
+    """
+    Returns a list of supported task strings.
+    """
+    supported_tasks = list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys())
+    supported_tasks.sort()
+    return supported_tasks
+
+
+def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
+    tmp = io.BytesIO()
+    headers = {}
+    if use_auth_token:
+        headers["Authorization"] = f"Bearer {use_auth_token}"
+
+    try:
+        http_get(f"https://huggingface.co/api/models/{model}", tmp, headers=headers)
+        tmp.seek(0)
+        body = tmp.read()
+        data = json.loads(body)
+    except Exception as e:
+        raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
+    if "pipeline_tag" not in data:
+        raise RuntimeError(
+            f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
+        )
+    if data.get("library_name", "transformers") != "transformers":
+        raise RuntimeError(f"This model is meant to be used with {data['library_name']} not with transformers")
+    task = data["pipeline_tag"]
+    return task
 
 
 def check_task(task: str) -> Tuple[Dict, Any]:
@@ -210,18 +320,22 @@ def check_task(task: str) -> Tuple[Dict, Any]:
         task (:obj:`str`):
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
-            - :obj:`"feature-extraction"`
-            - :obj:`"text-classification"`
-            - :obj:`"sentiment-analysis"` (alias of :obj:`"text-classification")
-            - :obj:`"token-classification"`
-            - :obj:`"ner"` (alias of :obj:`"token-classification")
-            - :obj:`"question-answering"`
-            - :obj:`"fill-mask"`
-            - :obj:`"summarization"`
-            - :obj:`"translation_xx_to_yy"`
-            - :obj:`"translation"`
-            - :obj:`"text-generation"`
+            - :obj:`"audio-classification"`
+            - :obj:`"automatic-speech-recognition"`
             - :obj:`"conversational"`
+            - :obj:`"feature-extraction"`
+            - :obj:`"fill-mask"`
+            - :obj:`"image-classification"`
+            - :obj:`"question-answering"`
+            - :obj:`"table-question-answering"`
+            - :obj:`"text2text-generation"`
+            - :obj:`"text-classification"` (alias :obj:`"sentiment-analysis" available)
+            - :obj:`"text-generation"`
+            - :obj:`"token-classification"` (alias :obj:`"ner"` available)
+            - :obj:`"translation"`
+            - :obj:`"translation_xx_to_yy"`
+            - :obj:`"summarization"`
+            - :obj:`"zero-shot-classification"`
 
     Returns:
         (task_defaults:obj:`dict`, task_options: (:obj:`tuple`, None)) The actual dictionary required to initialize the
@@ -242,21 +356,21 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             return targeted_task, (tokens[1], tokens[3])
         raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
-    raise KeyError(
-        f"Unknown task {task}, available tasks are {list(SUPPORTED_TASKS.keys()) + ['translation_XX_to_YY']}"
-    )
+    raise KeyError(f"Unknown task {task}, available tasks are {get_supported_tasks() + ['translation_XX_to_YY']}")
 
 
 def pipeline(
-    task: str,
+    task: str = None,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+    feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
-    model_kwargs: Dict[str, Any] = {},
+    model_kwargs: Dict[str, Any] = None,
+    pipeline_class: Optional[Any] = None,
     **kwargs
 ) -> Pipeline:
     """
@@ -272,28 +386,33 @@ def pipeline(
         task (:obj:`str`):
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
-            - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
-            - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
-              :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
-              :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
-            - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
-            - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
-            - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`.
-            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
-            - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
-            - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
-            - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`.
-        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
+            - :obj:`"audio-classification"`: will return a :class:`~transformers.AudioClassificationPipeline`:.
+            - :obj:`"automatic-speech-recognition"`: will return a
+              :class:`~transformers.AutomaticSpeechRecognitionPipeline`:.
+            - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`:.
+            - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`:.
+            - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`:.
+            - :obj:`"image-classification"`: will return a :class:`~transformers.ImageClassificationPipeline`:.
+            - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`:.
+            - :obj:`"table-question-answering"`: will return a :class:`~transformers.TableQuestionAnsweringPipeline`:.
+            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`:.
+            - :obj:`"text-classification"` (alias :obj:`"sentiment-analysis" available): will return a
+              :class:`~transformers.TextClassificationPipeline`:.
+            - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`:.
+            - :obj:`"token-classification"` (alias :obj:`"ner"` available): will return a
+              :class:`~transformers.TokenClassificationPipeline`:.
+            - :obj:`"translation"`: will return a :class:`~transformers.TranslationPipeline`:.
+            - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`:.
+            - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`:.
+            - :obj:`"zero-shot-classification"`: will return a :class:`~transformers.ZeroShotClassificationPipeline`:.
+
+        model (:obj:`str` or :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
             actual instance of a pretrained model inheriting from :class:`~transformers.PreTrainedModel` (for PyTorch)
             or :class:`~transformers.TFPreTrainedModel` (for TensorFlow).
 
             If not provided, the default for the :obj:`task` will be loaded.
-        config (:obj:`str` or :obj:`~transformers.PretrainedConfig`, `optional`):
+        config (:obj:`str` or :class:`~transformers.PretrainedConfig`, `optional`):
             The configuration that will be used by the pipeline to instantiate the model. This can be a model
             identifier or an actual pretrained model configuration inheriting from
             :class:`~transformers.PretrainedConfig`.
@@ -301,7 +420,7 @@ def pipeline(
             If not provided, the default configuration file for the requested model will be used. That means that if
             :obj:`model` is given, its default configuration will be used. However, if :obj:`model` is not supplied,
             this :obj:`task`'s default model's config is used instead.
-        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`):
+        tokenizer (:obj:`str` or :class:`~transformers.PreTrainedTokenizer`, `optional`):
             The tokenizer that will be used by the pipeline to encode data for the model. This can be a model
             identifier or an actual pretrained tokenizer inheriting from :class:`~transformers.PreTrainedTokenizer`.
 
@@ -309,6 +428,18 @@ def pipeline(
             :obj:`model` is not specified or not a string, then the default tokenizer for :obj:`config` is loaded (if
             it is a string). However, if :obj:`config` is also not given or not a string, then the default tokenizer
             for the given :obj:`task` will be loaded.
+        feature_extractor (:obj:`str` or :class:`~transformers.PreTrainedFeatureExtractor`, `optional`):
+            The feature extractor that will be used by the pipeline to encode data for the model. This can be a model
+            identifier or an actual pretrained feature extractor inheriting from
+            :class:`~transformers.PreTrainedFeatureExtractor`.
+
+            Feature extractors are used for non-NLP models, such as Speech or Vision models as well as multi-modal
+            models. Multi-modal models will also require a tokenizer to be passed.
+
+            If not provided, the default feature extractor for the given :obj:`model` will be loaded (if it is a
+            string). If :obj:`model` is not specified or not a string, then the default feature extractor for
+            :obj:`config` is loaded (if it is a string). However, if :obj:`config` is also not given or not a string,
+            then the default feature extractor for the given :obj:`task` will be loaded.
         framework (:obj:`str`, `optional`):
             The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
             must be installed.
@@ -351,88 +482,137 @@ def pipeline(
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         >>> pipeline('ner', model=model, tokenizer=tokenizer)
     """
+    if model_kwargs is None:
+        model_kwargs = {}
+
+    if task is None and model is None:
+        raise RuntimeError(
+            "Impossible to instantiate a pipeline without either a task or a model"
+            "being specified."
+            "Please provide a task class or a model"
+        )
+
+    if model is None and tokenizer is not None:
+        raise RuntimeError(
+            "Impossible to instantiate a pipeline with tokenizer specified but not the model "
+            "as the provided tokenizer may not be compatible with the default model. "
+            "Please provide a PreTrainedModel class or a path/identifier to a pretrained model when providing tokenizer."
+        )
+    if model is None and feature_extractor is not None:
+        raise RuntimeError(
+            "Impossible to instantiate a pipeline with feature_extractor specified but not the model "
+            "as the provided feature_extractor may not be compatible with the default model. "
+            "Please provide a PreTrainedModel class or a path/identifier to a pretrained model when providing feature_extractor."
+        )
+
+    if task is None and model is not None:
+        if not isinstance(model, str):
+            raise RuntimeError(
+                "Inferring the task automatically requires to check the hub with a model_id defined as a `str`."
+                f"{model} is not a valid model_id."
+            )
+        task = get_task(model, use_auth_token)
+
     # Retrieve the task
     targeted_task, task_options = check_task(task)
+    if pipeline_class is None:
+        pipeline_class = targeted_task["impl"]
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
-
-    # Try to infer tokenizer from model or config name (if provided as str)
-    if tokenizer is None:
-        if isinstance(model, str):
-            tokenizer = model
-        elif isinstance(config, str):
-            tokenizer = config
-        else:
-            # Impossible to guest what is the right tokenizer here
-            raise Exception(
-                "Impossible to guess which tokenizer to use. "
-                "Please provided a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
-            )
-
-    modelcard = None
-    # Try to infer modelcard from model or config name (if provided as str)
-    if isinstance(model, str):
-        modelcard = model
-    elif isinstance(config, str):
-        modelcard = config
-
-    # Infer the framework form the model
-    if framework is None:
-        framework, model = infer_framework_from_model(model, targeted_task, revision=revision, task=task)
-
-    task_class, model_class = targeted_task["impl"], targeted_task[framework]
+        logger.warning(f"No model was supplied, defaulted to {model} (https://huggingface.co/{model})")
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
     model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
-    # Instantiate tokenizer if needed
-    if isinstance(tokenizer, (str, tuple)):
-        if isinstance(tokenizer, tuple):
-            # For tuple we have (tokenizer name, {kwargs})
-            use_fast = tokenizer[1].pop("use_fast", use_fast)
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer[0], use_fast=use_fast, revision=revision, _from_pipeline=task, **tokenizer[1]
-            )
-        else:
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task, **model_kwargs
-            )
-
+    # Config is the primordial information item.
     # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
+    elif config is None and isinstance(model, str):
+        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
-    # Instantiate modelcard if needed
-    if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard, revision=revision, _from_pipeline=task)
+    model_name = model if isinstance(model, str) else None
 
-    # Instantiate model if needed
-    if isinstance(model, str):
-        # Handle transparent TF/PT model conversion
-        if framework == "pt" and model.endswith(".h5"):
-            model_kwargs["from_tf"] = True
-            logger.warning(
-                "Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. "
-                "Trying to load the model with PyTorch."
+    # Infer the framework from the model
+    # Forced if framework already defined, inferred if it's None
+    # Will load the correct model if possible
+    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
+    framework, model = infer_framework_load_model(
+        model,
+        model_classes=model_classes,
+        config=config,
+        framework=framework,
+        revision=revision,
+        task=task,
+        **model_kwargs,
+    )
+
+    model_config = model.config
+
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+
+    if task in NO_TOKENIZER_TASKS:
+        # These will never require a tokenizer.
+        # the model on the other hand might have a tokenizer, but
+        # the files could be missing from the hub, instead of failing
+        # on such repos, we just force to not load it.
+        load_tokenizer = False
+    if task in NO_FEATURE_EXTRACTOR_TASKS:
+        load_feature_extractor = False
+
+    if load_tokenizer:
+        # Try to infer tokenizer from model or config name (if provided as str)
+        if tokenizer is None:
+            if isinstance(model_name, str):
+                tokenizer = model_name
+            elif isinstance(config, str):
+                tokenizer = config
+            else:
+                # Impossible to guess what is the right tokenizer here
+                raise Exception(
+                    "Impossible to guess which tokenizer to use. "
+                    "Please provide a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                )
+
+        # Instantiate tokenizer if needed
+        if isinstance(tokenizer, (str, tuple)):
+            if isinstance(tokenizer, tuple):
+                # For tuple we have (tokenizer name, {kwargs})
+                use_fast = tokenizer[1].pop("use_fast", use_fast)
+                tokenizer_identifier = tokenizer[0]
+                tokenizer_kwargs = tokenizer[1]
+            else:
+                tokenizer_identifier = tokenizer
+                tokenizer_kwargs = model_kwargs
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_identifier, revision=revision, use_fast=use_fast, _from_pipeline=task, **tokenizer_kwargs
             )
-        elif framework == "tf" and model.endswith(".bin"):
-            model_kwargs["from_pt"] = True
-            logger.warning(
-                "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
-                "Trying to load the model with Tensorflow."
-            )
 
-        if model_class is None:
-            raise ValueError(
-                f"Pipeline using {framework} framework, but this framework is not supported by this pipeline."
-            )
+    if load_feature_extractor:
+        # Try to infer feature extractor from model or config name (if provided as str)
+        if feature_extractor is None:
+            if isinstance(model_name, str):
+                feature_extractor = model_name
+            elif isinstance(config, str):
+                feature_extractor = config
+            else:
+                # Impossible to guess what is the right feature_extractor here
+                raise Exception(
+                    "Impossible to guess which feature extractor to use. "
+                    "Please provide a PreTrainedFeatureExtractor class or a path/identifier "
+                    "to a pretrained feature extractor."
+                )
 
-        model = model_class.from_pretrained(
-            model, config=config, revision=revision, _from_pipeline=task, **model_kwargs
-        )
+        # Instantiate feature_extractor if needed
+        if isinstance(feature_extractor, (str, tuple)):
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                feature_extractor, revision=revision, _from_pipeline=task, **model_kwargs
+            )
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
@@ -444,4 +624,10 @@ def pipeline(
                 )
                 break
 
-    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
+    if tokenizer is not None:
+        kwargs["tokenizer"] = tokenizer
+
+    if feature_extractor is not None:
+        kwargs["feature_extractor"] = feature_extractor
+
+    return pipeline_class(model=model, framework=framework, task=task, **kwargs)

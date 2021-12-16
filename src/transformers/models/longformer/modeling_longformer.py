@@ -19,10 +19,9 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
 
 from ...activations import ACT2FN, gelu
 from ...file_utils import (
@@ -640,7 +639,9 @@ class LongformerSelfAttention(nn.Module):
             # free memory
             del global_key_attn_scores
 
-        attn_probs = F.softmax(attn_scores, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
+        attn_probs = nn.functional.softmax(
+            attn_scores, dim=-1, dtype=torch.float32
+        )  # use fp32 for numerical stability
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -656,7 +657,7 @@ class LongformerSelfAttention(nn.Module):
         del attn_scores
 
         # apply dropout
-        attn_probs = F.dropout(attn_probs, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(attn_probs, p=self.dropout, training=self.training)
 
         value_vectors = value_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
 
@@ -716,7 +717,7 @@ class LongformerSelfAttention(nn.Module):
     @staticmethod
     def _pad_and_transpose_last_two_dims(hidden_states_padded, padding):
         """pads rows and then flips rows and columns"""
-        hidden_states_padded = F.pad(
+        hidden_states_padded = nn.functional.pad(
             hidden_states_padded, padding
         )  # padding value is not important because it will be overwritten
         hidden_states_padded = hidden_states_padded.view(
@@ -743,7 +744,7 @@ class LongformerSelfAttention(nn.Module):
                0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
         """
         total_num_heads, num_chunks, window_overlap, hidden_dim = chunked_hidden_states.size()
-        chunked_hidden_states = F.pad(
+        chunked_hidden_states = nn.functional.pad(
             chunked_hidden_states, (0, window_overlap + 1)
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
         chunked_hidden_states = chunked_hidden_states.view(
@@ -879,7 +880,7 @@ class LongformerSelfAttention(nn.Module):
         value = value.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
 
         # pad seq_len with w at the beginning of the sequence and another window overlap at the end
-        padded_value = F.pad(value, (0, 0, window_overlap, window_overlap), value=-1)
+        padded_value = nn.functional.pad(value, (0, 0, window_overlap, window_overlap), value=-1)
 
         # chunk padded_value into chunks of size 3 window overlap and an overlap of size window overlap
         chunked_value_size = (batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim)
@@ -975,7 +976,7 @@ class LongformerSelfAttention(nn.Module):
         # attn = torch.einsum('blhs,bshd->blhd', (selected_attn_probs, selected_v))
         # compute attn output only global
         attn_output_only_global = torch.matmul(
-            attn_probs_only_global.transpose(1, 2), value_vectors_only_global.transpose(1, 2)
+            attn_probs_only_global.transpose(1, 2).clone(), value_vectors_only_global.transpose(1, 2).clone()
         ).transpose(1, 2)
 
         # reshape attn probs
@@ -1051,7 +1052,7 @@ class LongformerSelfAttention(nn.Module):
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
 
         # compute global attn probs
-        global_attn_probs_float = F.softmax(
+        global_attn_probs_float = nn.functional.softmax(
             global_attn_scores, dim=-1, dtype=torch.float32
         )  # use fp32 for numerical stability
 
@@ -1067,7 +1068,7 @@ class LongformerSelfAttention(nn.Module):
                 batch_size * self.num_heads, max_num_global_attn_indices, seq_len
             )
 
-        global_attn_probs = F.dropout(
+        global_attn_probs = nn.functional.dropout(
             global_attn_probs_float.type_as(global_attn_scores), p=self.dropout, training=self.training
         )
 
@@ -1230,6 +1231,7 @@ class LongformerEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LongformerLayer(config, layer_id=i) for i in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -1258,7 +1260,7 @@ class LongformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+            if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1335,10 +1337,8 @@ class LongformerLMHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
@@ -1351,6 +1351,10 @@ class LongformerLMHead(nn.Module):
 
         return x
 
+    def _tie_weights(self):
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        self.bias = self.decoder.bias
+
 
 class LongformerPreTrainedModel(PreTrainedModel):
     """
@@ -1360,6 +1364,7 @@ class LongformerPreTrainedModel(PreTrainedModel):
 
     config_class = LongformerConfig
     base_model_prefix = "longformer"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -1377,6 +1382,10 @@ class LongformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, LongformerEncoder):
+            module.gradient_checkpointing = value
 
 
 LONGFORMER_START_DOCSTRING = r"""
@@ -1502,7 +1511,8 @@ class LongformerModel(LongformerPreTrainedModel):
         self.encoder = LongformerEncoder(config)
         self.pooler = LongformerPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1546,10 +1556,10 @@ class LongformerModel(LongformerPreTrainedModel):
                 f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
-                input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
+                input_ids = nn.functional.pad(input_ids, (0, padding_len), value=pad_token_id)
             if position_ids is not None:
                 # pad with position_id = pad_token_id as in modeling_roberta.RobertaEmbeddings
-                position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
+                position_ids = nn.functional.pad(position_ids, (0, padding_len), value=pad_token_id)
             if inputs_embeds is not None:
                 input_ids_padding = inputs_embeds.new_full(
                     (batch_size, padding_len),
@@ -1559,8 +1569,10 @@ class LongformerModel(LongformerPreTrainedModel):
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
 
-            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
-            token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
+            attention_mask = nn.functional.pad(
+                attention_mask, (0, padding_len), value=False
+            )  # no attention on the padding tokens
+            token_type_ids = nn.functional.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
@@ -1606,7 +1618,6 @@ class LongformerModel(LongformerPreTrainedModel):
             >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
             >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-            >>> # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
             >>> attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
             >>> global_attention_mask = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to global attention to be deactivated for all tokens
             >>> global_attention_mask[:, [1, 4, 21,]] = 1  # Set global attention to random tokens for the sake of this example
@@ -1703,7 +1714,8 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.lm_head = LongformerLMHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -1752,7 +1764,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
             >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
             >>> loss = outputs.loss
-            >>> prediction_logits = output.logits
+            >>> prediction_logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1808,11 +1820,12 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.classifier = LongformerClassificationHead(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1872,7 +1885,10 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels)
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -1930,7 +1946,8 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         self.longformer = LongformerModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=LongformerQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -2014,8 +2031,8 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
 
         total_loss = None
         if start_positions is not None and end_positions is not None:
@@ -2026,8 +2043,8 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
@@ -2067,11 +2084,12 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2157,13 +2175,14 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

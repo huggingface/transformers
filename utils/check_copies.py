@@ -27,9 +27,40 @@ TRANSFORMERS_PATH = "src/transformers"
 PATH_TO_DOCS = "docs/source"
 REPO_PATH = "."
 
+# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
+FULL_COPIES = {
+    "examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
+    "examples/flax/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
+}
+
+
+LOCALIZED_READMES = {
+    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
+    "README.md": {
+        "start_prompt": "🤗 Transformers currently provides the following architectures",
+        "end_prompt": "1. Want to contribute a new model?",
+        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+    },
+    "README_zh-hans.md": {
+        "start_prompt": "🤗 Transformers 目前支持如下的架构",
+        "end_prompt": "1. 想要贡献新的模型？",
+        "format_model_list": "**[{title}]({model_link})** (来自 {paper_affiliations}) 伴随论文 {paper_title_link} 由 {paper_authors} 发布。{supplements}",
+    },
+    "README_zh-hant.md": {
+        "start_prompt": "🤗 Transformers 目前支援以下的架構",
+        "end_prompt": "1. 想要貢獻新的模型？",
+        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+    },
+    "README_ko.md": {
+        "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
+        "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
+        "format_model_list": "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by {paper_authors}.{supplements}",
+    },
+}
+
 
 def _should_continue(line, indent):
-    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\):\s*$", line) is not None
+    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
 
 
 def find_code_in_transformers(object_name):
@@ -192,16 +223,37 @@ def check_copies(overwrite: bool = False):
     check_model_list_copy(overwrite=overwrite)
 
 
-def get_model_list():
+def check_full_copies(overwrite: bool = False):
+    diffs = []
+    for target, source in FULL_COPIES.items():
+        with open(source, "r", encoding="utf-8") as f:
+            source_code = f.read()
+        with open(target, "r", encoding="utf-8") as f:
+            target_code = f.read()
+        if source_code != target_code:
+            if overwrite:
+                with open(target, "w", encoding="utf-8") as f:
+                    print(f"Replacing the content of {target} by the one of {source}.")
+                    f.write(source_code)
+            else:
+                diffs.append(f"- {target}: copy does not match {source}.")
+
+    if not overwrite and len(diffs) > 0:
+        diff = "\n".join(diffs)
+        raise Exception(
+            "Found the following copy inconsistencies:\n"
+            + diff
+            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
+        )
+
+
+def get_model_list(filename, start_prompt, end_prompt):
     """Extracts the model list from the README."""
-    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    _start_prompt = "🤗 Transformers currently provides the following architectures"
-    _end_prompt = "1. Want to contribute a new model?"
-    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(REPO_PATH, filename), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     # Find the start of the list.
     start_index = 0
-    while not lines[start_index].startswith(_start_prompt):
+    while not lines[start_index].startswith(start_prompt):
         start_index += 1
     start_index += 1
 
@@ -209,7 +261,7 @@ def get_model_list():
     current_line = ""
     end_index = start_index
 
-    while not lines[end_index].startswith(_end_prompt):
+    while not lines[end_index].startswith(end_prompt):
         if lines[end_index].startswith("1."):
             if len(current_line) > 1:
                 result.append(current_line)
@@ -223,52 +275,62 @@ def get_model_list():
     return "".join(result)
 
 
-def split_long_line_with_indent(line, max_per_line, indent):
-    """Split the `line` so that it doesn't go over `max_per_line` and adds `indent` to new lines."""
-    words = line.split(" ")
-    lines = []
-    current_line = words[0]
-    for word in words[1:]:
-        if len(f"{current_line} {word}") > max_per_line:
-            lines.append(current_line)
-            current_line = " " * indent + word
+def convert_to_localized_md(model_list, localized_model_list, format_str):
+    """Convert `model_list` to each localized README."""
+
+    def _rep(match):
+        title, model_link, paper_affiliations, paper_title_link, paper_authors, supplements = match.groups()
+        return format_str.format(
+            title=title,
+            model_link=model_link,
+            paper_affiliations=paper_affiliations,
+            paper_title_link=paper_title_link,
+            paper_authors=paper_authors,
+            supplements=" " + supplements.strip() if len(supplements) != 0 else "",
+        )
+
+    # This regex captures metadata from an English model description, including model title, model link,
+    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for example).
+    _re_capture_meta = re.compile(
+        r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
+    )
+    # This regex is used to synchronize link.
+    _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
+
+    num_models_equal = True
+
+    if len(localized_model_list) == 0:
+        localized_model_index = {}
+    else:
+        try:
+            localized_model_index = {
+                re.search(r"\*\*\[([^\]]*)", line).groups()[0]: line
+                for line in localized_model_list.strip().split("\n")
+            }
+        except AttributeError:
+            raise AttributeError("A model name in localized READMEs cannot be recognized.")
+
+    for model in model_list.strip().split("\n"):
+        title, model_link = _re_capture_title_link.search(model).groups()
+        if title not in localized_model_index:
+            num_models_equal = False
+            # Add an anchor white space behind a model description string for regex.
+            # If metadata cannot be captured, the English version will be directly copied.
+            localized_model_index[title] = _re_capture_meta.sub(_rep, model + " ")
         else:
-            current_line = f"{current_line} {word}"
-    lines.append(current_line)
-    return "\n".join(lines)
+            # Synchronize link
+            localized_model_index[title] = _re_capture_title_link.sub(
+                f"**[{title}]({model_link})**", localized_model_index[title], count=1
+            )
+
+    sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
+
+    return num_models_equal, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
 
 
-def convert_to_rst(model_list, max_per_line=None):
-    """Convert `model_list` to rst format."""
-    # Convert **[description](link)** to `description <link>`__
-    def _rep_link(match):
-        title, link = match.groups()
-        # Keep hard links for the models not released yet
-        if "master" in link or not link.startswith("https://huggingface.co/transformers"):
-            return f"`{title} <{link}>`__"
-        # Convert links to relative links otherwise
-        else:
-            link = link[len("https://huggingface.co/transformers/") : -len(".html")]
-            return f":doc:`{title} <{link}>`"
-
-    model_list = re.sub(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*", _rep_link, model_list)
-
-    # Convert [description](link) to `description <link>`__
-    model_list = re.sub(r"\[([^\]]*)\]\(([^\)]*)\)", r"`\1 <\2>`__", model_list)
-
-    # Enumerate the lines properly
-    lines = model_list.split("\n")
-    result = []
-    for i, line in enumerate(lines):
-        line = re.sub(r"^\s*(\d+)\.", f"{i+1}.", line)
-        # Split the lines that are too long
-        if max_per_line is not None and len(line) > max_per_line:
-            prompt = re.search(r"^(\s*\d+\.\s+)\S", line)
-            indent = len(prompt.groups()[0]) if prompt is not None else 0
-            line = split_long_line_with_indent(line, max_per_line, indent)
-
-        result.append(line)
-    return "\n".join(result)
+def convert_readme_to_index(model_list):
+    model_list = model_list.replace("https://huggingface.co/docs/transformers/master/", "")
+    return model_list.replace("https://huggingface.co/docs/transformers/", "")
 
 
 def _find_text_in_file(filename, start_prompt, end_prompt):
@@ -299,21 +361,55 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
     """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
-    rst_list, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.rst"),
-        start_prompt="    This list is updated automatically from the README",
-        end_prompt=".. _bigtable:",
-    )
-    md_list = get_model_list()
-    converted_list = convert_to_rst(md_list, max_per_line=max_per_line)
 
-    if converted_list != rst_list:
+    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
+    index_list, start_index, end_index, lines = _find_text_in_file(
+        filename=os.path.join(PATH_TO_DOCS, "index.mdx"),
+        start_prompt="<!--This list is updated automatically from the README",
+        end_prompt="### Supported frameworks",
+    )
+    md_list = get_model_list(
+        filename="README.md",
+        start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
+        end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
+    )
+
+    converted_md_lists = []
+    for filename, value in LOCALIZED_READMES.items():
+        _start_prompt = value["start_prompt"]
+        _end_prompt = value["end_prompt"]
+        _format_model_list = value["format_model_list"]
+
+        localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
+        num_models_equal, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
+
+        converted_md_lists.append((filename, num_models_equal, converted_md_list, _start_prompt, _end_prompt))
+
+    converted_md_list = convert_readme_to_index(md_list)
+    if converted_md_list != index_list:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.rst"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [converted_list] + lines[end_index:])
+            with open(os.path.join(PATH_TO_DOCS, "index.mdx"), "w", encoding="utf-8", newline="\n") as f:
+                f.writelines(lines[:start_index] + [converted_md_list] + lines[end_index:])
         else:
             raise ValueError(
-                "The model list in the README changed and the list in `index.rst` has not been updated. Run "
+                "The model list in the README changed and the list in `index.mdx` has not been updated. Run "
+                "`make fix-copies` to fix this."
+            )
+
+    for converted_md_list in converted_md_lists:
+        filename, num_models_equal, converted_md, _start_prompt, _end_prompt = converted_md_list
+
+        if filename == "README.md":
+            continue
+        if overwrite:
+            _, start_index, end_index, lines = _find_text_in_file(
+                filename=os.path.join(REPO_PATH, filename), start_prompt=_start_prompt, end_prompt=_end_prompt
+            )
+            with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
+                f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
+        elif not num_models_equal:
+            raise ValueError(
+                f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
                 "`make fix-copies` to fix this."
             )
 
@@ -324,3 +420,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite)
+    check_full_copies(args.fix_and_overwrite)

@@ -24,7 +24,11 @@ Underflow and Overflow Detection
 
 .. note::
 
-   This feature can be used with any ``nn.Module``-based model
+   For multi-GPU training it requires DDP (``torch.distributed.launch``).
+
+.. note::
+
+   This feature can be used with any ``nn.Module``-based model.
 
 If you start getting ``loss=NaN`` or the model inhibits some other abnormal behavior due to ``inf`` or ``nan`` in
 activations or weights one needs to discover where the first underflow or overflow happens and what led to it. Luckily
@@ -150,7 +154,7 @@ input elements was ``6.27e+04`` and same for the output was ``inf``.
 You can see here, that ``T5DenseGatedGeluDense.forward`` resulted in output activations, whose absolute max value was
 around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have ``Dropout`` which renormalizes
 the weights, after it zeroed some of the elements, which pushes the absolute max value to more than 64K, and we get an
-overlow (``inf``).
+overflow (``inf``).
 
 As you can see it's the previous frames that we need to look into when the numbers start going into very large for fp16
 numbers.

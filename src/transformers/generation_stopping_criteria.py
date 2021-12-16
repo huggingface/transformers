@@ -35,7 +35,7 @@ class StoppingCriteria(ABC):
     """Abstract base class for all stopping criteria that can be applied during generation."""
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, score: torch.FloatTensor, **kwargs) -> bool:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         raise NotImplementedError("StoppingCriteria needs to be subclassed")
 
 
@@ -51,6 +51,35 @@ class MaxLengthCriteria(StoppingCriteria):
 
     def __init__(self, max_length: int):
         self.max_length = max_length
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        return input_ids.shape[-1] >= self.max_length
+
+
+class MaxNewTokensCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever the generated number of tokens exceeds :obj:`max_new_tokens`.
+    Keep in mind for decoder-only type of transformers, this will **not** include the initial prompted tokens. This is
+    very close to :obj:`MaxLengthCriteria` but ignores the number of initial tokens.
+
+    Args:
+        start_length (:obj:`int`):
+            The number of initial tokens.
+        max_new_tokens (:obj:`int`):
+            The maximum number of tokens to generate.
+    """
+
+    def __init__(self, start_length: int, max_new_tokens: int):
+        warnings.warn(
+            "The class `MaxNewTokensCriteria` is deprecated. "
+            f"Please use `MaxLengthCriteria(max_length={start_length + max_new_tokens})` "
+            "with `max_length = start_length + max_new_tokens` instead.",
+            FutureWarning,
+        )
+        self.start_length = start_length
+        self.max_new_tokens = max_new_tokens
+        self.max_length = start_length + max_new_tokens
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
@@ -88,6 +117,8 @@ class StoppingCriteriaList(list):
     def max_length(self) -> Optional[int]:
         for stopping_criterium in self:
             if isinstance(stopping_criterium, MaxLengthCriteria):
+                return stopping_criterium.max_length
+            elif isinstance(stopping_criterium, MaxNewTokensCriteria):
                 return stopping_criterium.max_length
         return None
 

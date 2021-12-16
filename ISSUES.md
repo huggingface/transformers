@@ -205,7 +205,7 @@ You are not required to read the following guidelines before opening an issue. H
 
    If you really tried to make a short reproducible code but couldn't figure it out, it might be that having a traceback will give the developer enough information to know what's going on. But if it is not enough and we can't reproduce the problem, we can't really solve it.
 
-   Do not dispair if you can't figure it out from the begining, just share what you can and perhaps someone else will be able to help you at the forums.
+   Do not despair if you can't figure it out from the beginning, just share what you can and perhaps someone else will be able to help you at the forums.
 
    If your setup involves any custom datasets, the best way to help us reproduce the problem is to create a [Google Colab notebook](https://colab.research.google.com/) that demonstrates the issue and once you verify that the issue still exists, include a link to that notebook in the Issue. Just make sure that you don't copy and paste the location bar url of the open notebook - as this is private and we won't be able to open it. Instead, you need to click on `Share` in the right upper corner of the notebook, select `Get Link` and then copy and paste the public link it will give to you.
 

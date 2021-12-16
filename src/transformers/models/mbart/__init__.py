@@ -18,7 +18,8 @@
 from typing import TYPE_CHECKING
 
 from ...file_utils import (
-    _BaseLazyModule,
+    _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tf_available,
     is_tokenizers_available,
@@ -27,15 +28,13 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig"],
+    "configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig", "MBartOnnxConfig"],
 }
 
 if is_sentencepiece_available():
     _import_structure["tokenization_mbart"] = ["MBartTokenizer"]
-    _import_structure["tokenization_mbart50"] = ["MBart50Tokenizer"]
 
 if is_tokenizers_available():
-    _import_structure["tokenization_mbart50_fast"] = ["MBart50TokenizerFast"]
     _import_structure["tokenization_mbart_fast"] = ["MBartTokenizerFast"]
 
 if is_torch_available():
@@ -50,18 +49,29 @@ if is_torch_available():
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_mbart"] = ["TFMBartForConditionalGeneration", "TFMBartModel"]
+    _import_structure["modeling_tf_mbart"] = [
+        "TFMBartForConditionalGeneration",
+        "TFMBartModel",
+        "TFMBartPreTrainedModel",
+    ]
+
+if is_flax_available():
+    _import_structure["modeling_flax_mbart"] = [
+        "FlaxMBartForConditionalGeneration",
+        "FlaxMBartForQuestionAnswering",
+        "FlaxMBartForSequenceClassification",
+        "FlaxMBartModel",
+        "FlaxMBartPreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
+    from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig, MBartOnnxConfig
 
     if is_sentencepiece_available():
         from .tokenization_mbart import MBartTokenizer
-        from .tokenization_mbart50 import MBart50Tokenizer
 
     if is_tokenizers_available():
-        from .tokenization_mbart50_fast import MBart50TokenizerFast
         from .tokenization_mbart_fast import MBartTokenizerFast
 
     if is_torch_available():
@@ -76,22 +86,18 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel
+        from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
+
+    if is_flax_available():
+        from .modeling_flax_mbart import (
+            FlaxMBartForConditionalGeneration,
+            FlaxMBartForQuestionAnswering,
+            FlaxMBartForSequenceClassification,
+            FlaxMBartModel,
+            FlaxMBartPreTrainedModel,
+        )
 
 else:
-    import importlib
-    import os
     import sys
 
-    class _LazyModule(_BaseLazyModule):
-        """
-        Module class that surfaces all objects but only performs associated imports when the objects are requested.
-        """
-
-        __file__ = globals()["__file__"]
-        __path__ = [os.path.dirname(__file__)]
-
-        def _get_module(self, module_name: str):
-            return importlib.import_module("." + module_name, self.__name__)
-
-    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

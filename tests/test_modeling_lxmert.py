@@ -15,11 +15,16 @@
 
 
 import copy
+import os
+import tempfile
 import unittest
 
-from transformers import is_torch_available
+import numpy as np
+
+import transformers
+from transformers import LxmertConfig, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import is_pt_tf_cross_test, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -31,12 +36,15 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        LxmertConfig,
         LxmertForPreTraining,
         LxmertForQuestionAnswering,
         LxmertModel,
     )
     from transformers.models.lxmert.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_tf_available():
+    import tensorflow as tf
 
 
 class LxmertModelTester:
@@ -168,7 +176,24 @@ class LxmertModelTester:
         if self.task_matched:
             matched_label = ids_tensor([self.batch_size], self.num_labels)
 
-        config = LxmertConfig(
+        config = self.get_config()
+
+        return (
+            config,
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids,
+            input_mask,
+            obj_labels,
+            masked_lm_labels,
+            matched_label,
+            ans,
+            output_attentions,
+        )
+
+    def get_config(self):
+        return LxmertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
@@ -200,20 +225,6 @@ class LxmertModelTester:
             visual_feat_loss=self.visual_feat_loss,
             output_attentions=self.output_attentions,
             output_hidden_states=self.output_hidden_states,
-        )
-
-        return (
-            config,
-            input_ids,
-            visual_feats,
-            bounding_boxes,
-            token_type_ids,
-            input_mask,
-            obj_labels,
-            masked_lm_labels,
-            matched_label,
-            ans,
-            output_attentions,
         )
 
     def create_and_check_lxmert_model(
@@ -492,7 +503,7 @@ class LxmertModelTester:
             result_pretrain_more.question_answering_score.shape, (self.batch_size, num_large_labels)
         )
 
-    def prepare_config_and_inputs_for_common(self):
+    def prepare_config_and_inputs_for_common(self, return_obj_labels=False):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
@@ -515,6 +526,9 @@ class LxmertModelTester:
             "token_type_ids": token_type_ids,
             "attention_mask": input_mask,
         }
+
+        if return_obj_labels:
+            inputs_dict["obj_labels"] = obj_labels
 
         return config, inputs_dict
 
@@ -727,3 +741,146 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(attentions_vision.grad)
         self.assertIsNotNone(hidden_states_vision.grad)
         self.assertIsNotNone(attentions_vision.grad)
+
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
+                return_obj_labels="PreTraining" in model_class.__name__
+            )
+
+            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
+
+            if not hasattr(transformers, tf_model_class_name):
+                # transformers does not have TF version yet
+                return
+
+            tf_model_class = getattr(transformers, tf_model_class_name)
+
+            config.output_hidden_states = True
+            config.task_obj_predict = False
+
+            pt_model = model_class(config)
+            tf_model = tf_model_class(config)
+
+            # Check we can load pt model in tf and vice-versa with model => model functions
+            pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            def recursive_numpy_convert(iterable):
+                return_dict = {}
+                for key, value in iterable.items():
+                    if type(value) == bool:
+                        return_dict[key] = value
+                    if isinstance(value, dict):
+                        return_dict[key] = recursive_numpy_convert(value)
+                    else:
+                        if isinstance(value, (list, tuple)):
+                            return_dict[key] = (
+                                tf.convert_to_tensor(iter_value.numpy(), dtype=tf.int32) for iter_value in value
+                            )
+                        else:
+                            return_dict[key] = tf.convert_to_tensor(value.numpy(), dtype=tf.int32)
+                return return_dict
+
+            tf_inputs_dict = recursive_numpy_convert(pt_inputs)
+
+            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+
+            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            pt_model.eval()
+
+            # Delete obj labels as we want to compute the hidden states and not the loss
+
+            if "obj_labels" in inputs_dict:
+                del inputs_dict["obj_labels"]
+
+            def torch_type(key):
+                if key in ("visual_feats", "visual_pos"):
+                    return torch.float32
+                else:
+                    return torch.long
+
+            pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+            tf_inputs_dict = recursive_numpy_convert(pt_inputs)
+
+            with torch.no_grad():
+                pto = pt_model(**pt_inputs)
+            tfo = tf_model(tf_inputs_dict, training=False)
+            tf_hidden_states = tfo[0].numpy()
+            pt_hidden_states = pto[0].numpy()
+
+            tf_nans = np.copy(np.isnan(tf_hidden_states))
+            pt_nans = np.copy(np.isnan(pt_hidden_states))
+
+            pt_hidden_states[tf_nans] = 0
+            tf_hidden_states[tf_nans] = 0
+            pt_hidden_states[pt_nans] = 0
+            tf_hidden_states[pt_nans] = 0
+
+            max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
+            # Debug info (remove when fixed)
+            if max_diff >= 2e-2:
+                print("===")
+                print(model_class)
+                print(config)
+                print(inputs_dict)
+                print(pt_inputs)
+            self.assertLessEqual(max_diff, 6e-2)
+
+            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
+                torch.save(pt_model.state_dict(), pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+
+                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
+                tf_model.save_weights(tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+
+            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            pt_model.eval()
+
+            for key, value in pt_inputs.items():
+                if key in ("visual_feats", "visual_pos"):
+                    pt_inputs[key] = value.to(torch.float32)
+                else:
+                    pt_inputs[key] = value.to(torch.long)
+
+            with torch.no_grad():
+                pto = pt_model(**pt_inputs)
+
+            tfo = tf_model(tf_inputs_dict)
+            tfo = tfo[0].numpy()
+            pto = pto[0].numpy()
+            tf_nans = np.copy(np.isnan(tfo))
+            pt_nans = np.copy(np.isnan(pto))
+
+            pto[tf_nans] = 0
+            tfo[tf_nans] = 0
+            pto[pt_nans] = 0
+            tfo[pt_nans] = 0
+
+            max_diff = np.amax(np.abs(tfo - pto))
+            self.assertLessEqual(max_diff, 6e-2)
+
+
+@require_torch
+class LxmertModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head_absolute_embedding(self):
+        model = LxmertModel.from_pretrained(LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        input_ids = torch.tensor([[101, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 102]])
+        num_visual_features = 10
+        _, visual_feats = np.random.seed(0), np.random.rand(1, num_visual_features, model.config.visual_feat_dim)
+        _, visual_pos = np.random.seed(0), np.random.rand(1, num_visual_features, 4)
+        visual_feats = torch.as_tensor(visual_feats, dtype=torch.float32)
+        visual_pos = torch.as_tensor(visual_pos, dtype=torch.float32)
+        output = model(input_ids, visual_feats=visual_feats, visual_pos=visual_pos)[0]
+        expected_shape = torch.Size([1, 11, 768])
+        self.assertEqual(expected_shape, output.shape)
+        expected_slice = torch.tensor(
+            [[[0.2417, -0.9807, 0.1480], [1.2541, -0.8320, 0.5112], [1.4070, -1.1052, 0.6990]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
