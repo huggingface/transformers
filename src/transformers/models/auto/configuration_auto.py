@@ -110,6 +110,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("unispeech", "UniSpeechConfig"),
+        ("wavlm", "WavLMConfig"),
     ]
 )
 
@@ -281,6 +282,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("sew", "SEW"),
         ("unispeech-sat", "UniSpeechSat"),
         ("unispeech", "UniSpeech"),
+        ("wavlm", "WavLM"),
     ]
 )
 
