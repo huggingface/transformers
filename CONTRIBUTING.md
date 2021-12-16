@@ -249,7 +249,7 @@ Follow these steps to start contributing:
 
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
    Markdown files with your favorite editor. You won't be able to see the final rendering on the website
-   before your PR is merged, we are actively working on adding a too for this.
+   before your PR is merged, we are actively working on adding a tool for this.
 
    Once you're happy with your changes, add changed files using `git add` and
    make a commit with `git commit` to record your changes locally:
