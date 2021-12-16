@@ -314,6 +314,10 @@ _import_structure = {
         "Wav2Vec2Tokenizer",
     ],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
+    "models.wavlm": [
+        "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "WavLMConfig",
+    ],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
@@ -1372,6 +1376,15 @@ if is_torch_available():
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.wavlm"].extend(
+        [
+            "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WavLMForCTC",
+            "WavLMForSequenceClassification",
+            "WavLMModel",
+            "WavLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2327,6 +2340,7 @@ if TYPE_CHECKING:
         Wav2Vec2Tokenizer,
     )
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
+    from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -3209,6 +3223,13 @@ if TYPE_CHECKING:
             Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+        from .models.wavlm import (
+            WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WavLMForCTC,
+            WavLMForSequenceClassification,
+            WavLMModel,
+            WavLMPreTrainedModel,
         )
         from .models.xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
