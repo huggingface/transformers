@@ -238,7 +238,7 @@ Follow these steps to start contributing:
    Then, make sure you have all the dependencies to be able to build the doc with:
    
    ```bash
-   $ pip install .[docs]
+   $ pip install ".[docs]"
    ```
 
    Finally run the following command from the root of the repository:
