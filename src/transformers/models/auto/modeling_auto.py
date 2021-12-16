@@ -538,6 +538,22 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
+        ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
+    ]
+)
+
+MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("wav2vec2", "Wav2Vec2ForXVector"),
+        ("unispeech-sat", "UniSpeechSatForXVector"),
+    ]
+)
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -578,6 +594,10 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 )
 MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CTC_MAPPING_NAMES)
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
+MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
+)
+MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
 
 
 class AutoModel(_BaseAutoModelClass):
@@ -724,6 +744,22 @@ class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 AutoModelForSpeechSeq2Seq = auto_class_update(
     AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeing"
 )
+
+
+class AutoModelForAudioFrameClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING
+
+
+AutoModelForAudioFrameClassification = auto_class_update(
+    AutoModelForAudioFrameClassification, head_doc="audio frame (token) classification"
+)
+
+
+class AutoModelForAudioXVector(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
+
+
+AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

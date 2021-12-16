@@ -20,11 +20,11 @@ import argparse
 import torch
 
 from transformers import (
-    Wav2Vec2Config,
+    UniSpeechSatConfig,
+    UniSpeechSatForAudioFrameClassification,
+    UniSpeechSatForSequenceClassification,
+    UniSpeechSatForXVector,
     Wav2Vec2FeatureExtractor,
-    Wav2Vec2ForAudioFrameClassification,
-    Wav2Vec2ForSequenceClassification,
-    Wav2Vec2ForXVector,
     logging,
 )
 
@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 
 def convert_classification(base_model_name, hf_config, downstream_dict):
-    model = Wav2Vec2ForSequenceClassification.from_pretrained(base_model_name, config=hf_config)
+    model = UniSpeechSatForSequenceClassification.from_pretrained(base_model_name, config=hf_config)
     model.projector.weight.data = downstream_dict["projector.weight"]
     model.projector.bias.data = downstream_dict["projector.bias"]
     model.classifier.weight.data = downstream_dict["model.post_net.linear.weight"]
@@ -43,14 +43,14 @@ def convert_classification(base_model_name, hf_config, downstream_dict):
 
 
 def convert_diarization(base_model_name, hf_config, downstream_dict):
-    model = Wav2Vec2ForAudioFrameClassification.from_pretrained(base_model_name, config=hf_config)
+    model = UniSpeechSatForAudioFrameClassification.from_pretrained(base_model_name, config=hf_config)
     model.classifier.weight.data = downstream_dict["model.linear.weight"]
     model.classifier.bias.data = downstream_dict["model.linear.bias"]
     return model
 
 
 def convert_xvector(base_model_name, hf_config, downstream_dict):
-    model = Wav2Vec2ForXVector.from_pretrained(base_model_name, config=hf_config)
+    model = UniSpeechSatForXVector.from_pretrained(base_model_name, config=hf_config)
     model.projector.weight.data = downstream_dict["connector.weight"]
     model.projector.bias.data = downstream_dict["connector.bias"]
     for i, kernel_size in enumerate(hf_config.tdnn_kernel):
@@ -76,7 +76,7 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
 
     downstream_dict = checkpoint["Downstream"]
 
-    hf_config = Wav2Vec2Config.from_pretrained(config_path)
+    hf_config = UniSpeechSatConfig.from_pretrained(config_path)
     hf_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         base_model_name, return_attention_mask=True, do_normalize=False
     )
