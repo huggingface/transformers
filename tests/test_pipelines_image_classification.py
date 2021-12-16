@@ -19,7 +19,6 @@ from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
-    require_datasets,
     require_tf,
     require_torch,
     require_vision,
@@ -53,7 +52,6 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         ]
         return image_classifier, examples
 
-    @require_datasets
     def run_pipeline_test(self, image_classifier, examples):
         outputs = image_classifier("./tests/fixtures/tests_samples/COCO/000000039769.png")
 
