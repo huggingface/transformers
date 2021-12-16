@@ -818,9 +818,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
         )
 
 
@@ -863,9 +861,8 @@ class WavLMGumbelVectorQuantizer(nn.Module):
 
         if self.training:
             # sample code vector probs via gumbel in differentiateable way
-            codevector_probs = nn.functional.gumbel_softmax(
-                hidden_states.float(), tau=self.temperature, hard=True
-            ).type_as(hidden_states)
+            codevector_probs = nn.functional.gumbel_softmax(hidden_states.float(), tau=self.temperature, hard=True)
+            codevector_probs = codevector_probs.type_as(hidden_states)
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
