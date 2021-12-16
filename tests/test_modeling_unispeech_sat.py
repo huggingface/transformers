@@ -73,8 +73,8 @@ class UniSpeechSatModelTester:
         vocab_size=32,
         do_stable_layer_norm=False,
         tdnn_dim=(32, 32),
-        tdnn_kernel=(5, 3),
-        tdnn_dilation=(1, 2),
+        tdnn_kernel=(3, 3),
+        tdnn_dilation=(1, 1),
         xvector_output_dim=32,
         scope=None,
     ):
