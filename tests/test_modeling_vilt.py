@@ -15,9 +15,9 @@
 """ Testing suite for the PyTorch ViLT model. """
 
 
+import tempfile
 import unittest
 from typing import Dict, List, Tuple
-import tempfile
 
 import numpy as np
 
@@ -294,13 +294,13 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
                 print("Before outputs:", outputs[0].cpu().numpy().mean())
                 print("After outputs:", after_outputs[0].cpu().numpy().mean())
-                
+
                 # Make sure we don't have nans
                 out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
-    
+
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

@@ -123,11 +123,17 @@ class ViltEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def visual_embed(self, _x, max_image_length=200, mask_it=False):
+    def visual_embed(self, pixel_values, max_image_length=200, mask_it=False):
         _, _, ph, pw = self.patch_embeddings.projection.weight.shape
-        
-        x = self.patch_embeddings(_x)
-        x_mask = (_x.sum(dim=1) != 0).float()[:, None, :, :]
+
+        print("Shape of pixel values:", pixel_values.shape)
+
+        print("Patch height:", ph)
+        print("Patch width:", pw)
+
+        x = self.patch_embeddings(pixel_values)
+        print("Shape of patch embeddings:", x.shape)
+        x_mask = (pixel_values.sum(dim=1) != 0).float()[:, None, :, :]
         x_mask = nn.functional.interpolate(x_mask, size=(x.shape[2], x.shape[3])).long()
         x_h = x_mask[:, 0].sum(dim=1)[:, 0]
         x_w = x_mask[:, 0].sum(dim=2)[:, 0]
@@ -164,7 +170,7 @@ class ViltEmbeddings(nn.Module):
         x_mask = x_mask.flatten(1)
 
         if mask_it:
-            x, label = self.mask_tokens(_x, x)
+            x, label = self.mask_tokens(pixel_values, x)
 
         if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
             # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
@@ -173,7 +179,6 @@ class ViltEmbeddings(nn.Module):
             # if res is 384 x 640, 12 * 20 = 240
             eff = x_h * x_w
             max_image_length = eff.max()
-            print("Max image length:", max_image_length)
         else:
             eff = x_h * x_w
             max_image_length = min(eff.max(), max_image_length)
@@ -203,7 +208,7 @@ class ViltEmbeddings(nn.Module):
                 )
 
         print("Length of select:", len(select))
-        
+
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(B, -1, C)
         x_mask = x_mask[select[:, 0], select[:, 1]].view(B, -1)
@@ -235,7 +240,7 @@ class ViltEmbeddings(nn.Module):
         else:
             return x, x_mask, (patch_index, (H, W)), None
 
-    def forward(self, input_ids, token_type_ids, pixel_values, inputs_embeds):
+    def forward(self, input_ids, attention_mask, token_type_ids, pixel_values, inputs_embeds):
         # PART 1: text embeddings
         text_embeds = self.text_embeddings(
             input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -257,15 +262,11 @@ class ViltEmbeddings(nn.Module):
             + self.token_type_embeddings(torch.ones(image_tokens_shape, dtype=torch.long, device=text_embeds.device)),
         )
 
-        print("Shape of image embeddings:", image_embeds.shape)
-        print("First values of image embeds:", image_embeds[0, :3, :3])
-
-        print("Last values of image embeds:", image_embeds[0, -3:, -3:])
-
         # PART 4: concatenate
         embeddings = torch.cat([text_embeds, image_embeds], dim=1)
+        masks = torch.cat([attention_mask, image_masks], dim=1)
 
-        return embeddings
+        return embeddings, masks
 
 
 class TextEmbeddings(nn.Module):
@@ -379,7 +380,7 @@ class ViltSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -388,8 +389,10 @@ class ViltSelfAttention(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -457,8 +460,8 @@ class ViltAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+        self_outputs = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -511,9 +514,10 @@ class ViltLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViLT, layernorm is applied before self-attention
+            attention_mask,
             head_mask,
             output_attentions=output_attentions,
         )
@@ -556,6 +560,7 @@ class ViltEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
+        attention_mask=None,
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
@@ -581,10 +586,11 @@ class ViltEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
+                    attention_mask,
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -742,8 +748,18 @@ class ViltModel(ViltPreTrainedModel):
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is None and inputs_embeds is None:
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        batch_size, seq_length = input_shape
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -755,10 +771,17 @@ class ViltModel(ViltPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(input_ids, token_type_ids, pixel_values, inputs_embeds)
+        embedding_output, attention_mask = self.embeddings(
+            input_ids, attention_mask, token_type_ids, pixel_values, inputs_embeds
+        )
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
         encoder_outputs = self.encoder(
             embedding_output,
+            attention_mask=extended_attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -768,12 +791,6 @@ class ViltModel(ViltPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        print("Shape of sequence output:", sequence_output.shape)
-        print("Sequence output:", sequence_output[0,:3,:3])
-
-        print("Mean of sequence output:", sequence_output.mean())
-        print("Max of sequence output:", sequence_output.max())
-        
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
