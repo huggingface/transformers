@@ -72,7 +72,7 @@ call the model to be added to 🤗 Transformers ``BrandNewBert``.
 
 Let's take a look:
 
-.. image:: /imgs/transformers_overview.png
+.. image:: https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_overview.png
 
 As you can see, we do make use of inheritance in 🤗 Transformers, but we keep the level of abstraction to an absolute
 minimum. There are never more than two levels of abstraction for any model in the library. :obj:`BrandNewBertModel`
