@@ -1161,7 +1161,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
         >>> cosine_sim = torch.nn.CosineSimilarity(dim=-1)
         >>> similarity = cosine_sim(embeddings[0], embeddings[1])
         >>> threshold = 0.7  # the optimal threshold is dataset-dependent
-        >>> if similarity < threshold:  
+        >>> if similarity < threshold:
         ...     print("Speakers are not the same!")
 """
 
