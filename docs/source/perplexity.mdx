@@ -34,7 +34,7 @@ intuition about perplexity and its relationship to Bits Per Character (BPC) and 
 If we weren't limited by a model's context size, we would evaluate the model's perplexity by autoregressively
 factorizing a sequence and conditioning on the entire preceding subsequence at each step, as shown below.
 
-<img width="600" alt="Full decomposition of a sequence with unlimited context length" src="/imgs/ppl_full.gif"/>
+<img width="600" alt="Full decomposition of a sequence with unlimited context length" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_full.gif"/>
 
 When working with approximate models, however, we typically have a constraint on the number of tokens the model can
 process. The largest version of [GPT-2](model_doc/gpt2), for example, has a fixed length of 1024 tokens, so we
@@ -46,7 +46,7 @@ input size is \\(k\\), we then approximate the likelihood of a token \\(x_t\\) b
 sequence, a tempting but suboptimal approach is to break the sequence into disjoint chunks and add up the decomposed
 log-likelihoods of each segment independently.
 
-<img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="/imgs/ppl_chunked.gif"/>
+<img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_chunked.gif"/>
 
 This is quick to compute since the perplexity of each segment can be computed in one forward pass, but serves as a poor
 approximation of the fully-factorized perplexity and will typically yield a higher (worse) PPL because the model will
@@ -55,7 +55,7 @@ have less context at most of the prediction steps.
 Instead, the PPL of fixed-length models should be evaluated with a sliding-window strategy. This involves repeatedly
 sliding the context window so that the model has more context when making each prediction.
 
-<img width="600" alt="Sliding window PPL taking advantage of all available context" src="/imgs/ppl_sliding.gif"/>
+<img width="600" alt="Sliding window PPL taking advantage of all available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_sliding.gif"/>
 
 This is a closer approximation to the true decomposition of the sequence probability and will typically yield a more
 favorable score. The downside is that it requires a separate forward pass for each token in the corpus. A good
