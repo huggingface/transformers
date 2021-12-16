@@ -52,6 +52,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTModel"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("unispeech-sat", "UniSpeechSatModel"),
+        ("wavlm", "WavLMModel"),
         ("unispeech", "UniSpeechModel"),
         ("hubert", "HubertModel"),
         ("m2m_100", "M2M100Model"),
@@ -523,6 +524,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),
         ("sew-d", "SEWDForSequenceClassification"),
+        ("wavlm", "WavLMForSequenceClassification"),
     ]
 )
 
@@ -535,6 +537,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertForCTC"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
+        ("wavlm", "WavLMForCTC"),
     ]
 )
 
