@@ -422,6 +422,30 @@ class AutoModelForAudioClassification:
         requires_backends(self, ["torch"])
 
 
+class AutoModelForAudioFrameClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForAudioXVector:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -4896,6 +4920,11 @@ class UniSpeechPreTrainedModel:
 UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class UniSpeechSatForAudioFrameClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UniSpeechSatForCTC:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -4915,6 +4944,11 @@ class UniSpeechSatForSequenceClassification:
         requires_backends(cls, ["torch"])
 
     def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UniSpeechSatForXVector:
+    def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
@@ -5072,6 +5106,11 @@ class ViTPreTrainedModel:
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class Wav2Vec2ForAudioFrameClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Wav2Vec2ForCTC:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -5103,6 +5142,11 @@ class Wav2Vec2ForSequenceClassification:
         requires_backends(cls, ["torch"])
 
     def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Wav2Vec2ForXVector:
+    def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 

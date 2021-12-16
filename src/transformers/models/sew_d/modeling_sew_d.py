@@ -39,9 +39,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SEWDConfig"
 _CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _SEQ_CLASS_CHECKPOINT = "asapp/sew-d-tiny-100k"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 1
 
@@ -1598,7 +1598,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
