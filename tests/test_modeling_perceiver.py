@@ -759,7 +759,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
-        # This test currently doesn't pass because of a bug in PyTorch.
+        # This test currently doesn't pass because of a bug in PyTorch: https://github.com/pytorch/pytorch/issues/36035
         # The Perceiver makes use of `nn.ParameterDict` in PerceiverMultimodalPreprocessor which is not correctly copied to each GPU.
         pass
 
