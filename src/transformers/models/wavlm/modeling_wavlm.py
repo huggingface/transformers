@@ -776,7 +776,6 @@ class WavLMEncoderStableLayerNorm(nn.Module):
         hidden_states = self.dropout(hidden_states)
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
-
         position_bias = None
 
         for i, layer in enumerate(self.layers):
