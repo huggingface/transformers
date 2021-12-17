@@ -15,8 +15,11 @@
 """
 Speech processor class for Wav2Vec2
 """
+import warnings
 from contextlib import contextmanager
 
+from ...tokenization_utils import PreTrainedTokenizer
+from ..auto.tokenization_auto import AutoTokenizer
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
@@ -27,15 +30,15 @@ class Wav2Vec2Processor:
     processor.
 
     :class:`~transformers.Wav2Vec2Processor` offers all the functionalities of
-    :class:`~transformers.Wav2Vec2FeatureExtractor` and :class:`~transformers.Wav2Vec2CTCTokenizer`. See the docstring
+    :class:`~transformers.Wav2Vec2FeatureExtractor` and :class:`~transformers.PreTrainedTokenizer`. See the docstring
     of :meth:`~transformers.Wav2Vec2Processor.__call__` and :meth:`~transformers.Wav2Vec2Processor.decode` for more
     information.
 
     Args:
         feature_extractor (:obj:`Wav2Vec2FeatureExtractor`):
             An instance of :class:`~transformers.Wav2Vec2FeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:obj:`Wav2Vec2CTCTokenizer`):
-            An instance of :class:`~transformers.Wav2Vec2CTCTokenizer`. The tokenizer is a required input.
+        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
+            An instance of :class:`~transformers.PreTrainedTokenizer`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -43,9 +46,9 @@ class Wav2Vec2Processor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, Wav2Vec2CTCTokenizer):
+        if not isinstance(tokenizer, PreTrainedTokenizer):
             raise ValueError(
-                f"`tokenizer` has to be of type {Wav2Vec2CTCTokenizer.__class__}, but is {type(tokenizer)}"
+                f"`tokenizer` has to be of type {PreTrainedTokenizer.__class__}, but is {type(tokenizer)}"
             )
 
         self.feature_extractor = feature_extractor
@@ -82,7 +85,7 @@ class Wav2Vec2Processor:
 
             This class method is simply calling Wav2Vec2FeatureExtractor's
             :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` and
-            Wav2Vec2CTCTokenizer's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`.
+            PreTrainedTokenizer's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`.
             Please refer to the docstrings of the methods above for more information.
 
         Args:
@@ -102,7 +105,23 @@ class Wav2Vec2Processor:
                 :class:`~transformers.PreTrainedTokenizer`
         """
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        # load generic `AutoTokenizer`
+        # need fallback here for backward compatibility in case processor is
+        # loaded from just a tokenizer file that does not have a `tokenizer_class` attribute
+        # behavior should be deprecated in major future release
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        except OSError:
+            warnings.warn(
+                f"Loading a tokenizer inside {cls.__name__} from a config that does not"
+                " include a `tokenizer_class` attribute is deprecated and will be "
+                "removed in v5. Please add `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`"
+                " attribute to either your `config.json` or `tokenizer_config.json` "
+                "file to suppress this warning: ",
+                FutureWarning,
+            )
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -111,8 +130,8 @@ class Wav2Vec2Processor:
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` and returns its output. If used in the context
         :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.__call__`. Please refer to the docstring of
-        the above two methods for more information.
+        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.__call__`. Please refer to the docstring of the
+        above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
@@ -121,14 +140,14 @@ class Wav2Vec2Processor:
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.pad` and returns its output. If used in the context
         :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.pad`. Please refer to the docstring of the
-        above two methods for more information.
+        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.pad`. Please refer to the docstring of the above
+        two methods for more information.
         """
         return self.current_processor.pad(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to Wav2Vec2CTCTokenizer's
+        This method forwards all its arguments to PreTrainedTokenizer's
         :meth:`~transformers.PreTrainedTokenizer.batch_decode`. Please refer to the docstring of this method for more
         information.
         """
@@ -136,7 +155,7 @@ class Wav2Vec2Processor:
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to Wav2Vec2CTCTokenizer's
+        This method forwards all its arguments to PreTrainedTokenizer's
         :meth:`~transformers.PreTrainedTokenizer.decode`. Please refer to the docstring of this method for more
         information.
         """
