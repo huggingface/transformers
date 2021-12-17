@@ -34,6 +34,7 @@ deps = {
     "optax": "optax>=0.0.8",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
+    "phonemizer": "phonemizer",
     "protobuf": "protobuf",
     "psutil": "psutil",
     "pyyaml": "pyyaml>=5.1",
