@@ -123,6 +123,7 @@ _deps = [
     "optax>=0.0.8",
     "packaging>=20.0",
     "parameterized",
+    "phonemizer",
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
@@ -254,7 +255,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
 extras["speech"] = deps_list("torchaudio") + extras["audio"]  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]

@@ -33,7 +33,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
+          apt -y update && apt install -y libsndfile1-dev git espeak-ng
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
           pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -140,7 +140,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
+          apt -y update && apt install -y libsndfile1-dev git espeak-ng
           pip install --upgrade pip
           pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
           pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -237,7 +237,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
+          apt -y update && apt install -y libsndfile1-dev git espeak-ng
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
           pip install https://github.com/kpu/kenlm/archive/master.zip

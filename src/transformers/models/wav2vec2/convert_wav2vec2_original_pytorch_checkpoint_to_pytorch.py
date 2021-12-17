@@ -205,8 +205,13 @@ def convert_wav2vec2_checkpoint(
                 logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
                 return
             os.makedirs(pytorch_dump_folder_path, exist_ok=True)
+            vocab_dict = target_dict.indices
+
+            # fairseq has the <pad> and <s> switched
+            vocab_dict["<pad>"] = 0
+            vocab_dict["<s>"] = 1
             with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
-                json.dump(target_dict.indices, vocab_handle)
+                json.dump(vocab_dict, vocab_handle)
             tokenizer = Wav2Vec2CTCTokenizer(
                 vocab_path,
                 unk_token=target_dict.unk_word,
