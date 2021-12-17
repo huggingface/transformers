@@ -12,17 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Hubert model. """
-
+""" Testing suite for the PyTorch WavLM model. """
 
 import math
 import unittest
 
 import pytest
+from datasets import load_dataset
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from transformers import SEWDConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers import WavLMConfig, is_torch_available
+from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -31,44 +31,29 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import (
-        SEWDForCTC,
-        SEWDForSequenceClassification,
-        SEWDModel,
-        Wav2Vec2FeatureExtractor,
-        Wav2Vec2Processor,
-    )
-    from transformers.models.hubert.modeling_hubert import _compute_mask_indices
+    from transformers import Wav2Vec2FeatureExtractor, WavLMForCTC, WavLMForSequenceClassification, WavLMModel
 
 
-class SEWDModelTester:
+class WavLMModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
         seq_length=1024,  # speech is longer
         is_training=False,
-        hidden_size=32,
+        hidden_size=16,
         feat_extract_norm="group",
         feat_extract_dropout=0.0,
         feat_extract_activation="gelu",
-        conv_dim=(64, 32, 32),
-        conv_stride=(5, 2, 1),
-        conv_kernel=(10, 3, 1),
+        conv_dim=(32, 32, 32),
+        conv_stride=(4, 4, 4),
+        conv_kernel=(8, 8, 8),
         conv_bias=False,
-        num_conv_pos_embeddings=31,
+        num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        squeeze_factor=2,
-        max_position_embeddings=512,
-        position_buckets=256,
-        share_att_key=True,
-        relative_attention=True,
-        position_biased_input=False,
-        pos_att_type=("p2c", "c2p"),
-        norm_rel_ebd="layer_norm",
         num_hidden_layers=4,
         num_attention_heads=2,
-        hidden_dropout=0.1,
+        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
         intermediate_size=20,
         layer_norm_eps=1e-5,
         hidden_act="gelu",
@@ -91,17 +76,9 @@ class SEWDModelTester:
         self.conv_bias = conv_bias
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.squeeze_factor = squeeze_factor
-        self.max_position_embeddings = max_position_embeddings
-        self.position_buckets = position_buckets
-        self.share_att_key = share_att_key
-        self.relative_attention = relative_attention
-        self.position_biased_input = position_biased_input
-        self.pos_att_type = pos_att_type
-        self.norm_rel_ebd = norm_rel_ebd
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.hidden_dropout = hidden_dropout
+        self.hidden_dropout_prob = hidden_dropout_prob
         self.intermediate_size = intermediate_size
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
@@ -114,7 +91,7 @@ class SEWDModelTester:
         for kernel, stride in zip(self.conv_kernel, self.conv_stride):
             output_seq_length = (output_seq_length - (kernel - 1)) / stride
         self.output_seq_length = int(math.ceil(output_seq_length))
-        self.encoder_seq_length = self.output_seq_length // self.squeeze_factor
+        self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -125,7 +102,7 @@ class SEWDModelTester:
         return config, input_values, attention_mask
 
     def get_config(self):
-        return SEWDConfig(
+        return WavLMConfig(
             hidden_size=self.hidden_size,
             feat_extract_norm=self.feat_extract_norm,
             feat_extract_dropout=self.feat_extract_dropout,
@@ -136,17 +113,9 @@ class SEWDModelTester:
             conv_bias=self.conv_bias,
             num_conv_pos_embeddings=self.num_conv_pos_embeddings,
             num_conv_pos_embedding_groups=self.num_conv_pos_embedding_groups,
-            squeeze_factor=self.squeeze_factor,
-            max_position_embeddings=self.max_position_embeddings,
-            position_buckets=self.position_buckets,
-            share_att_key=self.share_att_key,
-            relative_attention=self.relative_attention,
-            position_biased_input=self.position_biased_input,
-            pos_att_type=self.pos_att_type,
-            norm_rel_ebd=self.norm_rel_ebd,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            hidden_dropout=self.hidden_dropout,
+            hidden_dropout_prob=self.hidden_dropout_prob,
             intermediate_size=self.intermediate_size,
             layer_norm_eps=self.layer_norm_eps,
             hidden_act=self.hidden_act,
@@ -155,7 +124,7 @@ class SEWDModelTester:
         )
 
     def create_and_check_model(self, config, input_values, attention_mask):
-        model = SEWDModel(config=config)
+        model = WavLMModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
@@ -166,7 +135,7 @@ class SEWDModelTester:
     def create_and_check_batch_inference(self, config, input_values, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
-        model = SEWDModel(config=config)
+        model = WavLMModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -190,7 +159,7 @@ class SEWDModelTester:
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
-        model = SEWDForCTC(config=config)
+        model = WavLMForCTC(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -217,9 +186,34 @@ class SEWDModelTester:
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
 
+    def check_seq_classifier_loss(self, config, input_values, *args):
+        model = WavLMForSequenceClassification(config=config)
+        model.to(torch_device)
+
+        # make sure that dropout is disabled
+        model.eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        unmasked_loss = model(input_values, labels=labels).loss.item()
+
+        self.parent.assertTrue(isinstance(masked_loss, float))
+        self.parent.assertTrue(isinstance(unmasked_loss, float))
+        self.parent.assertTrue(masked_loss != unmasked_loss)
+
     def check_ctc_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
-        model = SEWDForCTC(config=config)
+        model = WavLMForCTC(config=config)
         model.to(torch_device)
         model.train()
 
@@ -246,34 +240,9 @@ class SEWDModelTester:
 
         loss.backward()
 
-    def check_seq_classifier_loss(self, config, input_values, *args):
-        model = SEWDForSequenceClassification(config=config)
-        model.to(torch_device)
-
-        # make sure that dropout is disabled
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0
-
-        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
-        unmasked_loss = model(input_values, labels=labels).loss.item()
-
-        self.parent.assertTrue(isinstance(masked_loss, float))
-        self.parent.assertTrue(isinstance(unmasked_loss, float))
-        self.parent.assertTrue(masked_loss != unmasked_loss)
-
     def check_seq_classifier_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
-        model = SEWDForSequenceClassification(config=config)
+        model = WavLMForSequenceClassification(config=config)
         model.to(torch_device)
         model.train()
 
@@ -295,7 +264,7 @@ class SEWDModelTester:
         loss.backward()
 
     def check_labels_out_of_vocab(self, config, input_values, *args):
-        model = SEWDForCTC(config)
+        model = WavLMForCTC(config)
         model.to(torch_device)
         model.train()
 
@@ -315,15 +284,15 @@ class SEWDModelTester:
 
 
 @require_torch
-class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SEWDForCTC, SEWDModel, SEWDForSequenceClassification) if is_torch_available() else ()
+class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (WavLMForCTC, WavLMModel, WavLMForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = SEWDModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SEWDConfig, hidden_size=37)
+        self.model_tester = WavLMModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=WavLMConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -336,15 +305,23 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
+    def test_seq_classifier_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_seq_classifier_loss(*config_and_inputs)
+
     def test_ctc_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_training(*config_and_inputs)
+
+    def test_seq_classifier_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    # WavLM has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
@@ -352,17 +329,19 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    # SEW cannot resize token embeddings
+    # WavLM cannot resize token embeddings
     # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    # SEW has no inputs_embeds
+    # WavLM has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
     def test_model_common_attributes(self):
         pass
 
+    # WavLM uses PyTorch's multi-head-attention class
+    # and thus can't retain gradients on attentions
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -393,15 +372,11 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
 
         # Encoder-/Decoder-only models
         hidden_states = outputs.hidden_states[0]
-        attentions = outputs.attentions[0]
-
         hidden_states.retain_grad()
-        attentions.retain_grad()
 
         output.flatten()[0].backward(retain_graph=True)
 
         self.assertIsNotNone(hidden_states.grad)
-        self.assertIsNotNone(attentions.grad)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -413,7 +388,16 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
                 uniform_init_parms = [
                     "conv.weight",
                     "masked_spec_embed",
+                    "codevectors",
                     "quantizer.weight_proj.weight",
+                    "project_hid.weight",
+                    "project_hid.bias",
+                    "project_q.weight",
+                    "project_q.bias",
+                    "feature_projection.projection.weight",
+                    "feature_projection.projection.bias",
+                    "label_embeddings_concat",
+                    "rel_attn_embed",
                 ]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):
@@ -438,49 +422,22 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
+        if hasattr(module, "codevectors") and module.codevectors is not None:
+            module.codevectors.data.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
     @slow
     def test_model_from_pretrained(self):
-        model = SEWDModel.from_pretrained("asapp/sew-d-tiny-100k")
+        model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus")
         self.assertIsNotNone(model)
 
 
 @require_torch
-class SEWDUtilsTest(unittest.TestCase):
-    def test_compute_mask_indices(self):
-        batch_size = 4
-        sequence_length = 60
-        mask_prob = 0.5
-        mask_length = 1
-
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
-        mask = torch.from_numpy(mask).to(torch_device)
-
-        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
-
-    def test_compute_mask_indices_overlap(self):
-        batch_size = 4
-        sequence_length = 80
-        mask_prob = 0.5
-        mask_length = 4
-
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
-        mask = torch.from_numpy(mask).to(torch_device)
-
-        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
-        for batch_sum in mask.sum(axis=-1):
-            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
-
-
-@require_torch
-@require_soundfile
+@require_torchaudio
 @slow
-class SEWDModelIntegrationTest(unittest.TestCase):
+class WavLMModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
@@ -489,78 +446,48 @@ class SEWDModelIntegrationTest(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
-    def test_inference_pretrained_batched(self):
-        model = SEWDModel.from_pretrained("asapp/sew-d-tiny-100k").to(torch_device)
-        processor = Wav2Vec2FeatureExtractor.from_pretrained("asapp/sew-d-tiny-100k")
+    def test_inference_base(self):
+        model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus").to(torch_device)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "microsoft/wavlm-base-plus", return_attention_mask=True
+        )
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            outputs = model(input_values).last_hidden_state
+            hidden_states_slice = (
+                model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
+            )
 
-        # expected outputs taken from the original SEW-D implementation
-        expected_outputs_first = torch.tensor(
-            [
-                [
-                    [-0.1619, 0.6995, 0.4062, -0.1014],
-                    [-0.1364, 0.5960, 0.0952, -0.0873],
-                    [-0.1572, 0.5718, 0.4228, -0.0864],
-                    [-0.1325, 0.6823, 0.1387, -0.0871],
-                ],
-                [
-                    [-0.1296, 0.4008, 0.4952, -0.1450],
-                    [-0.1152, 0.3693, 0.3037, -0.1290],
-                    [-0.1194, 0.6074, 0.3531, -0.1466],
-                    [-0.1113, 0.3135, 0.2224, -0.1338],
-                ],
-            ],
-            device=torch_device,
+        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
+            [[[0.0554, 0.1138], [0.0555, 0.1144]], [[0.0200, 0.1240], [0.0059, 0.0607]]]
         )
-        expected_outputs_last = torch.tensor(
-            [
-                [
-                    [-0.1577, 0.5108, 0.8553, 0.2550],
-                    [-0.1530, 0.3580, 0.6143, 0.2672],
-                    [-0.1535, 0.4954, 0.8503, 0.1387],
-                    [-0.1572, 0.3363, 0.6217, 0.1490],
-                ],
-                [
-                    [-0.1338, 0.5459, 0.9607, -0.1133],
-                    [-0.1502, 0.3738, 0.7313, -0.0986],
-                    [-0.0953, 0.4708, 1.0821, -0.0944],
-                    [-0.1474, 0.3598, 0.7248, -0.0748],
-                ],
-            ],
-            device=torch_device,
+        self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
+
+    def test_inference_large(self):
+        model = WavLMModel.from_pretrained("microsoft/wavlm-large").to(torch_device)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "microsoft/wavlm-base-plus", return_attention_mask=True
         )
-        expected_output_sum = 54201.0469
-
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=1e-3))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=1e-3))
-        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 1)
-
-    def test_inference_ctc_batched(self):
-        model = SEWDForCTC.from_pretrained("asapp/sew-d-tiny-100k-ft-ls100h").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("asapp/sew-d-tiny-100k-ft-ls100h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values).logits
+            hidden_states_slice = (
+                model(input_values, attention_mask=attention_mask).last_hidden_state[:, -2:, -2:].cpu()
+            )
 
-        predicted_ids = torch.argmax(logits, dim=-1)
-        predicted_trans = processor.batch_decode(predicted_ids)
-
-        EXPECTED_TRANSCRIPTIONS = [
-            "a man said to the universe sir i exist",
-            "swet covered breon's body trickling into the titlowing closs that was the only garmened he war",
-        ]
-        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+        EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
+            [[[0.2132, 0.0486], [0.2119, 0.0571]], [[0.1386, 0.1837], [0.2455, 0.0614]]]
+        )
+        self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
