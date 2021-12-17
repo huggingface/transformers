@@ -702,7 +702,11 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
                 FutureWarning,
             )
-            input_ids = input_ids if input_ids is not None else kwargs.pop("pixel_values")
+            if input_ids is not None:
+                raise ValueError(
+                    "You cannot pass both `pixel_values` and `input_ids`. "
+                    "Please make sure to only pass `input_ids`."
+                )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1001,7 +1005,11 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
                 "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
                 FutureWarning,
             )
-            input_ids = input_ids if input_ids is not None else kwargs.pop("pixel_values")
+            if input_ids is not None:
+                raise ValueError(
+                    "You cannot pass both `pixel_values` and `input_ids`. "
+                    "Please make sure to only pass `input_ids`."
+                )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1127,7 +1135,11 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
                 "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
                 FutureWarning,
             )
-            input_ids = input_ids if input_ids is not None else kwargs.pop("pixel_values")
+            if input_ids is not None:
+                raise ValueError(
+                    "You cannot pass both `pixel_values` and `input_ids`. "
+                    "Please make sure to only pass `input_ids`."
+                )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
