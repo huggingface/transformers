@@ -237,6 +237,14 @@ except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
 
+_phonemizer_available = importlib.util.find_spec("phonemizer") is not None
+try:
+    _phonemizer_version = importlib_metadata.version("phonemizer")
+    logger.debug(f"Successfully imported phonemizer version {_phonemizer_version}")
+except importlib_metadata.PackageNotFoundError:
+    _phonemizer_available = False
+
+
 _pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
 try:
     _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
@@ -592,6 +600,10 @@ def is_speech_available():
     return _torchaudio_available
 
 
+def is_phonemizer_available():
+    return _phonemizer_available
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -729,6 +741,13 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+PHONEMIZER_IMPORT_ERROR = """
+{0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
+`pip install phonemizer`
+"""
+
+
+# docstyle-ignore
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
 `pip install scipy`
@@ -774,6 +793,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
+        ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
