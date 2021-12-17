@@ -1016,7 +1016,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForTokenClassificationModule(nn.Mo
             attention_mask,
             token_type_ids,
             position_ids,
-            head)mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
