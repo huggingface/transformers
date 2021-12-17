@@ -457,7 +457,7 @@ class GenerationMixin:
         pad_token_id: int,
         eos_token_id: int,
     ) -> torch.LongTensor:
-        is_input_ids = isinstance(inputs, torch.LongTensor) and len(inputs.shape) == 2
+        is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
