@@ -551,7 +551,7 @@ IMAGEGPT_START_DOCSTRING = r"""
 
 IMAGEGPT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
             ``past_key_values[0][0].shape[-2]`` (``sequence_length`` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
@@ -574,7 +574,7 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
 
