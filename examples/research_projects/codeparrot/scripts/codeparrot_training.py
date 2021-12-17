@@ -131,10 +131,11 @@ def main():
             [tb_writer.add_scalar(k, v, step) for k, v in metrics.items()]
 
 
-    def evaluate(args):
+    def evaluate(args, device):
         model.eval()
         losses = []
         for step, batch in enumerate(eval_dataloader):
+            batch = batch.to(device)
             with torch.no_grad():
                 outputs = model(batch, labels=batch)
             loss = outputs.loss.repeat(args.valid_batch_size)
@@ -222,7 +223,7 @@ def main():
             completed_steps += 1
         if step % args.save_checkpoint_steps == 0:
             logger.info("Evaluating and saving model checkpoint")
-            eval_loss, perplexity = evaluate(args)
+            eval_loss, perplexity = evaluate(args, accelerator.device)
             log_metrics(step, {"loss/eval": eval_loss, "perplexity": perplexity})
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
@@ -235,7 +236,7 @@ def main():
 
     # Evaluate and save the last checkpoint
     logger.info("Evaluating and saving model after training")
-    eval_loss, perplexity = evaluate(args)
+    eval_loss, perplexity = evaluate(args, accelerator.device)
     log_metrics(step, {"loss/eval": eval_loss, "perplexity": perplexity})
     accelerator.wait_for_everyone()
     unwrapped_model = accelerator.unwrap_model(model)
