@@ -16,7 +16,7 @@ config_kwargs = {"vocab_size": len(tokenizer), "scale_attn_by_layer_idx": True, 
 config = AutoConfig.from_pretrained(args.config_name, **config_kwargs)
 
 # Initialize new model with config
-model = AutoModelForCausalLM(config)
+model = AutoModelForCausalLM.from_config(config)
 
 # Save model to the hub
 model.save_pretrained(args.model_name, push_to_hub=args.push_to_hub)
