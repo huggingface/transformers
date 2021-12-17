@@ -836,11 +836,14 @@ def add_start_docstrings_to_model_forward(*docstr):
         intro = f"   The {class_name} forward method, overrides the :func:`__call__` special method."
         note = r"""
 
-    .. note::
-        Although the recipe for forward pass needs to be defined within this function, one should call the
-        :class:`Module` instance afterwards instead of this since the former takes care of running the pre and post
-        processing steps while the latter silently ignores them.
-        """
+    <Tip>
+
+    Although the recipe for forward pass needs to be defined within this function, one should call the [`Module`]
+    instance afterwards instead of this since the former takes care of running the pre and post processing steps while
+    the latter silently ignores them.
+
+    </Tip>
+"""
         fn.__doc__ = intro + note + "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
         return fn
 
@@ -857,18 +860,18 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` or a tuple of
-        :obj:`torch.FloatTensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising
-        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        [`{full_output_type}`] or `tuple(torch.FloatTensor)`: A [`{full_output_type}`] or a tuple of
+        `torch.FloatTensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
+        elements depending on the configuration ([`{config_class}`]) and inputs.
 
 """
 
 
 TF_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` or a tuple of
-        :obj:`tf.Tensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising various
-        elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        [`{full_output_type}`] or `tuple(tf.Tensor)`: A [`{full_output_type}`] or a tuple of `tf.Tensor` (if
+        `return_dict=False` is passed or when `config.return_dict=False`) comprising various elements depending on the
+        configuration ([`{config_class}`]) and inputs.
 
 """
 
@@ -1591,8 +1594,8 @@ def url_to_filename(url: str, etag: Optional[str] = None) -> str:
 
 def filename_to_url(filename, cache_dir=None):
     """
-    Return the url and etag (which may be ``None``) stored for `filename`. Raise ``EnvironmentError`` if `filename` or
-    its stored metadata do not exist.
+    Return the url and etag (which may be `None`) stored for *filename*. Raise `EnvironmentError` if *filename* or its
+    stored metadata do not exist.
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -1617,16 +1620,16 @@ def filename_to_url(filename, cache_dir=None):
 
 def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
     """
-    Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape
-    :obj:`(model_url, etag, size_MB)`. Filenames in :obj:`cache_dir` are use to get the metadata for each model, only
-    urls ending with `.bin` are added.
+    Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape `(model_url,
+    etag, size_MB)`. Filenames in `cache_dir` are use to get the metadata for each model, only urls ending with *.bin*
+    are added.
 
     Args:
-        cache_dir (:obj:`Union[str, Path]`, `optional`):
+        cache_dir (`Union[str, Path]`, *optional*):
             The cache directory to search for models within. Will default to the transformers cache if unset.
 
     Returns:
-        List[Tuple]: List of tuples each with shape :obj:`(model_url, etag, size_MB)`
+        List[Tuple]: List of tuples each with shape `(model_url, etag, size_MB)`
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -1986,23 +1989,23 @@ def get_list_of_files(
     local_files_only: bool = False,
 ) -> List[str]:
     """
-    Gets the list of files inside :obj:`path_or_repo`.
+    Gets the list of files inside `path_or_repo`.
 
     Args:
-        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
-            Can be either the id of a repo on huggingface.co or a path to a `directory`.
-        revision (:obj:`str`, `optional`, defaults to :obj:`"main"`):
+        path_or_repo (`str` or `os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a *directory*.
+        revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
-        use_auth_token (:obj:`str` or `bool`, `optional`):
-            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
+        local_files_only (`bool`, *optional*, defaults to `False`):
             Whether or not to only rely on local files and not to attempt to download any files.
 
     Returns:
-        :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
+        `List[str]`: The list of files available in `path_or_repo`.
     """
     path_or_repo = str(path_or_repo)
     # If path_or_repo is a folder, we just return what is inside (subdirectories included).
@@ -2083,8 +2086,7 @@ def is_torch_fx_proxy(x):
 
 def is_tensor(x):
     """
-    Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
-    :obj:`np.ndarray`.
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, obj:*jaxlib.xla_extension.DeviceArray* or `np.ndarray`.
     """
     if is_torch_fx_proxy(x):
         return True
@@ -2177,13 +2179,16 @@ def to_numpy(obj):
 
 class ModelOutput(OrderedDict):
     """
-    Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionary) that will ignore the ``None`` attributes. Otherwise behaves like a regular
+    Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
+    tuple) or strings (like a dictionary) that will ignore the `None` attributes. Otherwise behaves like a regular
     python dictionary.
 
-    .. warning::
-        You can't unpack a :obj:`ModelOutput` directly. Use the :meth:`~transformers.file_utils.ModelOutput.to_tuple`
-        method to convert it to a tuple before.
+    <Tip warning={true}>
+
+    You can't unpack a `ModelOutput` directly. Use the [`~file_utils.ModelOutput.to_tuple`] method to convert it to a
+    tuple before.
+
+    </Tip>
     """
 
     def __post_init__(self):
@@ -2263,7 +2268,7 @@ class ModelOutput(OrderedDict):
 
     def to_tuple(self) -> Tuple[Any]:
         """
-        Convert self to a tuple containing all the attributes/keys that are not ``None``.
+        Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
         return tuple(self[k] for k in self.keys())
 
@@ -2282,8 +2287,8 @@ class ExplicitEnum(Enum):
 
 class PaddingStrategy(ExplicitEnum):
     """
-    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for tab-completion
-    in an IDE.
+    Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
+    IDE.
     """
 
     LONGEST = "longest"
@@ -2293,7 +2298,7 @@ class PaddingStrategy(ExplicitEnum):
 
 class TensorType(ExplicitEnum):
     """
-    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
     tab-completion in an IDE.
     """
 
@@ -2413,55 +2418,52 @@ class PushToHubMixin:
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
-        :obj:`repo_path_or_name`.
+        `repo_path_or_name`.
 
         Parameters:
-            repo_path_or_name (:obj:`str`, `optional`):
+            repo_path_or_name (`str`, *optional*):
                 Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
                 the repository will have the name of that local folder). If not specified, will default to the name
-                given by :obj:`repo_url` and a local directory with that name will be created.
-            repo_url (:obj:`str`, `optional`):
+                given by `repo_url` and a local directory with that name will be created.
+            repo_url (`str`, *optional*):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
-                repository will be created in your namespace (unless you specify an :obj:`organization`) with
-                :obj:`repo_name`.
-            use_temp_dir (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to clone the distant repo in a temporary directory or in :obj:`repo_path_or_name` inside
-                the current working directory. This will slow things down if you are making changes in an existing repo
+                repository will be created in your namespace (unless you specify an `organization`) with `repo_name`.
+            use_temp_dir (`bool`, *optional*, defaults to `False`):
+                Whether or not to clone the distant repo in a temporary directory or in `repo_path_or_name` inside the
+                current working directory. This will slow things down if you are making changes in an existing repo
                 since you will need to clone the repo before every push.
-            commit_message (:obj:`str`, `optional`):
-                Message to commit while pushing. Will default to :obj:`"add {object}"`.
-            organization (:obj:`str`, `optional`):
+            commit_message (`str`, *optional*):
+                Message to commit while pushing. Will default to `"add {object}"`.
+            organization (`str`, *optional*):
                 Organization in which you want to push your {object} (you must be a member of this organization).
-            private (:obj:`bool`, `optional`):
+            private (`bool`, *optional*):
                 Whether or not the repository created should be private (requires a paying subscription).
-            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
-                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
-                :obj:`True` if :obj:`repo_url` is not specified.
+            use_auth_token (`bool` or `str`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`). Will default to `True` if
+                `repo_url` is not specified.
 
 
         Returns:
-            :obj:`str`: The url of the commit of your {object} in the given repository.
+            `str`: The url of the commit of your {object} in the given repository.
 
-        Examples::
+        Examples:
 
-            from transformers import {object_class}
+        ```python from transformers import {object_class}
 
-            {object} = {object_class}.from_pretrained("bert-base-cased")
+        {object} = {object_class}.from_pretrained("bert-base-cased")
 
-            # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
-            # `my-finetuned-bert` folder.
-            {object}.push_to_hub("my-finetuned-bert")
+        # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the #
+        *my-finetuned-bert* folder. {object}.push_to_hub("my-finetuned-bert")
 
-            # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
-            {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+        # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
+        {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
 
-            # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
-            # `my-finetuned-bert` folder.
-            {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
+        # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the #
+        *my-finetuned-bert* folder. {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
 
-            # Make a change to an existing repo that has been cloned locally in `my-finetuned-bert`.
-            {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+        # Make a change to an existing repo that has been cloned locally in *my-finetuned-bert*.
+        {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert") ```
         """
         if use_temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
