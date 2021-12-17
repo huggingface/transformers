@@ -158,6 +158,8 @@ class FeaturesManager:
             "default-with-past",
             "seq2seq-lm",
             "seq2seq-lm-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
             onnx_config_cls=MarianOnnxConfig,
         ),
         "roberta": supported_features_mapping(
