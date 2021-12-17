@@ -411,7 +411,7 @@ class FlaxRobertaLayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -470,7 +470,7 @@ class FlaxRobertaEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -600,13 +600,14 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
         token_type_ids = jnp.ones_like(input_ids)
         position_ids = create_position_ids_from_input_ids(input_ids, self.config.pad_token_id)
         attention_mask = jnp.ones_like(input_ids)
+        head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
-            "params"
-        ]
+        return self.module.init(
+            rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
+        )["params"]
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -749,7 +750,7 @@ class FlaxRobertaForMaskedLMModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -761,7 +762,7 @@ class FlaxRobertaForMaskedLMModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -816,7 +817,7 @@ class FlaxRobertaForSequenceClassificationModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -828,7 +829,7 @@ class FlaxRobertaForSequenceClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -884,7 +885,7 @@ class FlaxRobertaForMultipleChoiceModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -902,7 +903,7 @@ class FlaxRobertaForMultipleChoiceModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -969,7 +970,7 @@ class FlaxRobertaForTokenClassificationModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -981,7 +982,7 @@ class FlaxRobertaForTokenClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1037,7 +1038,7 @@ class FlaxRobertaForQuestionAnsweringModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1049,7 +1050,7 @@ class FlaxRobertaForQuestionAnsweringModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

@@ -1260,7 +1260,7 @@ class FlaxBigBirdLayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1319,7 +1319,7 @@ class FlaxBigBirdEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1435,13 +1435,14 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         token_type_ids = jnp.zeros_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
+        head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
-            "params"
-        ]
+        return self.module.init(
+            rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
+        )["params"]
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -1517,7 +1518,7 @@ class FlaxBigBirdModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1582,7 +1583,7 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1595,7 +1596,7 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1678,7 +1679,7 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1690,7 +1691,7 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1767,7 +1768,7 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1779,7 +1780,7 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1836,7 +1837,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1854,7 +1855,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1935,7 +1936,7 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1947,7 +1948,7 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2023,8 +2024,8 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         logits_mask=None,
-        head_mask: Optional[np.ndarray] = None,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2037,7 +2038,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2085,8 +2086,8 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
+        head_mask=None,
         question_lengths=None,
-        head_mask: Optional[np.ndarray] = None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -2105,6 +2106,9 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
+
+        if head_mask is None:
+            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
         if question_lengths is None and input_ids is not None:
             # assuming input_ids format: <cls> <question> <sep> context <sep>
@@ -2137,8 +2141,8 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             token_type_ids,
             jnp.array(position_ids, dtype="i4"),
+            jnp.array(head_mask, dtype="i4"),
             logits_mask,
-            head_mask,
             not train,
             output_attentions,
             output_hidden_states,

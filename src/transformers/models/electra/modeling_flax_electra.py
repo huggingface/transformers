@@ -421,7 +421,7 @@ class FlaxElectraLayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -480,7 +480,7 @@ class FlaxElectraEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        head_mask=None,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -556,13 +556,14 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         token_type_ids = jnp.zeros_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
+        head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
-            "params"
-        ]
+        return self.module.init(
+            rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
+        )["params"]
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -571,7 +572,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        head_mask: Optional[np.ndarray] = None,
+        head_mask=None,
         params: dict = None,
         dropout_rng: PRNGKey = None,
         train: bool = False,
@@ -722,7 +723,7 @@ class FlaxElectraForMaskedLMModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -783,7 +784,7 @@ class FlaxElectraForPreTrainingModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -872,7 +873,7 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1020,7 +1021,7 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1092,7 +1093,7 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1187,7 +1188,7 @@ class FlaxElectraForSequenceClassificationModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
-            head_mask=head_mask,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
