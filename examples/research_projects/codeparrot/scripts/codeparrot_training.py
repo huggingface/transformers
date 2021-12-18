@@ -30,11 +30,12 @@ class ConstantLengthDataset(IterableDataset):
     """
 
     def __init__(
-        self, tokenizer, dataset, infinite=False, seq_length=1024, num_of_sequences=1024, chars_per_token=3.6
+        self, tokenizer, dataset, logger, infinite=False, seq_length=1024, num_of_sequences=1024, chars_per_token=3.6
     ):
         self.tokenizer = tokenizer
         self.concat_token_id = tokenizer.bos_token_id
         self.dataset = dataset
+        self.logger = logger
         self.seq_length = seq_length
         self.input_characters = seq_length * chars_per_token * num_of_sequences
         self.epoch = 0
@@ -55,7 +56,7 @@ class ConstantLengthDataset(IterableDataset):
                     if self.infinite:
                         iterator = iter(self.dataset)
                         self.epoch += 1
-                        logger.info(f"Dataset epoch: {self.epoch}")
+                        self.logger.info(f"Dataset epoch: {self.epoch}")
                     else:
                         more_examples = False
                         break
@@ -103,8 +104,10 @@ def main():
         train_data = load_dataset(args.dataset_name_train, split="train", **ds_kwargs)
         train_data = train_data.shuffle(buffer_size=args.shuffle_buffer, seed=args.seed)
         valid_data = load_dataset(args.dataset_name_valid, split="train", **ds_kwargs)
-        train_dataset = ConstantLengthDataset(tokenizer, train_data, infinite=True, seq_length=args.seq_length)
-        valid_dataset = ConstantLengthDataset(tokenizer, valid_data, infinite=False, seq_length=args.seq_length)
+        train_dataset = ConstantLengthDataset(tokenizer, train_data, logger, infinite=True, seq_length=args.seq_length)
+        valid_dataset = ConstantLengthDataset(
+            tokenizer, valid_data, logger, infinite=False, seq_length=args.seq_length
+        )
         train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size)
         eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
         return train_dataloader, eval_dataloader
