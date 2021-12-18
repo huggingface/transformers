@@ -4,7 +4,6 @@ from pathlib import Path
 
 import datasets
 import torch
-import torch_xla.distributed.xla_multiprocessing as xmp
 from datasets import load_dataset
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
