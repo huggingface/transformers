@@ -113,25 +113,6 @@ Recall that you can see the full set of possible options with descriptions (for 
 python scripts/codeparrot_training.py --help
 ```
 
-### TPU Training
-
-```bash
-python scripts/tpu_training.py \
-    --num_cores 8  \
-    scripts/codeparrot_training.py \
-    --save_dir lvwerra/codeparrot \
-    --model_ckpt lvwerra/codeparrot \
-    --train_batch_size 4 \
-    --valid_batch_size 4 \
-    --learning_rate 5e-4 \
-    --num_warmup_steps 1_000 \
-    --gradient_accumulation 1 \
-    --gradient_checkpointing False \
-    --max_train_steps 5_000 \
-    --max_eval_steps 100 \
-    --save_checkpoint_steps 1_000
-```
-
 ## Evaluation
 For evaluating the language modeling loss on the validation set or any other dataset you can use the following command:
 ```bash
