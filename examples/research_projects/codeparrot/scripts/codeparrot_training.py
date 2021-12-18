@@ -165,6 +165,7 @@ def main():
     # Clone model repository
     if accelerator.is_main_process:
         hf_repo = Repository(args.save_dir, clone_from=args.model_ckpt)
+    accelerator.wait_for_everyone()
 
     # Logging
     logger, tb_writer, run_name = setup_logging(args)
@@ -173,6 +174,7 @@ def main():
     # Checkout new branch on repo
     if accelerator.is_main_process:
         hf_repo.git_checkout(run_name, create_branch_ok=True)
+    accelerator.wait_for_everyone()
 
     # Load model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(args.save_dir)
@@ -243,9 +245,6 @@ def main():
     unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
     if accelerator.is_main_process:
         hf_repo.push_to_hub(commit_message="final model")
-
-def _mp_fn(index):
-    main()
 
 if __name__ == "__main__":
     main()
