@@ -4,11 +4,11 @@ from pathlib import Path
 
 import datasets
 import torch
+import torch_xla.distributed.xla_multiprocessing as xmp
 from datasets import load_dataset
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-import torch_xla.distributed.xla_multiprocessing as xmp
 
 import transformers
 import wandb
@@ -69,6 +69,7 @@ class ConstantLengthDataset(IterableDataset):
                 if len(input_ids) == self.seq_length:
                     yield torch.tensor(input_ids)
 
+
 def main():
     def setup_logging(args):
         project_name = args.model_ckpt.split("/")[-1]
@@ -98,7 +99,6 @@ def main():
             transformers.utils.logging.set_verbosity_error()
         return logger, tb_writer, run_name
 
-
     def create_dataloaders(args):
         ds_kwargs = {"streaming": True}
         train_data = load_dataset(args.dataset_name_train, split="train", **ds_kwargs)
@@ -109,7 +109,6 @@ def main():
         train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size)
         eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
         return train_dataloader, eval_dataloader
-
 
     def get_grouped_params(model, args, no_decay=["bias", "LayerNorm.weight"]):
         params_with_wd, params_without_wd = [], []
@@ -123,13 +122,11 @@ def main():
             {"params": params_without_wd, "weight_decay": 0.0},
         ]
 
-
     def log_metrics(step, metrics):
         logger.info(f"Step {step}: {metrics}")
         if accelerator.is_main_process:
             wandb.log(metrics)
             [tb_writer.add_scalar(k, v, step) for k, v in metrics.items()]
-
 
     def evaluate(args, device):
         model.eval()
@@ -148,7 +145,6 @@ def main():
         except OverflowError:
             perplexity = float("inf")
         return loss.item(), perplexity.item()
-
 
     # Accelerator
     accelerator = Accelerator()
@@ -182,8 +178,6 @@ def main():
         model.gradient_checkpointing_enable()
     tokenizer = AutoTokenizer.from_pretrained(args.save_dir)
 
-    
-
     # Load dataset and dataloader
     train_dataloader, eval_dataloader = create_dataloaders(args)
 
@@ -196,10 +190,8 @@ def main():
         num_training_steps=args.max_train_steps,
     )
 
-
     def get_lr():
         return optimizer.param_groups[0]["lr"]
-
 
     # Prepare everything with our `accelerator`.
     model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
@@ -213,7 +205,8 @@ def main():
         batch = batch.to(accelerator.device)
         loss = model(batch, labels=batch, use_cache=False).loss
         log_metrics(
-            step, {"lr": get_lr(), "samples": step * samples_per_step, "steps": completed_steps, "loss/train": loss.item()}
+            step,
+            {"lr": get_lr(), "samples": step * samples_per_step, "steps": completed_steps, "loss/train": loss.item()},
         )
         loss = loss / args.gradient_accumulation_steps
         accelerator.backward(loss)
@@ -245,6 +238,7 @@ def main():
     unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
     if accelerator.is_main_process:
         hf_repo.push_to_hub(commit_message="final model")
+
 
 if __name__ == "__main__":
     main()
