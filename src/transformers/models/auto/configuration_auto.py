@@ -30,6 +30,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("s4", "S4Config"),
         ("imagegpt", "ImageGPTConfig"),
         ("qdqbert", "QDQBertConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
@@ -189,6 +190,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("s4", "S4"),
         ("imagegpt", "ImageGPT"),
         ("qdqbert", "QDQBert"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),

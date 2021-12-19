@@ -196,6 +196,27 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
 
+_pykeops_available = importlib.util.find_spec("pykeops") is not None
+try:
+    _pykeops_version = importlib_metadata.version("pykeops")
+    logger.debug(f"Successfully imported pykeops version {_pykeops_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pykeops_available = False
+
+_opt_einsum_available = importlib.util.find_spec("opt_einsum") is not None
+try:
+    _opt_einsum_version = importlib_metadata.version("opt_einsum")
+    logger.debug(f"Successfully imported opt_einsum version {_opt_einsum_version}")
+except importlib_metadata.PackageNotFoundError:
+    _opt_einsum_available = False
+
+_einops_available = importlib.util.find_spec("einops") is not None
+try:
+    _einops_version = importlib_metadata.version("einops")
+    logger.debug(f"Successfully imported einops version {_einops_version}")
+except importlib_metadata.PackageNotFoundError:
+    _einops_available = False
+
 
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
 try:
@@ -521,6 +542,18 @@ def is_scatter_available():
     return _scatter_available
 
 
+def is_pykeops_available():
+    return _pykeops_available
+
+
+def is_opt_einsum_available():
+    return _opt_einsum_available
+
+
+def is_einops_available():
+    return _einops_available
+
+
 def is_pytorch_quantization_available():
     return _pytorch_quantization_available
 
@@ -708,6 +741,21 @@ SCATTER_IMPORT_ERROR = """
 explained here: https://github.com/rusty1s/pytorch_scatter.
 """
 
+PYKEOPS_IMPORT_ERROR = """
+{0} requires the pykeops library but it was not found in your environment. You can install it with pip as explained
+here: https://www.kernel-operations.io/keops/python/installation.html
+"""
+
+OPT_EINSUM_IMPORT_ERROR = """
+{0} requires the opt_einsum library but it was not found in your environment. You can install it with pip as explained
+here: https://github.com/dgasmith/opt_einsum
+"""
+
+EINOPS_IMPORT_ERROR = """
+{0} requires the einops library but it was not found in your environment. You can install it with pip as explained
+here: https://github.com/arogozhnikov/einops
+"""
+
 # docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
@@ -778,6 +826,9 @@ BACKENDS_MAPPING = OrderedDict(
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("pykeops", (is_pykeops_available, PYKEOPS_IMPORT_ERROR)),
+        ("opt_einsum", (is_opt_einsum_available, OPT_EINSUM_IMPORT_ERROR)),
+        ("einops", (is_einops_available, EINOPS_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),

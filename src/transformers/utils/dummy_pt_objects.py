@@ -4356,6 +4356,42 @@ def load_tf_weights_in_roformer(*args, **kwargs):
     requires_backends(load_tf_weights_in_roformer, ["torch"])
 
 
+class S4LMHeadModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class S4Model:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class S4PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

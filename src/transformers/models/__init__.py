@@ -88,6 +88,7 @@ from . import (
     retribert,
     roberta,
     roformer,
+    s4,
     segformer,
     sew,
     sew_d,
