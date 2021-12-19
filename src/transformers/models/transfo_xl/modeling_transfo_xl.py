@@ -937,9 +937,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             all_ones = word_emb.new_ones((qlen, klen), dtype=torch.uint8)
             mask_len = klen - self.mem_len
             if mask_len > 0:
-                mask_shift_len = qlen - mask_len
+                mask_shift_len = qlen - mask_len + 1
             else:
-                mask_shift_len = qlen
+                mask_shift_len = qlen + 1
             dec_attn_mask = (torch.triu(all_ones, 1 + mlen) + torch.tril(all_ones, -mask_shift_len))[:, :, None]  # -1
         else:
             dec_attn_mask = torch.triu(word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1 + mlen)[
