@@ -86,6 +86,10 @@ is implemented in the library. Note that the models available in the library onl
 with the Perceiver. There are many more use cases, including question answering, named-entity recognition, object detection, 
 audio classification, video classification, etc. 
 
+**Note**:
+
+- Perceiver does **not** work with `torch.nn.DataParallel` due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
+
 ## Perceiver specific outputs
 
 [[autodoc]] models.perceiver.modeling_perceiver.PerceiverModelOutput
