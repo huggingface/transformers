@@ -470,7 +470,7 @@ Dependencies
 
 Using AWS Neuron to convert models requires the following dependencies and environment:
 
-2. A `Neuron SDK environment
+* A `Neuron SDK environment
    <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide>`_,
    which comes pre-configured on `AWS Deep Learning AMI
    <https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html>`_
