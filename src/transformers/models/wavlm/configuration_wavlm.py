@@ -144,6 +144,17 @@ class WavLMConfig(PretrainedConfig):
             instance of :class:`~transformers.WavLMForSequenceClassification`.
         classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
+        tdnn_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(512, 512, 512, 512, 1500)`):
+            A tuple of integers defining the number of output channels of each 1D convolutional layer in the `TDNN`
+            module of the `XVector` model. The length of `tdnn_dim` defines the number of `TDNN` layers.
+        tdnn_kernel (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 3, 3, 1, 1)`):
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the `TDNN` module of the
+            `XVector` model. The length of `tdnn_kernel` has to match the length of `tdnn_dim`.
+        tdnn_dilation (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(1, 2, 3, 1, 1)`):
+            A tuple of integers defining the dilation factor of each 1D convolutional layer in `TDNN` module of the
+            `XVector` model. The length of `tdnn_dilation` has to match the length of `tdnn_dim`.
+        xvector_output_dim (:obj:`int`, `optional`, defaults to 512):
+            Dimensionality of the `XVector` embedding vectors.
         add_adapter (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether a convolutional network should be stacked on top of the Wav2Vec2 Encoder. Can be very useful for
             warm-starting Wav2Vec2 for SpeechEncoderDecoder models.
@@ -220,6 +231,10 @@ class WavLMConfig(PretrainedConfig):
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
         classifier_proj_size=256,
+        tdnn_dim=(512, 512, 512, 512, 1500),
+        tdnn_kernel=(5, 3, 3, 1, 1),
+        tdnn_dilation=(1, 2, 3, 1, 1),
+        xvector_output_dim=512,
         num_ctc_classes=80,
         pad_token_id=0,
         bos_token_id=1,
@@ -302,3 +317,12 @@ class WavLMConfig(PretrainedConfig):
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
         self.output_hidden_size = output_hidden_size or hidden_size
+
+        # SequenceClassification-specific parameter. Feel free to ignore for other classes.
+        self.classifier_proj_size = classifier_proj_size
+
+        # XVector-specific parameters. Feel free to ignore for other classes.
+        self.tdnn_dim = list(tdnn_dim)
+        self.tdnn_kernel = list(tdnn_kernel)
+        self.tdnn_dilation = list(tdnn_dilation)
+        self.xvector_output_dim = xvector_output_dim

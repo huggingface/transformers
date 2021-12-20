@@ -1404,8 +1404,10 @@ if is_torch_available():
     _import_structure["models.wavlm"].extend(
         [
             "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WavLMForAudioFrameClassification",
             "WavLMForCTC",
             "WavLMForSequenceClassification",
+            "WavLMForXVector",
             "WavLMModel",
             "WavLMPreTrainedModel",
         ]
@@ -3275,8 +3277,10 @@ if TYPE_CHECKING:
         )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WavLMForAudioFrameClassification,
             WavLMForCTC,
             WavLMForSequenceClassification,
+            WavLMForXVector,
             WavLMModel,
             WavLMPreTrainedModel,
         )
