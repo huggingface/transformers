@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType
+from ...file_utils import TensorType, is_torch_available
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -30,6 +30,9 @@ from ...image_utils import (
 )
 from ...utils import logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -48,6 +51,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Resize the shorter side of the input to the given size. Should be an integer. The longer side will be
             limited to under int((1333 / 800) * size) while preserving the aspect ratio. Only has an effect if
             :obj:`do_resize` is set to :obj:`True`.
+        size_divisor (:obj:`int`, `optional`, defaults to 32):
+            The size by which to make sure both the height and width can be divided.
         resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
@@ -66,6 +71,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         do_resize=True,
         size=384,
+        size_divisor=32,
         resample=Image.BICUBIC,
         do_normalize=True,
         image_mean=None,
@@ -75,12 +81,33 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
+        self.size_divisor = size_divisor
         self.resample = resample
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def _resize(self, image, shorter=800, longer=1333, resample=Image.BICUBIC):
+    def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=Image.BICUBIC):
+        """
+        Resizes the shorter edge of :obj:`image` to :obj:`shorter` and limits the longer edge to under :obj:`longer`,
+        while preserving the aspect ratio. Also makes sure that both the height and width can be divided by
+        :obj:`size_divisor`.
+
+        Based on original implementation:
+        https://github.com/dandelin/ViLT/blob/3db8b5035464afee84d951bf6322e1b27f1d072d/vilt/transforms/utils.py#L5
+
+        Args:
+            image (:obj:`PIL.Image`):
+                The image to resize.
+            shorter (:obj:`int`, `optional`, defaults to :obj:`800`):
+                The shorter side of the image.
+            longer (:obj:`int`, `optional`, defaults to :obj:`1333`):
+                The longer side of the image.
+            size_divisor (:obj:`int`, `optional`, defaults to :obj:`32`):
+                The size by which both the height and the width must be divisible.
+            resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
+                An optional resampling filter.
+        """
         if not isinstance(image, Image.Image):
             image = self.to_pil_image(image)
 
@@ -99,7 +126,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             neww = neww * scale
 
         newh, neww = int(newh + 0.5), int(neww + 0.5)
-        newh, neww = newh // 32 * 32, neww // 32 * 32
+        newh, neww = newh // size_divisor * size_divisor, neww // size_divisor * size_divisor
 
         return self.resize(image, size=(neww, newh), resample=resample)
 
@@ -110,6 +137,47 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for index, item in enumerate(sublist):
                 maxes[index] = max(maxes[index], item)
         return maxes
+
+    def pad_and_create_pixel_mask(
+        self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None
+    ):
+        """
+        Pad images up to the largest image in a batch and create a corresponding :obj:`pixel_mask`.
+
+        Args:
+            pixel_values_list (:obj:`List[torch.Tensor]`):
+                List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch
+                :obj:`torch.Tensor` objects.
+
+        Returns:
+            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+
+            - **pixel_values** -- Pixel values to be fed to a model.
+            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
+              `"pixel_mask"` is in :obj:`self.model_input_names`).
+        """
+
+        max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
+        c, h, w = max_size
+        padded_images = []
+        pixel_mask = []
+        for image in pixel_values_list:
+            # create padded image
+            padded_image = np.zeros((c, h, w), dtype=np.float32)
+            padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
+            padded_images.append(padded_image)
+            # create pixel mask
+            mask = np.zeros((h, w), dtype=np.int64)
+            mask[: image.shape[1], : image.shape[2]] = True
+            pixel_mask.append(mask)
+
+        # return as BatchFeature
+        data = {"pixel_values": padded_images, "pixel_mask": pixel_mask}
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        return encoded_inputs
 
     def __call__(
         self,
@@ -184,7 +252,14 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             longer = int((1333 / 800) * self.size)
             images = [
-                self._resize(image=image, shorter=self.size, longer=longer, resample=self.resample) for image in images
+                self._resize(
+                    image=image,
+                    shorter=self.size,
+                    longer=longer,
+                    size_divisor=self.size_divisor,
+                    resample=self.resample,
+                )
+                for image in images
             ]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
