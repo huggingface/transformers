@@ -686,6 +686,7 @@ def main():
 
     def get_luke_labels(outputs, ner_tags, original_entity_spans):
         true_predictions = []
+        true_labels = []
     
         for output, original_spans, tags in zip(outputs.logits, original_entity_spans, ner_tags):
             max_indices = torch.argmax(output, axis=1)
@@ -705,10 +706,9 @@ def main():
                         predicted_sequence[span[0] + 1 : span[1]] = [label] * (span[1] - span[0] - 1)
 
             true_predictions.append(predicted_sequence)
-
-        refs = [label_list[tag_id] for tag_id in ner_tags]
+            true_labels.append([label_list[tag_id] for tag_id in ner_tags])
         
-        return true_predictions, refs
+        return true_predictions, true_labels
 
     def get_labels(predictions, references):
         # Transform predictions and references tensos to numpy arrays
