@@ -1388,6 +1388,7 @@ if is_torch_available():
         [
             "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViltForImageRetrievalTextRetrieval",
+            "ViltForNaturalLanguageVisualReasoning",
             "ViltForPreTraining",
             "ViltForVisualQuestionAnswering",
             "ViltLayer",
@@ -3320,6 +3321,7 @@ if TYPE_CHECKING:
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViltForImageRetrievalTextRetrieval,
+            ViltForNaturalLanguageVisualReasoning,
             ViltForPreTraining,
             ViltForVisualQuestionAnswering,
             ViltLayer,

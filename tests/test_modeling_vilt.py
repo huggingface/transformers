@@ -36,6 +36,7 @@ if is_torch_available():
     from transformers import (
         MODEL_MAPPING,
         ViltForImageRetrievalTextRetrieval,
+        ViltForNaturalLanguageVisualReasoning,
         ViltForPreTraining,
         ViltForVisualQuestionAnswering,
         ViltModel,
@@ -197,6 +198,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             ViltForVisualQuestionAnswering,
             ViltForImageRetrievalTextRetrieval,
             ViltForPreTraining,
+            #ViltForNaturalLanguageVisualReasoning,
         )
         if is_torch_available()
         else ()
@@ -205,12 +207,12 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
 
-    # ViltForVisualQuestionAnswering requires special treatment
+    # ViltForVisualQuestionAnswering and ViltForNaturalLanguageVisualReasoning require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "ViltForVisualQuestionAnswering":
+            if model_class.__name__ in ["ViltForVisualQuestionAnswering", "ViltForNaturalLanguageVisualReasoning"]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
                 )

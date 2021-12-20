@@ -1131,3 +1131,104 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+@add_start_docstrings(
+    """
+    Vilt Model transformer with a classifier head on top for natural language visual reasoning, e.g. NLVR2.
+    """,
+    VILT_START_DOCSTRING,
+)
+class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.vilt = ViltModel(config)
+
+        # Classifier head
+        self.classifier = nn.Sequential(
+            nn.Linear(config.hidden_size * 2, config.hidden_size * 2),
+            nn.LayerNorm(config.hidden_size * 2),
+            nn.GELU(),
+            nn.Linear(config.hidden_size * 2, config.num_labels),
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        pixel_mask=None,
+        pixel_values_2=None,
+        pixel_mask_2=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Binary classification labels.
+
+        Returns:
+
+        Examples::
+            >>> TODO
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs_1 = self.vilt(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        outputs_2 = self.vilt(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            pixel_values=pixel_values_2,
+            pixel_mask=pixel_mask_2,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooler_output_1 = outputs_1.pooler_output if return_dict else outputs_1[1]
+        pooler_output_2 = outputs_2.pooler_output if return_dict else outputs_2[1]
+
+        pooled_output = torch.cat((pooler_output_1, pooler_output_2), dim=-1)
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs_1[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs_1.hidden_states,
+            attentions=outputs_1.attentions,
+        )

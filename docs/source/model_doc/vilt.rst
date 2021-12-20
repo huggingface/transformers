@@ -87,6 +87,12 @@ ViltForVisualQuestionAnswering
 .. autoclass:: transformers.ViltForVisualQuestionAnswering
     :members: forward
 
+ViltForNaturalLanguageVisualReasoning
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ViltForNaturalLanguageVisualReasoning
+    :members: forward
+
 
 ViltForImageRetrievalTextRetrieval
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
