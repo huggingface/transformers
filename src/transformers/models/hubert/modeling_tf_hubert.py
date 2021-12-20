@@ -1265,6 +1265,7 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
 
     config_class = HubertConfig
     base_model_prefix = "hubert"
+    main_input_name = "input_values"
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:

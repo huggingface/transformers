@@ -385,6 +385,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
 
     config_class = DeiTConfig
     base_model_prefix = "deit"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
