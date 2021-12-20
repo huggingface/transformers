@@ -860,7 +860,6 @@ def add_end_docstrings(*docstr):
     return docstring_decorator
 
 
-
 PT_RETURN_INTRODUCTION = r"""
     Returns:
         [`{full_output_type}`] or `tuple(torch.FloatTensor)`: A [`{full_output_type}`] or a tuple of
@@ -911,7 +910,7 @@ def _convert_output_args_doc(output_args_doc):
     return "\n".join(blocks)
 
 
-def _prepare_output_docstrings(output_type, config_class):
+def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     """
     Prepares the return part of the docstring using `output_type`.
     """
@@ -930,7 +929,23 @@ def _prepare_output_docstrings(output_type, config_class):
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
     intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
     intro = intro.format(full_output_type=full_output_type, config_class=config_class)
-    return intro + params_docstring
+    result = intro + params_docstring
+
+    # Apply minimum indent if necessary
+    if min_indent is not None:
+        lines = result.split("\n")
+        # Find the indent of the first nonempty line
+        i = 0
+        while len(lines[i]) == 0:
+            i += 1
+        indent = len(_get_indent(lines[i]))
+        # If too small, add indentation to all nonempty lines
+        if indent < min_indent:
+            to_add = " " * (min_indent - indent)
+            lines = [(f"{to_add}{line}" if len(line) > 0 else line) for line in lines]
+            result = "\n".join(lines)
+
+    return result
 
 
 PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
@@ -1432,11 +1447,7 @@ def add_code_sample_docstrings(
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
         func_doc = (fn.__doc__ or "") + "".join(docstr)
-        is_rst_docstring = _is_rst_docstring(func_doc)
-        if output_type is not None:
-            output_doc = _prepare_output_docstrings(output_type, config_class, is_rst_docstring)
-        else:
-            output_doc = ""
+        output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
@@ -1452,7 +1463,8 @@ def replace_return_docstrings(output_type=None, config_class=None):
         while i < len(lines) and re.search(r"^\s*Returns?:\s*$", lines[i]) is None:
             i += 1
         if i < len(lines):
-            lines[i] = _prepare_output_docstrings(output_type, config_class)
+            indent = len(_get_indent(lines[i]))
+            lines[i] = _prepare_output_docstrings(output_type, config_class, min_indent=indent)
             func_doc = "\n".join(lines)
         else:
             raise ValueError(
