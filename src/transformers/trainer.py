@@ -999,19 +999,23 @@ class Trainer:
         elif is_sagemaker_dp_enabled():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
+            kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
-                find_unused_parameters = self.args.ddp_find_unused_parameters
+                kwargs["find_unused_parameters"] = self.args.ddp_find_unused_parameters
             elif isinstance(model, PreTrainedModel):
                 # find_unused_parameters breaks checkpointing as per
                 # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not model.is_gradient_checkpointing
+                kwargs["find_unused_parameters"] = not model.is_gradient_checkpointing
             else:
-                find_unused_parameters = True
+                kwargs["find_unused_parameters"] = True
+
+            if self.args.ddp_bucket_cap_mb is not None:
+                kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
             model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
                 output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
-                find_unused_parameters=find_unused_parameters,
+                **kwargs,
             )
 
         return model
