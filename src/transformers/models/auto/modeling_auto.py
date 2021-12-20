@@ -546,6 +546,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
+        ("wavlm", "WavLMForAudioFrameClassification"),
     ]
 )
 
@@ -554,6 +555,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForXVector"),
         ("unispeech-sat", "UniSpeechSatForXVector"),
+        ("wavlm", "WavLMForXVector"),
     ]
 )
 
