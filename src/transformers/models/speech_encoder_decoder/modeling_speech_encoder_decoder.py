@@ -180,6 +180,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     """
     config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
+    main_input_name = "input_values"
 
     def __init__(
         self,
