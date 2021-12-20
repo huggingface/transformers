@@ -1750,6 +1750,10 @@ class S4LMHeadModelOutput(ModelOutput):
     losses: Optional[torch.FloatTensor] = None
     prediction_scores: torch.FloatTensor = None
 
+    @property
+    def logits(self):
+        return self.prediction_scores
+
 
 class S4PreTrainedModel(PreTrainedModel):
     """
@@ -2020,12 +2024,12 @@ class S4Model(S4PreTrainedModel):
     )
     def forward(
         self,
-        hidden_states,
+        input_ids,
         state=None,
         return_dict=True,
     ):
 
-        hidden_states = self.embeddings(hidden_states)
+        hidden_states = self.embeddings(input_ids)
 
         if self.transposed:
             hidden_states = einops.rearrange(hidden_states, "b l d -> b d l")

@@ -32,14 +32,17 @@ from transformers import logging as transformers_logging
 from .deepspeed import is_deepspeed_available
 from .file_utils import (
     is_detectron2_available,
+    is_einops_available,
     is_faiss_available,
     is_flax_available,
     is_keras2onnx_available,
     is_librosa_available,
     is_onnx_available,
+    is_opt_einsum_available,
     is_pandas_available,
     is_phonemizer_available,
     is_pyctcdecode_available,
+    is_pykeops_available,
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
@@ -517,6 +520,30 @@ def require_detectron2(test_case):
     """Decorator marking a test that requires detectron2."""
     if not is_detectron2_available():
         return unittest.skip("test requires `detectron2`")(test_case)
+    else:
+        return test_case
+
+
+def require_einops(test_case):
+    """Decorator marking a test that requires einops."""
+    if not is_einops_available():
+        return unittest.skip("test requires `einops`")(test_case)
+    else:
+        return test_case
+
+
+def require_opt_einsum(test_case):
+    """Decorator marking a test that requires opt_einsum."""
+    if not is_opt_einsum_available():
+        return unittest.skip("test requires `opt_einsum`")(test_case)
+    else:
+        return test_case
+
+
+def require_pykeops(test_case):
+    """Decorator marking a test that requires pykeops."""
+    if not is_pykeops_available():
+        return unittest.skip("test requires `pykeops`")(test_case)
     else:
         return test_case
 

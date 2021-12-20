@@ -19,7 +19,7 @@ import random
 import unittest
 
 from transformers import S4Config, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_einops, require_opt_einsum, require_pykeops, require_torch, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -43,7 +43,7 @@ class S4ModelTester:
         self.d_embed = 32
         self.embedding_dropout_prob = 0.25
         self.div_val = 2
-        self.cutoffs = [10, 50, 80]
+        self.cutoffs = [7, 47, 77]
         self.tie_weights = True
         self.tie_projs = [True, True, True]
         self.initializer_scale = 0.5
@@ -78,6 +78,7 @@ class S4ModelTester:
         self.initializer_range = 0.02
         self.seed = 1
         self.use_labels = True
+        self.is_training = False
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.l_max], self.vocab_size)
@@ -147,7 +148,7 @@ class S4ModelTester:
         return outputs
 
     def check_s4_model_output(self, result):
-        self.parent.assertEqual(result["hidden_states"].shape, (self.batch_size, self.l_max, self.hidden_size))
+        self.parent.assertEqual(result["hidden_states"].shape, (self.batch_size, self.l_max, self.d_model))
 
     def create_s4_lm_head(self, config, input_ids, lm_labels):
         model = S4LMHeadModel(config)
@@ -162,7 +163,7 @@ class S4ModelTester:
 
     def check_s4_lm_head_output(self, result):
         self.parent.assertEqual(result["loss"].shape, ())
-        self.parent.assertEqual(result["lm_logits"].shape, (self.batch_size, self.l_max, self.vocab_size))
+        self.parent.assertEqual(result["lm_logits"].shape, (self.batch_size, self.l_max, self.cutoffs[0] + 3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -176,6 +177,9 @@ class S4ModelTester:
 
 
 @require_torch
+@require_einops
+@require_opt_einsum
+@require_pykeops
 class S4ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
@@ -192,19 +196,52 @@ class S4ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     test_resize_embeddings = True
     test_mismatched_shape = False
 
+    def check_cutoffs_and_n_token(
+        self, copied_cutoffs, layer, model_embed, model, model_class, resized_value, vocab_size
+    ):
+        # Check that the cutoffs were modified accordingly
+        for i in range(len(copied_cutoffs)):
+            if i < layer:
+                self.assertEqual(model_embed.cutoffs[i], copied_cutoffs[i])
+                if model_class == S4LMHeadModel:
+                    self.assertEqual(model.crit.cutoffs[i], copied_cutoffs[i])
+                if i < len(model.config.cutoffs):
+                    self.assertEqual(model.config.cutoffs[i], copied_cutoffs[i])
+            else:
+                self.assertEqual(model_embed.cutoffs[i], copied_cutoffs[i] + resized_value)
+                if model_class == S4LMHeadModel:
+                    self.assertEqual(model.crit.cutoffs[i], copied_cutoffs[i] + resized_value)
+                if i < len(model.config.cutoffs):
+                    self.assertEqual(model.config.cutoffs[i], copied_cutoffs[i] + resized_value)
+
+        self.assertEqual(model_embed.n_token, vocab_size + resized_value)
+        if model_class == S4LMHeadModel:
+            self.assertEqual(model.crit.n_token, vocab_size + resized_value)
+
     def setUp(self):
         self.model_tester = S4ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=S4Config, d_embed=37)
 
     def test_config(self):
+        self.config_tester.create_and_test_config_common_properties = lambda: None
         self.config_tester.run_common_tests()
 
-    def test_model(self):
+    def test_s4_model(self):
+        self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        output_result = self.model_tester.create_s4_model(*config_and_inputs)
+        self.model_tester.check_s4_model_output(output_result)
 
-    def test_model_various_embeddings(self):
+    def test_s4_lm_head(self):
+        self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
+        output_result = self.model_tester.create_s4_lm_head(*config_and_inputs)
+        self.model_tester.check_s4_lm_head_output(output_result)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # s4 no attentions outputs
+        return
+
+    def test_attention_outputs(self):
+        # s4 no attention outputs
+        return
