@@ -770,25 +770,27 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         return embeddings
 
     def _calc_visual_bbox(self, image_feature_pool_shape, bbox, device, final_shape):
-        visual_bbox_x = (
+        visual_bbox_x = torch.div(
             torch.arange(
                 0,
                 1000 * (image_feature_pool_shape[1] + 1),
                 1000,
                 device=device,
                 dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[1]
+            ),
+            self.config.image_feature_pool_shape[1],
+            rounding_mode="floor",
         )
-        visual_bbox_y = (
+        visual_bbox_y = torch.div(
             torch.arange(
                 0,
                 1000 * (self.config.image_feature_pool_shape[0] + 1),
                 1000,
                 device=device,
                 dtype=bbox.dtype,
-            )
-            // self.config.image_feature_pool_shape[0]
+            ),
+            self.config.image_feature_pool_shape[0],
+            rounding_mode="floor",
         )
         visual_bbox = torch.stack(
             [
