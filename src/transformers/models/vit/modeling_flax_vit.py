@@ -406,6 +406,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
 
     config_class = ViTConfig
     base_model_prefix = "vit"
+    main_input_name = "pixel_values"
     module_class: nn.Module = None
 
     def __init__(self, config: ViTConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):

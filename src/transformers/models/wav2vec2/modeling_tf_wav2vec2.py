@@ -1256,6 +1256,7 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
 
     config_class = Wav2Vec2Config
     base_model_prefix = "wav2vec2"
+    main_input_name = "input_values"
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:

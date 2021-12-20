@@ -776,6 +776,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
     config_class = HubertConfig
     base_model_prefix = "hubert"
+    main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 

@@ -283,6 +283,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
     """
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
+    main_input_name = "pixel_values"
     module_class = FlaxVisionEncoderDecoderModule
 
     def __init__(

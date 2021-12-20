@@ -523,6 +523,7 @@ class BeitPreTrainedModel(PreTrainedModel):
 
     config_class = BeitConfig
     base_model_prefix = "beit"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
