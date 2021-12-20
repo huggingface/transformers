@@ -573,7 +573,7 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
-        logits_processor: Optional[StoppingCriteriaList],
+        logits_processor: Optional[LogitsProcessorList],
     ) -> LogitsProcessorList:
         """
         This class returns a :class:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -795,11 +795,11 @@ class GenerationMixin:
             logits_processor (:obj:`LogitsProcessorList`, `optional`):
                  Custom logits processors that complement the default logits processors built from arguments and a
                  model's config. If a logit processor is passed that is already created with the arguments or a model's
-                 config an error is thrown.
+                 config an error is thrown. This feature is intended for advanced users.
             stopping_criteria (:obj:`StoppingCriteriaList`, `optional`):
                  Custom stopping criteria that complement the default stopping criteria built from arguments and a
                  model's config. If a stopping criteria is passed that is already created with the arguments or a
-                 model's config an error is thrown.
+                 model's config an error is thrown. This feature is intended for advanced users.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more details.
