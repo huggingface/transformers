@@ -706,7 +706,7 @@ def main():
                         predicted_sequence[span[0] + 1 : span[1]] = [label] * (span[1] - span[0] - 1)
 
             true_predictions.append(predicted_sequence)
-            true_labels.append([label_list[tag_id] for tag_id in ner_tags])
+            true_labels.append([label_list[tag_id] for tag_id in tags])
         
         return true_predictions, true_labels
 
