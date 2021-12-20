@@ -123,17 +123,11 @@ class ViltEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def visual_embed(self, pixel_values, max_image_length=200):
+    def visual_embed(self, pixel_values, pixel_mask, max_image_length=200):
         _, _, ph, pw = self.patch_embeddings.projection.weight.shape
 
-        print("Shape of pixel values:", pixel_values.shape)
-
-        print("Patch height:", ph)
-        print("Patch width:", pw)
-
         x = self.patch_embeddings(pixel_values)
-        print("Shape of patch embeddings:", x.shape)
-        x_mask = (pixel_values.sum(dim=1) != 0).float()[:, None, :, :]
+        x_mask = pixel_mask[:, None, :, :].float()
         x_mask = nn.functional.interpolate(x_mask, size=(x.shape[2], x.shape[3])).long()
         x_h = x_mask[:, 0].sum(dim=1)[:, 0]
         x_w = x_mask[:, 0].sum(dim=2)[:, 0]
@@ -204,8 +198,6 @@ class ViltEmbeddings(nn.Module):
                     )
                 )
 
-        print("Length of select:", len(select))
-
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(B, -1, C)
         x_mask = x_mask[select[:, 0], select[:, 1]].view(B, -1)
@@ -222,7 +214,7 @@ class ViltEmbeddings(nn.Module):
 
         return x, x_mask, (patch_index, (H, W))
 
-    def forward(self, input_ids, attention_mask, token_type_ids, pixel_values, inputs_embeds):
+    def forward(self, input_ids, attention_mask, token_type_ids, pixel_values, pixel_mask, inputs_embeds):
         # PART 1: text embeddings
         text_embeds = self.text_embeddings(
             input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -230,14 +222,8 @@ class ViltEmbeddings(nn.Module):
 
         # PART 2: patch embeddings (with interpolated position encodings)
         image_embeds, image_masks, patch_index = self.visual_embed(
-            pixel_values, max_image_length=self.config.max_image_length
+            pixel_values, pixel_mask, max_image_length=self.config.max_image_length
         )
-
-        print("Shape of text embeddings:", text_embeds.shape)
-        print("Shape of image embeddings:", image_embeds.shape)
-
-        print("Patch index:", patch_index[0].shape)
-        print(patch_index[0][0, 0, :])
 
         # PART 3: add token type embeddings
         # 0 indicates text, 1 indicates patch
@@ -646,6 +632,13 @@ VILT_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using :class:`~transformers.ViltFeatureExtractor`. See
             :meth:`transformers.ViltFeatureExtractor.__call__` for details.
 
+        pixel_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
+
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
@@ -703,6 +696,7 @@ class ViltModel(ViltPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         pixel_values=None,
+        pixel_mask=None,
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
@@ -752,6 +746,10 @@ class ViltModel(ViltPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        batch_size, num_channels, height, width = pixel_values.shape
+        if pixel_mask is None:
+            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -760,7 +758,7 @@ class ViltModel(ViltPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output, attention_mask = self.embeddings(
-            input_ids, attention_mask, token_type_ids, pixel_values, inputs_embeds
+            input_ids, attention_mask, token_type_ids, pixel_values, pixel_mask, inputs_embeds
         )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
@@ -837,6 +835,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         pixel_values=None,
+        pixel_mask=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -862,6 +861,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -974,6 +974,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         pixel_values=None,
+        pixel_mask=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -1017,6 +1018,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1072,6 +1074,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         pixel_values=None,
+        pixel_mask=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -1095,6 +1098,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,

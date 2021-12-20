@@ -151,8 +151,10 @@ class ViltProcessor:
             return_tensors=return_tensors,
             **kwargs,
         )
-        # add pixel_values
-        encoding["pixel_values"] = self.feature_extractor(images, return_tensors=return_tensors).pixel_values
+        # add pixel_values + pixel_mask
+        encoding_feature_extractor = self.feature_extractor(images, return_tensors=return_tensors)
+        encoding["pixel_values"] = encoding_feature_extractor.pixel_values
+        encoding["pixel_mask"] = encoding_feature_extractor.pixel_mask
 
         return encoding
 

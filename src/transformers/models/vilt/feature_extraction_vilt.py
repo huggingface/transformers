@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for ViLT."""
 
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -60,7 +60,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
         self,
@@ -103,8 +103,20 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return self.resize(image, size=(neww, newh), resample=resample)
 
+    def _max_by_axis(self, the_list):
+        # type: (List[List[int]]) -> List[int]
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
+        return maxes
+
     def __call__(
-        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
+        self,
+        images: ImageInput,
+        pad_and_return_pixel_mask: Optional[bool] = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
@@ -120,6 +132,14 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
+            pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to pad images up to the largest image in a batch and create a pixel mask.
+
+                If left to the default, will return a pixel mask that is:
+
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
+
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -133,6 +153,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`return_pixel_mask=True` or if
+              `"pixel_mask"` is in :obj:`self.model_input_names`).
         """
         # Input type checking for clearer error
         valid_images = False
@@ -167,8 +189,28 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
+        if pad_and_return_pixel_mask:
+            # pad images up to largest image in batch and create pixel_mask
+            max_size = self._max_by_axis([list(image.shape) for image in images])
+            c, h, w = max_size
+            padded_images = []
+            pixel_mask = []
+            for image in images:
+                # create padded image
+                padded_image = np.zeros((c, h, w), dtype=np.float32)
+                padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
+                padded_images.append(padded_image)
+                # create pixel mask
+                mask = np.zeros((h, w), dtype=np.int64)
+                mask[: image.shape[1], : image.shape[2]] = True
+                pixel_mask.append(mask)
+            images = padded_images
+
         # return as BatchFeature
-        data = {"pixel_values": images}
+        data = {}
+        data["pixel_values"] = images
+        if pad_and_return_pixel_mask:
+            data["pixel_mask"] = pixel_mask
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
