@@ -213,7 +213,8 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(post_processor_state["trim_offsets"], trim_offsets)
 
     def test_offsets_mapping_with_different_add_prefix_space_and_trim_space_arguments(self):
-        # Test which aims to verify that the offsets are well adapted to the argument `add_prefix_space`.
+        # Test which aims to verify that the offsets are well adapted to the argument `add_prefix_space` and
+        # `trim_offsets`
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 text_of_1_token = "hello"  # `hello` is a token in the vocabulary of `pretrained_name`
@@ -261,7 +262,6 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 text = f" {text}"
 
-                # The result is not what I expect
                 # tokenizer_r = self.rust_tokenizer_class.from_pretrained(
                 #     pretrained_name, use_fast=True, add_prefix_space=True, trim_offsets=True
                 # )
