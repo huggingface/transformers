@@ -25,8 +25,6 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from scipy import special as scipy_special
-
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -34,6 +32,7 @@ from ...file_utils import (
     is_einops_available,
     is_opt_einsum_available,
     is_pykeops_available,
+    is_scipy_available,
     replace_return_docstrings,
 )
 from ...modeling_outputs import ModelOutput
@@ -70,6 +69,15 @@ if is_einops_available():
         logger.error(
             "S4 models are not usable since `einops` can't be loaded. "
             "Please try to reinstall it following the instructions here: https://einops.rocks/#installation"
+        )
+
+if is_scipy_available():
+    try:
+        from scipy import special as scipy_special
+    except ImportError:
+        logger.error(
+            "S4 models are not usable since `scipy` can't be loaded. "
+            "Please try to reinstall it following the instructions here: https://www.scipy.org/install.html"
         )
 
 

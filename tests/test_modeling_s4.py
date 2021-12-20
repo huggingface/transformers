@@ -19,7 +19,14 @@ import random
 import unittest
 
 from transformers import S4Config, is_torch_available
-from transformers.testing_utils import require_einops, require_opt_einsum, require_pykeops, require_torch, torch_device
+from transformers.testing_utils import (
+    require_einops,
+    require_opt_einsum,
+    require_pykeops,
+    require_scipy,
+    require_torch,
+    torch_device,
+)
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -180,6 +187,7 @@ class S4ModelTester:
 @require_einops
 @require_opt_einsum
 @require_pykeops
+@require_scipy
 class S4ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (

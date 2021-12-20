@@ -47,6 +47,7 @@ from .file_utils import (
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_scatter_available,
+    is_scipy_available,
     is_sentencepiece_available,
     is_soundfile_availble,
     is_tensorflow_probability_available,
@@ -283,6 +284,19 @@ def require_torch(test_case):
     """
     if not is_torch_available():
         return unittest.skip("test requires PyTorch")(test_case)
+    else:
+        return test_case
+
+
+def require_scipy(test_case):
+    """
+    Decorator marking a test that requires SciPy.
+
+    These tests are skipped when SciPy isn't installed.
+
+    """
+    if not is_scipy_available():
+        return unittest.skip("test requires SciPy")(test_case)
     else:
         return test_case
 
