@@ -96,7 +96,10 @@ class ViltFeatureExtractionTester(unittest.TestCase):
                 neww = neww * scale
 
             newh, neww = int(newh + 0.5), int(neww + 0.5)
-            expected_height, expected_width = newh // self.size_divisor * self.size_divisor, neww // self.size_divisor * self.size_divisor
+            expected_height, expected_width = (
+                newh // self.size_divisor * self.size_divisor,
+                neww // self.size_divisor * self.size_divisor,
+            )
 
         else:
             expected_values = []
@@ -144,7 +147,7 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        
+
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
         self.assertEqual(
             encoded_images.shape,
@@ -160,8 +163,8 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                expected_height, 
-                expected_width
+                expected_height,
+                expected_width,
             ),
         )
 
@@ -175,7 +178,7 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        
+
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
         self.assertEqual(
             encoded_images.shape,
@@ -184,15 +187,15 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test batched
         encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        
+
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
         self.assertEqual(
             encoded_images.shape,
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                expected_height, 
-                expected_width
+                expected_height,
+                expected_width,
             ),
         )
 
@@ -206,7 +209,7 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        
+
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
         self.assertEqual(
             encoded_images.shape,
@@ -215,18 +218,18 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 
         # Test batched
         encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        
+
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs, batched=True)
         self.assertEqual(
             encoded_images.shape,
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                expected_height, 
-                expected_width
+                expected_height,
+                expected_width,
             ),
         )
-    
+
     def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)

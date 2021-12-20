@@ -100,9 +100,9 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             image (:obj:`PIL.Image`):
                 The image to resize.
             shorter (:obj:`int`, `optional`, defaults to :obj:`800`):
-                The shorter side of the image.
+                The size to which to resize the shorter side of the image.
             longer (:obj:`int`, `optional`, defaults to :obj:`1333`):
-                The longer side of the image.
+                The size by which to limit the longer side of the image, while preserving the aspect ratio.
             size_divisor (:obj:`int`, `optional`, defaults to :obj:`32`):
                 The size by which both the height and the width must be divisible.
             resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):

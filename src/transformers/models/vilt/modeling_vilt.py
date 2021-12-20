@@ -839,6 +839,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        itm_labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -848,6 +849,8 @@ class ViltForPreTraining(ViltPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        itm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image text matching loss. Indices should be in ``[0, 1]``.
 
         Returns:
 
@@ -873,23 +876,27 @@ class ViltForPreTraining(ViltPreTrainedModel):
         # split up final hidden states into text and image features
         text_seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
         text_features, _ = (sequence_output[:, :text_seq_len], sequence_output[:, text_seq_len:])
-        mlm_logits = self.mlm_score(text_features)
 
-        total_loss = None
+        mlm_logits = self.mlm_score(text_features)
+        itm_logits = self.itm_score(pooled_output)
+
+        loss = None
+        loss_fct = CrossEntropyLoss()
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-            # TODO: add itm loss
-            total_loss = masked_lm_loss
+            loss = masked_lm_loss
+        if itm_labels is not None:
+            itm_loss = loss_fct(itm_logits, itm_labels)
+            loss = itm_loss if loss is None else loss + itm_loss
 
         if not return_dict:
-            output = (mlm_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
+            output = (mlm_logits, itm_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return ViltForPreTrainingOutput(
-            loss=total_loss,
+            loss=loss,
             mlm_logits=mlm_logits,
-            itm_logits=None,
+            itm_logits=itm_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
