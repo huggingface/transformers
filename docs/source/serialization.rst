@@ -431,7 +431,7 @@ Using the traced model for inference is as simple as using its ``__call__`` dund
 
     traced_model(tokens_tensor, segments_tensors)                   
 
-Deploying HuggingFace TorchScript models on AWS using the Neuron SDK
+Converting HuggingFace Transformers to AWS Neuron compatible models
 -----------------------------------------------------------------------------------------------------------------------
 
 AWS introduced the `Amazon EC2 Inf1 <https://aws.amazon.com/ec2/instance-types/inf1/>`_ instance family for low cost,
