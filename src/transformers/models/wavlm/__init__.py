@@ -27,8 +27,10 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_wavlm"] = [
         "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "WavLMForAudioFrameClassification",
         "WavLMForCTC",
         "WavLMForSequenceClassification",
+        "WavLMForXVector",
         "WavLMModel",
         "WavLMPreTrainedModel",
     ]
@@ -39,8 +41,10 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WavLMForAudioFrameClassification,
             WavLMForCTC,
             WavLMForSequenceClassification,
+            WavLMForXVector,
             WavLMModel,
             WavLMPreTrainedModel,
         )
