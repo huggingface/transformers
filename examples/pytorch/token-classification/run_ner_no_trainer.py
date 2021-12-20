@@ -705,8 +705,10 @@ def main():
                         predicted_sequence[span[0] + 1 : span[1]] = [label] * (span[1] - span[0] - 1)
 
             true_predictions.append(predicted_sequence)
+
+        refs = [label_list[tag_id] for tag_id in ner_tags]
         
-        return true_predictions
+        return true_predictions, refs
 
     def get_labels(predictions, references):
         # Transform predictions and references tensos to numpy arrays
@@ -785,7 +787,7 @@ def main():
         model.eval()
         for step, batch in enumerate(eval_dataloader):
             if config.model_type == "luke":
-                refs = batch.pop("ner_tags")
+                ner_tags = batch.pop("ner_tags")
                 original_entity_spans = batch.pop("original_entity_spans")
             with torch.no_grad():
                 outputs = model(**batch)
@@ -798,7 +800,7 @@ def main():
             predictions_gathered = accelerator.gather(predictions)
             labels_gathered = accelerator.gather(labels)
             if config.model_type == "luke":
-                preds = get_luke_labels(outputs, refs, original_entity_spans)
+                preds, refs = get_luke_labels(outputs, ner_tags, original_entity_spans)
             else:
                 preds, refs = get_labels(predictions_gathered, labels_gathered)
             metric.add_batch(
