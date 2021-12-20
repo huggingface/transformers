@@ -13,6 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .config import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, OnnxConfigWithPast, PatchingSpec
-from .convert import export, validate_model_outputs
-from .utils import ParameterFormat, compute_serialized_parameters_size
+from typing import TYPE_CHECKING
+
+from ..file_utils import _LazyModule
+
+
+_import_structure = {
+    "config": ["EXTERNAL_DATA_FORMAT_SIZE_LIMIT", "OnnxConfig", "OnnxConfigWithPast", "PatchingSpec"],
+    "convert": ["export", "validate_model_outputs"],
+    "utils": ["ParameterFormat", "compute_serialized_parameters_size"],
+}
+
+
+if TYPE_CHECKING:
+    from .config import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, OnnxConfigWithPast, PatchingSpec
+    from .convert import export, validate_model_outputs
+    from .utils import ParameterFormat, compute_serialized_parameters_size
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

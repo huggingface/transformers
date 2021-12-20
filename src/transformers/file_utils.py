@@ -2337,6 +2337,7 @@ class _LazyModule(ModuleType):
         return result
 
     def __getattr__(self, name: str) -> Any:
+        print(f"Requesting {name} from {self.__name__}")
         if name in self._objects:
             return self._objects[name]
         if name in self._modules:
@@ -2351,6 +2352,7 @@ class _LazyModule(ModuleType):
         return value
 
     def _get_module(self, module_name: str):
+        print(f"Importing {self.__name__}.{module_name}")
         try:
             return importlib.import_module("." + module_name, self.__name__)
         except Exception as e:
