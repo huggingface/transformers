@@ -484,6 +484,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
+        ("mluke", "LukeForEntitySpanClassification"),
+        ("luke", "LukeForEntitySpanClassification"),
     ]
 )
 

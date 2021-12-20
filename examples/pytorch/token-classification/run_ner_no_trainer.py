@@ -24,10 +24,11 @@ import math
 import os
 import random
 from pathlib import Path
+import unicodedata
 
 import datasets
 import torch
-from datasets import ClassLabel, load_dataset, load_metric
+from datasets import ClassLabel, load_dataset, load_metric, concatenate_datasets
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -240,9 +241,11 @@ def main():
     # accelerator.is_local_main_process is only True for one process per machine.
     logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
     if accelerator.is_local_main_process:
+        import datasets
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
     else:
+        import datasets
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
@@ -273,7 +276,17 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+        dataset_configs = args.dataset_config_name.split(",")
+        
+        if len(dataset_configs) > 1:
+            datasets = []
+
+            for dataset_config_name in args.dataset_config_name.split(","):
+                datasets.append(load_dataset(args.dataset_name, dataset_config_name))
+            
+            raw_datasets = concatenate_datasets(datasets)
+        else:
+            raw_datasets = load_dataset(args.dataset_name, dataset_configs[0])
     else:
         data_files = {}
         if args.train_file is not None:
@@ -350,6 +363,8 @@ def main():
 
     if config.model_type in {"gpt2", "roberta"}:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
+    elif config.model_type in {"luke"}:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=False, task="entity_span_classification")
     else:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
 
@@ -394,41 +409,166 @@ def main():
     padding = "max_length" if args.pad_to_max_length else False
 
     # Tokenize all texts and align the labels with them.
+    def add_entity_spans(examples):
+        return []
+    
+    def compute_sentence_boundaries(examples):
+        sentence_boundaries = []
+        
+        for tokens in examples["tokens"]:
+            sentence_boundaries.append([0, len(tokens)])
+        
+        examples["sentence_boundaries"] = sentence_boundaries
+        
+        return examples
+
+    if config.model_type == "luke":
+        with accelerator.main_process_first():
+            raw_datasets = raw_datasets.map(
+                compute_sentence_boundaries,
+                batched=True,
+                desc="Adding sentence boundaries",
+            )
+
+    def is_punctuation(char):
+        cp = ord(char)
+        if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
+            return True
+        cat = unicodedata.category(char)
+        if cat.startswith("P"):
+            return True
+        return False
+
+    def compute_entity_spans(examples):
+        all_entity_spans = []
+        texts = []
+        all_labels_entity_spans = []
+        all_original_entity_spans = []
+
+        for labels, tokens, sentence_boundaries in zip(examples["ner_tags"], examples["tokens"], examples["sentence_boundaries"]):
+            subword_lengths = [len(tokenizer.tokenize(token)) for token in tokens]
+            total_subword_length = sum(subword_lengths)
+            _, context_end = sentence_boundaries
+        
+            if total_subword_length > args.max_length - 2:
+                cur_length = sum(subword_lengths[:context_end])
+                idx = context_end - 1
+
+                while cur_length > args.max_length - 2:
+                    cur_length -= subword_lengths[idx]
+                    context_end -= 1
+                    idx -= 1
+
+            text = ""
+            sentence_words = tokens[:context_end]
+            sentence_subword_lengths = subword_lengths[:context_end]
+            word_start_char_positions = []
+            word_end_char_positions = []
+            labels_positions = {}
+
+            for word, label in zip(sentence_words, labels):
+                if word[0] == "'" or (len(word) == 1 and is_punctuation(word)):
+                    text = text.rstrip()
+                
+                word_start_char_positions.append(len(text))
+                text += word
+                word_end_char_positions.append(len(text))
+                text += " "
+                labels_positions[(word_start_char_positions[-1], word_end_char_positions[-1])] = label
+
+            text = text.rstrip()
+            texts.append(text)
+            entity_spans = []
+            labels_entity_spans = []
+            original_entity_spans = []
+
+            for word_start in range(len(sentence_words)):
+                for word_end in range(word_start, len(sentence_words)):
+                    if sum(sentence_subword_lengths[word_start:word_end]) <= tokenizer.max_mention_length and len(entity_spans) < tokenizer.max_entity_length:
+                        entity_spans.append(
+                            (word_start_char_positions[word_start], word_end_char_positions[word_end])
+                        )
+                        original_entity_spans.append(
+                            (word_start, word_end + 1)
+                        )
+                        if (word_start_char_positions[word_start], word_end_char_positions[word_end]) in labels_positions:
+                            labels_entity_spans.append(labels_positions[(word_start_char_positions[word_start], word_end_char_positions[word_end])])
+                        else:
+                            labels_entity_spans.append(0)
+            
+            all_entity_spans.append(entity_spans)
+            all_labels_entity_spans.append(labels_entity_spans)
+            all_original_entity_spans.append(original_entity_spans)
+                
+        examples["entity_spans"] = all_entity_spans
+        examples["text"] = texts
+        examples["labels_entity_spans"] = all_labels_entity_spans
+        examples["original_entity_spans"] = all_original_entity_spans
+
+        return examples
+
+    if config.model_type == "luke":
+        with accelerator.main_process_first():
+            raw_datasets = raw_datasets.map(
+                compute_entity_spans,
+                batched=True,
+                desc="Adding sentence spans",
+            )
 
     def tokenize_and_align_labels(examples):
-        tokenized_inputs = tokenizer(
-            examples[text_column_name],
-            max_length=args.max_length,
-            padding=padding,
-            truncation=True,
-            # We use this argument because the texts in our dataset are lists of words (with a label for each word).
-            is_split_into_words=True,
-        )
+        if config.model_type == "luke":
+            entity_spans = []
 
-        labels = []
-        for i, label in enumerate(examples[label_column_name]):
-            word_ids = tokenized_inputs.word_ids(batch_index=i)
-            previous_word_idx = None
-            label_ids = []
-            for word_idx in word_ids:
-                # Special tokens have a word id that is None. We set the label to -100 so they are automatically
-                # ignored in the loss function.
-                if word_idx is None:
-                    label_ids.append(-100)
-                # We set the label for the first token of each word.
-                elif word_idx != previous_word_idx:
-                    label_ids.append(label_to_id[label[word_idx]])
-                # For the other tokens in a word, we set the label to either the current label or -100, depending on
-                # the label_all_tokens flag.
-                else:
-                    if args.label_all_tokens:
-                        label_ids.append(b_to_i_label[label_to_id[label[word_idx]]])
-                    else:
+            for v in examples["entity_spans"]:
+                entity_spans.append(list(map(tuple, v)))
+            
+            tokenized_inputs = tokenizer(
+                examples["text"],
+                entity_spans=entity_spans,
+                max_length=args.max_length,
+                padding=padding,
+                truncation=True,
+            )
+        else:
+            tokenized_inputs = tokenizer(
+                examples[text_column_name],
+                max_length=args.max_length,
+                padding=padding,
+                truncation=True,
+                # We use this argument because the texts in our dataset are lists of words (with a label for each word).
+                is_split_into_words=True,
+            )
+
+        if config.model_type == "luke":
+            tokenized_inputs["labels"] = examples["labels_entity_spans"]
+            tokenized_inputs["original_entity_spans"] = examples["original_entity_spans"]
+            tokenized_inputs["ner_tags"] = [ex[:tokenizer.max_entity_length] for ex in examples["ner_tags"]]
+        else:
+            labels = []
+            for i, label in enumerate(examples[label_column_name]):
+                word_ids = tokenized_inputs.word_ids(batch_index=i)
+                previous_word_idx = None
+                label_ids = []
+                for word_idx in word_ids:
+                    # Special tokens have a word id that is None. We set the label to -100 so they are automatically
+                    # ignored in the loss function.
+                    if word_idx is None:
                         label_ids.append(-100)
-                previous_word_idx = word_idx
+                    # We set the label for the first token of each word.
+                    elif word_idx != previous_word_idx:
+                        label_ids.append(label_to_id[label[word_idx]])
+                    # For the other tokens in a word, we set the label to either the current label or -100, depending on
+                    # the label_all_tokens flag.
+                    else:
+                        if args.label_all_tokens:
+                            label_ids.append(b_to_i_label[label_to_id[label[word_idx]]])
+                        else:
+                            label_ids.append(-100)
+                    previous_word_idx = word_idx
 
-            labels.append(label_ids)
-        tokenized_inputs["labels"] = labels
+                labels.append(label_ids)
+            tokenized_inputs["labels"] = labels
+        
         return tokenized_inputs
 
     with accelerator.main_process_first():
@@ -446,11 +586,47 @@ def main():
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
+    def luke_collate_fn(batch):
+        def create_padded_sequence(target, padding_value):
+            if isinstance(target, str):
+                tensors = [torch.tensor(o[target], dtype=torch.long) for o in batch]
+            else:
+                tensors = [torch.tensor(o, dtype=torch.long) for o in target]
+            return torch.nn.utils.rnn.pad_sequence(tensors, batch_first=True, padding_value=padding_value)
+        
+        def padding_tensor(sequences):
+            num = len(sequences)
+            out_dims = (num, tokenizer.max_entity_length)
+            out_tensor = sequences[0].data.new(*out_dims).fill_(0)
+            for i, tensor in enumerate(sequences):
+                length = tensor.size(0)
+                out_tensor[i, :length] = tensor
+                
+            return out_tensor
+
+        ret = dict(
+            input_ids=create_padded_sequence("input_ids", tokenizer.pad_token_id),
+            attention_mask=create_padded_sequence("attention_mask", 0),
+            entity_start_positions=create_padded_sequence("entity_start_positions", 0),
+            entity_end_positions=create_padded_sequence("entity_end_positions", 0),
+            entity_ids=create_padded_sequence("entity_ids", 0),
+            entity_attention_mask=create_padded_sequence("entity_attention_mask", 0),
+            entity_position_ids=create_padded_sequence("entity_position_ids", -1),
+        )
+        ret["labels"] = padding_tensor(create_padded_sequence("labels", -100))
+        ret["original_entity_spans"] = [torch.tensor(o["original_entity_spans"], dtype=torch.long) for o in batch]
+        ret["ner_tags"] = [torch.tensor(o["ner_tags"], dtype=torch.long) for o in batch]
+
+        return ret
+
     # DataLoaders creation:
     if args.pad_to_max_length:
         # If padding was already done ot max length, we use the default data collator that will just convert everything
         # to tensors.
-        data_collator = default_data_collator
+        if config.model_type == "luke":
+            data_collator = luke_collate_fn
+        else:
+            data_collator = default_data_collator
     else:
         # Otherwise, `DataCollatorForTokenClassification` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
@@ -507,6 +683,30 @@ def main():
 
     # Metrics
     metric = load_metric("seqeval")
+
+    def get_luke_labels(outputs, ner_tags, original_entity_spans):
+        true_predictions = []
+    
+        for output, original_spans, tags in zip(outputs.logits, original_entity_spans, ner_tags):
+            max_indices = torch.argmax(output, axis=1)
+            max_logits = torch.max(output, axis=1).values
+            predictions = []
+
+            for logit, index, span in zip(max_logits, max_indices, original_spans):
+                if index != 0:
+                    predictions.append((logit, span, label_list[index]))
+            
+            predicted_sequence = [label_list[0]] * len(tags)
+
+            for _, span, label in sorted(predictions, key=lambda o: o[0], reverse=True):
+                if all([o == "O" for o in predicted_sequence[span[0] : span[1]]]):
+                    predicted_sequence[span[0]] = label
+                    if span[1] - span[0] > 1:
+                        predicted_sequence[span[0] + 1 : span[1]] = [label] * (span[1] - span[0] - 1)
+
+            true_predictions.append(predicted_sequence)
+        
+        return true_predictions
 
     def get_labels(predictions, references):
         # Transform predictions and references tensos to numpy arrays
@@ -565,6 +765,9 @@ def main():
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
+            if config.model_type == "luke":
+                ner_tags = batch.pop("ner_tags")
+                original_entity_spans = batch.pop("original_entity_spans")
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
@@ -581,6 +784,9 @@ def main():
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
+            if config.model_type == "luke":
+                refs = batch.pop("ner_tags")
+                original_entity_spans = batch.pop("original_entity_spans")
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
@@ -591,7 +797,10 @@ def main():
 
             predictions_gathered = accelerator.gather(predictions)
             labels_gathered = accelerator.gather(labels)
-            preds, refs = get_labels(predictions_gathered, labels_gathered)
+            if config.model_type == "luke":
+                preds = get_luke_labels(outputs, refs, original_entity_spans)
+            else:
+                preds, refs = get_labels(predictions_gathered, labels_gathered)
             metric.add_batch(
                 predictions=preds,
                 references=refs,
