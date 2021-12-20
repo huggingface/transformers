@@ -465,7 +465,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
             )
 
         EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
-            [[[0.0554, 0.1138], [0.0555, 0.1144]], [[0.0200, 0.1240], [0.0059, 0.0607]]]
+            [[[0.0577, 0.1161], [0.0579, 0.1165]], [[0.0199, 0.1237], [0.0059, 0.0605]]]
         )
         self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
 
@@ -488,6 +488,6 @@ class WavLMModelIntegrationTest(unittest.TestCase):
             )
 
         EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
-            [[[0.2132, 0.0486], [0.2119, 0.0571]], [[0.1386, 0.1837], [0.2455, 0.0614]]]
+            [[[0.1612, 0.4314], [0.1690, 0.4344]], [[0.2086, 0.1396], [0.3014, 0.0903]]]
         )
         self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=1e-2))
