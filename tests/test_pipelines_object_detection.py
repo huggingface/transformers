@@ -25,7 +25,6 @@ from transformers import (
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
-    require_datasets,
     require_tf,
     require_timm,
     require_torch,
@@ -57,7 +56,6 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 
-    @require_datasets
     def run_pipeline_test(self, object_detector, examples):
         outputs = object_detector("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
 

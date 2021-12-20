@@ -162,6 +162,29 @@ Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
 ## Software
 
+
+### Anatomy of Model's Operations
+
+Transformers architecture includes 3 main groups of operations grouped below by compute-intensity.
+
+1. **Tensor Contractions**
+
+    Linear layers and components of Multi-Head Attention all do batched **matrix-matrix multiplications**. These operations are the most compute-intensive part of training a transformer.
+
+2. **Statistical Normalizations**
+
+    Softmax and layer normalization are less compute-intensive than tensor contractions, and involve one or more **reduction operations**, the result of which is then applied via a map.
+
+3. **Element-wise Operators**
+
+    These are the remaining operators: **biases, dropout, activations, and residual connections**. These are the least compute-intensive operations.
+
+This knowledge can be helpful to know when analyzing performance bottlenecks.
+
+This summary is derived from [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+
+
+
 ### Anatomy of Model's Memory
 
 The components on GPU memory are the following:
@@ -225,7 +248,7 @@ Here are the commonly used floating point data types choice of which impacts bot
 
 Here is a diagram that shows how these data types correlate to each other.
 
-![data types](/imgs/tf32-bf16-fp16-fp32.png)
+![data types](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/tf32-bf16-fp16-fp32.png)
 
 (source: [NVIDIA Blog](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/))
 
@@ -501,7 +524,7 @@ Since it has been discovered that more parameters lead to better performance, th
 
 In this approach every other FFN layer is replaced with a MoE Layer which consists of many experts, with a gated function that trains each expert in a balanced way depending on the input token's position in a sequence.
 
-![MoE Transformer 2x block](/imgs/perf-moe-transformer.png)
+![MoE Transformer 2x block](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perf-moe-transformer.png)
 
 (source: [GLAM](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html))
 
