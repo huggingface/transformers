@@ -301,3 +301,32 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     encoding.offset_mapping[1],
                     (1 + len(text_of_1_token), 1 + len(text_of_1_token) + 1 + len(text_of_1_token)),
                 )
+
+    def test_offsets_mapping_with_different_add_prefix_space_and_trim_space_arguments_with_pre_tokenized_text(self):
+        # Test which aims to verify that the offsets are well adapted to the argument `add_prefix_space` and
+        # `trim_offsets`
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                text_of_1_token = "hello"  # `hello` is a token in the vocabulary of `pretrained_name`
+
+                words_list = [text_of_1_token, text_of_1_token, f" {text_of_1_token}"]
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, use_fast=True, add_prefix_space=True, trim_offsets=True
+                )
+                encoding = tokenizer_r(
+                    words_list, return_offsets_mapping=True, add_special_tokens=False, is_split_into_words=True
+                )
+                self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
+                self.assertEqual(encoding.offset_mapping[1], (0, len(text_of_1_token)))
+                self.assertEqual(encoding.offset_mapping[2], (1, 1 + len(text_of_1_token)))
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, use_fast=True, add_prefix_space=True, trim_offsets=False
+                )
+                encoding = tokenizer_r(
+                    words_list, return_offsets_mapping=True, add_special_tokens=False, is_split_into_words=True
+                )
+                self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
+                self.assertEqual(encoding.offset_mapping[1], (0, len(text_of_1_token)))
+                self.assertEqual(encoding.offset_mapping[2], (0, 1 + len(text_of_1_token)))
