@@ -619,6 +619,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
 
     config_class = PerceiverConfig
     base_model_prefix = "perceiver"
+    main_input_name = "inputs"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -2128,7 +2129,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             # to get the indices for the unflattened array
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            indices = list(torch.from_numpy(x) for x in np.unravel_index(subsampled_points, self.output_index_dims))
+            indices = list(
+                torch.from_numpy(x) for x in np.unravel_index(subsampled_points.cpu(), self.output_index_dims)
+            )
             pos = torch.stack(indices, dim=1)
             batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]

@@ -784,6 +784,7 @@ class DetrClassificationHead(nn.Module):
 class DetrPreTrainedModel(PreTrainedModel):
     config_class = DetrConfig
     base_model_prefix = "model"
+    main_input_name = "pixel_values"
 
     def _init_weights(self, module):
         std = self.config.init_std

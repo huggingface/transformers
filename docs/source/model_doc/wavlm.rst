@@ -81,3 +81,17 @@ WavLMForSequenceClassification
 
 .. autoclass:: transformers.WavLMForSequenceClassification
     :members: forward
+
+
+WavLMForAudioFrameClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.WavLMForAudioFrameClassification
+    :members: forward
+
+
+WavLMForXVector
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.WavLMForXVector
+    :members: forward
