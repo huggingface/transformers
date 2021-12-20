@@ -455,10 +455,10 @@ Implications
 
 Transformers Models based on the `BERT (Bidirectional Encoder Representations from Transformers)
 <https://huggingface.co/bert-base-uncased>`_ architecture, or its variants such as `distilBERT
-<https://huggingface.co/transformers/v4.0.1/model_doc/distilbert.html>`_ and `roBERTa
-<https://huggingface.co/roberta-base>`_ will run best on Inf1 for non-generative tasks such as Extractive Question
-Answering, Sequence Classification, Token Classification. Alternatively, text generation tasks can be adapted to run on
-Inf1, according to this `AWS Neuron MarianMT tutorial
+<https://huggingface.co/docs/transformers/master/model_doc/distilbert>`_ and `roBERTa
+<https://huggingface.co/docs/transformers/master/model_doc/roberta>`_ will run best on Inf1 for non-generative tasks
+such as Extractive Question Answering, Sequence Classification, Token Classification. Alternatively, text generation
+tasks can be adapted to run on Inf1, according to this `AWS Neuron MarianMT tutorial
 <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html>`_. More
 information about models that can be converted out of the box on Inferentia can be found in the `Model Architecture Fit
 section of the Neuron documentation
@@ -471,9 +471,9 @@ Dependencies
 Using AWS Neuron to convert models requires the following dependencies and environment:
 
 * A `Neuron SDK environment
-   <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide>`_,
-   which comes pre-configured on `AWS Deep Learning AMI
-   <https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html>`_
+  <https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide>`_,
+  which comes pre-configured on `AWS Deep Learning AMI
+  <https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html>`_
 
 
 Converting a Model for AWS Neuron
