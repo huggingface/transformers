@@ -74,6 +74,12 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES",
         "AutoModelForNextSentencePrediction",
     ),
+    (
+        "audio-frame-classification",
+        "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES",
+        "AutoModelForAudioFrameClassification",
+    ),
+    ("audio-xvector", "MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "AutoModelForAudioXVector"),
 ]
 
 
