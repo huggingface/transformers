@@ -468,7 +468,7 @@ section of the Neuron documentation
 Dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Using AWS Neuron to run inference workloads requires the following dependencies and environment:
+Using AWS Neuron to convert models requires the following dependencies and environment:
 
 1. An `Amanzon EC2 Inf1 <https://aws.amazon.com/ec2/instance-types/inf1/>`_ instance in AWS cloud.
 2. A `Neuron SDK environment
