@@ -555,6 +555,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
 
     config_class = ViTConfig
     base_model_prefix = "vit"
+    main_input_name = "pixel_values"
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
