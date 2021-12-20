@@ -527,14 +527,14 @@ To summarize you can do:
 
 .. code-block:: python
 
-    TrainingArguments(..., deespeed="/path/to/ds_config.json")
+    TrainingArguments(..., deepspeed="/path/to/ds_config.json")
 
 or:
 
 .. code-block:: python
 
     ds_config_dict=dict(scheduler=scheduler_params, optimizer=optimizer_params)
-    TrainingArguments(..., deespeed=ds_config_dict)
+    TrainingArguments(..., deepspeed=ds_config_dict)
 
 
 
