@@ -539,6 +539,7 @@ class Speech2TextDecoderLayer(nn.Module):
 class Speech2TextPreTrainedModel(PreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
+    main_input_name = "input_features"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):

@@ -653,6 +653,7 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
 
 class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
     config_class = CLIPVisionConfig
+    main_input_name = "pixel_values"
     module_class: nn.Module = None
 
     def __init__(

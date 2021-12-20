@@ -590,6 +590,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
 
     config_class = BeitConfig
     base_model_prefix = "beit"
+    main_input_name = "pixel_values"
     module_class: nn.Module = None
 
     def __init__(self, config: BeitConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):

@@ -406,6 +406,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
 
     config_class = SegformerConfig
     base_model_prefix = "segformer"
+    main_input_name = "pixel_values"
 
     def _init_weights(self, module):
         """Initialize the weights"""

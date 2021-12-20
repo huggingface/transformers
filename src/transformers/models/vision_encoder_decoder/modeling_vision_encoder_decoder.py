@@ -160,6 +160,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     """
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
+    main_input_name = "pixel_values"
 
     def __init__(
         self,

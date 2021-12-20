@@ -619,6 +619,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
 
     config_class = PerceiverConfig
     base_model_prefix = "perceiver"
+    main_input_name = "inputs"
 
     def _init_weights(self, module):
         """Initialize the weights"""

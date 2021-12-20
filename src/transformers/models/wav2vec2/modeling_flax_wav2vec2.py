@@ -775,6 +775,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
 
     config_class = Wav2Vec2Config
     base_model_prefix: str = "wav2vec2"
+    main_input_name = "input_values"
     module_class: nn.Module = None
 
     def __init__(
