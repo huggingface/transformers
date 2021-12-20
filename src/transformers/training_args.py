@@ -348,6 +348,9 @@ class TrainingArguments:
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
+        ddp_bucket_cap_mb (:obj:`int`, `optional`):
+            When using distributed training, the value of the flag :obj:`bucket_cap_mb` passed to
+            :obj:`DistributedDataParallel`.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
         skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -662,6 +665,13 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "When using distributed training, the value of the flag `find_unused_parameters` passed to "
+            "`DistributedDataParallel`."
+        },
+    )
+    ddp_bucket_cap_mb: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "When using distributed training, the value of the flag `bucket_cap_mb` passed to "
             "`DistributedDataParallel`."
         },
     )

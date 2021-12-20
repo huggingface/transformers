@@ -23,7 +23,6 @@ from transformers import Wav2Vec2Config, is_flax_available
 from transformers.testing_utils import (
     is_librosa_available,
     is_pyctcdecode_available,
-    require_datasets,
     require_flax,
     require_librosa,
     require_pyctcdecode,
@@ -367,7 +366,6 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
 
 
 @require_flax
-@require_datasets
 @require_soundfile
 @slow
 class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):

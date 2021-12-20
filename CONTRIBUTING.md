@@ -220,7 +220,7 @@ Follow these steps to start contributing:
    some files when adding a new model, that you can run with
 
    ```bash
-   $ make repo-consitency
+   $ make repo-consistency
    ```
 
    To learn more about those checks and how to fix any issue with them, check out the
@@ -238,7 +238,7 @@ Follow these steps to start contributing:
    Then, make sure you have all the dependencies to be able to build the doc with:
    
    ```bash
-   $ pip install .[docs]
+   $ pip install ".[docs]"
    ```
 
    Finally run the following command from the root of the repository:
@@ -249,7 +249,7 @@ Follow these steps to start contributing:
 
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
    Markdown files with your favorite editor. You won't be able to see the final rendering on the website
-   before your PR is merged, we are actively working on adding a too for this.
+   before your PR is merged, we are actively working on adding a tool for this.
 
    Once you're happy with your changes, add changed files using `git add` and
    make a commit with `git commit` to record your changes locally:
