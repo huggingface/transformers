@@ -46,6 +46,7 @@ from transformers import (
     PretrainedConfig,
     SchedulerType,
     default_data_collator,
+    luke_entity_span_classification_data_collator,
     get_scheduler,
     set_seed,
 )
@@ -586,45 +587,12 @@ def main():
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
-    def luke_collate_fn(batch):
-        def create_padded_sequence(target, padding_value):
-            if isinstance(target, str):
-                tensors = [torch.tensor(o[target], dtype=torch.long) for o in batch]
-            else:
-                tensors = [torch.tensor(o, dtype=torch.long) for o in target]
-            return torch.nn.utils.rnn.pad_sequence(tensors, batch_first=True, padding_value=padding_value)
-        
-        def padding_tensor(sequences):
-            num = len(sequences)
-            out_dims = (num, tokenizer.max_entity_length)
-            out_tensor = sequences[0].data.new(*out_dims).fill_(0)
-            for i, tensor in enumerate(sequences):
-                length = tensor.size(0)
-                out_tensor[i, :length] = tensor
-                
-            return out_tensor
-
-        ret = dict(
-            input_ids=create_padded_sequence("input_ids", tokenizer.pad_token_id),
-            attention_mask=create_padded_sequence("attention_mask", 0),
-            entity_start_positions=create_padded_sequence("entity_start_positions", 0),
-            entity_end_positions=create_padded_sequence("entity_end_positions", 0),
-            entity_ids=create_padded_sequence("entity_ids", 0),
-            entity_attention_mask=create_padded_sequence("entity_attention_mask", 0),
-            entity_position_ids=create_padded_sequence("entity_position_ids", -1),
-        )
-        ret["labels"] = padding_tensor(create_padded_sequence("labels", -100))
-        ret["original_entity_spans"] = [torch.tensor(o["original_entity_spans"], dtype=torch.long) for o in batch]
-        ret["ner_tags"] = [torch.tensor(o["ner_tags"], dtype=torch.long) for o in batch]
-
-        return ret
-
     # DataLoaders creation:
     if args.pad_to_max_length:
         # If padding was already done ot max length, we use the default data collator that will just convert everything
         # to tensors.
         if config.model_type == "luke":
-            data_collator = luke_collate_fn
+            data_collator = luke_entity_span_classification_data_collator
         else:
             data_collator = default_data_collator
     else:
