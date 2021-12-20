@@ -758,29 +758,11 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                     loss.backward()
 
     @require_torch_multi_gpu
+    @unittest.skip(
+        reason="Perceiver does not work with data parallel (DP) because of a bug in PyTorch: https://github.com/pytorch/pytorch/issues/36035"
+    )
     def test_multi_gpu_data_parallel_forward(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-
-            # some params shouldn't be scattered by nn.DataParallel
-            # so just remove them if they are present.
-            blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
-            for k in blacklist_non_batched_params:
-                inputs_dict.pop(k, None)
-
-            # move input tensors to cuda:O
-            for k, v in inputs_dict.items():
-                if torch.is_tensor(v):
-                    inputs_dict[k] = v.to(0)
-
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = nn.DataParallel(model)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
+        pass
 
     @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
     def test_save_load_fast_init_from_base(self):

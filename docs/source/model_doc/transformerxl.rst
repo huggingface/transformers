@@ -44,6 +44,11 @@ Tips:
 This model was contributed by `thomwolf <https://huggingface.co/thomwolf>`__. The original code can be found `here
 <https://github.com/kimiyoung/transformer-xl>`__.
 
+**Note**:
+
+- TransformerXL does **not** work with `torch.nn.DataParallel` due to a bug in PyTorch, see `issue #36035
+  <https://github.com/pytorch/pytorch/issues/36035>`__
+
 
 TransfoXLConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -35,6 +35,11 @@ while being much more memory-efficient and much faster on long sequences.*
 This model was contributed by `patrickvonplaten <https://huggingface.co/patrickvonplaten>`__. The Authors' code can be
 found `here <https://github.com/google/trax/tree/master/trax/models/reformer>`__.
 
+**Note**:
+
+- Reformer does **not** work with `torch.nn.DataParallel` due to a bug in PyTorch, see `issue #36035
+  <https://github.com/pytorch/pytorch/issues/36035>`__
+
 Axial Positional Encodings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
