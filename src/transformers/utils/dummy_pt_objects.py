@@ -5177,6 +5177,11 @@ class Wav2Vec2PreTrainedModel:
 WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class WavLMForAudioFrameClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class WavLMForCTC:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -5191,6 +5196,11 @@ class WavLMForSequenceClassification:
         requires_backends(cls, ["torch"])
 
     def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WavLMForXVector:
+    def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
