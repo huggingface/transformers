@@ -476,7 +476,7 @@ Using AWS Neuron to convert models requires the following dependencies and envir
    <https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html>`_
 
 
-Running Neuron traced TorchScript in Inf1
+Converting a Model for AWS Neuron
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Using the same script as in `Using TorchScript in Python
