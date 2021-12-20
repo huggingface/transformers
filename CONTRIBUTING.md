@@ -220,7 +220,7 @@ Follow these steps to start contributing:
    some files when adding a new model, that you can run with
 
    ```bash
-   $ make repo-consitency
+   $ make repo-consistency
    ```
 
    To learn more about those checks and how to fix any issue with them, check out the
