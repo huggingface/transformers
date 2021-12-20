@@ -1784,8 +1784,7 @@ class MBartForCausalLM(MBartPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

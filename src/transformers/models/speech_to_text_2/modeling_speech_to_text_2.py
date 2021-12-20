@@ -867,8 +867,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
 
         # init speech2text model
         >>> model = SpeechEncoderDecoderModel(encoder=encoder, decoder=decoder)
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

@@ -2323,8 +2323,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 
         >>> prediction = model.generate(input_ids)[0]
         >>> print(tokenizer.decode(prediction, skip_special_tokens=True))
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

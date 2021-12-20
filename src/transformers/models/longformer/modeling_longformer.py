@@ -1742,8 +1742,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         >>> loss = outputs.loss
         >>> prediction_logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.longformer(
@@ -1979,8 +1978,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
         >>> answer_tokens = all_tokens[torch.argmax(start_logits) :torch.argmax(end_logits)+1]
         >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if global_attention_mask is None:

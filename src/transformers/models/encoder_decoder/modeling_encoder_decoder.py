@@ -344,8 +344,7 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> model.save_pretrained("./bert2bert")
         >>> # load fine-tuned model
         >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
-        ```
-"""
+        ```"""
 
         kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")

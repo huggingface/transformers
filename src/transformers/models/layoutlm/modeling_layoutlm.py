@@ -921,8 +921,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         ...                 labels=labels)
 
         >>> loss = outputs.loss
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlm(
@@ -1038,8 +1037,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlm(
@@ -1169,8 +1167,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.layoutlm(

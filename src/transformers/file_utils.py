@@ -2522,21 +2522,25 @@ class PushToHubMixin:
 
         Examples:
 
-        ```python from transformers import {object_class}
+        ```python
+        from transformers import {object_class}
 
         {object} = {object_class}.from_pretrained("bert-base-cased")
 
-        # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the #
-        *my-finetuned-bert* folder. {object}.push_to_hub("my-finetuned-bert")
+        # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
+        # *my-finetuned-bert* folder.
+        {object}.push_to_hub("my-finetuned-bert")
 
         # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
         {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
 
-        # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the #
-        *my-finetuned-bert* folder. {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
+        # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
+        # *my-finetuned-bert* folder.
+        {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
 
         # Make a change to an existing repo that has been cloned locally in *my-finetuned-bert*.
-        {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert") ```
+        {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+        ```
         """
         if use_temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.

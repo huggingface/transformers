@@ -44,8 +44,7 @@ class MT5Model(T5Model):
 
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
-    ```
-"""
+    ```"""
     model_type = "mt5"
     config_class = MT5Config
     _keys_to_ignore_on_load_missing = [
@@ -78,8 +77,7 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
 
     >>> outputs = model(**inputs,labels=labels["input_ids"])
     >>> loss = outputs.loss
-    ```
-"""
+    ```"""
 
     model_type = "mt5"
     config_class = MT5Config
@@ -106,8 +104,7 @@ class MT5EncoderModel(T5EncoderModel):
     >>> input_ids = tokenizer(article, return_tensors="pt").input_ids
     >>> outputs = model(input_ids)
     >>> hidden_state = outputs.last_hidden_state
-    ```
-"""
+    ```"""
 
     model_type = "mt5"
     config_class = MT5Config

@@ -1003,8 +1003,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         >>> outputs = model(**encoding, labels=sequence_label)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1172,8 +1171,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         >>> outputs = model(**encoding)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1298,8 +1296,7 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> loss = outputs.loss
         >>> start_scores = outputs.start_logits
         >>> end_scores = outputs.end_logits
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -1306,8 +1306,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: person
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.luke(
@@ -1422,8 +1421,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: per:cities_of_residence
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.luke(
@@ -1558,8 +1556,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         ...        print(text[span[0]:span[1]], model.config.id2label[predicted_class_idx])
         Beyoncé PER
         Los Angeles LOC
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.luke(

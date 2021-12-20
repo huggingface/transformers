@@ -1116,8 +1116,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         ...                 labels=labels)
 
         >>> loss = outputs.loss
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1253,8 +1252,7 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1394,8 +1392,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

@@ -789,8 +789,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> model.save_pretrained("./bert2gpt2")
         >>> # load fine-tuned model
         >>> model = FlaxEncoderDecoderModel.from_pretrained("./bert2gpt2")
-        ```
-"""
+        ```"""
 
         kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")

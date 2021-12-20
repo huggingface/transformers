@@ -1132,8 +1132,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
 
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1389,8 +1388,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
         >>> logits = outputs.logits
         >>> logits_aggregation = outputs.logits_aggregation
-        ```
-"""
+        ```"""
 
         inputs = input_processing(
             func=self.call,
@@ -1717,8 +1715,7 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         inputs = input_processing(
             func=self.call,

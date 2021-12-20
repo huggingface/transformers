@@ -1077,8 +1077,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         >>> # the linear classifier still needs to be trained
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

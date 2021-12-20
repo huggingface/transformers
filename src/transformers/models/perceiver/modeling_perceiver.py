@@ -1024,8 +1024,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         >>> masked_tokens_predictions = logits[0, 52:61].argmax(dim=-1).tolist()
         >>> tokenizer.decode(masked_tokens_predictions)
         ' missing.'
-        ```
-"""
+        ```"""
         if inputs is not None and input_ids is not None:
             raise ValueError("You cannot use both `inputs` and `input_ids`")
         elif inputs is None and input_ids is not None:
@@ -1123,8 +1122,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         >>> inputs = tokenizer(images=image, return_tensors="pt").input_ids
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         if inputs is not None and input_ids is not None:
             raise ValueError("You cannot use both `inputs` and `input_ids`")
         elif inputs is None and input_ids is not None:
@@ -1264,8 +1262,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```
-"""
+        ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
         elif inputs is None and pixel_values is not None:
@@ -1402,8 +1399,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```
-"""
+        ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
         elif inputs is None and pixel_values is not None:
@@ -1540,8 +1536,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```
-"""
+        ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
         elif inputs is None and pixel_values is not None:
@@ -1689,8 +1684,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         >>> patches = torch.randn(1, 2, 27, 368, 496)
         >>> outputs = model(inputs=patches)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(
@@ -1901,8 +1895,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
 
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.perceiver(

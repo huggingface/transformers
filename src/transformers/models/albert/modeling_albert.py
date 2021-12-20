@@ -808,8 +808,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
         >>> prediction_logits = outputs.prediction_logits
         >>> sop_logits = outputs.sop_logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.albert(

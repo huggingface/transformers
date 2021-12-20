@@ -1460,8 +1460,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1921,8 +1920,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
         >>> logits_next_token = outputs.logits  # logits to predict next token as usual
         >>> logits_ngram_next_tokens = outputs.logits_ngram  # logits to predict 2nd, 3rd, ... next tokens
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -2183,8 +2181,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:])
 
         >>> loss = outputs.loss
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)

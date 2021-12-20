@@ -1378,8 +1378,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> # model predicts bounding boxes and corresponding COCO classes
         >>> logits = outputs.logits
         >>> bboxes = outputs.pred_boxes
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
@@ -1536,8 +1535,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> logits = outputs.logits
         >>> bboxes = outputs.pred_boxes
         >>> masks = outputs.pred_masks
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

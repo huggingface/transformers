@@ -819,8 +819,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="np")
         >>> text_features = model.get_text_features(**inputs)
-        ```
-"""
+        ```"""
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
@@ -883,8 +882,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="np")
 
         >>> image_features = model.get_image_features(**inputs)
-        ```
-"""
+        ```"""
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
         # Handle any PRNG if needed

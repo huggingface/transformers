@@ -1545,8 +1545,7 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         ...     labels = processor(transcription, return_tensors="tf").input_values
 
         >>> loss = model(input_values, labels=labels).loss
-        ```
-"""
+        ```"""
         inputs = input_values_processing(
             func=self.call,
             config=self.config,

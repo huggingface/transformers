@@ -1427,8 +1427,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         >>> # for contrastive loss training model should be put into train mode
         >>> model.train()
         >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1578,8 +1577,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 
         >>> predicted_ids = torch.argmax(logits, dim=-1)
         >>> transcription = processor.decode(predicted_ids[0])
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -895,8 +895,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
-        ```
-"""
+        ```"""
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -940,8 +939,7 @@ class CLIPModel(CLIPPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
-        ```
-"""
+        ```"""
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,

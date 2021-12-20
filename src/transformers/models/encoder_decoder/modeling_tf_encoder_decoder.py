@@ -354,8 +354,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         >>> model.save_pretrained("./bert2gpt2")
         >>> # load fine-tuned model
         >>> model = TFEncoderDecoderModel.from_pretrained("./bert2gpt2")
-        ```
-"""
+        ```"""
 
         kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")

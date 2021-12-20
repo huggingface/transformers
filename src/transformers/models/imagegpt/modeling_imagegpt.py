@@ -695,8 +695,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
 
         if "pixel_values" in kwargs:
             warnings.warn(
@@ -1003,8 +1002,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         >>> for img, ax in zip(samples_img, axes):
         ...    ax.axis('off')
         ...    ax.imshow(img)
-        ```
-"""
+        ```"""
 
         if "pixel_values" in kwargs:
             warnings.warn(
@@ -1137,8 +1135,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         if "pixel_values" in kwargs:
             warnings.warn(

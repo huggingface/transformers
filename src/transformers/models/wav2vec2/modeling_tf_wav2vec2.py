@@ -1537,8 +1537,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         >>>     labels = processor(transcription, return_tensors="tf").input_ids
 
         >>> loss = model(input_values, labels=labels).loss
-        ```
-"""
+        ```"""
         inputs = input_values_processing(
             func=self.call,
             config=self.config,

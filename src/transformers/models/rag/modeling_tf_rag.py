@@ -280,8 +280,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         >>> retriever = RagRetriever.from_pretrained(PATH, index_name="exact", use_dummy_dataset=True)
         >>> # load fine-tuned model with retriever
         >>> model = TFRagModel.from_pretrained("./rag", retriever=retriever)
-        ```
-"""
+        ```"""
 
         kwargs_question_encoder = {
             argument[len("question_encoder_") :]: value
@@ -942,8 +941,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         >>> # or directly generate
         >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
-        ```
-"""
+        ```"""
 
         assert (
             "decoder_cached_states" not in kwargs
@@ -1535,8 +1533,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         >>> # or directly generate
         >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
-        ```
-"""
+        ```"""
 
         assert (
             "decoder_cached_states" not in kwargs

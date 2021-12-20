@@ -236,8 +236,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"],  padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
-        ```
-"""
+        ```"""
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -281,8 +280,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
-        ```
-"""
+        ```"""
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -458,8 +456,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> model.save_pretrained("./vit-bert")
         >>> # load fine-tuned model
         >>> model = VisionTextDualEncoderModel.from_pretrained("./vit-bert")
-        ```
-"""
+        ```"""
         kwargs_vision = {
             argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
         }

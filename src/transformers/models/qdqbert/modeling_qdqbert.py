@@ -1093,8 +1093,7 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
@@ -1321,8 +1320,7 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
         >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
-        ```
-"""
+        ```"""
 
         if "next_sentence_label" in kwargs:
             warnings.warn(

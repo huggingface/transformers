@@ -297,8 +297,7 @@ class RagPreTrainedModel(PreTrainedModel):
         >>> model.save_pretrained("./rag")
         >>> # load fine-tuned model
         >>> model = RagModel.from_pretrained("./rag")
-        ```
-"""
+        ```"""
 
         kwargs_question_encoder = {
             argument[len("question_encoder_") :]: value
@@ -810,8 +809,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
         >>> # 3. Forward to generator
         >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=labels)
-        ```
-"""
+        ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
         reduce_loss = reduce_loss if reduce_loss is not None else self.config.reduce_loss
@@ -1276,8 +1274,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> # or directly generate
         >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
-        ```
-"""
+        ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         do_marginalize = do_marginalize if do_marginalize is not None else self.config.do_marginalize
         reduce_loss = reduce_loss if reduce_loss is not None else self.config.reduce_loss

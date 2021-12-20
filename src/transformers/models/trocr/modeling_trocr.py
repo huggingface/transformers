@@ -900,8 +900,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
 
         # init vision2text model
         >>> model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

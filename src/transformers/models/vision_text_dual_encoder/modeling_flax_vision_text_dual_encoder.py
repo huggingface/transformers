@@ -455,8 +455,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         >>> model.save_pretrained("./vit-bert")
         >>> # load fine-tuned model
         >>> model =  FlaxVisionTextDualEncoderModel.from_pretrained("./vit-bert")
-        ```
-"""
+        ```"""
 
         kwargs_vision = {
             argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")

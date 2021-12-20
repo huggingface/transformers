@@ -1047,8 +1047,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
         >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

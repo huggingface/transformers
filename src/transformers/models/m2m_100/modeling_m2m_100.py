@@ -1290,8 +1290,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         >>> # translate to French
         >>> gen_tokens = model.generate( **model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
         >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

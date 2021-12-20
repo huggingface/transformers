@@ -44,8 +44,7 @@ class TFMT5Model(TFT5Model):
 
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
-    ```
-"""
+    ```"""
     model_type = "mt5"
     config_class = MT5Config
 
@@ -69,8 +68,7 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
 
     >>> outputs = model(**inputs,labels=labels["input_ids"])
     >>> loss = outputs.loss
-    ```
-"""
+    ```"""
 
     model_type = "mt5"
     config_class = MT5Config
@@ -91,8 +89,7 @@ class TFMT5EncoderModel(TFT5EncoderModel):
     >>> input_ids = tokenizer(article, return_tensors="tf").input_ids
     >>> outputs = model(input_ids)
     >>> hidden_state = outputs.last_hidden_state
-    ```
-"""
+    ```"""
 
     model_type = "mt5"
     config_class = MT5Config

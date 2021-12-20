@@ -1317,8 +1317,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         >>> generated_ids = model.generate(input_ids=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

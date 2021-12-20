@@ -332,8 +332,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         >>> model.save_pretrained("./wav2vec2bert")
         >>> # load fine-tuned model
         >>> model = SpeechEncoderDecoderModel.from_pretrained("./wav2vec2bert")
-        ```
-"""
+        ```"""
 
         kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")

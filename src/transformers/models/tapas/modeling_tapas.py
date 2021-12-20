@@ -1070,8 +1070,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
 
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.tapas(
@@ -1220,8 +1219,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
         >>> logits = outputs.logits
         >>> logits_aggregation = outputs.logits_aggregation
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.tapas(
@@ -1518,8 +1516,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.tapas(

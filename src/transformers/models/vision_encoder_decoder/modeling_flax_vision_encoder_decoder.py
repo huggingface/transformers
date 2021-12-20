@@ -756,8 +756,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> model.save_pretrained("./vit-gpt2")
         >>> # load fine-tuned model
         >>> model = FlaxVisionEncoderDecoderModel.from_pretrained("./vit-gpt2")
-        ```
-"""
+        ```"""
 
         kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
