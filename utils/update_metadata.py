@@ -221,7 +221,10 @@ def update_metadata(token, commit_sha):
         if repo.is_repo_clean():
             print("Nothing to commit!")
         else:
-            commit_message = f"Update with commit {commit_sha}" if commit_sha is not None else "Update"
+            if commit_sha is not None
+                commit_message = f"Update with commit https://github.com/huggingface/transformers/commit/{commit_sha}"
+            else:
+                commit_message = "Update"
             repo.push_to_hub(commit_message)
 
 
