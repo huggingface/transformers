@@ -222,7 +222,10 @@ def update_metadata(token, commit_sha):
             print("Nothing to commit!")
         else:
             if commit_sha is not None:
-                commit_message = f"Update with commit https://github.com/huggingface/transformers/commit/{commit_sha}"
+                commit_message = (
+                    f"Update with commit {commit_sha}\n\nSee: "
+                    f"https://github.com/huggingface/transformers/commit/{commit_sha}"
+                )
             else:
                 commit_message = "Update"
             repo.push_to_hub(commit_message)

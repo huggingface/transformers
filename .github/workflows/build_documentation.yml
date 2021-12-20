@@ -94,7 +94,7 @@ jobs:
           cd notebooks
           if [[ `git status --porcelain` ]]; then
             git add transformers_doc
-            git commit -m "Updated Transformer doc notebooks with commit https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+            git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
             git push origin master
           else
             echo "No diff in the notebooks."
