@@ -2159,7 +2159,7 @@ def is_torch_fx_proxy(x):
 
 def is_tensor(x):
     """
-    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, obj:*jaxlib.xla_extension.DeviceArray* or `np.ndarray`.
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
     """
     if is_torch_fx_proxy(x):
         return True
