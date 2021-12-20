@@ -832,6 +832,7 @@ class FlaxModelTesterMixin:
             else:
                 _check_attentions_validity(outputs.attentions)
 
+
 @require_flax
 @is_staging_test
 class FlaxModelPushToHubTester(unittest.TestCase):
