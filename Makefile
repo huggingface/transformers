@@ -54,7 +54,7 @@ quality:
 
 extra_style_checks:
 	python utils/custom_init_isort.py
-	python utils/style_doc.py src/transformers docs/source --max_len 119
+#	python utils/style_doc.py src/transformers docs/source --max_len 119
 
 # this target runs checks on all files and potentially modifies some of them
 
