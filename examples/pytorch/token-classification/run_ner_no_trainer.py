@@ -413,7 +413,7 @@ def main():
     def add_entity_spans(examples):
         return []
     
-    def compute_sentence_boundaries(examples):
+    def compute_sentence_boundaries_for_luke(examples):
         sentence_boundaries = []
         
         for tokens in examples["tokens"]:
@@ -426,21 +426,21 @@ def main():
     if config.model_type == "luke":
         with accelerator.main_process_first():
             raw_datasets = raw_datasets.map(
-                compute_sentence_boundaries,
+                compute_sentence_boundaries_for_luke,
                 batched=True,
                 desc="Adding sentence boundaries",
             )
 
-    def is_punctuation(char):
-        cp = ord(char)
-        if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
-            return True
-        cat = unicodedata.category(char)
-        if cat.startswith("P"):
-            return True
-        return False
+    def compute_entity_spans_for_luke(examples):
+        def is_punctuation(char):
+            cp = ord(char)
+            if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
+                return True
+            cat = unicodedata.category(char)
+            if cat.startswith("P"):
+                return True
+            return False
 
-    def compute_entity_spans(examples):
         all_entity_spans = []
         texts = []
         all_labels_entity_spans = []
@@ -511,7 +511,7 @@ def main():
     if config.model_type == "luke":
         with accelerator.main_process_first():
             raw_datasets = raw_datasets.map(
-                compute_entity_spans,
+                compute_entity_spans_for_luke,
                 batched=True,
                 desc="Adding sentence spans",
             )
