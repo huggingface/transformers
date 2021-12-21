@@ -1491,7 +1491,8 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
     >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='jax', padding=True)
     >>> outputs = model(**{{k: v[None, :] for k,v in encoding.items()}})
 
-    >>> logits = outputs.logits ```
+    >>> logits = outputs.logits
+    ```
 """
 
 FLAX_CAUSAL_LM_SAMPLE = r"""
