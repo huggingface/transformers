@@ -653,9 +653,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
+        - **main_input_name** (:obj:`str`) -- The name of the principal input to the model (often :obj:`input_ids` for
+          NLP models, :obj:`pixel_values` for vision models and :obj:`input_values` for speech models).
     """
     config_class = None
     base_model_prefix = ""
+    main_input_name = "input_ids"
+
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_missing = None
@@ -870,6 +874,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # the input dict (and loss is computed internally)
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
+        elif y is None and "input_ids" in x:
+            # Just make any kind of dummy array to make loss work
+            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
@@ -925,6 +932,39 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if "loss" in return_metrics and "loss_loss" in return_metrics:
             del return_metrics["loss_loss"]
         return return_metrics
+
+    def create_model_card(
+        self,
+        output_dir,
+        model_name: str,
+        language: Optional[str] = None,
+        license: Optional[str] = None,
+        tags: Optional[str] = None,
+        finetuned_from: Optional[str] = None,
+        tasks: Optional[str] = None,
+        dataset_tags: Optional[Union[str, List[str]]] = None,
+        dataset: Optional[Union[str, List[str]]] = None,
+        dataset_args: Optional[Union[str, List[str]]] = None,
+    ):
+        # Avoids a circular import by doing this when necessary.
+        from .modelcard import TrainingSummary
+
+        training_summary = TrainingSummary.from_keras(
+            self,
+            keras_history=self.history,
+            language=language,
+            license=license,
+            tags=tags,
+            model_name=model_name,
+            finetuned_from=finetuned_from,
+            tasks=tasks,
+            dataset_tags=dataset_tags,
+            dataset=dataset,
+            dataset_args=dataset_args,
+        )
+        model_card = training_summary.to_model_card()
+        with open(os.path.join(output_dir, "README.md"), "w") as f:
+            f.write(model_card)
 
     def set_input_embeddings(self, value):
         """

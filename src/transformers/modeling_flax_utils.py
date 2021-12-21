@@ -76,9 +76,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
+        - **main_input_name** (:obj:`str`) -- The name of the principal input to the model (often :obj:`input_ids` for
+          NLP models, :obj:`pixel_values` for vision models and :obj:`input_values` for speech models).
     """
     config_class = None
     base_model_prefix = ""
+    main_input_name = "input_ids"
 
     def __init__(
         self,

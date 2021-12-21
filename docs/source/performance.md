@@ -55,7 +55,7 @@ Software:
 - fp16/bf16 (smaller data/faster throughput)
 - tf32 (faster throughput)
 - Gradient checkpointing
-
+- Sparsity
 
 
 ## Hardware
@@ -162,6 +162,29 @@ Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
 ## Software
 
+
+### Anatomy of Model's Operations
+
+Transformers architecture includes 3 main groups of operations grouped below by compute-intensity.
+
+1. **Tensor Contractions**
+
+    Linear layers and components of Multi-Head Attention all do batched **matrix-matrix multiplications**. These operations are the most compute-intensive part of training a transformer.
+
+2. **Statistical Normalizations**
+
+    Softmax and layer normalization are less compute-intensive than tensor contractions, and involve one or more **reduction operations**, the result of which is then applied via a map.
+
+3. **Element-wise Operators**
+
+    These are the remaining operators: **biases, dropout, activations, and residual connections**. These are the least compute-intensive operations.
+
+This knowledge can be helpful to know when analyzing performance bottlenecks.
+
+This summary is derived from [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+
+
+
 ### Anatomy of Model's Memory
 
 The components on GPU memory are the following:
@@ -225,7 +248,7 @@ Here are the commonly used floating point data types choice of which impacts bot
 
 Here is a diagram that shows how these data types correlate to each other.
 
-![data types](/imgs/tf32-bf16-fp16-fp32.png)
+![data types](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/tf32-bf16-fp16-fp32.png)
 
 (source: [NVIDIA Blog](https://developer.nvidia.com/blog/accelerating-ai-training-with-tf32-tensor-cores/))
 
@@ -303,7 +326,7 @@ In 🤗 Transformers the full fp16 inference is enabled by passing `--fp16_full_
 
 #### bf16
 
-If you own the new Ampere hardware you can start using bf16 for your training and evaluation. While bf16 has a worse precision than fp16, it has a much much bigger dynamic range. Therefore, if in the past you were experiencing overflow issues while training the model, bf16 will prevent this from happening most of the time. Remember that in fp16 the biggest number you can have is `65535` and any number above that will overflow. a bf16 number can be as large as `3.39e+38` (!) which is about the same as fp32 - because both have 8-bits used for the numerical range.
+If you own Ampere or newer hardware you can start using bf16 for your training and evaluation. While bf16 has a worse precision than fp16, it has a much much bigger dynamic range. Therefore, if in the past you were experiencing overflow issues while training the model, bf16 will prevent this from happening most of the time. Remember that in fp16 the biggest number you can have is `65535` and any number above that will overflow. A bf16 number can be as large as `3.39e+38` (!) which is about the same as fp32 - because both have 8-bits used for the numerical range.
 
 Automatic Mixed Precision (AMP) is the same as with fp16, except it'll use bf16.
 
@@ -311,7 +334,7 @@ Thanks to the fp32-like dynamic range with bf16 mixed precision loss scaling is 
 
 If you have tried to finetune models pre-trained under bf16 mixed precision (e.g. T5) it's very likely that you have encountered overflow issues. Now you should be able to finetune those models without any issues.
 
-That's said also be aware that if you pre-trained a model in bf16, it's likely to have overflow issues if someone tries to finetune it in fp16 down the road. So once started on the bf16-mode path it's best to remain on it and not switch to fp16.
+That said, also be aware that if you pre-trained a model in bf16, it's likely to have overflow issues if someone tries to finetune it in fp16 down the road. So once started on the bf16-mode path it's best to remain on it and not switch to fp16.
 
 In 🤗 Transformers bf16 mixed precision is enabled by passing `--bf16` to the 🤗 Trainer.
 
@@ -345,7 +368,7 @@ In 🤗 Transformers the full bf16 inference is enabled by passing `--bf16_full_
 
 The Ampere hardware uses a magical data type called tf32. It has the same numerical range as fp32 (8-bits), but instead of 23 bits precision it has only 10 bits (same as fp16). In total it uses only 19 bits.
 
-It's magical in a sense that you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput improvement. All you need to do is to add this to your code:
+It's magical in the sense that you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput improvement. All you need to do is to add this to your code:
 
 ```
 import torch
@@ -488,6 +511,38 @@ One of the important requirements to reach great training speed is the ability t
 ### Faster optimizer
 
 pytorch-nightly introduced `torch.optim._multi_tensor` which should significantly speed up the optimizers for situations with lots of small feature tensors. It should eventually become the default, but if you want to experiment with it sooner and don't mind using the bleed-edge, see: https://github.com/huggingface/transformers/issues/9965
+
+
+### Sparsity
+
+#### Mixture of Experts
+
+Quite a few of the recent papers reported a 4-5x training speedup and a faster inference by integrating
+Mixture of Experts (MoE) into the Transformer models.
+
+Since it has been discovered that more parameters lead to better performance, this technique allows to increase the number of parameters by an order of magnitude without increasing training costs.
+
+In this approach every other FFN layer is replaced with a MoE Layer which consists of many experts, with a gated function that trains each expert in a balanced way depending on the input token's position in a sequence.
+
+![MoE Transformer 2x block](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perf-moe-transformer.png)
+
+(source: [GLAM](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html))
+
+You can find exhaustive details and comparison tables in the papers listed at the end of this section.
+
+The main drawback of this approach is that it requires staggering amounts of GPU memory - almost an order of magnitude larger than its dense equivalent. Various distillation and approaches are proposed to how to overcome the much higher memory requirements.
+
+There is direct trade-off though, you can use just a few experts with a 2-3x smaller base model instead of dozens or hundreds experts leading to a 5x smaller model and thus increase the training speed moderately while increasing the memory requirements moderately as well.
+
+Most related papers and implementations are built around Tensorflow/TPUs:
+
+- [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding](https://arxiv.org/abs/2006.16668)
+- [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961)
+- [GLaM: Generalist Language Model (GLaM)](https://ai.googleblog.com/2021/12/more-efficient-in-context-learning-with.html)
+
+And for Pytorch DeepSpeed has built one as well: [Mixture of Experts](https://www.deepspeed.ai/tutorials/mixture-of-experts/) - blog posts:  [1](https://www.microsoft.com/en-us/research/blog/deepspeed-powers-8x-larger-moe-model-training-with-high-performance/), [2](https://www.microsoft.com/en-us/research/publication/scalable-and-efficient-moe-training-for-multitask-multilingual-models/) and specific deployment with large transformer-based natural language generation models: [blog post](https://www.deepspeed.ai/news/2021/12/09/deepspeed-moe-nlg.html), [Megatron-Deepspeed branch](Thttps://github.com/microsoft/Megatron-DeepSpeed/tree/moe-training).
+
+
 
 
 ## Contribute

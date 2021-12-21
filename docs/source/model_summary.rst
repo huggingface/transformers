@@ -360,7 +360,7 @@ ConvBERT
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-convbert-blueviolet">
    </a>
 
-`ConvBERT: Improving BERT with Span-based Dynamic Convolution <https://arxiv.org/abs/1910.01108>`_, Zihang Jiang,
+`ConvBERT: Improving BERT with Span-based Dynamic Convolution <https://arxiv.org/abs/2008.02496>`_, Zihang Jiang,
 Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng Yan.
 
 Pre-trained language models like BERT and its variants have recently achieved impressive performance in various natural
@@ -877,7 +877,7 @@ Some preselected input tokens are also given global attention: for those few tok
 all tokens and this process is symmetric: all other tokens have access to those specific tokens (on top of the ones in
 their local window). This is shown in Figure 2d of the paper, see below for a sample attention mask:
 
-.. image:: /imgs/local_attention_mask.png
+.. image:: https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/local_attention_mask.png
    :scale: 50 %
    :align: center
 

@@ -406,6 +406,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
 
     config_class = SegformerConfig
     base_model_prefix = "segformer"
+    main_input_name = "pixel_values"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -490,8 +491,8 @@ class SegformerModel(SegformerPreTrainedModel):
             >>> from PIL import Image
             >>> import requests
 
-            >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0")
-            >>> model = SegformerModel("nvidia/segformer-b0")
+            >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+            >>> model = SegformerModel("nvidia/segformer-b0-finetuned-ade-512-512")
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -726,7 +727,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             >>> import requests
 
             >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-            >>> model = SegformerForSemanticSegmentation("nvidia/segformer-b0-finetuned-ade-512-512")
+            >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)

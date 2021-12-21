@@ -29,6 +29,7 @@ from .file_utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
+    is_torch_bf16_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     torch_required,
@@ -347,6 +348,9 @@ class TrainingArguments:
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
+        ddp_bucket_cap_mb (:obj:`int`, `optional`):
+            When using distributed training, the value of the flag :obj:`bucket_cap_mb` passed to
+            :obj:`DistributedDataParallel`.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
         skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -664,6 +668,13 @@ class TrainingArguments:
             "`DistributedDataParallel`."
         },
     )
+    ddp_bucket_cap_mb: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "When using distributed training, the value of the flag `bucket_cap_mb` passed to "
+            "`DistributedDataParallel`."
+        },
+    )
     dataloader_pin_memory: bool = field(
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
@@ -793,6 +804,9 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.half_precision_backend = self.fp16_backend
+
+        if (self.bf16 or self.bf16_full_eval) and not is_torch_bf16_available():
+            raise ValueError("Your setup doesn't support bf16. You need Ampere GPU, torch>=1.10, cuda>=11.0")
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")

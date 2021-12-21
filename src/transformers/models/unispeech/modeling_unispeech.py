@@ -44,9 +44,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "UniSpeechConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 _CHECKPOINT_FOR_DOC = "microsoft/unispeech-large-1500h-cv"
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-large-1500h-cv"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2
 
@@ -912,6 +912,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
 
     config_class = UniSpeechConfig
     base_model_prefix = "unispeech"
+    main_input_name = "input_values"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
 
@@ -1262,7 +1263,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
             >>> # compute masked indices
             >>> batch_size, raw_sequence_length = input_values.shape
             >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2, device=model.device)
+            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
 
             >>> with torch.no_grad():
             ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
@@ -1481,7 +1482,7 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

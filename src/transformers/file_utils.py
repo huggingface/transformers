@@ -237,6 +237,30 @@ except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
 
+_phonemizer_available = importlib.util.find_spec("phonemizer") is not None
+try:
+    _phonemizer_version = importlib_metadata.version("phonemizer")
+    logger.debug(f"Successfully imported phonemizer version {_phonemizer_version}")
+except importlib_metadata.PackageNotFoundError:
+    _phonemizer_available = False
+
+
+_pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
+try:
+    _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
+    logger.debug(f"Successfully imported pyctcdecode version {_pyctcdecode_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pyctcdecode_available = False
+
+
+_librosa_available = importlib.util.find_spec("librosa") is not None
+try:
+    _librosa_version = importlib_metadata.version("librosa")
+    logger.debug(f"Successfully imported librosa version {_librosa_version}")
+except importlib_metadata.PackageNotFoundError:
+    _librosa_available = False
+
+
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
@@ -309,6 +333,14 @@ def is_offline_mode():
 
 def is_torch_available():
     return _torch_available
+
+
+def is_pyctcdecode_available():
+    return _pyctcdecode_available
+
+
+def is_librosa_available():
+    return _librosa_available
 
 
 def is_torch_cuda_available():
@@ -568,6 +600,10 @@ def is_speech_available():
     return _torchaudio_available
 
 
+def is_phonemizer_available():
+    return _phonemizer_available
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -705,6 +741,13 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+PHONEMIZER_IMPORT_ERROR = """
+{0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
+`pip install phonemizer`
+"""
+
+
+# docstyle-ignore
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
 `pip install scipy`
@@ -736,6 +779,12 @@ PYTESSERACT_IMPORT_ERROR = """
 `pip install pytesseract`
 """
 
+# docstyle-ignore
+PYCTCDECODE_IMPORT_ERROR = """
+{0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
+`pip install pyctcdecode`
+"""
+
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -744,7 +793,9 @@ BACKENDS_MAPPING = OrderedDict(
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
+        ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
@@ -1086,6 +1137,54 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
 """
 
 
+PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> feature_extractor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
+        >>> logits = model(**inputs).logits
+        >>> probabilities = torch.sigmoid(logits[0])
+        >>> # labels is a one-hot array of shape (num_frames, num_speakers)
+        >>> labels = (probabilities > 0.5).long()
+"""
+
+
+PT_SPEECH_XVECTOR_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {processor_class}, {model_class}
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> feature_extractor = {processor_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> # audio file is decoded on the fly
+        >>> inputs = feature_extractor(dataset[:2]["audio"]["array"], return_tensors="pt")
+        >>> embeddings = model(**inputs).embeddings
+        >>> embeddings = torch.nn.functional.normalize(embeddings, dim=-1).cpu()
+
+        >>> # the resulting embeddings can be used for cosine similarity-based retrieval
+        >>> cosine_sim = torch.nn.CosineSimilarity(dim=-1)
+        >>> similarity = cosine_sim(embeddings[0], embeddings[1])
+        >>> threshold = 0.7  # the optimal threshold is dataset-dependent
+        >>> if similarity < threshold:
+        ...     print("Speakers are not the same!")
+"""
+
 PT_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": PT_QUESTION_ANSWERING_SAMPLE,
@@ -1097,6 +1196,8 @@ PT_SAMPLE_DOCSTRINGS = {
     "SpeechBaseModel": PT_SPEECH_BASE_MODEL_SAMPLE,
     "CTC": PT_SPEECH_CTC_SAMPLE,
     "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
+    "AudioFrameClassification": PT_SPEECH_FRAME_CLASS_SAMPLE,
+    "AudioXVector": PT_SPEECH_XVECTOR_SAMPLE,
 }
 
 
@@ -1388,6 +1489,10 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["LMHead"]
         elif "CTC" in model_class:
             code_sample = sample_docstrings["CTC"]
+        elif "AudioFrameClassification" in model_class:
+            code_sample = sample_docstrings["AudioFrameClassification"]
+        elif "XVector" in model_class and modality == "audio":
+            code_sample = sample_docstrings["AudioXVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:
@@ -2304,6 +2409,7 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        **model_card_kwargs
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
@@ -2378,6 +2484,14 @@ class PushToHubMixin:
         )
         # Save the files in the cloned repo
         self.save_pretrained(repo_path_or_name)
+        if hasattr(self, "history") and hasattr(self, "create_model_card"):
+            # This is a Keras model and we might be able to fish out its History and make a model card out of it
+            base_model_card_args = {
+                "output_dir": repo_path_or_name,
+                "model_name": Path(repo_path_or_name).name,
+            }
+            base_model_card_args.update(model_card_kwargs)
+            self.create_model_card(**base_model_card_args)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
