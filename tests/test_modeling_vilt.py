@@ -36,8 +36,8 @@ if is_torch_available():
     from transformers import (
         MODEL_MAPPING,
         ViltForImageRetrievalTextRetrieval,
+        ViltForMaskedLM,
         ViltForNaturalLanguageVisualReasoning,
-        ViltForPreTraining,
         ViltForVisualQuestionAnswering,
         ViltModel,
     )
@@ -197,7 +197,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             ViltModel,
             ViltForVisualQuestionAnswering,
             ViltForImageRetrievalTextRetrieval,
-            ViltForPreTraining,
+            ViltForMaskedLM,
             # ViltForNaturalLanguageVisualReasoning,
         )
         if is_torch_available()
@@ -207,7 +207,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
 
-    # ViltForVisualQuestionAnswering and ViltForNaturalLanguageVisualReasoning require special treatment
+    # ViltForMaskedLM, ViltForVisualQuestionAnswering and ViltForNaturalLanguageVisualReasoning require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -215,6 +215,10 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             if model_class.__name__ in ["ViltForVisualQuestionAnswering", "ViltForNaturalLanguageVisualReasoning"]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
+                )
+            elif model_class.__name__ == "ViltForMaskedLM":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
 
         return inputs_dict
@@ -238,8 +242,8 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            # ViltForPreTraining and ViltForImageRetrievalTextRetrieval don't support training for now
-            if model_class in [*get_values(MODEL_MAPPING), ViltForPreTraining, ViltForImageRetrievalTextRetrieval]:
+            # ViltForImageRetrievalTextRetrieval doesn't support training for now
+            if model_class in [*get_values(MODEL_MAPPING), ViltForImageRetrievalTextRetrieval]:
                 continue
 
             model = model_class(config)
@@ -258,9 +262,9 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             config.use_cache = False
             config.return_dict = True
 
-            # ViltForPreTraining and ViltForImageRetrievalTextRetrieval don't support training for now
+            # ViltForImageRetrievalTextRetrieval doesn't support training for now
             if (
-                model_class in [*get_values(MODEL_MAPPING), ViltForPreTraining, ViltForImageRetrievalTextRetrieval]
+                model_class in [*get_values(MODEL_MAPPING), ViltForImageRetrievalTextRetrieval]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue

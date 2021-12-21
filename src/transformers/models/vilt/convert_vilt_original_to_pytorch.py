@@ -29,8 +29,8 @@ from transformers import (
     ViltConfig,
     ViltFeatureExtractor,
     ViltForImageRetrievalTextRetrieval,
+    ViltForMaskedLM,
     ViltForNaturalLanguageVisualReasoning,
-    ViltForPreTraining,
     ViltForVisualQuestionAnswering,
     ViltProcessor,
 )
@@ -212,7 +212,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         irtr_model = True
         model = ViltForImageRetrievalTextRetrieval(config)
     elif "mlm_itm" in checkpoint_url:
-        model = ViltForPreTraining(config)
+        model = ViltForMaskedLM(config)
     else:
         raise ValueError("Unknown model type")
 
@@ -222,7 +222,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config)
-    if irtr_model:
+    if irtr_model or "mlm_itm" in checkpoint_url:
         ignore_keys = ["itm_score.fc.weight", "itm_score.fc.bias"]
         for k in ignore_keys:
             state_dict.pop(k, None)

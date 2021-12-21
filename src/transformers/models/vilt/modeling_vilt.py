@@ -17,8 +17,6 @@
 
 import collections.abc
 import math
-from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -27,13 +25,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_vilt import ViltConfig
@@ -48,37 +41,6 @@ VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "dandelin/vilt-b32-mlm-itm",
     # See all ViLT models at https://huggingface.co/models?filter=vilt
 ]
-
-
-@dataclass
-class ViltForPreTrainingOutput(ModelOutput):
-    """
-    Output type of [`ViltForPreTraining`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction
-            (classification) loss.
-        mlm_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        itm_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the image-text matching prediction (classification) head (scores of True/False
-            continuation before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    mlm_logits: torch.FloatTensor = None
-    itm_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Inspired by
@@ -665,7 +627,7 @@ VILT_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        
+
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation. This is
             useful if you want more control over how to convert `pixel_values` into patch embeddings.
@@ -839,18 +801,16 @@ class ViltPooler(nn.Module):
 
 @add_start_docstrings(
     """
-    ViLT Model with 2 heads on top as done during the pretraining: a `masked language modeling` head and an `image text
-    matching (classification)` head.
+    ViLT Model with a language modeling head on top as done during pretraining.
     """,
     VILT_START_DOCSTRING,
 )
-class ViltForPreTraining(ViltPreTrainedModel):
+class ViltForMaskedLM(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.vilt = ViltModel(config)
         self.mlm_score = ViltMLMHead(config)
-        self.itm_score = ViltITMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -862,7 +822,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
         self.mlm_score.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=ViltForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -874,7 +834,6 @@ class ViltForPreTraining(ViltPreTrainedModel):
         inputs_embeds=None,
         image_embeds=None,
         labels=None,
-        itm_labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -884,13 +843,27 @@ class ViltForPreTraining(ViltPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        itm_labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image text matching loss. Indices should be in `[0, 1]`.
 
         Returns:
 
-        Example::
-            >>> TODO
+        Examples::
+            >>> from transformers import ViltProcessor, ViltForMaskedLM
+            >>> import requests
+            >>> from PIL import Image
+
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+            >>> text = "How many cats are there?"
+
+            >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
+            >>> model = ViltForMaskedLM.from_pretrained("dandelin/vilt-b32-mlm")
+
+            >>> # prepare inputs
+            >>> encoding = processor(image, text, return_tensors="pt")
+
+            >>> # forward pass
+            >>> outputs = model(**encoding)
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -914,25 +887,19 @@ class ViltForPreTraining(ViltPreTrainedModel):
         text_features, _ = (sequence_output[:, :text_seq_len], sequence_output[:, text_seq_len:])
 
         mlm_logits = self.mlm_score(text_features)
-        itm_logits = self.itm_score(pooled_output)
 
-        loss = None
-        loss_fct = CrossEntropyLoss()
+        masked_lm_loss = None
         if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-            loss = masked_lm_loss
-        if itm_labels is not None:
-            itm_loss = loss_fct(itm_logits, itm_labels)
-            loss = itm_loss if loss is None else loss + itm_loss
 
         if not return_dict:
-            output = (mlm_logits, itm_logits) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            output = (mlm_logits,) + outputs[2:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return ViltForPreTrainingOutput(
-            loss=loss,
-            mlm_logits=mlm_logits,
-            itm_logits=itm_logits,
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=mlm_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
