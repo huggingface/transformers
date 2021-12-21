@@ -56,3 +56,4 @@ python3 run_image_captioning_flax.py \
 ```
 
 This should finish in about 1h30, with validation loss and ROUGE2 score of 2.0153 and 14.64 respectively after 1 epoch.
+Training statistics can be accessed on [Models](https://huggingface.co/ydshieh/image-captioning-training-results/tensorboard).
