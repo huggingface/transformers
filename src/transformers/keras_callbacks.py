@@ -79,6 +79,26 @@ class KerasMetricCallback(Callback):
         else:
             raise ValueError("Could not autodetect label_cols for KerasMetricCallback, please specify them!")
 
+    @staticmethod
+    def _concatenate_batches(batches):
+        # Flattens Numpy array batches into a list of single samples, where each sample is still np.ndarray
+        return [sample for batch in batches for sample in batch]
+
+    def _postprocess_predictions_or_labels(self, inputs):
+        if isinstance(inputs[0], dict):
+            outputs = dict()
+            for key in inputs[0].keys():
+                outputs[key] = self._concatenate_batches(batch[key] for batch in inputs)
+        elif isinstance(inputs[0], list) or isinstance(inputs[0], tuple):
+            outputs = []
+            for input_list in zip(*inputs):
+                outputs.append(self._concatenate_batches(input_list))
+        elif isinstance(inputs[0], np.ndarray):
+            outputs = self._concatenate_batches(inputs)
+        else:
+            raise TypeError(f"Couldn't handle batch of type {type(inputs[0])}!")
+        return outputs
+
     def on_epoch_end(self, epoch, logs=None):
         prediction_list = []
         label_list = []
@@ -95,13 +115,22 @@ class KerasMetricCallback(Callback):
                 predictions = self.model.predict(batch)
             predictions = dict(predictions)
             if self.output_cols is not None:
-                prediction_list.append({key: predictions[key] for key in self.output_cols})
+                predictions = {key: predictions[key] for key in self.output_cols}
+            prediction_list.append(predictions)
+            if not self.use_keras_label:
+                labels = {key: batch[key].numpy() for key in self.label_cols}
+            elif isinstance(labels, dict):
+                labels = {key: array.numpy() for key, array in labels.items()}
+            elif isinstance(labels, list) or isinstance(labels, tuple):
+                labels = [array.numpy() for array in labels]
+            elif isinstance(labels, tf.Tensor):
+                labels = labels.numpy()
             else:
-                prediction_list.append(predictions)
-            if self.use_keras_label:
-                label_list.append(labels)
-            else:
-                label_list.append({key: batch[key] for key in self.label_cols})
+                raise TypeError(f"Confused by labels of type {type(labels)}")
+            label_list.append(labels)
+
+        prediction_list = self._postprocess_predictions_or_labels(prediction_list)
+        label_list = self._postprocess_predictions_or_labels(label_list)
 
         metric_output = self.metric_fn(prediction_list, label_list)
         if not isinstance(metric_output, dict):
