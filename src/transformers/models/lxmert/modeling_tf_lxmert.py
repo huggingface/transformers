@@ -1327,7 +1327,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
             - 0 indicates that the sentence does not match the image,
             - 1 indicates that the sentence does match the image.
-        ans: (`Torch.Tensor` of shape `(batch_size)`, *optional*, defaults to :obj: *None*):
+        ans (`Torch.Tensor` of shape `(batch_size)`, *optional*, defaults to :obj: *None*):
             a one hot representation hof the correct answer *optional*
 
         Returns:
