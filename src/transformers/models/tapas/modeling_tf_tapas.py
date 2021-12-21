@@ -25,7 +25,6 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_tensorflow_probability_available,
