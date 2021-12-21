@@ -61,21 +61,20 @@ UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class UniSpeechSatBaseModelOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.UniSpeechSatBaseModelOutput`, with potential hidden states and attentions.
+    Output type of [`UniSpeechSatBaseModelOutput`], with potential hidden states and attentions.
 
     Args:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        extract_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, conv_dim[-1])`):
+        extract_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
             Sequence of extracted feature vectors of the last convolutional layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -90,27 +89,26 @@ class UniSpeechSatBaseModelOutput(ModelOutput):
 @dataclass
 class UniSpeechSatForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.UniSpeechSatForPreTrainingOutput`, with potential hidden states and
+    Output type of [`UniSpeechSatForPreTrainingOutput`], with potential hidden states and
     attentions.
 
     Args:
-        loss (`optional`, returned when model is in train mode, ``torch.FloatTensor`` of shape :obj:`(1,)`):
-            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the `official
-            paper <https://arxiv.org/pdf/2006.11477.pdf>`__ . (classification) loss.
-        projected_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Hidden-states of the model projected to `config.proj_codevector_dim` that can be used to predict the masked
+        loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
+            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
+            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
-        projected_quantized_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Quantized extracted feature vectors projected to `config.proj_codevector_dim` representing the positive
+        projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
             target vectors for contrastive loss.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -128,23 +126,22 @@ class UniSpeechSatForPreTrainingOutput(ModelOutput):
 @dataclass
 class XVectorOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.Wav2Vec2ForXVector`.
+    Output type of [`Wav2Vec2ForXVector`].
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Classification loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
+        logits (`torch.FloatTensor` of shape `(batch_size, config.xvector_output_dim)`):
             Classification hidden states before AMSoftmax.
-        embeddings (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.xvector_output_dim)`):
+        embeddings (`torch.FloatTensor` of shape `(batch_size, config.xvector_output_dim)`):
             Utterance embeddings used for vector similarity-based retrieval.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -1020,58 +1017,58 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
 
 
 UNISPEECH_SAT_START_DOCSTRING = r"""
-    UniSpeechSat was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
-    <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
+    UniSpeechSat was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.UniSpeechSatConfig`): Model configuration class with all the parameters of the model.
+        config ([`UniSpeechSatConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 
 UNISPEECH_SAT_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.UniSpeechSatProcessor`
-            should be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.UniSpeechSatProcessor.__call__` for details.
-        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
-            1]``:
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`UniSpeechSatProcessor`]
+            should be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
+            [`UniSpeechSatProcessor.__call__`] for details.
+        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            [What are attention masks?](../glossary#attention-mask)
 
-            .. warning::
-                :obj:`attention_mask` should only be passed if the corresponding processor has
-                ``config.return_attention_mask == True``. For all models whose processor has
-                ``config.return_attention_mask == False``, such as `unispeech_sat-base
-                <https://huggingface.co/facebook/unispeech_sat-base-960h>`__, :obj:`attention_mask` should **not** be
-                passed to avoid degraded performance when doing batched inference. For such models :obj:`input_values`
-                should simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models
-                also yield slightly different results depending on whether :obj:`input_values` is padded or not.
+            <Tip warning={true}>
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            `attention_mask` should only be passed if the corresponding processor has
+            `config.return_attention_mask == True`. For all models whose processor has
+            `config.return_attention_mask == False`, such as [unispeech_sat-base](https://huggingface.co/facebook/unispeech_sat-base-960h), `attention_mask` should **not** be
+            passed to avoid degraded performance when doing batched inference. For such models `input_values`
+            should simply be padded with 0 and passed without `attention_mask`. Be aware that these models
+            also yield slightly different results depending on whether `input_values` is padded or not.
+
+            </Tip>
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1405,11 +1402,9 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_length)`, `optional`):
-            Labels for connectionist temporal classification. Note that ``target_length`` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
-            1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
-            config.vocab_size - 1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`.
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1523,10 +1518,9 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1626,10 +1620,9 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1791,10 +1784,9 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

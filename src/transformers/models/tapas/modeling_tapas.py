@@ -105,23 +105,22 @@ CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
 @dataclass
 class TableQuestionAnsweringOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TapasForQuestionAnswering`.
+    Output type of [`TapasForQuestionAnswering`].
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` (and possibly :obj:`answer`, :obj:`aggregation_labels`, :obj:`numeric_values` and :obj:`numeric_values_scale` are provided)):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` (and possibly `answer`, `aggregation_labels`, `numeric_values` and `numeric_values_scale` are provided)):
             Total loss as the sum of the hierarchical cell selection log-likelihood loss and (optionally) the
             semi-supervised regression loss and (optionally) supervised loss for aggregations.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Prediction scores of the cell selection head, for every token.
-        logits_aggregation (:obj:`torch.FloatTensor`, `optional`, of shape :obj:`(batch_size, num_aggregation_labels)`):
+        logits_aggregation (`torch.FloatTensor`, *optional*, of shape `(batch_size, num_aggregation_labels)`):
             Prediction scores of the aggregation head, for every aggregation operator.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
             each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
             weighted average in the self-attention heads.
     """
 
@@ -792,62 +791,62 @@ class TapasPreTrainedModel(PreTrainedModel):
 
 
 TAPAS_START_DOCSTRING = r"""
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its models (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.TapasConfig`): Model configuration class with all the parameters of the model.
+        config ([`TapasConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 TAPAS_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using
-            :class:`~transformers.TapasTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            [`TapasTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0}, 7)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `({0}, 7)`, *optional*):
             Token indices that encode tabular structure. Indices can be obtained using
-            :class:`~transformers.TapasTokenizer`. See this class for more info.
+            [`TapasTokenizer`]. See this class for more info.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. If
-            ``reset_position_index_per_cell`` of :class:`~transformers.TapasConfig` is set to ``True``, relative
-            position embeddings will be used. Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            `reset_position_index_per_cell` of [`TapasConfig`] is set to `True`, relative
+            position embeddings will be used. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``: - 1
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`: - 1
             indicates the head is **not masked**, - 0 indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -857,12 +856,12 @@ TAPAS_INPUTS_DOCSTRING = r"""
 )
 class TapasModel(TapasPreTrainedModel):
     """
-    This class is a small change compared to :class:`~transformers.BertModel`, taking into account the additional token
+    This class is a small change compared to [`BertModel`], taking into account the additional token
     type ids.
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
+    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     """
@@ -1045,33 +1044,33 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         **kwargs
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import TapasTokenizer, TapasForMaskedLM
-            >>> import pandas as pd
+        ```python
+        >>> from transformers import TapasTokenizer, TapasForMaskedLM
+        >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base')
-            >>> model = TapasForMaskedLM.from_pretrained('google/tapas-base')
+        >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base')
+        >>> model = TapasForMaskedLM.from_pretrained('google/tapas-base')
 
-            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-            ...         'Age': ["56", "45", "59"],
-            ...         'Number of movies': ["87", "53", "69"]
-            ... }
-            >>> table = pd.DataFrame.from_dict(data)
+        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        ...         'Age': ["56", "45", "59"],
+        ...         'Number of movies': ["87", "53", "69"]
+        ... }
+        >>> table = pd.DataFrame.from_dict(data)
 
-            >>> inputs = tokenizer(table=table, queries="How many [MASK] has George [MASK] played in?", return_tensors="pt")
-            >>> labels = tokenizer(table=table, queries="How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
+        >>> inputs = tokenizer(table=table, queries="How many [MASK] has George [MASK] played in?", return_tensors="pt")
+        >>> labels = tokenizer(table=table, queries="How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
 
-            >>> outputs = model(**inputs, labels=labels)
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model(**inputs, labels=labels)
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.tapas(
@@ -1172,54 +1171,55 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        table_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
+        table_mask (`torch.LongTensor` of shape `(batch_size, seq_length)`, *optional*):
             Mask for the table. Indicates which tokens belong to the table (1). Question tokens, table headers and
             padding are 0.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
+        labels (`torch.LongTensor` of shape `(batch_size, seq_length)`, *optional*):
             Labels per token for computing the hierarchical cell selection loss. This encodes the positions of the
-            answer appearing in the table. Can be obtained using :class:`~transformers.TapasTokenizer`.
+            answer appearing in the table. Can be obtained using [`TapasTokenizer`].
 
             - 1 for tokens that are **part of the answer**,
             - 0 for tokens that are **not part of the answer**.
 
-        aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
+        aggregation_labels (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             Aggregation function index for every example in the batch for computing the aggregation loss. Indices
-            should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`. Only required in case of strong
+            should be in `[0, ..., config.num_aggregation_labels - 1]`. Only required in case of strong
             supervision for aggregation (WikiSQL-supervised).
-        float_answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
-            Float answer for every example in the batch. Set to `float('nan')` for cell selection questions. Only
+        float_answer (`torch.FloatTensor` of shape `(batch_size, )`, *optional*):
+            Float answer for every example in the batch. Set to *float('nan')* for cell selection questions. Only
             required in case of weak supervision (WTQ) to calculate the aggregate mask and regression loss.
-        numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
+        numeric_values (`torch.FloatTensor` of shape `(batch_size, seq_length)`, *optional*):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using
-            :class:`~transformers.TapasTokenizer`. Only required in case of weak supervision for aggregation (WTQ) to
+            [`TapasTokenizer`]. Only required in case of weak supervision for aggregation (WTQ) to
             calculate the regression loss.
-        numeric_values_scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
-            Scale of the numeric values of every token. Can be obtained using :class:`~transformers.TapasTokenizer`.
+        numeric_values_scale (`torch.FloatTensor` of shape `(batch_size, seq_length)`, *optional*):
+            Scale of the numeric values of every token. Can be obtained using [`TapasTokenizer`].
             Only required in case of weak supervision for aggregation (WTQ) to calculate the regression loss.
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
-            >>> import pandas as pd
+        ```python
+        >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
+        >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-wtq')
-            >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq')
+        >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-wtq')
+        >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq')
 
-            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-            ...         'Age': ["56", "45", "59"],
-            ...         'Number of movies': ["87", "53", "69"]
-            ... }
-            >>> table = pd.DataFrame.from_dict(data)
-            >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
+        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        ...         'Age': ["56", "45", "59"],
+        ...         'Number of movies': ["87", "53", "69"]
+        ... }
+        >>> table = pd.DataFrame.from_dict(data)
+        >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
-            >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
-            >>> outputs = model(**inputs)
+        >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
+        >>> outputs = model(**inputs)
 
-            >>> logits = outputs.logits
-            >>> logits_aggregation = outputs.logits_aggregation
-        """
+        >>> logits = outputs.logits
+        >>> logits_aggregation = outputs.logits_aggregation
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.tapas(
@@ -1486,37 +1486,37 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy). Note: this is called
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy). Note: this is called
             "classification_class_index" in the original implementation.
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import TapasTokenizer, TapasForSequenceClassification
-            >>> import torch
-            >>> import pandas as pd
+        ```python
+        >>> from transformers import TapasTokenizer, TapasForSequenceClassification
+        >>> import torch
+        >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-tabfact')
-            >>> model = TapasForSequenceClassification.from_pretrained('google/tapas-base-finetuned-tabfact')
+        >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-tabfact')
+        >>> model = TapasForSequenceClassification.from_pretrained('google/tapas-base-finetuned-tabfact')
 
-            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-            ...         'Age': ["56", "45", "59"],
-            ...         'Number of movies': ["87", "53", "69"]
-            ... }
-            >>> table = pd.DataFrame.from_dict(data)
-            >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors which played in more than 60 movies"]
+        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        ...         'Age': ["56", "45", "59"],
+        ...         'Number of movies': ["87", "53", "69"]
+        ... }
+        >>> table = pd.DataFrame.from_dict(data)
+        >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors which played in more than 60 movies"]
 
-            >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
-            >>> labels = torch.tensor([1, 0]) # 1 means entailed, 0 means refuted
+        >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
+        >>> labels = torch.tensor([1, 0]) # 1 means entailed, 0 means refuted
 
-            >>> outputs = model(**inputs, labels=labels)
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.tapas(
@@ -1590,13 +1590,13 @@ class IndexMap(object):
         Creates an index
 
         Args:
-            indices (:obj:`torch.LongTensor`, same shape as a `values` Tensor to which the indices refer):
+            indices (`torch.LongTensor`, same shape as a *values* Tensor to which the indices refer):
                 Tensor containing the indices.
-            num_segments (:obj:`torch.LongTensor`):
+            num_segments (`torch.LongTensor`):
                 Scalar tensor, the number of segments. All elements in a batched segmented tensor must have the same
                 number of segments (although many segments can be empty).
-            batch_dims (:obj:`int`, `optional`, defaults to 0):
-                The number of batch dimensions. The first `batch_dims` dimensions of a SegmentedTensor are treated as
+            batch_dims (`int`, *optional*, defaults to 0):
+                The number of batch dimensions. The first *batch_dims* dimensions of a SegmentedTensor are treated as
                 batch dimensions. Segments in different batch elements are always distinct even if they have the same
                 index.
         """
@@ -1616,14 +1616,14 @@ class ProductIndexMap(IndexMap):
         Combines indices i and j into pairs (i, j). The result is an index where each segment (i, j) is the
         intersection of segments i and j. For example if the inputs represent table cells indexed by respectively rows
         and columns the output will be a table indexed by (row, column) pairs, i.e. by cell. The implementation
-        combines indices {0, .., n - 1} and {0, .., m - 1} into {0, .., nm - 1}. The output has `num_segments` equal to
-        `outer_index.num_segments` * `inner_index.num_segments`
+        combines indices {0, .., n - 1} and {0, .., m - 1} into {0, .., nm - 1}. The output has *num_segments* equal to
+        *outer_index.num_segments* * *inner_index.num_segments*
 
         Args:
-            outer_index (:obj:`IndexMap`):
+            outer_index (`IndexMap`):
                 IndexMap.
-            inner_index (:obj:`IndexMap`):
-                IndexMap, must have the same shape as `outer_index`.
+            inner_index (`IndexMap`):
+                IndexMap, must have the same shape as *outer_index*.
         """
         if outer_index.batch_dims != inner_index.batch_dims:
             raise ValueError("outer_index.batch_dims and inner_index.batch_dims must be the same.")
@@ -1658,19 +1658,19 @@ class ProductIndexMap(IndexMap):
 
 def gather(values, index, name="segmented_gather"):
     """
-    Gathers from `values` using the index map. For each element in the domain of the index map this operation looks up
-    a value for that index in `values`. Two elements from the same segment always get assigned the same value.
+    Gathers from *values* using the index map. For each element in the domain of the index map this operation looks up
+    a value for that index in *values*. Two elements from the same segment always get assigned the same value.
 
     Args:
-        values (:obj:`torch.Tensor` of shape (B1, ..., Bn, num_segments, V1, ...)):
+        values (`torch.Tensor` of shape (B1, ..., Bn, num_segments, V1, ...)):
             Tensor with segment values.
-        index (:obj:`IndexMap` of shape (B1, ..., Bn, I1, ..., Ik)):
+        index (`IndexMap` of shape (B1, ..., Bn, I1, ..., Ik)):
             IndexMap.
-        name (:obj:`str`, `optional`, defaults to 'segmented_gather'):
+        name (`str`, *optional*, defaults to 'segmented_gather'):
             Name for the operation. Currently not used
 
     Returns:
-        :obj:`tuple(torch.Tensor)`: Tensor of shape (B1, ..., Bn, I1, ..., Ik, V1, ...) with the gathered values.
+        `tuple(torch.Tensor)`: Tensor of shape (B1, ..., Bn, I1, ..., Ik, V1, ...) with the gathered values.
     """
     indices = index.indices
     # first, check whether the indices of the index represent scalar values (i.e. not vectorized)
@@ -1693,17 +1693,17 @@ def flatten(index, name="segmented_flatten"):
     """
     Flattens a batched index map (which is typically of shape batch_size, seq_length) to a 1d index map. This operation
     relabels the segments to keep batch elements distinct. The k-th batch element will have indices shifted by
-    `num_segments` * (k - 1). The result is a tensor with `num_segments` multiplied by the number of elements in the
+    *num_segments* * (k - 1). The result is a tensor with *num_segments* multiplied by the number of elements in the
     batch.
 
     Args:
-        index (:obj:`IndexMap`):
+        index (`IndexMap`):
             IndexMap to flatten.
-        name (:obj:`str`, `optional`, defaults to 'segmented_flatten'):
+        name (`str`, *optional*, defaults to 'segmented_flatten'):
             Name for the operation. Currently not used
 
     Returns:
-        (:obj:`IndexMap`): The flattened IndexMap.
+        (`IndexMap`): The flattened IndexMap.
     """
     # first, get batch_size as scalar tensor
     batch_size = torch.prod(torch.tensor(list(index.batch_shape())))
@@ -1723,15 +1723,15 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     Constructs an index map equal to range(num_segments).
 
     Args:
-        batch_shape (:obj:`torch.Size`):
+        batch_shape (`torch.Size`):
             Batch shape
-        num_segments (:obj:`int`):
+        num_segments (`int`):
             Number of segments
-        name (:obj:`str`, `optional`, defaults to 'range_index_map'):
+        name (`str`, *optional*, defaults to 'range_index_map'):
             Name for the operation. Currently not used
 
     Returns:
-        (:obj:`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
+        (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
     """
     batch_shape = torch.as_tensor(
         batch_shape, dtype=torch.long
@@ -1764,17 +1764,17 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     Applies a segment reduction segment-wise.
 
     Args:
-        values (:obj:`torch.Tensor`):
+        values (`torch.Tensor`):
             Tensor with segment values.
-        index (:obj:`IndexMap`):
+        index (`IndexMap`):
             IndexMap.
-        segment_reduce_fn (:obj:`str`):
+        segment_reduce_fn (`str`):
             Name for the reduce operation. One of "sum", "mean", "max" or "min".
-        name (:obj:`str`):
+        name (`str`):
             Name for the operation. Currently not used
 
     Returns:
-        (:obj:`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
+        (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
     """
     # Flatten the batch dimensions, as segments ops (scatter) do not support batching.
     # However if `values` has extra dimensions to the right keep them
@@ -1823,16 +1823,16 @@ def reduce_sum(values, index, name="segmented_reduce_sum"):
           vectors rather than scalars. Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
 
     Args:
-        values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
+        values (`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
             Tensor containing the values of which the sum must be taken segment-wise.
-        index (:obj:`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
+        index (`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
             Index defining the segments.
-        name (:obj:`str`, `optional`, defaults to 'segmented_reduce_sum'):
+        name (`str`, *optional*, defaults to 'segmented_reduce_sum'):
             Name for the operation. Currently not used
 
     Returns:
-        output_values (:obj:`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
-        output values. output_index (:obj:`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments]. .
+        output_values (`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
+        output values. output_index (`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments]. .
     """
     return _segment_reduce(values, index, "sum", name)
 
@@ -1852,16 +1852,16 @@ def reduce_mean(values, index, name="segmented_reduce_mean"):
     Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
 
     Args:
-        values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
+        values (`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
             Tensor containing the values of which the mean must be taken segment-wise.
-        index (:obj:`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
+        index (`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
             Index defining the segments.
-        name (:obj:`str`, `optional`, defaults to 'segmented_reduce_sum'):
+        name (`str`, *optional*, defaults to 'segmented_reduce_sum'):
             Name for the operation. Currently not used
 
     Returns:
-        output_values (:obj:`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
-        output values. output_index (:obj:`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
+        output_values (`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
+        output values. output_index (`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
     """
     return _segment_reduce(values, index, "mean", name)
 
@@ -1879,16 +1879,16 @@ def reduce_max(values, index, name="segmented_reduce_max"):
     Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
 
     Args:
-        values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
+        values (`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
             Tensor containing the values of which the max must be taken segment-wise.
-        index (:obj:`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
+        index (`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
             Index defining the segments.
-        name (:obj:`str`, `optional`, defaults to 'segmented_reduce_sum'):
+        name (`str`, *optional*, defaults to 'segmented_reduce_sum'):
             Name for the operation. Currently not used
 
     Returns:
-        output_values (:obj:`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
-        output values. output_index (:obj:`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
+        output_values (`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
+        output values. output_index (`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
     """
     return _segment_reduce(values, index, "max", name)
 
@@ -1906,16 +1906,16 @@ def reduce_min(values, index, name="segmented_reduce_min"):
     Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
 
     Args:
-        values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
+        values (`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
             Tensor containing the values of which the min must be taken segment-wise.
-        index (:obj:`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
+        index (`IndexMap`, indices are of shape [B1, B2, ..., Bn, I1, .., Ik].):
             Index defining the segments.
-        name (:obj:`str`, `optional`, defaults to 'segmented_reduce_sum'):
+        name (`str`, *optional*, defaults to 'segmented_reduce_sum'):
             Name for the operation. Currently not used
 
     Returns:
-        output_values (:obj:`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
-        output values. output_index (:obj:`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
+        output_values (`torch.Tensor`of shape [B1, B2, ..., Bn, num_segments, V1, V2, ..]): Tensor containing the
+        output values. output_index (`IndexMap`): IndexMap with shape [B1, B2, ..., Bn, num_segments].
     """
     return _segment_reduce(values, index, "min", name)
 
@@ -1930,21 +1930,21 @@ def compute_column_logits(
     Computes the column logits.
 
     Args:
-        sequence_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+        sequence_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the model.
-        column_output_weights (:obj:`torch.FloatTensor` of shape :obj:`(hidden_size)`):
+        column_output_weights (`torch.FloatTensor` of shape `(hidden_size)`):
             Weights of the linear layer for column selection.
-        column_output_bias (:obj:`torch.FloatTensor` of shape :obj:`()`):
+        column_output_bias (`torch.FloatTensor` of shape `()`):
             Bias of the linear layer for column selection.
-        cell_index (:obj:`ProductIndexMap`):
+        cell_index (`ProductIndexMap`):
             Index that groups tokens into cells.
-        cell_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, max_num_rows * max_num_cols)`):
+        cell_mask (`torch.FloatTensor` of shape `(batch_size, max_num_rows * max_num_cols)`):
             Mask for cells that exist in the table (i.e. that are not padding).
-        allow_empty_column_selection (:obj:`bool`):
+        allow_empty_column_selection (`bool`):
             Whether to allow not to select any column
 
     Returns:
-        column_logits (:obj:`torch.FloatTensor`of shape :obj:`(batch_size, max_num_cols)`): Tensor containing the
+        column_logits (`torch.FloatTensor`of shape `(batch_size, max_num_cols)`): Tensor containing the
         column logits for every example in the batch.
     """
 
@@ -1982,24 +1982,24 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
     the selected column are never selected.
 
     Args:
-        token_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+        token_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Tensor containing the logits per token.
-        column_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, max_num_cols)`):
+        column_logits (`torch.FloatTensor` of shape `(batch_size, max_num_cols)`):
             Tensor containing the logits per column.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Labels per token.
-        cell_index (:obj:`ProductIndexMap`):
+        cell_index (`ProductIndexMap`):
             Index that groups tokens into cells.
-        col_index (:obj:`IndexMap`):
+        col_index (`IndexMap`):
             Index that groups tokens into columns.
-        cell_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, max_num_rows * max_num_cols)`):
+        cell_mask (`torch.FloatTensor` of shape `(batch_size, max_num_rows * max_num_cols)`):
             Mask for cells that exist in the table (i.e. that are not padding).
 
     Returns:
-        selection_loss_per_example (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Loss for each example.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`): New logits which are only
+        selection_loss_per_example (`torch.FloatTensor` of shape `(batch_size,)`): Loss for each example.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`): New logits which are only
         allowed to select cells in a single column. Logits outside of the most likely column according to
-        `column_logits` will be set to a very low value (such that the probabilities are 0).
+        *column_logits* will be set to a very low value (such that the probabilities are 0).
     """
     # Part 1: column loss
 
@@ -2087,17 +2087,17 @@ def compute_token_logits(sequence_output, temperature, output_weights, output_bi
     Computes logits per token
 
     Args:
-        sequence_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+        sequence_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Also known as last_hidden_state. Sequence of hidden-states at the output of the last layer of the model.
-        temperature (:obj:`float`):
+        temperature (`float`):
             Temperature for the Bernoulli distribution.
-        output_weights (:obj:`torch.FloatTensor` of shape :obj:`(hidden_size,)`):
+        output_weights (`torch.FloatTensor` of shape `(hidden_size,)`):
             Weights of the linear layer for cell selection.
-        output_bias (:obj:`torch.FloatTensor` of shape :obj:`()`):
+        output_bias (`torch.FloatTensor` of shape `()`):
             Bias of the linear layer for cell selection
 
     Returns:
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`): Logits per token.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`): Logits per token.
     """
     logits = (torch.einsum("bsj,j->bs", sequence_output, output_weights) + output_bias) / temperature
 
@@ -2113,20 +2113,20 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
     apply to numbers. If the answer is a number but does not appear in the table then we must use some aggregation
     case. The ambiguous case is when the answer is a number that also appears in the table. In this case we use the
     aggregation function probabilities predicted by the model to decide whether to select or aggregate. The threshold
-    for this is a hyperparameter `cell_selection_preference`
+    for this is a hyperparameter *cell_selection_preference*
 
     Args:
-        answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`):
+        answer (`torch.FloatTensor` of shape `(batch_size, )`):
             Answer for every example in the batch. Nan if there is no scalar answer.
-        pooled_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
+        pooled_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Output of the pooler (BertPooler) on top of the encoder layer.
-        cell_selection_preference (:obj:`float`):
+        cell_selection_preference (`float`):
             Preference for cell selection in ambiguous cases.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Labels per token. aggregation_classifier (:obj:`torch.nn.Linear`): Aggregation head
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Labels per token. aggregation_classifier (`torch.nn.Linear`): Aggregation head
 
     Returns:
-        aggregate_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): A mask set to 1 for examples that
+        aggregate_mask (`torch.FloatTensor` of shape `(batch_size,)`): A mask set to 1 for examples that
         should use aggregation functions.
     """
     # torch.FloatTensor(batch_size,)
@@ -2166,19 +2166,19 @@ def _calculate_aggregation_loss_known(
     where aggregation type is always known, standard cross entropy loss is accumulated for all examples
 
     Args:
-        logits_aggregation (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
+        logits_aggregation (`torch.FloatTensor` of shape `(batch_size, num_aggregation_labels)`):
             Logits per aggregation operation.
-        aggregate_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`):
+        aggregate_mask (`torch.FloatTensor` of shape `(batch_size, )`):
             A mask set to 1 for examples that should use aggregation functions.
-        aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`):
+        aggregation_labels (`torch.LongTensor` of shape `(batch_size, )`):
             Aggregation function id for every example in the batch.
-        use_answer_as_supervision (:obj:`bool`, `optional`):
+        use_answer_as_supervision (`bool`, *optional*):
             Whether to use the answer as the only supervision for aggregation examples.
-        num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
+        num_aggregation_labels (`int`, *optional*, defaults to 0):
             The number of aggregation operators to predict.
 
     Returns:
-        aggregation_loss_known (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Aggregation loss (when its
+        aggregation_loss_known (`torch.FloatTensor` of shape `(batch_size,)`): Aggregation loss (when its
         type is known during training) per example.
     """
     if use_answer_as_supervision:
@@ -2206,13 +2206,13 @@ def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
     Calculates aggregation loss in the case of answer supervision.
 
     Args:
-        logits_aggregation (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
+        logits_aggregation (`torch.FloatTensor` of shape `(batch_size, num_aggregation_labels)`):
             Logits per aggregation operation.
-        aggregate_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`):
+        aggregate_mask (`torch.FloatTensor` of shape `(batch_size, )`):
             A mask set to 1 for examples that should use aggregation functions
 
     Returns:
-        aggregation_loss_unknown (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Aggregation loss (in case of
+        aggregation_loss_unknown (`torch.FloatTensor` of shape `(batch_size,)`): Aggregation loss (in case of
         answer supervision) per example.
     """
     dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation)
@@ -2237,21 +2237,21 @@ def _calculate_aggregation_loss(
     Calculates the aggregation loss per example.
 
     Args:
-        logits_aggregation (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
+        logits_aggregation (`torch.FloatTensor` of shape `(batch_size, num_aggregation_labels)`):
             Logits per aggregation operation.
-        aggregate_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`):
+        aggregate_mask (`torch.FloatTensor` of shape `(batch_size, )`):
             A mask set to 1 for examples that should use aggregation functions.
-        aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`):
+        aggregation_labels (`torch.LongTensor` of shape `(batch_size, )`):
             Aggregation function id for every example in the batch.
-        use_answer_as_supervision (:obj:`bool`, `optional`):
+        use_answer_as_supervision (`bool`, *optional*):
             Whether to use the answer as the only supervision for aggregation examples.
-        num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
+        num_aggregation_labels (`int`, *optional*, defaults to 0):
             The number of aggregation operators to predict.
-        aggregation_loss_weight (:obj:`float`, `optional`, defaults to 1.0):
+        aggregation_loss_weight (`float`, *optional*, defaults to 1.0):
             Importance weight for the aggregation loss.
 
     Returns:
-        aggregation_loss (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Aggregation loss per example.
+        aggregation_loss (`torch.FloatTensor` of shape `(batch_size,)`): Aggregation loss per example.
     """
     per_example_aggregation_loss = _calculate_aggregation_loss_known(
         logits_aggregation, aggregate_mask, aggregation_labels, use_answer_as_supervision, num_aggregation_labels
@@ -2270,21 +2270,21 @@ def _calculate_expected_result(
     Calculates the expected result given cell and aggregation probabilities.
 
     Args:
-        dist_per_cell (:obj:`torch.distributions.Bernoulli`):
+        dist_per_cell (`torch.distributions.Bernoulli`):
             Cell selection distribution for each cell.
-        numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`):
+        numeric_values (`torch.FloatTensor` of shape `(batch_size, seq_length)`):
             Numeric values of every token. Nan for tokens which are not numeric values.
-        numeric_values_scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`):
+        numeric_values_scale (`torch.FloatTensor` of shape `(batch_size, seq_length)`):
             Scale of the numeric values of every token.
-        input_mask_float (:obj: `torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`):
+        input_mask_float (:obj: *torch.FloatTensor* of shape `(batch_size, seq_length)`):
             Mask for the table, without question tokens and table headers.
-        logits_aggregation (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
+        logits_aggregation (`torch.FloatTensor` of shape `(batch_size, num_aggregation_labels)`):
             Logits per aggregation operation.
-        config (:class:`~transformers.TapasConfig`):
+        config ([`TapasConfig`]):
             Model configuration class with all the hyperparameters of the model
 
     Returns:
-        expected_result (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): The expected result per example.
+        expected_result (`torch.FloatTensor` of shape `(batch_size,)`): The expected result per example.
     """
     if config.use_gumbel_for_cells:
         gumbel_dist = torch.distributions.RelaxedBernoulli(
@@ -2370,26 +2370,26 @@ def _calculate_regression_loss(
     Calculates the regression loss per example.
 
     Args:
-        answer (:obj: `torch.FloatTensor` of shape :obj:`(batch_size,)`):
+        answer (:obj: *torch.FloatTensor* of shape `(batch_size,)`):
             Answer for every example in the batch. Nan if there is no scalar answer.
-        aggregate_mask (:obj: `torch.FloatTensor` of shape :obj:`(batch_size,)`):
+        aggregate_mask (:obj: *torch.FloatTensor* of shape `(batch_size,)`):
             A mask set to 1 for examples that should use aggregation functions.
-        dist_per_cell (:obj:`torch.distributions.Bernoulli`):
+        dist_per_cell (`torch.distributions.Bernoulli`):
             Cell selection distribution for each cell.
-        numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`):
+        numeric_values (`torch.FloatTensor` of shape `(batch_size, seq_length)`):
             Numeric values of every token. Nan for tokens which are not numeric values.
-        numeric_values_scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`):
+        numeric_values_scale (`torch.FloatTensor` of shape `(batch_size, seq_length)`):
             Scale of the numeric values of every token.
-        input_mask_float (:obj: `torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`):
+        input_mask_float (:obj: *torch.FloatTensor* of shape `(batch_size, seq_length)`):
             Mask for the table, without question tokens and table headers.
-        logits_aggregation (:obj: `torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
+        logits_aggregation (:obj: *torch.FloatTensor* of shape `(batch_size, num_aggregation_labels)`):
             Logits per aggregation operation.
-        config (:class:`~transformers.TapasConfig`):
+        config ([`TapasConfig`]):
             Model configuration class with all the parameters of the model
 
     Returns:
-        per_example_answer_loss_scaled (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Scales answer loss for
-        each example in the batch. large_answer_loss_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): A
+        per_example_answer_loss_scaled (`torch.FloatTensor` of shape `(batch_size,)`): Scales answer loss for
+        each example in the batch. large_answer_loss_mask (`torch.FloatTensor` of shape `(batch_size,)`): A
         mask which is 1 for examples for which their answer loss is larger than the answer_loss_cutoff.
     """
     # float32 (batch_size,)

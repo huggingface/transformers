@@ -180,9 +180,9 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     """
     Build relative position according to the query and key
 
-    We assume the absolute position of query :math:`P_q` is range from (0, query_size) and the absolute position of key
-    :math:`P_k` is range from (0, key_size), The relative positions from query to key is :math:`R_{q \\rightarrow k} =
-    P_q - P_k`
+    We assume the absolute position of query \\(P_q\\) is range from (0, query_size) and the absolute position of key
+    \\(P_k\\) is range from (0, key_size), The relative positions from query to key is \\(R_{q \\rightarrow k} =
+    P_q - P_k\\)
 
     Args:
         query_size (int): the length of query
@@ -191,7 +191,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         max_position (int): the maximum allowed absolute position
 
     Return:
-        :obj:`torch.LongTensor`: A tensor with shape [1, query_size, key_size]
+        `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
 
     """
     q_ids = np.arange(0, query_size)
@@ -468,23 +468,24 @@ class XSoftmax(torch.autograd.Function):
     Masked Softmax which is optimized for saving memory
 
     Args:
-        input (:obj:`torch.tensor`): The input tensor that will apply softmax.
-        mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+        input (`torch.tensor`): The input tensor that will apply softmax.
+        mask (`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
         dim (int): The dimension that will apply softmax
 
-    Example::
+    Example:
 
-          >>> import torch
-          >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
+    ```python
+    >>> import torch
+    >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
 
-          >>> # Make a tensor
-          >>> x = torch.randn([4,20,100])
+    >>> # Make a tensor
+    >>> x = torch.randn([4,20,100])
 
-          >>> # Create a mask
-          >>> mask = (x>0).int()
+    >>> # Create a mask
+    >>> mask = (x>0).int()
 
-          >>> y = XSoftmax.apply(x, mask, dim=-1)
-    """
+    >>> y = XSoftmax.apply(x, mask, dim=-1)
+    ```"""
 
     @staticmethod
     def forward(self, input, mask, dim):
@@ -571,7 +572,7 @@ class StableDropout(nn.Module):
         Call the module
 
         Args:
-            x (:obj:`torch.tensor`): The input tensor to apply dropout
+            x (`torch.tensor`): The input tensor to apply dropout
         """
         if self.training and self.drop_prob > 0:
             return XDropout.apply(x, self.get_context())
@@ -622,9 +623,9 @@ class DisentangledSelfAttention(nn.Module):
     Disentangled self-attention module
 
     Parameters:
-        config (:obj:`DebertaV2Config`):
+        config (`DebertaV2Config`):
             A model config class instance with the configuration to build a new model. The schema is similar to
-            `BertConfig`, for more details, please refer :class:`~transformers.DebertaV2Config`
+            *BertConfig*, for more details, please refer [`DebertaV2Config`]
 
     """
 
@@ -684,28 +685,28 @@ class DisentangledSelfAttention(nn.Module):
         Call the module
 
         Args:
-            hidden_states (:obj:`torch.FloatTensor`):
+            hidden_states (`torch.FloatTensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
-                `Attention(Q,K,V)`
+                *Attention(Q,K,V)*
 
-            attention_mask (:obj:`torch.ByteTensor`):
-                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maximum
-                sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
+            attention_mask (`torch.ByteTensor`):
+                An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
+                sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            output_attentions (:obj:`bool`, optional):
+            output_attentions (`bool`, optional):
                 Whether return the attention matrix.
 
-            query_states (:obj:`torch.FloatTensor`, optional):
-                The `Q` state in `Attention(Q,K,V)`.
+            query_states (`torch.FloatTensor`, optional):
+                The *Q* state in *Attention(Q,K,V)*.
 
-            relative_pos (:obj:`torch.LongTensor`):
-                The relative position encoding between the tokens in the sequence. It's of shape [`B`, `N`, `N`] with
-                values ranging in [`-max_relative_positions`, `max_relative_positions`].
+            relative_pos (`torch.LongTensor`):
+                The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
+                values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (:obj:`torch.FloatTensor`):
-                The embedding of relative distances. It's a tensor of shape [:math:`2 \\times
-                \\text{max_relative_positions}`, `hidden_size`].
+            rel_embeddings (`torch.FloatTensor`):
+                The embedding of relative distances. It's a tensor of shape [\\(2 \\times
+                \\text{max_relative_positions}\\), *hidden_size*].
 
 
         """
@@ -1274,50 +1275,48 @@ class SEWDPreTrainedModel(PreTrainedModel):
 
 
 SEWD_START_DOCSTRING = r"""
-    SEW-D was proposed in `Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech Recognition
-    <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav
+    SEW-D was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech Recognition](https://arxiv.org/abs/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav
     Artzi.
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.SEWDConfig`): Model configuration class with all the parameters of the model.
+        config ([`SEWDConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 
 SEWD_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
-            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
-        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
-            1]``:
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should
+            be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
+            [`Wav2Vec2Processor.__call__`] for details.
+        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            [What are attention masks?](../glossary#attention-mask)
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1497,11 +1496,9 @@ class SEWDForCTC(SEWDPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_length)`, `optional`):
-            Labels for connectionist temporal classification. Note that ``target_length`` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
-            1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
-            config.vocab_size - 1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`.
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1615,10 +1612,9 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
