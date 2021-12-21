@@ -742,18 +742,20 @@ class FlaxAlbertForPreTraining(FlaxAlbertPreTrainedModel):
 FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import AlbertTokenizer, FlaxAlbertForPreTraining
+    ```python
+    >>> from transformers import AlbertTokenizer, FlaxAlbertForPreTraining
 
-        >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        >>> model = FlaxAlbertForPreTraining.from_pretrained('albert-base-v2')
+    >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+    >>> model = FlaxAlbertForPreTraining.from_pretrained('albert-base-v2')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
-        >>> outputs = model(**inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+    >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.sop_logits
+    >>> prediction_logits = outputs.prediction_logits
+    >>> seq_relationship_logits = outputs.sop_logits
+    ```
 """
 
 overwrite_call_docstring(

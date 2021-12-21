@@ -68,25 +68,25 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to the superclass for more information regarding methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             File containing the vocabulary.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"__start__"`):
+        bos_token (`str`, *optional*, defaults to `"__start__"`):
             The beginning of sentence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
+        eos_token (`str`, *optional*, defaults to `"__end__"`):
             The end of sentence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
+        unk_token (`str`, *optional*, defaults to `"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
+        pad_token (`str`, *optional*, defaults to `"__pad__"`):
             The token used for padding, for example when batching sequences of different lengths.
         **kwargs
-            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -28,58 +28,58 @@ VIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ViTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.ViTModel`. It is used to
+    This is the configuration class to store the configuration of a [`ViTModel`]. It is used to
     instantiate an ViT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the ViT `google/vit-base-patch16-224
-    <https://huggingface.co/google/vit-base-patch16-224>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the ViT [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        hidden_size (:obj:`int`, `optional`, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (:obj:`int`, `optional`, defaults to :obj:`224`):
+        image_size (`int`, *optional*, defaults to `224`):
             The size (resolution) of each image.
-        patch_size (:obj:`int`, `optional`, defaults to :obj:`16`):
+        patch_size (`int`, *optional*, defaults to `16`):
             The size (resolution) of each patch.
-        num_channels (:obj:`int`, `optional`, defaults to :obj:`3`):
+        num_channels (`int`, *optional*, defaults to `3`):
             The number of input channels.
-        qkv_bias (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
 
 
-    Example::
+    Example:
 
-        >>> from transformers import ViTModel, ViTConfig
+    ```python
+    >>> from transformers import ViTModel, ViTConfig
 
-        >>> # Initializing a ViT vit-base-patch16-224 style configuration
-        >>> configuration = ViTConfig()
+    >>> # Initializing a ViT vit-base-patch16-224 style configuration
+    >>> configuration = ViTConfig()
 
-        >>> # Initializing a model from the vit-base-patch16-224 style configuration
-        >>> model = ViTModel(configuration)
+    >>> # Initializing a model from the vit-base-patch16-224 style configuration
+    >>> model = ViTModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "vit"
 
     def __init__(

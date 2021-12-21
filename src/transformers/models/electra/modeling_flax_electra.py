@@ -814,17 +814,19 @@ class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
 FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import ElectraTokenizer, FlaxElectraForPreTraining
+    ```python
+    >>> from transformers import ElectraTokenizer, FlaxElectraForPreTraining
 
-        >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        >>> model = FlaxElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+    >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+    >>> model = FlaxElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
-        >>> outputs = model(**inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+    >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.logits
+    >>> prediction_logits = outputs.logits
+    ```
 """
 
 overwrite_call_docstring(

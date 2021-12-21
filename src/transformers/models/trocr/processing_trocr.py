@@ -28,15 +28,15 @@ class TrOCRProcessor:
     r"""
     Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
 
-    :class:`~transformers.TrOCRProcessor` offers all the functionalities of :class:`~transformers.AutoFeatureExtractor`
-    and :class:`~transformers.RobertaTokenizer`. See the :meth:`~transformers.TrOCRProcessor.__call__` and
-    :meth:`~transformers.TrOCRProcessor.decode` for more information.
+    [`TrOCRProcessor`] offers all the functionalities of [`AutoFeatureExtractor`]
+    and [`RobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and
+    [`~TrOCRProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (:class:`~transformers.AutoFeatureExtractor`):
-            An instance of :class:`~transformers.AutoFeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:class:`~transformers.RobertaTokenizer`):
-            An instance of :class:`~transformers.RobertaTokenizer`. The tokenizer is a required input.
+        feature_extractor ([`AutoFeatureExtractor`]):
+            An instance of [`AutoFeatureExtractor`]. The feature extractor is a required input.
+        tokenizer ([`RobertaTokenizer`]):
+            An instance of [`RobertaTokenizer`]. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -55,17 +55,19 @@ class TrOCRProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a TrOCR feature extractor object and TrOCR tokenizer object to the directory ``save_directory``, so that
-        it can be re-loaded using the :func:`~transformers.TrOCRProcessor.from_pretrained` class method.
+        Save a TrOCR feature extractor object and TrOCR tokenizer object to the directory `save_directory`, so that
+        it can be re-loaded using the [`~TrOCRProcessor.from_pretrained`] class method.
 
-        .. note::
+        <Tip>
 
-            This class method is simply calling :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` and
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
+        This class method is simply calling [`~PreTrainedFeatureExtractor.save_pretrained`] and
+        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the
+        docstrings of the methods above for more information.
+
+        </Tip>
 
         Args:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
+            save_directory (`str` or `os.PathLike`):
                 Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
                 be created if it does not exist).
         """
@@ -76,30 +78,32 @@ class TrOCRProcessor:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.TrOCRProcessor` from a pretrained TrOCR processor.
+        Instantiate a [`TrOCRProcessor`] from a pretrained TrOCR processor.
 
-        .. note::
+        <Tip>
 
-            This class method is simply calling AutoFeatureExtractor's
-            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and TrOCRTokenizer's
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
+        This class method is simply calling AutoFeatureExtractor's
+        [`~PreTrainedFeatureExtractor.from_pretrained`] and TrOCRTokenizer's
+        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
+        docstrings of the methods above for more information.
+
+        </Tip>
 
         Args:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
-                - a string, the `model id` of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-                  namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a feature extractor file saved using the
-                  :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` method, e.g.,
-                  ``./my_model_directory/``.
-                - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/preprocessor_config.json``.
+                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a feature extractor file saved using the
+                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g.,
+                  `./my_model_directory/`.
+                - a path or url to a saved feature extractor JSON *file*, e.g.,
+                  `./my_model_directory/preprocessor_config.json`.
             **kwargs
-                Additional keyword arguments passed along to both :class:`~transformers.PreTrainedFeatureExtractor` and
-                :class:`~transformers.PreTrainedTokenizer`
+                Additional keyword arguments passed along to both [`PreTrainedFeatureExtractor`] and
+                [`PreTrainedTokenizer`]
         """
         feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
         tokenizer = RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -109,9 +113,9 @@ class TrOCRProcessor:
     def __call__(self, *args, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
-        :meth:`~transformers.AutoFeatureExtractor.__call__` and returns its output. If used in the context
-        :meth:`~transformers.TrOCRProcessor.as_target_processor` this method forwards all its arguments to
-        TrOCRTokenizer's :meth:`~transformers.TrOCRTokenizer.__call__`. Please refer to the doctsring of the above two
+        [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
+        [`~TrOCRProcessor.as_target_processor`] this method forwards all its arguments to
+        TrOCRTokenizer's [`~TrOCRTokenizer.__call__`]. Please refer to the doctsring of the above two
         methods for more information.
         """
         return self.current_processor(*args, **kwargs)
@@ -119,14 +123,14 @@ class TrOCRProcessor:
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to TrOCRTokenizer's
-        :meth:`~transformers.PreTrainedTokenizer.batch_decode`. Please refer to the docstring of this method for more
+        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more
         information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to TrOCRTokenizer's :meth:`~transformers.PreTrainedTokenizer.decode`.
+        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`].
         Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

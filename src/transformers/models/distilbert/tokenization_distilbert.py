@@ -57,10 +57,10 @@ class DistilBertTokenizer(BertTokenizer):
     r"""
     Construct a DistilBERT tokenizer.
 
-    :class:`~transformers.DistilBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    [`DistilBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
     parameters.
     """
 

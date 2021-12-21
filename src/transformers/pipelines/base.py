@@ -145,30 +145,29 @@ def infer_framework_load_model(
     **model_kwargs
 ):
     """
-    Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
+    Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
 
-    If :obj:`model` is instantiated, this function will just infer the framework from the model class. Otherwise
-    :obj:`model` is actually a checkpoint name and this method will try to instantiate it using :obj:`model_classes`.
+    If `model` is instantiated, this function will just infer the framework from the model class. Otherwise
+    `model` is actually a checkpoint name and this method will try to instantiate it using `model_classes`.
     Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
 
-    If both frameworks are installed and available for :obj:`model`, PyTorch is selected.
+    If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
-            The model to infer the framework from. If :obj:`str`, a checkpoint name. The model to infer the framewrok
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+            The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok
             from.
-        config (:class:`~transformers.AutoConfig`):
+        config ([`AutoConfig`]):
             The config associated with the model to help using the correct class
-        model_classes (dictionary :obj:`str` to :obj:`type`, `optional`):
+        model_classes (dictionary `str` to `type`, *optional*):
             A mapping framework to class.
-        task (:obj:`str`):
+        task (`str`):
             The task defining which pipeline will be returned.
         model_kwargs:
-            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
-            **model_kwargs)` function.
+            Additional dictionary of keyword arguments passed along to the model's `from_pretrained(..., **model_kwargs)` function.
 
     Returns:
-        :obj:`Tuple`: A tuple framework, model.
+        `Tuple`: A tuple framework, model.
     """
     if not is_tf_available() and not is_torch_available():
         raise RuntimeError(
@@ -242,28 +241,27 @@ def infer_framework_from_model(
     **model_kwargs
 ):
     """
-    Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
+    Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
 
-    If :obj:`model` is instantiated, this function will just infer the framework from the model class. Otherwise
-    :obj:`model` is actually a checkpoint name and this method will try to instantiate it using :obj:`model_classes`.
+    If `model` is instantiated, this function will just infer the framework from the model class. Otherwise
+    `model` is actually a checkpoint name and this method will try to instantiate it using `model_classes`.
     Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
 
-    If both frameworks are installed and available for :obj:`model`, PyTorch is selected.
+    If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
-            The model to infer the framework from. If :obj:`str`, a checkpoint name. The model to infer the framewrok
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+            The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok
             from.
-        model_classes (dictionary :obj:`str` to :obj:`type`, `optional`):
+        model_classes (dictionary `str` to `type`, *optional*):
             A mapping framework to class.
-        task (:obj:`str`):
+        task (`str`):
             The task defining which pipeline will be returned.
         model_kwargs:
-            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
-            **model_kwargs)` function.
+            Additional dictionary of keyword arguments passed along to the model's `from_pretrained(..., **model_kwargs)` function.
 
     Returns:
-        :obj:`Tuple`: A tuple framework, model.
+        `Tuple`: A tuple framework, model.
     """
     if isinstance(model, str):
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **model_kwargs)
@@ -279,7 +277,7 @@ def get_framework(model, revision: Optional[str] = None):
     Select framework (TensorFlow or PyTorch) to use.
 
     Args:
-        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
+        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
@@ -313,19 +311,19 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
     Args:
-        targeted_task (:obj:`Dict` ):
+        targeted_task (`Dict` ):
            Dictionary representing the given task, that should contain default models
 
-        framework (:obj:`str`, None)
+        framework (`str`, None)
            "pt", "tf" or None, representing a specific framework if it was specified, or None if we don't know yet.
 
-        task_options (:obj:`Any`, None)
+        task_options (`Any`, None)
            Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
            translation task.
 
     Returns
 
-        :obj:`str` The model string representing the default model for this pipeline
+        `str` The model string representing the default model for this pipeline
     """
     if is_torch_available() and not is_tf_available():
         framework = "pt"
@@ -352,12 +350,12 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
 
 class PipelineException(Exception):
     """
-    Raised by a :class:`~transformers.Pipeline` when handling __call__.
+    Raised by a [`Pipeline`] when handling __call__.
 
     Args:
-        task (:obj:`str`): The task of the pipeline.
-        model (:obj:`str`): The model used by the pipeline.
-        reason (:obj:`str`): The error message to display.
+        task (`str`): The task of the pipeline.
+        model (`str`): The model used by the pipeline.
+        reason (`str`): The error message to display.
     """
 
     def __init__(self, task: str, model: str, reason: str):
@@ -369,7 +367,7 @@ class PipelineException(Exception):
 
 class ArgumentHandler(ABC):
     """
-    Base interface for handling arguments for each :class:`~transformers.pipelines.Pipeline`.
+    Base interface for handling arguments for each [`~pipelines.Pipeline`].
     """
 
     @abstractmethod
@@ -386,15 +384,15 @@ class PipelineDataFormat:
     - CSV
     - stdin/stdout (pipe)
 
-    :obj:`PipelineDataFormat` also includes some utilities to work with multi-columns like mapping from datasets
-    columns to pipelines keyword arguments through the :obj:`dataset_kwarg_1=dataset_column_1` format.
+    `PipelineDataFormat` also includes some utilities to work with multi-columns like mapping from datasets
+    columns to pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
 
     Args:
-        output_path (:obj:`str`, `optional`): Where to save the outgoing data.
-        input_path (:obj:`str`, `optional`): Where to look for the input data.
-        column (:obj:`str`, `optional`): The column to read.
-        overwrite (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to overwrite the :obj:`output_path`.
+        output_path (`str`, *optional*): Where to save the outgoing data.
+        input_path (`str`, *optional*): Where to look for the input data.
+        column (`str`, *optional*): The column to read.
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the `output_path`.
     """
 
     SUPPORTED_FORMATS = ["json", "csv", "pipe"]
@@ -430,10 +428,10 @@ class PipelineDataFormat:
     def save(self, data: Union[dict, List[dict]]):
         """
         Save the provided data object with the representation for the current
-        :class:`~transformers.pipelines.PipelineDataFormat`.
+        [`~pipelines.PipelineDataFormat`].
 
         Args:
-            data (:obj:`dict` or list of :obj:`dict`): The data to store.
+            data (`dict` or list of `dict`): The data to store.
         """
         raise NotImplementedError()
 
@@ -442,10 +440,10 @@ class PipelineDataFormat:
         Save the provided data object as a pickle-formatted binary data on the disk.
 
         Args:
-            data (:obj:`dict` or list of :obj:`dict`): The data to store.
+            data (`dict` or list of `dict`): The data to store.
 
         Returns:
-            :obj:`str`: Path where the data has been saved.
+            `str`: Path where the data has been saved.
         """
         path, _ = os.path.splitext(self.output_path)
         binary_path = os.path.extsep.join((path, "pickle"))
@@ -464,23 +462,23 @@ class PipelineDataFormat:
         overwrite=False,
     ) -> "PipelineDataFormat":
         """
-        Creates an instance of the right subclass of :class:`~transformers.pipelines.PipelineDataFormat` depending on
-        :obj:`format`.
+        Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on
+        `format`.
 
         Args:
-            format: (:obj:`str`):
-                The format of the desired pipeline. Acceptable values are :obj:`"json"`, :obj:`"csv"` or :obj:`"pipe"`.
-            output_path (:obj:`str`, `optional`):
+            format: (`str`):
+                The format of the desired pipeline. Acceptable values are `"json"`, `"csv"` or `"pipe"`.
+            output_path (`str`, *optional*):
                 Where to save the outgoing data.
-            input_path (:obj:`str`, `optional`):
+            input_path (`str`, *optional*):
                 Where to look for the input data.
-            column (:obj:`str`, `optional`):
+            column (`str`, *optional*):
                 The column to read.
-            overwrite (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to overwrite the :obj:`output_path`.
+            overwrite (`bool`, *optional*, defaults to `False`):
+                Whether or not to overwrite the `output_path`.
 
         Returns:
-            :class:`~transformers.pipelines.PipelineDataFormat`: The proper data format.
+            [`~pipelines.PipelineDataFormat`]: The proper data format.
         """
         if format == "json":
             return JsonPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
@@ -497,11 +495,11 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using CSV data format.
 
     Args:
-        output_path (:obj:`str`, `optional`): Where to save the outgoing data.
-        input_path (:obj:`str`, `optional`): Where to look for the input data.
-        column (:obj:`str`, `optional`): The column to read.
-        overwrite (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to overwrite the :obj:`output_path`.
+        output_path (`str`, *optional*): Where to save the outgoing data.
+        input_path (`str`, *optional*): Where to look for the input data.
+        column (`str`, *optional*): The column to read.
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the `output_path`.
     """
 
     def __init__(
@@ -525,10 +523,10 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     def save(self, data: List[dict]):
         """
         Save the provided data object with the representation for the current
-        :class:`~transformers.pipelines.PipelineDataFormat`.
+        [`~pipelines.PipelineDataFormat`].
 
         Args:
-            data (:obj:`List[dict]`): The data to store.
+            data (`List[dict]`): The data to store.
         """
         with open(self.output_path, "w") as f:
             if len(data) > 0:
@@ -542,11 +540,11 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using JSON file format.
 
     Args:
-        output_path (:obj:`str`, `optional`): Where to save the outgoing data.
-        input_path (:obj:`str`, `optional`): Where to look for the input data.
-        column (:obj:`str`, `optional`): The column to read.
-        overwrite (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to overwrite the :obj:`output_path`.
+        output_path (`str`, *optional*): Where to save the outgoing data.
+        input_path (`str`, *optional*): Where to look for the input data.
+        column (`str`, *optional*): The column to read.
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the `output_path`.
     """
 
     def __init__(
@@ -573,7 +571,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
         Save the provided data object in a json file.
 
         Args:
-            data (:obj:`dict`): The data to store.
+            data (`dict`): The data to store.
         """
         with open(self.output_path, "w") as f:
             json.dump(data, f)
@@ -586,11 +584,11 @@ class PipedPipelineDataFormat(PipelineDataFormat):
     If columns are provided, then the output will be a dictionary with {column_x: value_x}
 
     Args:
-        output_path (:obj:`str`, `optional`): Where to save the outgoing data.
-        input_path (:obj:`str`, `optional`): Where to look for the input data.
-        column (:obj:`str`, `optional`): The column to read.
-        overwrite (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to overwrite the :obj:`output_path`.
+        output_path (`str`, *optional*): Where to save the outgoing data.
+        input_path (`str`, *optional*): Where to look for the input data.
+        column (`str`, *optional*): The column to read.
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the `output_path`.
     """
 
     def __iter__(self):
@@ -614,7 +612,7 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         Print the data.
 
         Args:
-            data (:obj:`dict`): The data to store.
+            data (`dict`): The data to store.
         """
         print(data)
 
@@ -644,37 +642,36 @@ class _ScikitCompat(ABC):
 
 PIPELINE_INIT_ARGS = r"""
     Arguments:
-        model (:class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
+        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for
             TensorFlow.
-        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
+        tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            :class:`~transformers.PreTrainedTokenizer`.
-        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
+            [`PreTrainedTokenizer`].
+        modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
-        framework (:obj:`str`, `optional`):
-            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
+        framework (`str`, *optional*):
+            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework
             must be installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
+            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model
             is provided.
-        task (:obj:`str`, defaults to :obj:`""`):
+        task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
-        num_workers (:obj:`int`, `optional`, defaults to 8):
-            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the number of
+        num_workers (`int`, *optional*, defaults to 8):
+            When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the number of
             workers to be used.
-        batch_size (:obj:`int`, `optional`, defaults to 1):
-            When the pipeline will use `DataLoader` (when passing a dataset, on GPU for a Pytorch model), the size of
-            the batch to use, for inference this is not always beneficial, please read `Batching with pipelines
-            <https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching>`_ .
-        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`):
+        batch_size (`int`, *optional*, defaults to 1):
+            When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the size of
+            the batch to use, for inference this is not always beneficial, please read [Batching with pipelines](https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching) .
+        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
-        device (:obj:`int`, `optional`, defaults to -1):
+        device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id.
-        binary_output (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
 
@@ -699,29 +696,29 @@ if is_torch_available():
             """
             Roughly equivalent to
 
-            .. code-block::
-                for item in loader:
-                    yield infer(item, **params)
+            ```python
+            for item in loader:
+                yield infer(item, **params)
+            ```
 
             Arguments:
-                loader (:obj:`torch.utils.data.DataLoader` or any iterator):
-                    The iterator that will be used to apply :obj:`infer` on.
+                loader (`torch.utils.data.DataLoader` or any iterator):
+                    The iterator that will be used to apply `infer` on.
                 infer (any function):
-                    The function to apply of each element of :obj:`loader`.
-                params (:obj:`dict`):
-                    The parameters passed to :obj:`infer` along with every item
-                loader_batch_size (:obj:`int`, `optional`):
-                    If specified, the items of :obj:`loader` are supposed to come as batch, and are loader_batched here
+                    The function to apply of each element of `loader`.
+                params (`dict`):
+                    The parameters passed to `infer` along with every item
+                loader_batch_size (`int`, *optional*):
+                    If specified, the items of `loader` are supposed to come as batch, and are loader_batched here
                     making it roughly behave as
 
 
-                    .. code-block::
-
-                        for items in loader:
-                            for i in loader_batch_size:
-                                item = items[i]
-                                yield infer(item, **params)
-            """
+            ```python
+            for items in loader:
+                for i in loader_batch_size:
+                    item = items[i]
+                    yield infer(item, **params)
+            ```"""
             self.loader = loader
             self.infer = infer
             self.params = params
@@ -815,9 +812,9 @@ class Pipeline(_ScikitCompat):
 
     Pipeline supports running on CPU or GPU through the device argument (see below).
 
-    Some pipeline, like for instance :class:`~transformers.FeatureExtractionPipeline` (:obj:`'feature-extraction'` )
+    Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature-extraction'`)
     output large tensor object as nested-lists. In order to avoid dumping such large structure as textual data we
-    provide the :obj:`binary_output` constructor argument. If set to :obj:`True`, the output will be stored in the
+    provide the `binary_output` constructor argument. If set to `True`, the output will be stored in the
     pickle format.
     """
 
@@ -866,7 +863,7 @@ class Pipeline(_ScikitCompat):
         Save the pipeline's model and tokenizer.
 
         Args:
-            save_directory (:obj:`str`):
+            save_directory (`str`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
         """
         if os.path.isfile(save_directory):
@@ -905,14 +902,15 @@ class Pipeline(_ScikitCompat):
         Returns:
             Context manager
 
-        Examples::
+        Examples:
 
-            # Explicitly ask for tensor allocation on CUDA device :0
-            pipe = pipeline(..., device=0)
-            with pipe.device_placement():
-                # Every framework specific tensor allocation will be done on the request device
-                output = pipe(...)
-        """
+        ```python
+        # Explicitly ask for tensor allocation on CUDA device :0
+        pipe = pipeline(..., device=0)
+        with pipe.device_placement():
+            # Every framework specific tensor allocation will be done on the request device
+            output = pipe(...)
+        ```"""
         if self.framework == "tf":
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
@@ -927,11 +925,11 @@ class Pipeline(_ScikitCompat):
         Ensure PyTorch tensors are on the specified device.
 
         Args:
-            inputs (keyword arguments that should be :obj:`torch.Tensor`, the rest is ignored): The tensors to place on :obj:`self.device`.
+            inputs (keyword arguments that should be `torch.Tensor`, the rest is ignored): The tensors to place on `self.device`.
             Recursive on lists **only**.
 
         Return:
-            :obj:`Dict[str, torch.Tensor]`: The same as :obj:`inputs` but on the proper device.
+            `Dict[str, torch.Tensor]`: The same as `inputs` but on the proper device.
         """
         return self._ensure_tensor_on_device(inputs, self.device)
 
@@ -958,7 +956,7 @@ class Pipeline(_ScikitCompat):
         Check if the model class is in supported by the pipeline.
 
         Args:
-            supported_models (:obj:`List[str]` or :obj:`dict`):
+            supported_models (`List[str]` or `dict`):
                 The list of models supported by the pipeline, or a dictionary with model class values.
         """
         if not isinstance(supported_models, list):  # Create from a model mapping

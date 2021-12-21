@@ -46,13 +46,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 class BlenderbotTokenizerFast(RobertaTokenizerFast):
     r"""
-    Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.BlenderbotFast` is nearly identical to :class:`~transformers.RobertaTokenizerFast` and runs
+    [`BlenderbotFast`] is nearly identical to [`RobertaTokenizerFast`] and runs
     end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesn't add BOS token
     to the beginning of sequences.
 
-    Refer to superclass :class:`~transformers.RobertaTokenizerFast` for usage examples and documentation concerning
+    Refer to superclass [`RobertaTokenizerFast`] for usage examples and documentation concerning
     parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
@@ -65,16 +65,16 @@ class BlenderbotTokenizerFast(RobertaTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A Blenderbot sequence has the following format:
 
-        - single sequence: `` X </s>``
+        - single sequence: ` X </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Will be ignored
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
 

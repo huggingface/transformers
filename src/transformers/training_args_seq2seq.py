@@ -27,20 +27,20 @@ logger = logging.getLogger(__name__)
 @add_start_docstrings(TrainingArguments.__doc__)
 class Seq2SeqTrainingArguments(TrainingArguments):
     """
-    sortish_sampler (:obj:`bool`, `optional`, defaults to :obj:`False`):
-        Whether to use a `sortish sampler` or not. Only possible if the underlying datasets are `Seq2SeqDataset` for
+    sortish_sampler (`bool`, *optional*, defaults to `False`):
+        Whether to use a *sortish sampler* or not. Only possible if the underlying datasets are *Seq2SeqDataset* for
         now but will become generally available in the near future.
 
         It sorts the inputs according to lengths in order to minimize the padding size, with a bit of randomness for
         the training set.
-    predict_with_generate (:obj:`bool`, `optional`, defaults to :obj:`False`):
+    predict_with_generate (`bool`, *optional*, defaults to `False`):
         Whether to use generate to calculate generative metrics (ROUGE, BLEU).
-    generation_max_length (:obj:`int`, `optional`):
-        The :obj:`max_length` to use on each evaluation loop when :obj:`predict_with_generate=True`. Will default to
-        the :obj:`max_length` value of the model configuration.
-    generation_num_beams (:obj:`int`, `optional`):
-        The :obj:`num_beams` to use on each evaluation loop when :obj:`predict_with_generate=True`. Will default to the
-        :obj:`num_beams` value of the model configuration.
+    generation_max_length (`int`, *optional*):
+        The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default to
+        the `max_length` value of the model configuration.
+    generation_num_beams (`int`, *optional*):
+        The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
+        `num_beams` value of the model configuration.
     """
 
     sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})

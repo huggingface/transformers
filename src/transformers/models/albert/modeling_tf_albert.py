@@ -885,20 +885,21 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         r"""
         Return:
 
-        Example::
+        Example:
 
-            >>> import tensorflow as tf
-            >>> from transformers import AlbertTokenizer, TFAlbertForPreTraining
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import AlbertTokenizer, TFAlbertForPreTraining
 
-            >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            >>> model = TFAlbertForPreTraining.from_pretrained('albert-base-v2')
+        >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        >>> model = TFAlbertForPreTraining.from_pretrained('albert-base-v2')
 
-            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-            >>> outputs = model(input_ids)
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        >>> outputs = model(input_ids)
 
-            >>> prediction_logits = outputs.prediction_logits
-            >>> sop_logits = outputs.sop_logits
-        """
+        >>> prediction_logits = outputs.prediction_logits
+        >>> sop_logits = outputs.sop_logits
+        ```"""
 
         inputs = input_processing(
             func=self.call,

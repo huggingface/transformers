@@ -977,26 +977,27 @@ class HubertModel(HubertPreTrainedModel):
 
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import Wav2Vec2Processor, HubertModel
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
+        ```python
+        >>> from transformers import Wav2Vec2Processor, HubertModel
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
-            >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-        """
+        >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+        >>> hidden_states = model(input_values).last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

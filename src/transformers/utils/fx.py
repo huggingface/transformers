@@ -404,12 +404,12 @@ class HFTracer(Tracer):
 
     def path_of_module(self, mod: nn.Module) -> str:
         """
-        Helper method to find the qualified name of ``mod`` in the Module hierarchy of ``root``. For example, if
-        ``root`` has a submodule named ``foo``, which has a submodule named ``bar``, passing ``bar`` into this function
+        Helper method to find the qualified name of `mod` in the Module hierarchy of `root`. For example, if
+        `root` has a submodule named `foo`, which has a submodule named `bar`, passing `bar` into this function
         will return the string "foo.bar".
 
         Args:
-            mod (str): The ``Module`` to retrieve the qualified name for.
+            mod (str): The `Module` to retrieve the qualified name for.
         """
         # Prefer the O(1) algorithm
         if hasattr(self, "submodule_paths") and self.submodule_paths:
@@ -506,32 +506,32 @@ def symbolic_trace(
     Performs symbolic tracing on the model.
 
     Args:
-        model (:obj:`PretrainedModel`):
+        model ([`PretrainedModel`]):
             The model to trace.
-        input_names (:obj:`List[str]`, `optional`):
+        input_names (`List[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs().keys() are used instead.
-        batch_size (:obj:`int`, `optional`, defaults to 1):
+        batch_size (`int`, *optional*, defaults to 1):
             The batch size of the traced model inputs.
-        sequence_length (:obj:`int` or :obj:`List[int]]`):
+        sequence_length (`int` or `List[int]]`):
             The sequence length of the traced model inputs. For sequence-to-sequence models with different sequence
-            lengths between the encoder and the decoder inputs, this must be :obj:`[encoder_sequence_length,
-            decoder_sequence_length]`.
-        num_choices (:obj:`int`, `optional`, defaults to -1):
+            lengths between the encoder and the decoder inputs, this must be `[encoder_sequence_length, decoder_sequence_length]`.
+        num_choices (`int`, *optional*, defaults to -1):
             The number of possible choices for a multiple choice task.
 
     Returns:
-        :obj:`torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
+        `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
 
-    Example::
+    Example:
 
-        from transformers.utils.fx import symbolic_trace
-        traced_model = symbolic_trace(
-            model,
-            input_names=["input_ids", "attention_mask", "token_type_ids"],
-            batch_size=1,
-            sequence_length=128,
-        )
-    """
+    ```python
+    from transformers.utils.fx import symbolic_trace
+    traced_model = symbolic_trace(
+        model,
+        input_names=["input_ids", "attention_mask", "token_type_ids"],
+        batch_size=1,
+        sequence_length=128,
+    )
+    ```"""
     if input_names is None:
         input_names = model.dummy_inputs.keys()
 

@@ -108,42 +108,43 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ::
+    ```
+    >>> from transformers import GPT2Tokenizer
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    >>> tokenizer("Hello world")['input_ids']
+    [15496, 995]
+    >>> tokenizer(" Hello world")['input_ids']
+    [18435, 995]
+    ```
 
-        >>> from transformers import GPT2Tokenizer
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        >>> tokenizer("Hello world")['input_ids']
-        [15496, 995]
-        >>> tokenizer(" Hello world")['input_ids']
-        [18435, 995]
-
-    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
     call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
-    .. note::
+    <Tip>
 
-        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first
-        one).
+    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first
+    one).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    </Tip>
+
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        errors (:obj:`str`, `optional`, defaults to :obj:`"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
-            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        errors (`str`, *optional*, defaults to `"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The beginning of sequence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
-        add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (GPT2 tokenizer detect beginning of words by the preceding space).
     """

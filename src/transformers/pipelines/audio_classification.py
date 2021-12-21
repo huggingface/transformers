@@ -66,15 +66,14 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class AudioClassificationPipeline(Pipeline):
     """
-    Audio classification pipeline using any :obj:`AutoModelForAudioClassification`. This pipeline predicts the class of
+    Audio classification pipeline using any `AutoModelForAudioClassification`. This pipeline predicts the class of
     a raw waveform or an audio file. In case of an audio file, ffmpeg should be installed to support multiple audio
     formats.
 
-    This pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task identifier:
-    :obj:`"audio-classification"`.
+    This pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"audio-classification"`.
 
-    See the list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=audio-classification>`__.
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=audio-classification).
     """
 
     def __init__(self, *args, **kwargs):
@@ -93,26 +92,26 @@ class AudioClassificationPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :class:`~transformers.AutomaticSpeechRecognitionPipeline`
+        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
 
         Args:
-            inputs (:obj:`np.ndarray` or :obj:`bytes` or :obj:`str`):
-                The inputs is either a raw waveform (:obj:`np.ndarray` of shape (n, ) of type :obj:`np.float32` or
-                :obj:`np.float64`) at the correct sampling rate (no further check will be done) or a :obj:`str` that is
+            inputs (`np.ndarray` or `bytes` or `str`):
+                The inputs is either a raw waveform (`np.ndarray` of shape (n, ) of type `np.float32` or
+                `np.float64`) at the correct sampling rate (no further check will be done) or a `str` that is
                 the filename of the audio file, the file will be read at the correct sampling rate to get the waveform
-                using `ffmpeg`. This requires `ffmpeg` to be installed on the system. If `inputs` is :obj:`bytes` it is
-                supposed to be the content of an audio file and is interpreted by `ffmpeg` in the same way.
-            top_k (:obj:`int`, `optional`, defaults to None):
-                The number of top labels that will be returned by the pipeline. If the provided number is `None` or
+                using *ffmpeg*. This requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is
+                supposed to be the content of an audio file and is interpreted by *ffmpeg* in the same way.
+            top_k (`int`, *optional*, defaults to None):
+                The number of top labels that will be returned by the pipeline. If the provided number is *None* or
                 higher than the number of labels available in the model configuration, it will default to the number of
                 labels.
 
         Return:
-            A list of :obj:`dict` with the following keys:
+            A list of `dict` with the following keys:
 
-            - **label** (:obj:`str`) -- The label predicted.
-            - **score** (:obj:`float`) -- The corresponding probability.
+            - **label** (`str`) -- The label predicted.
+            - **score** (`float`) -- The corresponding probability.
         """
         return super().__call__(inputs, **kwargs)
 

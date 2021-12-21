@@ -52,32 +52,32 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     """
     Constructs a Wav2Vec2PhonemeCTC tokenizer.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains some of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods.
     Users should refer to the superclass for more information regarding such methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             File containing the vocabulary.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sentence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sentence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        do_phonemize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_phonemize (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer should phonetize the input or not. Only if a sequence of phonemes is passed to the
-            tokenizer, :obj:`do_phonemize` should be set to ``False``.
-        phonemizer_lang (:obj:`str`, `optional`, defaults to :obj:`"en-us"`):
+            tokenizer, `do_phonemize` should be set to `False`.
+        phonemizer_lang (`str`, *optional*, defaults to `"en-us"`):
             The language of the phoneme set to which the tokenizer should phonetize the input text to.
-        phonemizer_backend (:obj:`str`, `optional`. defaults to :obj:`"espeak"`):
-            The backend phonetization library that shall be used by the phonemizer library. Defaults to ``espeak-ng``.
-            See the `phonemizer package <https://github.com/bootphon/phonemizer#readme>`_. for more information.
+        phonemizer_backend (`str`, *optional*. defaults to `"espeak"`):
+            The backend phonetization library that shall be used by the phonemizer library. Defaults to `espeak-ng`.
+            See the [phonemizer package](https://github.com/bootphon/phonemizer#readme). for more information.
 
         **kwargs
-            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -139,25 +139,25 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         Performs any necessary transformations before tokenization.
 
-        This method should pop the arguments from kwargs and return the remaining :obj:`kwargs` as well. We test the
-        :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
+        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
+        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
 
         Args:
-            text (:obj:`str`):
+            text (`str`):
                 The text to prepare.
-            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
+            is_split_into_words (`bool`, *optional*, defaults to `False`):
+                Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
-            phonemizer_lang (:obj:`str`, `optional`):
+            phonemizer_lang (`str`, *optional*):
                 The language of the phoneme set to which the tokenizer should phonetize the input text to.
-            do_phonemize (:obj:`bool`, `optional`):
+            do_phonemize (`bool`, *optional*):
                 Whether the tokenizer should phonetize the input text or not. Only if a sequence of phonemes is passed
-                to the tokenizer, :obj:`do_phonemize` should be set to ``False``.
+                to the tokenizer, `do_phonemize` should be set to `False`.
 
 
         Returns:
-            :obj:`Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+            `Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
         """
         if is_split_into_words:
             text = " " + text
@@ -217,7 +217,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token(self) -> str:
         """
-        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
+        `str`: Word delimiter token. Log an error if used while not having been set.
         """
         if self._word_delimiter_token is None and self.verbose:
             return None
@@ -226,7 +226,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token_id(self) -> Optional[int]:
         """
-        :obj:`Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns :obj:`None` if the token has
+        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has
         not been set.
         """
         if self._word_delimiter_token is None:
@@ -244,7 +244,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     @property
     def phone_delimiter_token(self) -> str:
         """
-        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
+        `str`: Word delimiter token. Log an error if used while not having been set.
         """
         if self._phone_delimiter_token is None and self.verbose:
             logger.error("Using phone_delimiter_token, but it is not set yet.")
@@ -254,7 +254,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     @property
     def phone_delimiter_token_id(self) -> Optional[int]:
         """
-        :obj:`Optional[int]`: Id of the phone_delimiter_token in the vocabulary. Returns :obj:`None` if the token has
+        `Optional[int]`: Id of the phone_delimiter_token in the vocabulary. Returns `None` if the token has
         not been set.
         """
         if self._phone_delimiter_token is None:
@@ -357,26 +357,27 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens (:obj:`List[str]`or :obj:`List[tokenizers.AddedToken]`):
+            new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
                 Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
-                checking if the tokenizer assign the index of the ``unk_token`` to them).
-            special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                checking if the tokenizer assign the index of the `unk_token` to them).
+            special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the tokens should be added as special tokens.
 
         Returns:
-            :obj:`int`: The number of tokens actually added to the vocabulary.
+            `int`: The number of tokens actually added to the vocabulary.
 
-        Examples::
+        Examples:
 
-            # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained('facebook/wav2vec2-lv-60-espeak-cv-ft')
-            model = Wav2Vec2PhonemeForCTC.from_pretrained('facebook/wav2vec2-lv-60-espeak-cv-ft')
+        ```python
+        # Let's see how to increase the vocabulary of Bert model and tokenizer
+        tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained('facebook/wav2vec2-lv-60-espeak-cv-ft')
+        model = Wav2Vec2PhonemeForCTC.from_pretrained('facebook/wav2vec2-lv-60-espeak-cv-ft')
 
-            num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-            print('We have added', num_added_toks, 'tokens')
-            # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-            model.resize_token_embeddings(len(tokenizer))
-        """
+        num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
+        print('We have added', num_added_toks, 'tokens')
+        # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+        model.resize_token_embeddings(len(tokenizer))
+        ```"""
         new_tokens = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []

@@ -32,33 +32,32 @@ class ClassificationFunction(ExplicitEnum):
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
-        return_all_scores (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        return_all_scores (`bool`, *optional*, defaults to `False`):
             Whether to return all prediction scores or just the one of the predicted class.
-        function_to_apply (:obj:`str`, `optional`, defaults to :obj:`"default"`):
+        function_to_apply (`str`, *optional*, defaults to `"default"`):
             The function to apply to the model outputs in order to retrieve the scores. Accepts four different values:
 
-            - :obj:`"default"`: if the model has a single label, will apply the sigmoid function on the output. If the
+            - `"default"`: if the model has a single label, will apply the sigmoid function on the output. If the
               model has several labels, will apply the softmax function on the output.
-            - :obj:`"sigmoid"`: Applies the sigmoid function on the output.
-            - :obj:`"softmax"`: Applies the softmax function on the output.
-            - :obj:`"none"`: Does not apply any function on the output.
+            - `"sigmoid"`: Applies the sigmoid function on the output.
+            - `"softmax"`: Applies the softmax function on the output.
+            - `"none"`: Does not apply any function on the output.
     """,
 )
 class TextClassificationPipeline(Pipeline):
     """
-    Text classification pipeline using any :obj:`ModelForSequenceClassification`. See the `sequence classification
-    examples <../task_summary.html#sequence-classification>`__ for more information.
+    Text classification pipeline using any `ModelForSequenceClassification`. See the [sequence classification
+    examples](../task_summary#sequence-classification) for more information.
 
-    This text classification pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"sentiment-analysis"` (for classifying sequences according to positive or negative
+    This text classification pipeline can currently be loaded from [`pipeline`] using the following
+    task identifier: `"sentiment-analysis"` (for classifying sequences according to positive or negative
     sentiments).
 
-    If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run a
+    If multiple classification labels are available (`model.config.num_labels >= 2`), the pipeline will run a
     softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
 
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task. See
-    the up-to-date list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=text-classification>`__.
+    the up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-classification).
     """
 
     return_all_scores = False
@@ -95,11 +94,11 @@ class TextClassificationPipeline(Pipeline):
         Classify the text(s) given as inputs.
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`):
+            args (`str` or `List[str]`):
                 One or several texts (or one list of prompts) to classify.
-            return_all_scores (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            return_all_scores (`bool`, *optional*, defaults to `False`):
                 Whether to return scores for all labels.
-            function_to_apply (:obj:`str`, `optional`, defaults to :obj:`"default"`):
+            function_to_apply (`str`, *optional*, defaults to `"default"`):
                 The function to apply to the model outputs in order to retrieve the scores. Accepts four different
                 values:
 
@@ -111,17 +110,17 @@ class TextClassificationPipeline(Pipeline):
 
                 Possible values are:
 
-                - :obj:`"sigmoid"`: Applies the sigmoid function on the output.
-                - :obj:`"softmax"`: Applies the softmax function on the output.
-                - :obj:`"none"`: Does not apply any function on the output.
+                - `"sigmoid"`: Applies the sigmoid function on the output.
+                - `"softmax"`: Applies the softmax function on the output.
+                - `"none"`: Does not apply any function on the output.
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the following keys:
+            A list or a list of list of `dict`: Each result comes as list of dictionaries with the following keys:
 
-            - **label** (:obj:`str`) -- The label predicted.
-            - **score** (:obj:`float`) -- The corresponding probability.
+            - **label** (`str`) -- The label predicted.
+            - **score** (`float`) -- The corresponding probability.
 
-            If ``self.return_all_scores=True``, one such dictionary is returned per label.
+            If `self.return_all_scores=True`, one such dictionary is returned per label.
         """
         result = super().__call__(*args, **kwargs)
         if isinstance(args[0], str):

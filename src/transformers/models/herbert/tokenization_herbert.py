@@ -49,7 +49,7 @@ class HerbertTokenizer(XLMTokenizer):
 
     - Such pretokenized input is BPE subtokenized
 
-    This tokenizer inherits from :class:`~transformers.XLMTokenizer` which contains most of the methods. Users should
+    This tokenizer inherits from [`XLMTokenizer`] which contains most of the methods. Users should
     refer to the superclass for more information regarding methods.
     """
 

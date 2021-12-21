@@ -105,33 +105,34 @@ class CLIPTokenizer(PreTrainedTokenizer):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
 
-    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
     call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
-    .. note::
+    <Tip>
 
-        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first
-        one).
+    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first
+    one).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    </Tip>
+
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        errors (:obj:`str`, `optional`, defaults to :obj:`"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
-            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        errors (`str`, *optional*, defaults to `"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The beginning of sequence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
-        add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CLIP tokenizer detect beginning of words by the preceding space).
     """
@@ -200,7 +201,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
     @property
     def pad_token_id(self) -> Optional[int]:
         """
-        :obj:`Optional[int]`: Id of the padding token in the vocabulary. Returns :obj:`None` if the token has not been
+        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been
         set.
         """
         return 0
@@ -219,18 +220,18 @@ class CLIPTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CLIP sequence has the following format:
 
-        - single sequence: ``<|startoftext|> X <|endoftext|>``
+        - single sequence: `<|startoftext|> X <|endoftext|>`
 
         Pairs of sequences are not the expected use case, but they will be handled without a separator.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
@@ -241,18 +242,18 @@ class CLIPTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:

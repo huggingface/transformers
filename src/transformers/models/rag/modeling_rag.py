@@ -544,19 +544,20 @@ class RagModel(RagPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import RagTokenizer, RagRetriever, RagModel
-            >>> import torch
+        ```python
+        >>> from transformers import RagTokenizer, RagRetriever, RagModel
+        >>> import torch
 
-            >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
-            >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-base", index_name="exact", use_dummy_dataset=True)
-            >>> # initialize with RagRetriever to do everything in one forward call
-            >>> model = RagModel.from_pretrained("facebook/rag-token-base", retriever=retriever)
+        >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
+        >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-base", index_name="exact", use_dummy_dataset=True)
+        >>> # initialize with RagRetriever to do everything in one forward call
+        >>> model = RagModel.from_pretrained("facebook/rag-token-base", retriever=retriever)
 
-            >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
-            >>> outputs = model(input_ids=inputs["input_ids"])
-        """
+        >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
+        >>> outputs = model(input_ids=inputs["input_ids"])
+        ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

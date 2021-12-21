@@ -424,15 +424,18 @@ PARALLELIZE_DOCSTRING = r"""
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to CPU from a model parallel state.
 
-    Example::
-        # On a 4 GPU machine with gpt-j-6B:
-        model = GPTJForCausalLM.from_pretrained('EleutherAI/gpt-j-6B')
-        device_map = {0: [0, 1, 2, 3, 4, 5, 6],
-                      1: [7, 8, 9, 10, 11, 12, 13],
-                      2: [14, 15, 16, 17, 18, 19, 20],
-                      3: [21, 22, 23, 24, 25, 26, 27]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    Example:
+
+    ```python
+    # On a 4 GPU machine with gpt-j-6B:
+    model = GPTJForCausalLM.from_pretrained('EleutherAI/gpt-j-6B')
+    device_map = {0: [0, 1, 2, 3, 4, 5, 6],
+                  1: [7, 8, 9, 10, 11, 12, 13],
+                  2: [14, 15, 16, 17, 18, 19, 20],
+                  3: [21, 22, 23, 24, 25, 26, 27]}
+    model.parallelize(device_map) # Splits the model across several devices
+    model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    ```
 """
 
 

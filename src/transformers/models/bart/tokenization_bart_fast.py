@@ -63,10 +63,10 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class BartTokenizerFast(RobertaTokenizerFast):
     r"""
-    Construct a "fast" BART tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" BART tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.BartTokenizerFast` is identical to :class:`~transformers.RobertaTokenizerFast`. Refer to
-    superclass :class:`~transformers.RobertaTokenizerFast` for usage examples and documentation concerning the
+    [`BartTokenizerFast`] is identical to [`RobertaTokenizerFast`]. Refer to
+    superclass [`RobertaTokenizerFast`] for usage examples and documentation concerning the
     initialization parameters and other methods.
     """
     vocab_files_names = VOCAB_FILES_NAMES

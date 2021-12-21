@@ -28,143 +28,141 @@ SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SEWDConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.SEWDModel`. It is used to
+    This is the configuration class to store the configuration of a [`SEWDModel`]. It is used to
     instantiate a SEW-D model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SEW-D `asapp/sew-d-tiny-100k
-    <https://huggingface.co/asapp/sew-d-tiny-100k>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the SEW-D [asapp/sew-d-tiny-100k](https://huggingface.co/asapp/sew-d-tiny-100k) architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 32):
+        vocab_size (`int`, *optional*, defaults to 32):
             Vocabulary size of the SEW-D model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.SEWD`.
-        hidden_size (:obj:`int`, `optional`, defaults to 768):
+            `inputs_ids` passed when calling [`SEWD`].
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        squeeze_factor (:obj:`int`, `optional`, defaults to 2):
+        squeeze_factor (`int`, *optional*, defaults to 2):
             Sequence length downsampling factor after the encoder and upsampling factor after the transformer.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
+        max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        position_buckets (:obj:`int`, `optional`, defaults to 256):
+        position_buckets (`int`, *optional*, defaults to 256):
             The maximum size of relative position embeddings.
-        share_att_key (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        share_att_key (`bool`, *optional*, defaults to `True`):
             Whether to share attention key with c2p and p2c.
-        relative_attention (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        relative_attention (`bool`, *optional*, defaults to `True`):
             Whether to use relative position encoding.
-        position_biased_input (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        position_biased_input (`bool`, *optional*, defaults to `False`):
             Whether to add absolute position embedding to content embedding.
-        pos_att_type (:obj:`Tuple[str]`, `optional`, defaults to :obj:`("p2c", "c2p")`):
-            The type of relative position attention, it can be a combination of :obj:`("p2c", "c2p", "p2p")`, e.g.
-            :obj:`("p2c")`, :obj:`("p2c", "c2p")`, :obj:`("p2c", "c2p", 'p2p")`.
-        norm_rel_ebd (:obj:`str`, `optional`, defaults to :obj:`"layer_norm"`):
-            Whether to use layer norm in relative embedding (:obj:`"layer_norm"` if yes)
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_python"`):
+        pos_att_type (`Tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
+            The type of relative position attention, it can be a combination of `("p2c", "c2p", "p2p")`, e.g.
+            `("p2c")`, `("p2c", "c2p")`, `("p2c", "c2p", 'p2p")`.
+        norm_rel_ebd (`str`, *optional*, defaults to `"layer_norm"`):
+            Whether to use layer norm in relative embedding (`"layer_norm"` if yes)
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"`, :obj:`"gelu_python"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout (:obj:`float`, `optional`, defaults to 0.1):
+            `"gelu"`, `"relu"`, `"selu"`, `"gelu_python"` and `"gelu_new"` are supported.
+        hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
+        attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        final_dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probability for the final projection layer of :class:`SEWDForCTC`.
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+        final_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the final projection layer of [`SEWDForCTC`].
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-7):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-7):
             The epsilon used by the layer normalization layers in the transformer encoder.
-        feature_layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-5):
+        feature_layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization after the feature extractor.
-        feat_extract_norm (:obj:`str`, `optional`, defaults to :obj:`"group"`):
-            The norm to be applied to 1D convolutional layers in feature extractor. One of :obj:`"group"` for group
-            normalization of only the first 1D convolutional layer or :obj:`"layer"` for layer normalization of all 1D
+        feat_extract_norm (`str`, *optional*, defaults to `"group"`):
+            The norm to be applied to 1D convolutional layers in feature extractor. One of `"group"` for group
+            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
             convolutional layers.
-        feat_proj_dropout (:obj:`float`, `optional`, defaults to 0.0):
+        feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for output of the feature extractor.
-        feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
+        feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
-            extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        conv_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
+            extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        conv_dim (`Tuple[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-            feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
-        conv_stride (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
+            feature extractor. The length of *conv_dim* defines the number of 1D convolutional layers.
+        conv_stride (`Tuple[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature extractor. The length
-            of `conv_stride` defines the number of convolutional layers and has to match the the length of `conv_dim`.
-        conv_kernel (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
+            of *conv_stride* defines the number of convolutional layers and has to match the the length of *conv_dim*.
+        conv_kernel (`Tuple[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature extractor. The
-            length of `conv_kernel` defines the number of convolutional layers and has to match the the length of
-            `conv_dim`.
-        conv_bias (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            length of *conv_kernel* defines the number of convolutional layers and has to match the the length of
+            *conv_dim*.
+        conv_bias (`bool`, *optional*, defaults to `False`):
             Whether the 1D convolutional layers have a bias.
-        num_conv_pos_embeddings (:obj:`int`, `optional`, defaults to 128):
+        num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
             Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
             embeddings layer.
-        num_conv_pos_embedding_groups (:obj:`int`, `optional`, defaults to 16):
+        num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
-        apply_spec_augment (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
-            `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
-            <https://arxiv.org/abs/1904.08779>`__.
-        mask_time_prob (:obj:`float`, `optional`, defaults to 0.05):
+            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition](https://arxiv.org/abs/1904.08779).
+        mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
             reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
-            masked, `mask_time_prob` should be ``prob_vector_start*mask_time_length``. Note that overlap may decrease
-            the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment is True``.
-        mask_time_length (:obj:`int`, `optional`, defaults to 10):
+            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease
+            the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
+        mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
-        mask_time_min_masks (:obj:`int`, `optional`, defaults to 2),:
-            The minimum number of masks of length ``mask_feature_length`` generated along the time axis, each time
-            step, irrespectively of ``mask_feature_prob``. Only relevant if
+        mask_time_min_masks (`int`, *optional*, defaults to 2),:
+            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time
+            step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''
-        mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
+        mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
             masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
             the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
-            span to be masked, `mask_feature_prob` should be ``prob_vector_start*mask_feature_length``. Note that
-            overlap may decrease the actual percentage of masked vectors. This is only relevant if ``apply_spec_augment
-            is True``.
-        mask_feature_length (:obj:`int`, `optional`, defaults to 10):
+            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that
+            overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
+        mask_feature_length (`int`, *optional*, defaults to 10):
             Length of vector span along the feature axis.
-        mask_feature_min_masks (:obj:`int`, `optional`, defaults to 0),:
-            The minimum number of masks of length ``mask_feature_length`` generated along the feature axis, each time
-            step, irrespectively of ``mask_feature_prob``. Only relevant if
+        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
+            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+            step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
-        diversity_loss_weight (:obj:`int`, `optional`, defaults to 0.1):
+        diversity_loss_weight (`int`, *optional*, defaults to 0.1):
             The weight of the codebook diversity loss component.
-        ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
-            Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
-            instance of :class:`~transformers.SEWDForCTC`.
-        ctc_zero_infinity (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
+        ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
+            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+            instance of [`SEWDForCTC`].
+        ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
+            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses
             mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
-            instance of :class:`~transformers.SEWDForCTC`.
-        use_weighted_layer_sum (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            instance of [`SEWDForCTC`].
+        use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of :class:`~transformers.Wav2Vec2ForSequenceClassification`.
-        classifier_proj_size (:obj:`int`, `optional`, defaults to 256):
+            instance of [`Wav2Vec2ForSequenceClassification`].
+        classifier_proj_size (`int`, *optional*, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
 
-    Example::
+    Example:
 
-        >>> from transformers import SEWDModel, SEWDConfig
+    ```python
+    >>> from transformers import SEWDModel, SEWDConfig
 
-        >>> # Initializing a SEW-D asapp/sew-d-tiny-100k style configuration
-        >>> configuration = SEWDConfig()
+    >>> # Initializing a SEW-D asapp/sew-d-tiny-100k style configuration
+    >>> configuration = SEWDConfig()
 
-        >>> # Initializing a model from the asapp/sew-d-tiny-100k style configuration
-        >>> model = SEWDModel(configuration)
+    >>> # Initializing a model from the asapp/sew-d-tiny-100k style configuration
+    >>> model = SEWDModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "sew-d"
 
     def __init__(

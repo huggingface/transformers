@@ -29,32 +29,32 @@ class PushToHubCallback(Callback):
         **model_card_args
     ):
         """
-        output_dir (:obj:`str`):
+        output_dir (`str`):
             The output directory where the model predictions and checkpoints will be written and synced with the
             repository on the Hub.
-        save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"epoch"`):
+        save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"epoch"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
-                * :obj:`"no"`: No save is done during training.
-                * :obj:`"epoch"`: Save is done at the end of each epoch.
-                * :obj:`"steps"`: Save is done every :obj:`save_steps`
-        save_steps (:obj:`int`, `optional`):
+                - `"no"`: No save is done during training.
+                - `"epoch"`: Save is done at the end of each epoch.
+                - `"steps"`: Save is done every `save_steps`
+        save_steps (`int`, *optional*):
             The number of steps between saves when using the "steps" save_strategy.
-        tokenizer (:obj:`PreTrainedTokenizerBase`, `optional`):
+        tokenizer (`PreTrainedTokenizerBase`, *optional*):
             The tokenizer used by the model. If supplied, will be uploaded to the repo alongside the weights.
-        hub_model_id (:obj:`str`, `optional`):
-            The name of the repository to keep in sync with the local `output_dir`. It can be a simple model ID in
+        hub_model_id (`str`, *optional*):
+            The name of the repository to keep in sync with the local *output_dir*. It can be a simple model ID in
             which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
-            for instance :obj:`"user_name/model"`, which allows you to push to an organization you are a member of with
-            :obj:`"organization_name/model"`.
+            for instance `"user_name/model"`, which allows you to push to an organization you are a member of with
+            `"organization_name/model"`.
 
-            Will default to to the name of :obj:`output_dir`.
-        hub_token (:obj:`str`, `optional`):
+            Will default to to the name of `output_dir`.
+        hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
-            :obj:`huggingface-cli login`.
-        checkpoint (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            `huggingface-cli login`.
+        checkpoint (`bool`, *optional*, defaults to `False`):
             Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
-            resumed. Only usable when `save_strategy` is `epoch`.
+            resumed. Only usable when *save_strategy* is *epoch*.
         """
         super().__init__()
         if checkpoint and save_strategy != "epoch":

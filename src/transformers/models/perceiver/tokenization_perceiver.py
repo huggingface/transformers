@@ -28,26 +28,29 @@ class PerceiverTokenizer(PreTrainedTokenizer):
     """
     Construct a Perceiver tokenizer. The Perceiver simply uses raw bytes utf-8 encoding.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"[BOS]"`):
+        bos_token (`str`, *optional*, defaults to `"[BOS]"`):
             The BOS token (reserved in the vocab, but not actually used).
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"[EOS]"`):
+        eos_token (`str`, *optional*, defaults to `"[EOS]"`):
             The end of sequence token (reserved in the vocab, but not actually used).
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+            When building a sequence using special tokens, this is not the token that is used for the end of
+            sequence. The token used is the `sep_token`.
+
+            </Tip>
+
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The MASK token, useful for masked language modeling.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
             The CLS token (reserved in the vocab, but not actually used).
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from two sequences.
 
     """
@@ -115,18 +118,18 @@ class PerceiverTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -145,17 +148,17 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks. A sequence has the
         following format:
 
-        - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]

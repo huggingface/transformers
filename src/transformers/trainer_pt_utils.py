@@ -215,7 +215,7 @@ def torch_distributed_zero_first(local_rank: int):
     Decorator to make all processes in distributed training wait for each local_master to do something.
 
     Args:
-        local_rank (:obj:`int`): The rank of the local process.
+        local_rank (`int`): The rank of the local process.
     """
     if local_rank not in [-1, 0]:
         dist.barrier()
@@ -230,12 +230,12 @@ class DistributedSamplerWithLoop(DistributedSampler):
     shuffled samples to make each process have a round multiple of batch_size samples.
 
     Args:
-        dataset (:obj:`torch.utils.data.Dataset`):
+        dataset (`torch.utils.data.Dataset`):
             Dataset used for sampling.
-        batch_size (:obj:`int`):
+        batch_size (`int`):
             The batch size used with this sampler
         kwargs:
-            All other keyword arguments passed to :obj:`DistributedSampler`.
+            All other keyword arguments passed to `DistributedSampler`.
     """
 
     def __init__(self, dataset, batch_size, **kwargs):
@@ -342,43 +342,43 @@ class DistributedTensorGatherer:
     If our dataset has 16 samples with a batch size of 2 on 3 processes and we gather then transfer on CPU at every
     step, our sampler will generate the following indices:
 
-        :obj:`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]`
+        `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]`
 
     to get something of size a multiple of 3 (so that each process gets the same dataset length). Then process 0, 1 and
     2 will be responsible of making predictions for the following samples:
 
-        - P0: :obj:`[0, 1, 2, 3, 4, 5]`
-        - P1: :obj:`[6, 7, 8, 9, 10, 11]`
-        - P2: :obj:`[12, 13, 14, 15, 0, 1]`
+        - P0: `[0, 1, 2, 3, 4, 5]`
+        - P1: `[6, 7, 8, 9, 10, 11]`
+        - P2: `[12, 13, 14, 15, 0, 1]`
 
     The first batch treated on each process will be
 
-        - P0: :obj:`[0, 1]`
-        - P1: :obj:`[6, 7]`
-        - P2: :obj:`[12, 13]`
+        - P0: `[0, 1]`
+        - P1: `[6, 7]`
+        - P2: `[12, 13]`
 
     So if we gather at the end of the first batch, we will get a tensor (nested list/tuple of tensor) corresponding to
     the following indices:
 
-        :obj:`[0, 1, 6, 7, 12, 13]`
+        `[0, 1, 6, 7, 12, 13]`
 
     If we directly concatenate our results without taking any precautions, the user will then get the predictions for
     the indices in this order at the end of the prediction loop:
 
-        :obj:`[0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 15, 4, 5, 10, 11, 0, 1]`
+        `[0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 15, 4, 5, 10, 11, 0, 1]`
 
     For some reason, that's not going to roll their boat. This class is there to solve that problem.
 
     Args:
 
-        world_size (:obj:`int`):
+        world_size (`int`):
             The number of processes used in the distributed training.
-        num_samples (:obj:`int`):
+        num_samples (`int`):
             The number of samples in our dataset.
-        make_multiple_of (:obj:`int`, `optional`):
+        make_multiple_of (`int`, *optional*):
             If passed, the class assumes the datasets passed to each process are made to be a multiple of this argument
             (by adding samples).
-        padding_index (:obj:`int`, `optional`, defaults to -100):
+        padding_index (`int`, *optional*, defaults to -100):
             The padding index to use if the arrays don't all have the same sequence length.
     """
 
@@ -398,7 +398,7 @@ class DistributedTensorGatherer:
 
     def add_arrays(self, arrays):
         """
-        Add :obj:`arrays` to the internal storage, Will initialize the storage to the full size at the first arrays
+        Add `arrays` to the internal storage, Will initialize the storage to the full size at the first arrays
         passed so that if we're bound to get an OOM, it happens at the beginning.
         """
         if arrays is None:
@@ -450,9 +450,9 @@ class LabelSmoother:
     Adds label-smoothing on a pre-computed output from a Transformers model.
 
     Args:
-        epsilon (:obj:`float`, `optional`, defaults to 0.1):
+        epsilon (`float`, *optional*, defaults to 0.1):
             The label smoothing factor.
-        ignore_index (:obj:`int`, `optional`, defaults to -100):
+        ignore_index (`int`, *optional*, defaults to -100):
             The index in the labels to ignore when computing the loss.
     """
 
@@ -485,14 +485,14 @@ class LabelSmoother:
 
 def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, generator=None):
     """
-    Return a list of indices so that each slice of :obj:`batch_size` consecutive indices correspond to elements of
+    Return a list of indices so that each slice of `batch_size` consecutive indices correspond to elements of
     similar lengths. To do this, the indices are:
 
     - randomly permuted
-    - grouped in mega-batches of size :obj:`mega_batch_mult * batch_size`
+    - grouped in mega-batches of size `mega_batch_mult * batch_size`
     - sorted by length in each mega-batch
 
-    The result is the concatenation of all mega-batches, with the batch of :obj:`batch_size` containing the element of
+    The result is the concatenation of all mega-batches, with the batch of `batch_size` containing the element of
     maximum length placed first, so that an OOM happens sooner rather than later.
     """
     # Default for mega_batch_mult: 50 or the number to get 4 megabatches, whichever is smaller.
@@ -641,11 +641,10 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 class ShardSampler(Sampler):
     """
     Sampler that shards batches between several processes. Dispatches indices batch by batch: on 2 processes with batch
-    size 4, the first two batches are :obj:`[0, 1, 2, 3, 4, 5, 6, 7]` and :obj:`[8, 9, 10, 11, 12, 13, 14, 15]`, which
-    shard into :obj:`[0, 1, 2, 3]` and :obj:`[8, 9, 10, 11]` for GPU-0 and :obj:`[4, 5, 6, 7]` and :obj:`[12, 13, 14,
-    15]` for GPU-1.
+    size 4, the first two batches are `[0, 1, 2, 3, 4, 5, 6, 7]` and `[8, 9, 10, 11, 12, 13, 14, 15]`, which
+    shard into `[0, 1, 2, 3]` and `[8, 9, 10, 11]` for GPU-0 and `[4, 5, 6, 7]` and `[12, 13, 14, 15]` for GPU-1.
 
-    The sampler thus yields :obj:`[0, 1, 2, 3, 8, 9, 10, 11]` on GPU-0 and :obj:`[4, 5, 6, 7, 12, 13, 14, 15]` on
+    The sampler thus yields `[0, 1, 2, 3, 8, 9, 10, 11]` on GPU-0 and `[4, 5, 6, 7, 12, 13, 14, 15]` on
     GPU-1.
     """
 
@@ -689,44 +688,44 @@ class ShardSampler(Sampler):
 
 class IterableDatasetShard(IterableDataset):
     """
-    Wraps a PyTorch :obj:`IterableDataset` to generate samples for one of the processes only. Instances of this class
-    will always yield a number of samples that is a round multiple of the actual batch size (which is :obj:`batch_size
-    x num_processes`). Depending on the value of the :obj:`drop_last` attribute, it will either stop the iteration at
+    Wraps a PyTorch `IterableDataset` to generate samples for one of the processes only. Instances of this class
+    will always yield a number of samples that is a round multiple of the actual batch size (which is `batch_size x num_processes`). Depending on the value of the `drop_last` attribute, it will either stop the iteration at
     the first batch that would be too small or loop with indices from the beginning.
 
-    On two processes with an iterable dataset yielding of :obj:`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]` with a batch
+    On two processes with an iterable dataset yielding of `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]` with a batch
     size of 2:
 
-    - the shard on process 0 will yield :obj:`[0, 1, 4, 5, 8, 9]` so will see batches :obj:`[0, 1]`, :obj:`[4, 5]`,
-      :obj:`[8, 9]`
-    - the shard on process 1 will yield :obj:`[2, 3, 6, 7, 10, 11]` so will see batches :obj:`[2, 3]`, :obj:`[6, 7]`,
-      :obj:`[10, 11]`
+    - the shard on process 0 will yield `[0, 1, 4, 5, 8, 9]` so will see batches `[0, 1]`, `[4, 5]`,
+      `[8, 9]`
+    - the shard on process 1 will yield `[2, 3, 6, 7, 10, 11]` so will see batches `[2, 3]`, `[6, 7]`,
+      `[10, 11]`
 
-    .. warning:
+    <Tip warning={true}>
 
         If your IterableDataset implements some randomization that needs to be applied the same way on all processes
-        (for instance, a shuffling), you should use a :obj:`torch.Generator` in a :obj:`generator` attribute of the
-        :obj:`dataset` to generate your random numbers and call the
-        :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch` method of this object. It will set the
-        seed of this :obj:`generator` to :obj:`seed + epoch` on all processes before starting the iteration.
-        Alternatively, you can also implement a :obj:`set_epoch()` method in your iterable dataset to deal with this.
+        (for instance, a shuffling), you should use a `torch.Generator` in a `generator` attribute of the
+        `dataset` to generate your random numbers and call the
+        [`~trainer_pt_utils.IterableDatasetShard.set_epoch`] method of this object. It will set the
+        seed of this `generator` to `seed + epoch` on all processes before starting the iteration.
+        Alternatively, you can also implement a `set_epoch()` method in your iterable dataset to deal with this.
 
+    </Tip>
 
     Args:
-        dataset (:obj:`torch.utils.data.IterableDataset`):
+        dataset (`torch.utils.data.IterableDataset`):
             The batch sampler to split in several shards.
-        batch_size (:obj:`int`, `optional`, defaults to 1):
+        batch_size (`int`, *optional*, defaults to 1):
             The size of the batches per shard.
-        drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        drop_last (`bool`, *optional*, defaults to `False`):
             Whether or not to drop the last incomplete batch or complete the last batches by using the samples from the
             beginning.
-        num_processes (:obj:`int`, `optional`, defaults to 1):
+        num_processes (`int`, *optional*, defaults to 1):
             The number of processes running concurrently.
-        process_index (:obj:`int`, `optional`, defaults to 0):
+        process_index (`int`, *optional*, defaults to 0):
             The index of the current process.
-        seed (:obj:`int`, `optional`, defaults to 0):
+        seed (`int`, *optional*, defaults to 0):
             A random seed that will be used for the random number generation in
-            :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch`.
+            [`~trainer_pt_utils.IterableDatasetShard.set_epoch`].
     """
 
     def __init__(
@@ -834,11 +833,11 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     Reformat Trainer metrics values to a human-readable format
 
     Args:
-        metrics (:obj:`Dict[str, float]`):
+        metrics (`Dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (:obj:`Dict[str, float]`): The reformatted metrics
+        metrics (`Dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
@@ -862,38 +861,40 @@ def log_metrics(self, split, metrics):
     Under distributed environment this is done only for a process with rank 0.
 
     Args:
-        split (:obj:`str`):
-            Mode/split name: one of ``train``, ``eval``, ``test``
-        metrics (:obj:`Dict[str, float]`):
+        split (`str`):
+            Mode/split name: one of `train`, `eval`, `test`
+        metrics (`Dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
 
-    In order to get memory usage report you need to install ``psutil``. You can do that with ``pip install psutil``.
+    In order to get memory usage report you need to install `psutil`. You can do that with `pip install psutil`.
 
-    Now when this method is run, you will see a report that will include: ::
+    Now when this method is run, you will see a report that will include: :
 
-        init_mem_cpu_alloc_delta   =     1301MB
-        init_mem_cpu_peaked_delta  =      154MB
-        init_mem_gpu_alloc_delta   =      230MB
-        init_mem_gpu_peaked_delta  =        0MB
-        train_mem_cpu_alloc_delta  =     1345MB
-        train_mem_cpu_peaked_delta =        0MB
-        train_mem_gpu_alloc_delta  =      693MB
-        train_mem_gpu_peaked_delta =        7MB
+    ```python
+    init_mem_cpu_alloc_delta   =     1301MB
+    init_mem_cpu_peaked_delta  =      154MB
+    init_mem_gpu_alloc_delta   =      230MB
+    init_mem_gpu_peaked_delta  =        0MB
+    train_mem_cpu_alloc_delta  =     1345MB
+    train_mem_cpu_peaked_delta =        0MB
+    train_mem_gpu_alloc_delta  =      693MB
+    train_mem_gpu_peaked_delta =        7MB
+    ```
 
     **Understanding the reports:**
 
-    - the first segment, e.g., ``train__``, tells you which stage the metrics are for. Reports starting with ``init_``
-      will be added to the first stage that gets run. So that if only evaluation is run, the memory usage for the
-      ``__init__`` will be reported along with the ``eval_`` metrics.
-    - the third segment, is either ``cpu`` or ``gpu``, tells you whether it's the general RAM or the gpu0 memory
-      metric.
-    - ``*_alloc_delta`` - is the difference in the used/allocated memory counter between the end and the start of the
-      stage - it can be negative if a function released more memory than it allocated.
-    - ``*_peaked_delta`` - is any extra memory that was consumed and then freed - relative to the current allocated
-      memory counter - it is never negative. When you look at the metrics of any stage you add up ``alloc_delta`` +
-      ``peaked_delta`` and you know how much memory was needed to complete that stage.
+    - the first segment, e.g., `train__`, tells you which stage the metrics are for. Reports starting with `init_`
+        will be added to the first stage that gets run. So that if only evaluation is run, the memory usage for the
+        `__init__` will be reported along with the `eval_` metrics.
+    - the third segment, is either `cpu` or `gpu`, tells you whether it's the general RAM or the gpu0 memory
+        metric.
+    - `*_alloc_delta` - is the difference in the used/allocated memory counter between the end and the start of the
+        stage - it can be negative if a function released more memory than it allocated.
+    - `*_peaked_delta` - is any extra memory that was consumed and then freed - relative to the current allocated
+        memory counter - it is never negative. When you look at the metrics of any stage you add up `alloc_delta` +
+        `peaked_delta` and you know how much memory was needed to complete that stage.
 
     The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
     main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
@@ -907,29 +908,29 @@ def log_metrics(self, split, metrics):
 
     The CPU peak memory is measured using a sampling thread. Due to python's GIL it may miss some of the peak memory if
     that thread didn't get a chance to run when the highest memory was used. Therefore this report can be less than
-    reality. Using ``tracemalloc`` would have reported the exact peak memory, but it doesn't report memory allocations
+    reality. Using `tracemalloc` would have reported the exact peak memory, but it doesn't report memory allocations
     outside of python. So if some C++ CUDA extension allocated its own memory it won't be reported. And therefore it
     was dropped in favor of the memory sampling approach, which reads the current process memory usage.
 
-    The GPU allocated and peak memory reporting is done with ``torch.cuda.memory_allocated()`` and
-    ``torch.cuda.max_memory_allocated()``. This metric reports only "deltas" for pytorch-specific allocations, as
-    ``torch.cuda`` memory management system doesn't track any memory allocated outside of pytorch. For example, the
+    The GPU allocated and peak memory reporting is done with `torch.cuda.memory_allocated()` and
+    `torch.cuda.max_memory_allocated()`. This metric reports only "deltas" for pytorch-specific allocations, as
+    `torch.cuda` memory management system doesn't track any memory allocated outside of pytorch. For example, the
     very first cuda call typically loads CUDA kernels, which may take from 0.5 to 2GB of GPU memory.
 
-    Note that this tracker doesn't account for memory allocations outside of :class:`~transformers.Trainer`'s
-    ``__init__``, ``train``, ``evaluate`` and ``predict`` calls.
+    Note that this tracker doesn't account for memory allocations outside of [`Trainer`]'s
+    `__init__`, `train`, `evaluate` and `predict` calls.
 
-    Because ``evaluation`` calls may happen during ``train``, we can't handle nested invocations because
-    ``torch.cuda.max_memory_allocated`` is a single counter, so if it gets reset by a nested eval call, ``train``'s
-    tracker will report incorrect info. If this `pytorch issue <https://github.com/pytorch/pytorch/issues/16266>`__
+    Because `evaluation` calls may happen during `train`, we can't handle nested invocations because
+    `torch.cuda.max_memory_allocated` is a single counter, so if it gets reset by a nested eval call, `train`'s
+    tracker will report incorrect info. If this [pytorch issue](https://github.com/pytorch/pytorch/issues/16266)
     gets resolved it will be possible to change this class to be re-entrant. Until then we will only track the outer
-    level of ``train``, ``evaluate`` and ``predict`` methods. Which means that if ``eval`` is called during ``train``,
+    level of `train`, `evaluate` and `predict` methods. Which means that if `eval` is called during `train`,
     it's the latter that will account for its memory usage and that of the former.
 
-    This also means that if any other tool that is used along the :class:`~transformers.Trainer` calls
-    ``torch.cuda.reset_peak_memory_stats``, the gpu peak memory stats could be invalid. And the
-    :class:`~transformers.Trainer` will disrupt the normal behavior of any such tools that rely on calling
-    ``torch.cuda.reset_peak_memory_stats`` themselves.
+    This also means that if any other tool that is used along the [`Trainer`] calls
+    `torch.cuda.reset_peak_memory_stats`, the gpu peak memory stats could be invalid. And the
+    [`Trainer`] will disrupt the normal behavior of any such tools that rely on calling
+    `torch.cuda.reset_peak_memory_stats` themselves.
 
     For best performance you may want to consider turning the memory profiling off for production runs.
     """
@@ -946,19 +947,19 @@ def log_metrics(self, split, metrics):
 
 def save_metrics(self, split, metrics, combined=True):
     """
-    Save metrics into a json file for that split, e.g. ``train_results.json``.
+    Save metrics into a json file for that split, e.g. `train_results.json`.
 
     Under distributed environment this is done only for a process with rank 0.
 
     Args:
-        split (:obj:`str`):
-            Mode/split name: one of ``train``, ``eval``, ``test``, ``all``
-        metrics (:obj:`Dict[str, float]`):
+        split (`str`):
+            Mode/split name: one of `train`, `eval`, `test`, `all`
+        metrics (`Dict[str, float]`):
             The metrics returned from train/evaluate/predict
-        combined (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Creates combined metrics by updating ``all_results.json`` with metrics of this call
+        combined (`bool`, *optional*, defaults to `True`):
+            Creates combined metrics by updating `all_results.json` with metrics of this call
 
-    To understand the metrics please read the docstring of :meth:`~transformers.Trainer.log_metrics`. The only
+    To understand the metrics please read the docstring of [`~Trainer.log_metrics`]. The only
     difference is that raw unformatted numbers are saved in the current method.
 
     """
