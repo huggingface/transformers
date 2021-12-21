@@ -53,23 +53,23 @@ VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class ViltForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.ViltForPreTraining`.
+    Output type of [`ViltForPreTraining`].
 
     Args:
-        loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
-        mlm_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+        mlm_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        itm_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
+        itm_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
             Prediction scores of the image-text matching prediction (classification) head (scores of True/False
             continuation before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
             each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
             weighted average in the self-attention heads.
     """
@@ -222,6 +222,7 @@ class ViltEmbeddings(nn.Module):
         pixel_values,
         pixel_mask,
         inputs_embeds,
+        image_embeds,
         image_token_type_idx=1,
     ):
         # PART 1: text embeddings
@@ -230,9 +231,12 @@ class ViltEmbeddings(nn.Module):
         )
 
         # PART 2: patch embeddings (with interpolated position encodings)
-        image_embeds, image_masks, patch_index = self.visual_embed(
-            pixel_values, pixel_mask, max_image_length=self.config.max_image_length
-        )
+        if image_embeds is None:
+            image_embeds, image_masks, patch_index = self.visual_embed(
+                pixel_values, pixel_mask, max_image_length=self.config.max_image_length
+            )
+        else:
+            image_masks = pixel_mask.flatten(1)
 
         # PART 3: add modality type embeddings
         # 0 indicates text, 1 indicates image, 2 is optionally used when a second image is provided (NLVR2)
@@ -633,39 +637,47 @@ VILT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config (:class:`~transformers.ViltConfig`): Model configuration class with all the parameters of the model.
+        config ([`ViltConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 VILT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.ViltFeatureExtractor`. See
-            :meth:`transformers.ViltFeatureExtractor.__call__` for details.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`ViltFeatureExtractor`]. See
+            [`ViltFeatureExtractor.__call__`] for details.
 
-        pixel_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, height, width)`, `optional`):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
+        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 
             - 1 for pixels that are real (i.e. **not masked**),
             - 0 for pixels that are padding (i.e. **masked**).
             `What are attention masks? <../glossary.html#attention-mask>`__
 
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation. This is
+            useful if you want more control over how to convert `pixel_values` into patch embeddings.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -710,9 +722,10 @@ class ViltModel(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         pixel_mask=None,
-        image_token_type_idx=None,
         head_mask=None,
         inputs_embeds=None,
+        image_embeds=None,
+        image_token_type_idx=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -778,6 +791,7 @@ class ViltModel(ViltPreTrainedModel):
             pixel_values,
             pixel_mask,
             inputs_embeds,
+            image_embeds,
             image_token_type_idx=image_token_type_idx,
         )
 
@@ -858,6 +872,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
         pixel_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        image_embeds=None,
         labels=None,
         itm_labels=None,
         output_attentions=None,
@@ -865,12 +880,12 @@ class ViltForPreTraining(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-        itm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image text matching loss. Indices should be in ``[0, 1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        itm_labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image text matching loss. Indices should be in `[0, 1]`.
 
         Returns:
 
@@ -887,6 +902,7 @@ class ViltForPreTraining(ViltPreTrainedModel):
             pixel_mask=pixel_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1004,13 +1020,14 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         pixel_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        image_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_labels)`, `optional`):
+        labels (`torch.FloatTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the visual question answering loss. This tensor must be either a one-hot encoding of
             all answers that are applicable for a given example in the batch, or a soft encoding indicating which
             answers are applicable, where 1.0 is the highest score.
@@ -1048,6 +1065,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
             pixel_mask=pixel_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1104,13 +1122,14 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         pixel_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        image_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             ...
 
         Returns:
@@ -1128,6 +1147,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
             pixel_mask=pixel_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1189,13 +1209,14 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         pixel_mask_2=None,
         head_mask=None,
         inputs_embeds=None,
+        image_embeds=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Binary classification labels.
 
         Returns:
@@ -1233,9 +1254,10 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            image_token_type_idx=1,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
+            image_token_type_idx=1,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
