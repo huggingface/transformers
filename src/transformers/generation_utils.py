@@ -729,8 +729,10 @@ class GenerationMixin:
         return criteria
 
     def _merge_criteria_processor_list(
-        self, default_list: StoppingCriteriaList, custom_list: StoppingCriteriaList
-    ) -> StoppingCriteriaList:
+        self,
+        default_list: Union[LogitsProcessorList, StoppingCriteriaList],
+        custom_list: Union[LogitsProcessorList, StoppingCriteriaList],
+    ) -> Union[LogitsProcessorList, StoppingCriteriaList]:
         if custom_list is None:
             return default_list
         for default in default_list:
