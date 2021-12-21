@@ -25,10 +25,10 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_tensorflow_probability_available,
+    replace_return_docstrings,
     requires_backends,
 )
 from ...modeling_tf_outputs import (
@@ -981,12 +981,7 @@ class TFTapasModel(TFTapasPreTrainedModel):
         self.tapas = TFTapasMainLayer(config, name="tapas")
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFBaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1085,12 +1080,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         return self.lm_head.predictions
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFMaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1314,12 +1304,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         self.config = config
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFTableQuestionAnsweringOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFTableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1664,12 +1649,7 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         )
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
