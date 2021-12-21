@@ -28,64 +28,64 @@ LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LukeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.LukeModel`. It is used to
+    This is the configuration class to store the configuration of a [`LukeModel`]. It is used to
     instantiate a LUKE model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the LUKE model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.LukeModel`.
-        entity_vocab_size (:obj:`int`, `optional`, defaults to 500000):
+            `inputs_ids` passed when calling [`LukeModel`].
+        entity_vocab_size (`int`, *optional*, defaults to 500000):
             Entity vocabulary size of the LUKE model. Defines the number of different entities that can be represented
-            by the :obj:`entity_ids` passed when calling :class:`~transformers.LukeModel`.
-        hidden_size (:obj:`int`, `optional`, defaults to 768):
+            by the `entity_ids` passed when calling [`LukeModel`].
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        entity_emb_size (:obj:`int`, `optional`, defaults to 256):
+        entity_emb_size (`int`, *optional*, defaults to 256):
             The number of dimensions of the entity embedding.
-        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
+        max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.LukeModel`.
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`LukeModel`].
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_entity_aware_attention (:obj:`bool`, defaults to :obj:`True`):
-            Whether or not the model should use the entity-aware self-attention mechanism proposed in `LUKE: Deep
-            Contextualized Entity Representations with Entity-aware Self-attention (Yamada et al.)
-            <https://arxiv.org/abs/2010.01057>`__.
+        use_entity_aware_attention (`bool`, defaults to `True`):
+            Whether or not the model should use the entity-aware self-attention mechanism proposed in [LUKE: Deep
+            Contextualized Entity Representations with Entity-aware Self-attention (Yamada et al.)](https://arxiv.org/abs/2010.01057).
 
-    Examples::
+    Examples:
 
-        >>> from transformers import LukeConfig, LukeModel
+    ```python
+    >>> from transformers import LukeConfig, LukeModel
 
-        >>> # Initializing a LUKE configuration
-        >>> configuration = LukeConfig()
+    >>> # Initializing a LUKE configuration
+    >>> configuration = LukeConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = LukeModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = LukeModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "luke"
 
     def __init__(
