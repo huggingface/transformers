@@ -208,7 +208,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     elif "nlvr" in checkpoint_url:
         nlvr_model = True
         config.num_labels = 2
-        config.id2label = {0: "True", 1: "False"}
+        config.id2label = {0: "False", 1: "True"}
         config.label2id = {v: k for k, v in config.id2label.items()}
         config.modality_type_vocab_size = 3
 

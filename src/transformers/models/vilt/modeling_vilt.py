@@ -1201,7 +1201,29 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         Returns:
 
         Examples::
-            >>> TODO
+            >>> from transformers import ViltProcessor, ViltForNaturalLanguageVisualReasoning
+            >>> import requests
+            >>> from PIL import Image
+
+            >>> image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
+            >>> image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_1.jpg", stream=True).raw)
+            >>> text = "The left image contains twice the number of dogs as the right image."
+
+            >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
+            >>> model = ViltForNaturalLanguageVisualReasoning.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
+
+            >>> # prepare inputs
+            >>> encoding_1 = processor(image1, text, return_tensors="pt")
+            >>> encoding_2 = processor(image2, text, return_tensors="pt")
+
+            >>> # forward pass
+            >>> outputs = model(input_ids=encoding_1.input_ids,
+            ...                 pixel_values=encoding_1.pixel_values,
+            ...                 pixel_values_2=encoding_2.pixel_values_2
+            ... )
+            >>> logits = outputs.logits
+            >>> idx = logits.argmax(-1).item()
+            >>> print("Predicted answer:", model.config.id2label[idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
