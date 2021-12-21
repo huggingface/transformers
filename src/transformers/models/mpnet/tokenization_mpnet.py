@@ -357,7 +357,7 @@ class BasicTokenizer(object):
         WordPieceTokenizer.
 
         Args:
-            **never_split**: (*optional*) list of str
+            never_split (`LIst[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
@@ -489,11 +489,11 @@ class WordpieceTokenizer(object):
         For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
 
         Args:
-          text: A single token or whitespace separated tokens. This should have
-            already been passed through *BasicTokenizer*.
+            text: A single token or whitespace separated tokens. This should have
+                already been passed through *BasicTokenizer*.
 
         Returns:
-          A list of wordpiece tokens.
+            A list of wordpiece tokens.
         """
 
         output_tokens = []
