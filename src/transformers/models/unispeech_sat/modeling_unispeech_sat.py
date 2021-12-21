@@ -1266,49 +1266,50 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> import torch
-            >>> from transformers import UniSpeechSatFeatureExtractor, UniSpeechSatForPreTraining
-            >>> from transformers.models.unispeech_sat.modeling_unispeech_sat import _compute_mask_indices
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
+        ```python
+        >>> import torch
+        >>> from transformers import UniSpeechSatFeatureExtractor, UniSpeechSatForPreTraining
+        >>> from transformers.models.unispeech_sat.modeling_unispeech_sat import _compute_mask_indices
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
 
-            >>> feature_extractor = UniSpeechSatFeatureExtractor.from_pretrained("patrickvonplaten/unispeech_sat-base")
-            >>> model = UniSpeechSatForPreTraining.from_pretrained("patrickvonplaten/unispeech_sat-base")
-
-
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
+        >>> feature_extractor = UniSpeechSatFeatureExtractor.from_pretrained("patrickvonplaten/unispeech_sat-base")
+        >>> model = UniSpeechSatForPreTraining.from_pretrained("patrickvonplaten/unispeech_sat-base")
 
 
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
 
-            >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
 
-            >>> # compute masked indices
-            >>> batch_size, raw_sequence_length = input_values.shape
-            >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
+        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
 
-            >>> with torch.no_grad():
-            ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
+        >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
 
-            >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-            >>> cosine_sim = torch.cosine_similarity(
-            ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
-            ... )
+        >>> # compute masked indices
+        >>> batch_size, raw_sequence_length = input_values.shape
+        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
+        >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
 
-            >>> # show that cosine similarity is much higher than random
-            >>> assert cosine_sim[mask_time_indices].mean() > 0.5
+        >>> with torch.no_grad():
+        ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
 
-            >>> # for contrastive loss training model should be put into train mode
-            >>> model.train()
-            >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
-        """
+        >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
+        >>> cosine_sim = torch.cosine_similarity(
+        ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
+        ... )
+
+        >>> # show that cosine similarity is much higher than random
+        >>> assert cosine_sim[mask_time_indices].mean() > 0.5
+
+        >>> # for contrastive loss training model should be put into train mode
+        >>> model.train()
+        >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

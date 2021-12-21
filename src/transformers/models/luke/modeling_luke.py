@@ -924,32 +924,33 @@ class LukeModel(LukePreTrainedModel):
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LukeTokenizer, LukeModel
+        ```python
+        >>> from transformers import LukeTokenizer, LukeModel
 
-            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
-            >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
+        >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
+        >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
 
-            # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
-            >>> text = "Beyoncé lives in Los Angeles."
-            >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
+        # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
+        >>> text = "Beyoncé lives in Los Angeles."
+        >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
 
-            >>> encoding = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
-            >>> outputs = model(**encoding)
-            >>> word_last_hidden_state = outputs.last_hidden_state
-            >>> entity_last_hidden_state = outputs.entity_last_hidden_state
+        >>> encoding = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+        >>> outputs = model(**encoding)
+        >>> word_last_hidden_state = outputs.last_hidden_state
+        >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
-            # Input Wikipedia entities to obtain enriched contextualized representations of word tokens
-            >>> text = "Beyoncé lives in Los Angeles."
-            >>> entities = ["Beyoncé", "Los Angeles"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
-            >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+        # Input Wikipedia entities to obtain enriched contextualized representations of word tokens
+        >>> text = "Beyoncé lives in Los Angeles."
+        >>> entities = ["Beyoncé", "Los Angeles"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
+        >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
 
-            >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
-            >>> outputs = model(**encoding)
-            >>> word_last_hidden_state = outputs.last_hidden_state
-            >>> entity_last_hidden_state = outputs.entity_last_hidden_state
-        """
+        >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+        >>> outputs = model(**encoding)
+        >>> word_last_hidden_state = outputs.last_hidden_state
+        >>> entity_last_hidden_state = outputs.entity_last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

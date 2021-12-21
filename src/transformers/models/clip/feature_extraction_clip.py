@@ -32,29 +32,29 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a CLIP feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to 224):
-            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
-        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
-            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
-            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
-        do_center_crop (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to crop the input at the center. If the input size is smaller than :obj:`crop_size` along any edge,
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the input to a certain `size`.
+        size (`int`, *optional*, defaults to 224):
+            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`.
+            Only has an effect if `do_resize` is set to `True`.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge,
             the image is padded with 0's and then center cropped.
-        crop_size (:obj:`int`, `optional`, defaults to 224):
-            Desired output size when applying center-cropping. Only has an effect if :obj:`do_center_crop` is set to
-            :obj:`True`.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to normalize the input with :obj:`image_mean` and :obj:`image_std`.
-        image_mean (:obj:`List[int]`, defaults to :obj:`[0.485, 0.456, 0.406]`):
+        crop_size (`int`, *optional*, defaults to 224):
+            Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to
+            `True`.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether or not to normalize the input with `image_mean` and `image_std`.
+        image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`List[int]`, defaults to :obj:`[0.229, 0.224, 0.225]`):
+        image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
@@ -93,27 +93,29 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         Main method to prepare for the model one or several image(s).
 
-        .. warning::
+        <Tip warning={true}>
 
-           NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
-           PIL images.
+        NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
+        PIL images.
+
+        </Tip>
 
         Args:
-            images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return NumPy :obj:`np.ndarray` objects.
-                * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
-            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
         """
@@ -157,13 +159,13 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def center_crop(self, image, size):
         """
-        Crops :obj:`image` to the given size using a center crop. Note that if the image is too small to be cropped to
+        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to
         the size is given, it will be padded (so the returned result has the size asked).
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to resize.
-            size (:obj:`int` or :obj:`Tuple[int, int]`):
+            size (`int` or `Tuple[int, int]`):
                 The size to which crop the image.
         """
         self._ensure_format_supported(image)
@@ -183,14 +185,14 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def resize(self, image, size, resample=Image.BICUBIC):
         """
-        Resizes :obj:`image`. Note that this will trigger a conversion of :obj:`image` to a PIL Image.
+        Resizes `image`. Note that this will trigger a conversion of `image` to a PIL Image.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to resize.
-            size (:obj:`int` or :obj:`Tuple[int, int]`):
-                The size to use for resizing the image. If :obj:`int` it will be resized to match the shorter side
-            resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+            size (`int` or `Tuple[int, int]`):
+                The size to use for resizing the image. If `int` it will be resized to match the shorter side
+            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
                 The filter to user for resampling.
         """
         self._ensure_format_supported(image)

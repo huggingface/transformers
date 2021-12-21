@@ -62,23 +62,23 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Construct a "fast" RoFormer tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" RoFormer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.RoFormerTokenizerFast` is almost identical to :class:`~transformers.BertTokenizerFast` and
+    [`RoFormerTokenizerFast`] is almost identical to [`BertTokenizerFast`] and
     runs end-to-end tokenization: punctuation splitting and wordpiece. There are some difference between them when
     tokenizing Chinese.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
-    Example::
+    Example:
 
-        >>> from transformers import RoFormerTokenizerFast
-        >>> tokenizer = RoFormerTokenizerFast.from_pretrained('junnyu/roformer_chinese_base')
-        >>> tokenizer.tokenize("今天天气非常好。")
-        # ['今', '天', '天', '气', '非常', '好', '。']
-
-    """
+    ```python
+    >>> from transformers import RoFormerTokenizerFast
+    >>> tokenizer = RoFormerTokenizerFast.from_pretrained('junnyu/roformer_chinese_base')
+    >>> tokenizer.tokenize("今天天气非常好。")
+    # ['今', '天', '天', '气', '非常', '好', '。']
+    ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -141,17 +141,17 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A RoFormer sequence has the following format:
 
-        - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
@@ -167,21 +167,21 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A RoFormer
         sequence pair mask has the following format:
 
-        ::
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
 
-            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
-
-        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
             sequence(s).
         """
         sep = [self.sep_token_id]

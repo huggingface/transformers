@@ -41,14 +41,14 @@ def is_torch_tensor(obj):
 
 def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
     """
-    Loads :obj:`image` to a PIL Image.
+    Loads `image` to a PIL Image.
 
     Args:
-        image (:obj:`str` or :obj:`PIL.Image.Image`):
+        image (`str` or `PIL.Image.Image`):
             The image to convert to the PIL Image format.
 
     Returns:
-        :obj:`PIL.Image.Image`: A PIL Image.
+        `PIL.Image.Image`: A PIL Image.
     """
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
@@ -87,15 +87,15 @@ class ImageFeatureExtractionMixin:
 
     def to_pil_image(self, image, rescale=None):
         """
-        Converts :obj:`image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last
+        Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last
         axis if needed.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`numpy.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor`):
                 The image to convert to the PIL Image format.
-            rescale (:obj:`bool`, `optional`):
+            rescale (`bool`, *optional*):
                 Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will
-                default to :obj:`True` if the image type is a floating type, :obj:`False` otherwise.
+                default to `True` if the image type is a floating type, `False` otherwise.
         """
         self._ensure_format_supported(image)
 
@@ -117,17 +117,17 @@ class ImageFeatureExtractionMixin:
 
     def to_numpy_array(self, image, rescale=None, channel_first=True):
         """
-        Converts :obj:`image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
+        Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
         dimension.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to convert to a NumPy array.
-            rescale (:obj:`bool`, `optional`):
+            rescale (`bool`, *optional*):
                 Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Will
-                default to :obj:`True` if the image is a PIL Image or an array/tensor of integers, :obj:`False`
+                default to `True` if the image is a PIL Image or an array/tensor of integers, `False`
                 otherwise.
-            channel_first (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            channel_first (`bool`, *optional*, defaults to `True`):
                 Whether or not to permute the dimensions of the image to put the channel dimension first.
         """
         self._ensure_format_supported(image)
@@ -151,15 +151,15 @@ class ImageFeatureExtractionMixin:
 
     def normalize(self, image, mean, std):
         """
-        Normalizes :obj:`image` with :obj:`mean` and :obj:`std`. Note that this will trigger a conversion of
-        :obj:`image` to a NumPy array if it's a PIL Image.
+        Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of
+        `image` to a NumPy array if it's a PIL Image.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to normalize.
-            mean (:obj:`List[float]` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            mean (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The mean (per channel) to use for normalization.
-            std (:obj:`List[float]` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            std (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
         """
         self._ensure_format_supported(image)
@@ -187,14 +187,14 @@ class ImageFeatureExtractionMixin:
 
     def resize(self, image, size, resample=PIL.Image.BILINEAR):
         """
-        Resizes :obj:`image`. Note that this will trigger a conversion of :obj:`image` to a PIL Image.
+        Resizes `image`. Note that this will trigger a conversion of `image` to a PIL Image.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to resize.
-            size (:obj:`int` or :obj:`Tuple[int, int]`):
+            size (`int` or `Tuple[int, int]`):
                 The size to use for resizing the image.
-            resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
                 The filter to user for resampling.
         """
         self._ensure_format_supported(image)
@@ -210,13 +210,13 @@ class ImageFeatureExtractionMixin:
 
     def center_crop(self, image, size):
         """
-        Crops :obj:`image` to the given size using a center crop. Note that if the image is too small to be cropped to
+        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to
         the size given, it will be padded (so the returned result has the size asked).
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to resize.
-            size (:obj:`int` or :obj:`Tuple[int, int]`):
+            size (`int` or `Tuple[int, int]`):
                 The size to which crop the image.
         """
         self._ensure_format_supported(image)

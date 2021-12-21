@@ -85,31 +85,32 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     Constructs a LayoutLMv2 feature extractor. This can be used to resize document images to the same size, as well as
     to apply OCR on them in order to get a list of words and normalized bounding boxes.
 
-    This feature extractor inherits from :class:`~transformers.feature_extraction_utils.PreTrainedFeatureExtractor`
+    This feature extractor inherits from [`~feature_extraction_utils.PreTrainedFeatureExtractor`]
     which contains most of the main methods. Users should refer to this superclass for more information regarding those
     methods.
 
     Args:
-        do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int` or :obj:`Tuple(int)`, `optional`, defaults to 224):
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the input to a certain `size`.
+        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if :obj:`do_resize`
-            is set to :obj:`True`.
-        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
-            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
-            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
-            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
-        apply_ocr (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize`
+            is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`.
+            Only has an effect if `do_resize` is set to `True`.
+        apply_ocr (`bool`, *optional*, defaults to `True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
-        ocr_lang (:obj:`Optional[str]`, `optional`):
+        ocr_lang (`Optional[str]`, *optional*):
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
             used.
 
-            .. note::
+            <Tip>
 
-                LayoutLMv2FeatureExtractor uses Google's Tesseract OCR engine under the hood.
-    """
+            LayoutLMv2FeatureExtractor uses Google's Tesseract OCR engine under the hood.
+
+            </Tip>"""
 
     model_input_names = ["pixel_values"]
 
@@ -130,48 +131,49 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Main method to prepare for the model one or several image(s).
 
         Args:
-            images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return NumPy :obj:`np.ndarray` objects.
-                * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
-            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
             - **words** -- Optional words as identified by Tesseract OCR (only when
-              :class:`~transformers.LayoutLMv2FeatureExtractor` was initialized with :obj:`apply_ocr` set to ``True``).
+              [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`).
             - **boxes** -- Optional bounding boxes as identified by Tesseract OCR, normalized based on the image size
-              (only when :class:`~transformers.LayoutLMv2FeatureExtractor` was initialized with :obj:`apply_ocr` set to
-              ``True``).
+              (only when [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to
+              `True`).
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMv2FeatureExtractor
-            >>> from PIL import Image
+        ```python
+        >>> from transformers import LayoutLMv2FeatureExtractor
+        >>> from PIL import Image
 
-            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
-            >>> # option 1: with apply_ocr=True (default)
-            >>> feature_extractor = LayoutLMv2FeatureExtractor()
-            >>> encoding = feature_extractor(image, return_tensors="pt")
-            >>> print(encoding.keys())
-            >>> # dict_keys(['pixel_values', 'words', 'boxes'])
+        >>> # option 1: with apply_ocr=True (default)
+        >>> feature_extractor = LayoutLMv2FeatureExtractor()
+        >>> encoding = feature_extractor(image, return_tensors="pt")
+        >>> print(encoding.keys())
+        >>> # dict_keys(['pixel_values', 'words', 'boxes'])
 
-            >>> # option 2: with apply_ocr=False
-            >>> feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
-            >>> encoding = feature_extractor(image, return_tensors="pt")
-            >>> print(encoding.keys())
-            >>> # dict_keys(['pixel_values'])
-        """
+        >>> # option 2: with apply_ocr=False
+        >>> feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+        >>> encoding = feature_extractor(image, return_tensors="pt")
+        >>> print(encoding.keys())
+        >>> # dict_keys(['pixel_values'])
+        ```"""
 
         # Input type checking for clearer error
         valid_images = False

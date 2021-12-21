@@ -736,30 +736,31 @@ class VisualBertModel(VisualBertPreTrainedModel):
 
         Returns:
 
-        Example::
+        Example:
 
-            # Assumption: `get_visual_embeddings(image)` gets the visual embeddings of the image.
-            from transformers import BertTokenizer, VisualBertModel
-            import torch
+        ```python
+        # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image.
+        from transformers import BertTokenizer, VisualBertModel
+        import torch
 
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = VisualBertModel.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = VisualBertModel.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
 
-            inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
-            visual_embeds = get_visual_embeddings(image).unsqueeze(0)
-            visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
-            visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
+        inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
+        visual_embeds = get_visual_embeddings(image).unsqueeze(0)
+        visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
+        visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-            inputs.update({
-                "visual_embeds": visual_embeds,
-                "visual_token_type_ids": visual_token_type_ids,
-                "visual_attention_mask": visual_attention_mask
-            })
+        inputs.update({
+            "visual_embeds": visual_embeds,
+            "visual_token_type_ids": visual_token_type_ids,
+            "visual_attention_mask": visual_attention_mask
+        })
 
-            outputs = model(**inputs)
+        outputs = model(**inputs)
 
-            last_hidden_states = outputs.last_hidden_state
-        """
+        last_hidden_states = outputs.last_hidden_state
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

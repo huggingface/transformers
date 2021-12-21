@@ -39,12 +39,12 @@ PRETRAINED_INIT_CONFIGURATION = {}
 
 class MobileBertTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" MobileBERT tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" MobileBERT tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.MobileBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    [`MobileBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
     end-to-end tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
     parameters.
     """
 

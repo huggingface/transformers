@@ -832,18 +832,20 @@ class FlaxBertForPreTraining(FlaxBertPreTrainedModel):
 FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import BertTokenizer, FlaxBertForPreTraining
+    ```python
+    >>> from transformers import BertTokenizer, FlaxBertForPreTraining
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = FlaxBertForPreTraining.from_pretrained('bert-base-uncased')
+    >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    >>> model = FlaxBertForPreTraining.from_pretrained('bert-base-uncased')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
-        >>> outputs = model(**inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+    >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
+    >>> prediction_logits = outputs.prediction_logits
+    >>> seq_relationship_logits = outputs.seq_relationship_logits
+    ```
 """
 
 overwrite_call_docstring(
@@ -976,20 +978,22 @@ class FlaxBertForNextSentencePrediction(FlaxBertPreTrainedModel):
 FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import BertTokenizer, FlaxBertForNextSentencePrediction
+    ```python
+    >>> from transformers import BertTokenizer, FlaxBertForNextSentencePrediction
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = FlaxBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+    >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    >>> model = FlaxBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='jax')
+    >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+    >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+    >>> encoding = tokenizer(prompt, next_sentence, return_tensors='jax')
 
-        >>> outputs = model(**encoding)
-        >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+    >>> outputs = model(**encoding)
+    >>> logits = outputs.logits
+    >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+    ```
 """
 
 

@@ -940,18 +940,20 @@ class FlaxCLIPTextModel(FlaxCLIPTextPreTrainedModel):
 FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import CLIPTokenizer, FlaxCLIPTextModel
+    ```python
+    >>> from transformers import CLIPTokenizer, FlaxCLIPTextModel
 
-        >>> model = FlaxCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    >>> model = FlaxCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+    >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="np")
+    >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="np")
 
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooler_output = outputs.pooler_output # pooled (EOS token) states
+    >>> outputs = model(**inputs)
+    >>> last_hidden_state = outputs.last_hidden_state
+    >>> pooler_output = outputs.pooler_output # pooled (EOS token) states
+    ```
 """
 
 overwrite_call_docstring(FlaxCLIPTextModel, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_DOCSTRING)
@@ -991,23 +993,25 @@ class FlaxCLIPVisionModel(FlaxCLIPVisionPreTrainedModel):
 FLAX_CLIP_VISION_MODEL_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import CLIPProcessor, FlaxCLIPVisionModel
+    ```python
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import CLIPProcessor, FlaxCLIPVisionModel
 
-        >>> model = FlaxCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    >>> model = FlaxCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+    >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="np")
+    >>> inputs = processor(images=image, return_tensors="np")
 
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooler_output = outputs.pooler_output # pooled CLS states
+    >>> outputs = model(**inputs)
+    >>> last_hidden_state = outputs.last_hidden_state
+    >>> pooler_output = outputs.pooler_output # pooled CLS states
+    ```
 """
 
 overwrite_call_docstring(FlaxCLIPVisionModel, CLIP_VISION_INPUTS_DOCSTRING + FLAX_CLIP_VISION_MODEL_DOCSTRING)
@@ -1115,24 +1119,26 @@ class FlaxCLIPModel(FlaxCLIPPreTrainedModel):
 FLAX_CLIP_MODEL_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> import jax
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import CLIPProcessor, FlaxCLIPModel
+    ```python
+    >>> import jax
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import CLIPProcessor, FlaxCLIPModel
 
-        >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="np", padding=True)
+    >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="np", padding=True)
 
-        >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-        >>> probs = jax.nn.softmax(logits_per_image, axis=1) # we can take the softmax to get the label probabilities
+    >>> outputs = model(**inputs)
+    >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
+    >>> probs = jax.nn.softmax(logits_per_image, axis=1) # we can take the softmax to get the label probabilities
+    ```
 """
 
 overwrite_call_docstring(FlaxCLIPModel, CLIP_INPUTS_DOCSTRING + FLAX_CLIP_MODEL_DOCSTRING)

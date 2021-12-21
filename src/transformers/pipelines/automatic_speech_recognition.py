@@ -77,25 +77,25 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
         """
         Arguments:
-            feature_extractor (:class:`~transformers.SequenceFeatureExtractor`):
+            feature_extractor ([`SequenceFeatureExtractor`]):
                 The feature extractor that will be used by the pipeline to encode waveform for the model.
-            model (:class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
+            model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
                 The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
-                from :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel`
+                from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`]
                 for TensorFlow.
-            tokenizer (:class:`~transformers.PreTrainedTokenizer`):
+            tokenizer ([`PreTrainedTokenizer`]):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-                :class:`~transformers.PreTrainedTokenizer`.
-            modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
+                [`PreTrainedTokenizer`].
+            modelcard (`str` or [`ModelCard`], *optional*):
                 Model card attributed to the model for this pipeline.
-            framework (:obj:`str`, `optional`):
-                The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified
+            framework (`str`, *optional*):
+                The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified
                 framework must be installed.
 
                 If no framework is specified, will default to the one currently installed. If no framework is specified
-                and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if
+                and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
                 no model is provided.
-            device (:obj:`int`, `optional`, defaults to -1):
+            device (`int`, *optional*, defaults to -1):
                 Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the
                 model on the associated CUDA device id.
         """
@@ -114,21 +114,21 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :class:`~transformers.AutomaticSpeechRecognitionPipeline`
+        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
 
         Args:
-            inputs (:obj:`np.ndarray` or :obj:`bytes` or :obj:`str`):
-                The inputs is either a raw waveform (:obj:`np.ndarray` of shape (n, ) of type :obj:`np.float32` or
-                :obj:`np.float64`) at the correct sampling rate (no further check will be done) or a :obj:`str` that is
+            inputs (`np.ndarray` or `bytes` or `str`):
+                The inputs is either a raw waveform (`np.ndarray` of shape (n, ) of type `np.float32` or
+                `np.float64`) at the correct sampling rate (no further check will be done) or a `str` that is
                 the filename of the audio file, the file will be read at the correct sampling rate to get the waveform
-                using `ffmpeg`. This requires `ffmpeg` to be installed on the system. If `inputs` is :obj:`bytes` it is
-                supposed to be the content of an audio file and is interpreted by `ffmpeg` in the same way.
+                using *ffmpeg*. This requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is
+                supposed to be the content of an audio file and is interpreted by *ffmpeg* in the same way.
 
         Return:
-            A :obj:`dict` with the following keys:
+            A `dict` with the following keys:
 
-            - **text** (:obj:`str`) -- The recognized text.
+            - **text** (`str`) -- The recognized text.
         """
         return super().__call__(inputs, **kwargs)
 

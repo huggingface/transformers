@@ -70,12 +70,12 @@ PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case":
 
 class FunnelTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.FunnelTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    [`FunnelTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
     end-to-end tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
     parameters.
     """
 
@@ -129,21 +129,21 @@ class FunnelTokenizerFast(BertTokenizerFast):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A Funnel
         Transformer sequence pair mask has the following format:
 
-        ::
+        ```
+        2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
 
-            2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
-
-        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
             sequence(s).
         """
         sep = [self.sep_token_id]

@@ -674,22 +674,23 @@ class TFViTModel(TFViTPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import ViTFeatureExtractor, TFViTModel
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import ViTFeatureExtractor, TFViTModel
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = TFViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> model = TFViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="tf")
-            >>> outputs = model(**inputs)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

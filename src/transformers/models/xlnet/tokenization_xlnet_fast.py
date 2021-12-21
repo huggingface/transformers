@@ -63,57 +63,62 @@ SEG_ID_PAD = 4
 
 class XLNetTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" XLNet tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
-    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
+    Construct a "fast" XLNet tokenizer (backed by HuggingFace's *tokenizers* library). Based on [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension) that
+        vocab_file (`str`):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether to lowercase the input when tokenizing.
-        remove_space (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        remove_space (`bool`, *optional*, defaults to `True`):
             Whether to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        keep_accents (`bool`, *optional*, defaults to `False`):
             Whether to keep accents when tokenizing.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning of
-                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the `cls_token`.
+
+            </Tip>
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            When building a sequence using special tokens, this is not the token that is used for the end of
+            sequence. The token used is the `sep_token`.
+
+            </Tip>
+
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"<sep>"`):
+        sep_token (`str`, *optional*, defaults to `"<sep>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<cls>"`):
+        cls_token (`str`, *optional*, defaults to `"<cls>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<eop>", "<eod>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
             Additional special tokens used by the tokenizer.
 
     Attributes:
-        sp_model (:obj:`SentencePieceProcessor`):
-            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
+        sp_model (`SentencePieceProcessor`):
+            The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -173,17 +178,17 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLNet sequence has the following format:
 
-        - single sequence: ``X <sep> <cls>``
-        - pair of sequences: ``A <sep> B <sep> <cls>``
+        - single sequence: `X <sep> <cls>`
+        - pair of sequences: `A <sep> B <sep> <cls>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -198,21 +203,21 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLNet
         sequence pair mask has the following format:
 
-        ::
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
 
-            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
-
-        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
             sequence(s).
         """
         sep = [self.sep_token_id]

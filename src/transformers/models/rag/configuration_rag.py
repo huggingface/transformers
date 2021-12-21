@@ -21,62 +21,62 @@ from ...file_utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""
-    :class:`~transformers.RagConfig` stores the configuration of a `RagModel`. Configuration objects inherit from
-    :class:`~transformers.PretrainedConfig` and can be used to control the model outputs. Read the documentation from
-    :class:`~transformers.PretrainedConfig` for more information.
+    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from
+    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PretrainedConfig`] for more information.
 
     Args:
-        title_sep (:obj:`str`, `optional`, defaults to  ``" / "``):
+        title_sep (`str`, *optional*, defaults to  `" / "`):
             Separator inserted between the title and the text of the retrieved document when calling
-            :class:`~transformers.RagRetriever`.
-        doc_sep (:obj:`str`, `optional`, defaults to  ``" // "``):
+            [`RagRetriever`].
+        doc_sep (`str`, *optional*, defaults to  `" // "`):
             Separator inserted between the the text of the retrieved document and the original input when calling
-            :class:`~transformers.RagRetriever`.
-        n_docs (:obj:`int`, `optional`, defaults to 5):
+            [`RagRetriever`].
+        n_docs (`int`, *optional*, defaults to 5):
             Number of documents to retrieve.
-        max_combined_length (:obj:`int`, `optional`, defaults to 300):
-            Max length of contextualized input returned by :meth:`~transformers.RagRetriever.__call__`.
-        retrieval_vector_size (:obj:`int`, `optional`, defaults to 768):
-            Dimensionality of the document embeddings indexed by :class:`~transformers.RagRetriever`.
-        retrieval_batch_size (:obj:`int`, `optional`, defaults to 8):
+        max_combined_length (`int`, *optional*, defaults to 300):
+            Max length of contextualized input returned by [`~RagRetriever.__call__`].
+        retrieval_vector_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the document embeddings indexed by [`RagRetriever`].
+        retrieval_batch_size (`int`, *optional*, defaults to 8):
             Retrieval batch size, defined as the number of queries issues concurrently to the faiss index encapsulated
-            :class:`~transformers.RagRetriever`.
-        dataset (:obj:`str`, `optional`, defaults to :obj:`"wiki_dpr"`):
+            [`RagRetriever`].
+        dataset (`str`, *optional*, defaults to `"wiki_dpr"`):
             A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and ids
-            using :obj:`datasets.list_datasets()`).
-        dataset_split (:obj:`str`, `optional`, defaults to :obj:`"train"`)
-            Which split of the :obj:`dataset` to load.
-        index_name (:obj:`str`, `optional`, defaults to :obj:`"compressed"`)
-            The index name of the index associated with the :obj:`dataset`. One can choose between :obj:`"legacy"`,
-            :obj:`"exact"` and :obj:`"compressed"`.
-        index_path (:obj:`str`, `optional`)
+            using `datasets.list_datasets()`).
+        dataset_split (`str`, *optional*, defaults to `"train"`)
+            Which split of the `dataset` to load.
+        index_name (`str`, *optional*, defaults to `"compressed"`)
+            The index name of the index associated with the `dataset`. One can choose between `"legacy"`,
+            `"exact"` and `"compressed"`.
+        index_path (`str`, *optional*)
             The path to the serialized faiss index on disk.
-        passages_path: (:obj:`str`, `optional`):
+        passages_path: (`str`, *optional*):
             A path to text passages compatible with the faiss index. Required if using
-            :class:`~transformers.models.rag.retrieval_rag.LegacyIndex`
-        use_dummy_dataset (:obj:`bool`, `optional`, defaults to ``False``)
-            Whether to load a "dummy" variant of the dataset specified by :obj:`dataset`.
-        label_smoothing (:obj:`float`, `optional`, defaults to 0.0):
-            Only relevant if ``return_loss`` is set to :obj:`True`. Controls the ``epsilon`` parameter value for label
+            [`~models.rag.retrieval_rag.LegacyIndex`]
+        use_dummy_dataset (`bool`, *optional*, defaults to `False`)
+            Whether to load a "dummy" variant of the dataset specified by `dataset`.
+        label_smoothing (`float`, *optional*, defaults to 0.0):
+            Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label
             smoothing in the loss calculation. If set to 0, no label smoothing is performed.
-        do_marginalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, the logits are marginalized over all documents by making use of
-            ``torch.nn.functional.log_softmax``.
-        reduce_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to reduce the NLL loss using the ``torch.Tensor.sum`` operation.
-        do_deduplication (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_marginalize (`bool`, *optional*, defaults to `False`):
+            If `True`, the logits are marginalized over all documents by making use of
+            `torch.nn.functional.log_softmax`.
+        reduce_loss (`bool`, *optional*, defaults to `False`):
+            Whether or not to reduce the NLL loss using the `torch.Tensor.sum` operation.
+        do_deduplication (`bool`, *optional*, defaults to `True`):
             Whether or not to deduplicate the generations from different context documents for a given input. Has to be
-            set to :obj:`False` if used while training with distributed backend.
-        exclude_bos_score (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            set to `False` if used while training with distributed backend.
+        exclude_bos_score (`bool`, *optional*, defaults to `False`):
             Whether or not to disregard the BOS token when computing the loss.
-        output_retrieved(:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If set to ``True``, :obj:`retrieved_doc_embeds`, :obj:`retrieved_doc_ids`, :obj:`context_input_ids` and
-            :obj:`context_attention_mask` are returned. See returned tensors for more detail.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        output_retrieved(`bool`, *optional*, defaults to `False`):
+            If set to `True`, `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
+            `context_attention_mask` are returned. See returned tensors for more detail.
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        forced_eos_token_id (:obj:`int`, `optional`):
-            The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
-            :obj:`eos_token_id`.
+        forced_eos_token_id (`int`, *optional*):
+            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+            `eos_token_id`.
 """
 
 
@@ -174,21 +174,21 @@ class RagConfig(PretrainedConfig):
         cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
-        Instantiate a :class:`~transformers.EncoderDecoderConfig` (or a derived class) from a pre-trained encoder model
+        Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
         configuration and decoder model configuration.
 
         Returns:
-            :class:`EncoderDecoderConfig`: An instance of a configuration object
+            [`EncoderDecoderConfig`]: An instance of a configuration object
         """
         return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default
-        :meth:`~transformers.PretrainedConfig.to_dict`.
+        [`~PretrainedConfig.to_dict`].
 
         Returns:
-            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
         output["question_encoder"] = self.question_encoder.to_dict()

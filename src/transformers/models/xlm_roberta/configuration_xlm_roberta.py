@@ -36,7 +36,7 @@ XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class XLMRobertaConfig(RobertaConfig):
     """
-    This class overrides :class:`~transformers.RobertaConfig`. Please check the superclass for the appropriate
+    This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate
     documentation alongside usage examples.
     """
 

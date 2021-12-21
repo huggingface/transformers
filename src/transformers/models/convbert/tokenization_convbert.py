@@ -45,9 +45,9 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class ConvBertTokenizer(BertTokenizer):
     r"""
-    Construct a ConvBERT tokenizer. :class:`~transformers.ConvBertTokenizer` is identical to
-    :class:`~transformers.BertTokenizer` and runs end-to-end tokenization: punctuation splitting and wordpiece. Refer
-    to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning parameters.
+    Construct a ConvBERT tokenizer. [`ConvBertTokenizer`] is identical to
+    [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting and wordpiece. Refer
+    to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

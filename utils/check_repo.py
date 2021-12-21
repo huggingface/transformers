@@ -593,6 +593,51 @@ def check_all_objects_are_documented():
             "The following objects are in the public init so should be documented:\n - "
             + "\n - ".join(undocumented_objs)
         )
+    check_docstrings_are_in_md()
+
+
+# Re pattern to catch :obj:`xx`, :class:`xx`, :func:`xx` or :meth:`xx`.
+_re_rst_special_words = re.compile(r":(?:obj|func|class|meth):`([^`]+)`")
+# Re pattern to catch things between double backquotes.
+_re_double_backquotes = re.compile(r"(^|[^`])``([^`]+)``([^`]|$)")
+# Re pattern to catch example introduction.
+_re_rst_example = re.compile(r"^\s*Example.*::\s*$", flags=re.MULTILINE)
+
+
+def is_rst_docstring(docstring):
+    """
+    Returns `True` if `docstring` is written in rst.
+    """
+    if _re_rst_special_words.search(docstring) is not None:
+        return True
+    if _re_double_backquotes.search(docstring) is not None:
+        return True
+    if _re_rst_example.search(docstring) is not None:
+        return True
+    return False
+
+
+def check_docstrings_are_in_md():
+    """Check all docstrings are in md"""
+    files_with_rst = []
+    for file in Path(PATH_TO_TRANSFORMERS).glob("**/*.py"):
+        with open(file, "r") as f:
+            code = f.read()
+        docstrings = code.split('"""')
+
+        for idx, docstring in enumerate(docstrings):
+            if idx % 2 == 0 or not is_rst_docstring(docstring):
+                continue
+            files_with_rst.append(file)
+            break
+
+    if len(files_with_rst) > 0:
+        raise ValueError(
+            "The following files have docstrings written in rst:\n"
+            + "\n".join([f"- {f}" for f in files_with_rst])
+            + "To fix this run `doc_builder convert path_to_py_file` after installing `doc_builder`\n"
+            "(`pip install git+https://github.com/huggingface/doc-builder`)"
+        )
 
 
 def check_repo_quality():

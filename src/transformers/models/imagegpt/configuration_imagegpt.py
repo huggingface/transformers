@@ -29,67 +29,68 @@ IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ImageGPTConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a :class:`~transformers.ImageGPTModel` or a
-    :class:`~transformers.TFImageGPTModel`. It is used to instantiate a GPT-2 model according to the specified
+    This is the configuration class to store the configuration of a [`ImageGPTModel`] or a
+    [`TFImageGPTModel`]. It is used to instantiate a GPT-2 model according to the specified
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the ImageGPT `small <https://huggingface.co/imagegpt>`__ architecture.
+    configuration to that of the ImageGPT [small](https://huggingface.co/imagegpt) architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 512):
+        vocab_size (`int`, *optional*, defaults to 512):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.ImageGPTModel` or
-            :class:`~transformers.TFImageGPTModel`.
-        n_positions (:obj:`int`, `optional`, defaults to 32*32):
+            `inputs_ids` passed when calling [`ImageGPTModel`] or
+            [`TFImageGPTModel`].
+        n_positions (`int`, *optional*, defaults to 32*32):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_embd (:obj:`int`, `optional`, defaults to 512):
+        n_embd (`int`, *optional*, defaults to 512):
             Dimensionality of the embeddings and hidden states.
-        n_layer (:obj:`int`, `optional`, defaults to 24):
+        n_layer (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        n_head (:obj:`int`, `optional`, defaults to 8):
+        n_head (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (:obj:`int`, `optional`, defaults to None):
-            Dimensionality of the inner feed-forward layers. :obj:`None` will set it to 4 times n_embd
-        activation_function (:obj:`str`, `optional`, defaults to :obj:`"quick_gelu"`):
+        n_inner (`int`, *optional*, defaults to None):
+            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
+        activation_function (`str`, *optional*, defaults to `"quick_gelu"`):
             Activation function (can be one of the activation functions defined in src/transformers/activations.py).
             Defaults to "quick_gelu".
-        resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
+        resid_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (:obj:`int`, `optional`, defaults to 0.1):
+        embd_pdrop (`int`, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
-        attn_pdrop (:obj:`float`, `optional`, defaults to 0.1):
+        attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
-        layer_norm_epsilon (:obj:`float`, `optional`, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers.
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_attn_weights (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_attn_by_inverse_layer_idx (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to additionally scale attention weights by ``1 / layer_idx + 1``.
-        reorder_and_upcast_attn (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
+            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
+        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
 
-    Example::
+    Example:
 
-        >>> from transformers import ImageGPTModel, ImageGPTConfig
+    ```python
+    >>> from transformers import ImageGPTModel, ImageGPTConfig
 
-        >>> # Initializing a ImageGPT configuration
-        >>> configuration = ImageGPTConfig()
+    >>> # Initializing a ImageGPT configuration
+    >>> configuration = ImageGPTConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = ImageGPTModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = ImageGPTModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "imagegpt"
     keys_to_ignore_at_inference = ["past_key_values"]

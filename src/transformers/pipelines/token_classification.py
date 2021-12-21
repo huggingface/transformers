@@ -56,12 +56,13 @@ class AggregationStrategy(ExplicitEnum):
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
-        ignore_labels (:obj:`List[str]`, defaults to :obj:`["O"]`):
+        ignore_labels (`List[str]`, defaults to `["O"]`):
             A list of labels to ignore.
-        grouped_entities (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            DEPRECATED, use :obj:`aggregation_strategy` instead. Whether or not to group the tokens corresponding to
+        grouped_entities (`bool`, *optional*, defaults to `False`):
+            DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to
             the same entity together in the predictions or not.
-        aggregation_strategy (:obj:`str`, `optional`, defaults to :obj:`"none"`): The strategy to fuse (or not) tokens based on the model prediction.
+        aggregation_strategy (`str`, *optional*, defaults to `"none"`):
+            The strategy to fuse (or not) tokens based on the model prediction.
 
                 - "none" : Will simply not do any aggregation and simply return raw results from the model
                 - "simple" : Will attempt to group entities following the default schema. (A, B-TAG), (B, I-TAG), (C,
@@ -72,28 +73,27 @@ class AggregationStrategy(ExplicitEnum):
                   "NAME"}]. Look for FIRST, MAX, AVERAGE for ways to mitigate that and disambiguate words (on languages
                   that support that meaning, which is basically tokens separated by a space). These mitigations will
                   only work on real words, "New york" might still be tagged with two different entities.
-                - "first" : (works only on word based models) Will use the :obj:`SIMPLE` strategy except that words,
+                - "first" : (works only on word based models) Will use the `SIMPLE` strategy except that words,
                   cannot end up with different tags. Words will simply use the tag of the first token of the word when
                   there is ambiguity.
-                - "average" : (works only on word based models) Will use the :obj:`SIMPLE` strategy except that words,
+                - "average" : (works only on word based models) Will use the `SIMPLE` strategy except that words,
                   cannot end up with different tags. scores will be averaged first across tokens, and then the maximum
                   label is applied.
-                - "max" : (works only on word based models) Will use the :obj:`SIMPLE` strategy except that words,
+                - "max" : (works only on word based models) Will use the `SIMPLE` strategy except that words,
                   cannot end up with different tags. Word entity will simply be the token with the maximum score.
     """,
 )
 class TokenClassificationPipeline(Pipeline):
     """
-    Named Entity Recognition pipeline using any :obj:`ModelForTokenClassification`. See the `named entity recognition
-    examples <../task_summary.html#named-entity-recognition>`__ for more information.
+    Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
+    examples](../task_summary#named-entity-recognition) for more information.
 
-    This token recognition pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location
+    This token recognition pipeline can currently be loaded from [`pipeline`] using the following
+    task identifier: `"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location
     or miscellaneous).
 
     The models that this pipeline can use are models that have been fine-tuned on a token classification task. See the
-    up-to-date list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=token-classification>`__.
+    up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=token-classification).
     """
 
     default_input_names = "sequences"
@@ -162,23 +162,23 @@ class TokenClassificationPipeline(Pipeline):
         Classify each token of the text(s) given as inputs.
 
         Args:
-            inputs (:obj:`str` or :obj:`List[str]`):
+            inputs (`str` or `List[str]`):
                 One or several texts (or one list of texts) for token classification.
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a list of dictionaries (one for each token in
+            A list or a list of list of `dict`: Each result comes as a list of dictionaries (one for each token in
             the corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy)
             with the following keys:
 
-            - **word** (:obj:`str`) -- The token/word classified.
-            - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
-            - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
-              `aggregation_strategy` is not :obj:`"none"`.
-            - **index** (:obj:`int`, only present when ``aggregation_strategy="none"``) -- The index of the
+            - **word** (`str`) -- The token/word classified.
+            - **score** (`float`) -- The corresponding probability for `entity`.
+            - **entity** (`str`) -- The entity predicted for that token/word (it is named *entity_group* when
+              *aggregation_strategy* is not `"none"`.
+            - **index** (`int`, only present when `aggregation_strategy="none"`) -- The index of the
               corresponding token in the sentence.
-            - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
+            - **start** (`int`, *optional*) -- The index of the start of the corresponding entity in the sentence.
               Only exists if the offsets are available within the tokenizer
-            - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
+            - **end** (`int`, *optional*) -- The index of the end of the corresponding entity in the sentence.
               Only exists if the offsets are available within the tokenizer
         """
 
@@ -395,7 +395,7 @@ class TokenClassificationPipeline(Pipeline):
         Group together the adjacent tokens with the same entity predicted.
 
         Args:
-            entities (:obj:`dict`): The entities predicted by the pipeline.
+            entities (`dict`): The entities predicted by the pipeline.
         """
         # Get the first entity in the entity group
         entity = entities[0]["entity"].split("-")[-1]
@@ -430,7 +430,7 @@ class TokenClassificationPipeline(Pipeline):
         Find and group together the adjacent tokens with the same entity predicted.
 
         Args:
-            entities (:obj:`dict`): The entities predicted by the pipeline.
+            entities (`dict`): The entities predicted by the pipeline.
         """
 
         entity_groups = []

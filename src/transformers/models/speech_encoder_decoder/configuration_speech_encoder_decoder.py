@@ -26,49 +26,50 @@ logger = logging.get_logger(__name__)
 
 class SpeechEncoderDecoderConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.SpeechEncoderDecoderConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.SpeechEncoderDecoderModel`. It is used to instantiate an Encoder Decoder model according to
+    [`SpeechEncoderDecoderConfig`] is the configuration class to store the configuration of a
+    [`SpeechEncoderDecoderModel`]. It is used to instantiate an Encoder Decoder model according to
     the specified arguments, defining the encoder and decoder configs.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        kwargs (`optional`):
+        kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **encoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration
                   object that defines the encoder config.
-                - **decoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
+                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration
                   object that defines the decoder config.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import BertConfig, Wav2Vec2Config, SpeechEncoderDecoderConfig, SpeechEncoderDecoderModel
+    ```python
+    >>> from transformers import BertConfig, Wav2Vec2Config, SpeechEncoderDecoderConfig, SpeechEncoderDecoderModel
 
-        >>> # Initializing a Wav2Vec2 & BERT style configuration
-        >>> config_encoder = Wav2Vec2Config()
-        >>> config_decoder = BertConfig()
+    >>> # Initializing a Wav2Vec2 & BERT style configuration
+    >>> config_encoder = Wav2Vec2Config()
+    >>> config_decoder = BertConfig()
 
-        >>> config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+    >>> config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-        >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & bert-base-uncased style configurations
-        >>> model = SpeechEncoderDecoderModel(config=config)
+    >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & bert-base-uncased style configurations
+    >>> model = SpeechEncoderDecoderModel(config=config)
 
-        >>> # Accessing the model configuration
-        >>> config_encoder = model.config.encoder
-        >>> config_decoder  = model.config.decoder
-        >>> # set decoder config to causal lm
-        >>> config_decoder.is_decoder = True
-        >>> config_decoder.add_cross_attention = True
+    >>> # Accessing the model configuration
+    >>> config_encoder = model.config.encoder
+    >>> config_decoder  = model.config.decoder
+    >>> # set decoder config to causal lm
+    >>> config_decoder.is_decoder = True
+    >>> config_decoder.add_cross_attention = True
 
-        >>> # Saving the model, including its configuration
-        >>> model.save_pretrained('my-model')
+    >>> # Saving the model, including its configuration
+    >>> model.save_pretrained('my-model')
 
-        >>> # loading model and config from pretrained folder
-        >>> encoder_decoder_config = SpeechEncoderDecoderConfig.from_pretrained('my-model')
-        >>> model = SpeechEncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
-    """
+    >>> # loading model and config from pretrained folder
+    >>> encoder_decoder_config = SpeechEncoderDecoderConfig.from_pretrained('my-model')
+    >>> model = SpeechEncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
+    ```"""
     model_type = "speech-encoder-decoder"
     is_composition = True
 
@@ -93,11 +94,11 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
         cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
-        Instantiate a :class:`~transformers.SpeechEncoderDecoderConfig` (or a derived class) from a pre-trained encoder
+        Instantiate a [`SpeechEncoderDecoderConfig`] (or a derived class) from a pre-trained encoder
         model configuration and decoder model configuration.
 
         Returns:
-            :class:`SpeechEncoderDecoderConfig`: An instance of a configuration object
+            [`SpeechEncoderDecoderConfig`]: An instance of a configuration object
         """
         logger.info("Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config")
         decoder_config.is_decoder = True
@@ -107,10 +108,10 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig`.
+        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
 
         Returns:
-            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
         output["encoder"] = self.encoder.to_dict()

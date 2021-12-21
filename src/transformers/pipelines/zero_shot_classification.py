@@ -46,19 +46,19 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ZeroShotClassificationPipeline(Pipeline):
     """
-    NLI-based zero-shot classification pipeline using a :obj:`ModelForSequenceClassification` trained on NLI (natural
+    NLI-based zero-shot classification pipeline using a `ModelForSequenceClassification` trained on NLI (natural
     language inference) tasks.
 
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
-    pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the candidate
-    label being valid. Any NLI model can be used, but the id of the `entailment` label must be included in the model
-    config's :attr:`~transformers.PretrainedConfig.label2id`.
+    pair and passed to the pretrained model. Then, the logit for *entailment* is taken as the logit for the candidate
+    label being valid. Any NLI model can be used, but the id of the *entailment* label must be included in the model
+    config's :attr:*~transformers.PretrainedConfig.label2id*.
 
-    This NLI pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task identifier:
-    :obj:`"zero-shot-classification"`.
+    This NLI pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"zero-shot-classification"`.
 
     The models that this pipeline can use are models that have been fine-tuned on an NLI task. See the up-to-date list
-    of available models on `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
+    of available models on [huggingface.co/models](https://huggingface.co/models?search=nli).
     """
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
@@ -154,34 +154,34 @@ class ZeroShotClassificationPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :class:`~transformers.ZeroShotClassificationPipeline`
+        Classify the sequence(s) given as inputs. See the [`ZeroShotClassificationPipeline`]
         documentation for more information.
 
         Args:
-            sequences (:obj:`str` or :obj:`List[str]`):
+            sequences (`str` or `List[str]`):
                 The sequence(s) to classify, will be truncated if the model input is too large.
-            candidate_labels (:obj:`str` or :obj:`List[str]`):
+            candidate_labels (`str` or `List[str]`):
                 The set of possible class labels to classify each sequence into. Can be a single label, a string of
                 comma-separated labels, or a list of labels.
-            hypothesis_template (:obj:`str`, `optional`, defaults to :obj:`"This example is {}."`):
+            hypothesis_template (`str`, *optional*, defaults to `"This example is {}."`):
                 The template used to turn each label into an NLI-style hypothesis. This template must include a {} or
                 similar syntax for the candidate label to be inserted into the template. For example, the default
-                template is :obj:`"This example is {}."` With the candidate label :obj:`"sports"`, this would be fed
-                into the model like :obj:`"<cls> sequence to classify <sep> This example is sports . <sep>"`. The
+                template is `"This example is {}."` With the candidate label `"sports"`, this would be fed
+                into the model like `"<cls> sequence to classify <sep> This example is sports . <sep>"`. The
                 default template works well in many cases, but it may be worthwhile to experiment with different
                 templates depending on the task setting.
-            multi_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not multiple candidate labels can be true. If :obj:`False`, the scores are normalized such
-                that the sum of the label likelihoods for each sequence is 1. If :obj:`True`, the labels are considered
+            multi_label (`bool`, *optional*, defaults to `False`):
+                Whether or not multiple candidate labels can be true. If `False`, the scores are normalized such
+                that the sum of the label likelihoods for each sequence is 1. If `True`, the labels are considered
                 independent and probabilities are normalized for each candidate by doing a softmax of the entailment
                 score vs. the contradiction score.
 
         Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
+            A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **sequence** (:obj:`str`) -- The sequence for which this is the output.
-            - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
-            - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
+            - **sequence** (`str`) -- The sequence for which this is the output.
+            - **labels** (`List[str]`) -- The labels sorted by order of likelihood.
+            - **scores** (`List[float]`) -- The probabilities for each of the labels.
         """
         if kwargs.get("batch_size", 1) > 1:
             logger.error("Batch size > 1 is not supported for zero-shot pipeline, setting batch_size=1.")

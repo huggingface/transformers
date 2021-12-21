@@ -55,18 +55,18 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
     """
     Perform a runtime check of the dependency versions, using the exact same syntax used by pip.
 
-    The installed module version comes from the `site-packages` dir via `importlib_metadata`.
+    The installed module version comes from the *site-packages* dir via *importlib_metadata*.
 
     Args:
-        requirement (:obj:`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
-        hint (:obj:`str`, `optional`): what suggestion to print in case of requirements not being met
+        requirement (`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
+        hint (`str`, *optional*): what suggestion to print in case of requirements not being met
 
-    Example::
+    Example:
 
-       require_version("pandas>1.1.2")
-       require_version("numpy>1.18.5", "this is important to have for whatever reason")
-
-    """
+    ```python
+    require_version("pandas>1.1.2")
+    require_version("numpy>1.18.5", "this is important to have for whatever reason")
+    ```"""
 
     hint = f"\n{hint}" if hint is not None else ""
 

@@ -48,20 +48,20 @@ def glue_convert_examples_to_features(
     output_mode=None,
 ):
     """
-    Loads a data file into a list of ``InputFeatures``
+    Loads a data file into a list of `InputFeatures`
 
     Args:
-        examples: List of ``InputExamples`` or ``tf.data.Dataset`` containing the examples.
+        examples: List of `InputExamples` or `tf.data.Dataset` containing the examples.
         tokenizer: Instance of a tokenizer that will tokenize the examples
         max_length: Maximum example length. Defaults to the tokenizer's max_len
         task: GLUE task
-        label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
-        output_mode: String indicating the output mode. Either ``regression`` or ``classification``
+        label_list: List of labels. Can be obtained from the processor using the `processor.get_labels()` method
+        output_mode: String indicating the output mode. Either `regression` or `classification`
 
     Returns:
-        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
-        task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
-        ``InputFeatures`` which can be fed to the model.
+        If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the
+        task-specific features. If the input is a list of `InputExamples`, will return a list of task-specific
+        `InputFeatures` which can be fed to the model.
 
     """
     warnings.warn(DEPRECATION_WARNING.format("function"), FutureWarning)
@@ -84,7 +84,7 @@ if is_tf_available():
     ) -> tf.data.Dataset:
         """
         Returns:
-            A ``tf.data.Dataset`` containing the task-specific features.
+            A `tf.data.Dataset` containing the task-specific features.
 
         """
         processor = glue_processors[task]()

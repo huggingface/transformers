@@ -30,22 +30,22 @@ logger = get_logger(__name__)
 
 LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`):
+            [What are input IDs?](../glossary#input-ids)
+        scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
         kwargs:
             Additional logits processor specific kwargs.
 
     Return:
-        :obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`: The processed prediction scores.
+        `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
 
 """
 
@@ -74,10 +74,10 @@ class LogitsWarper(ABC):
 
 class LogitsProcessorList(list):
     """
-    This class can be used to create a list of :class:`~transformers.LogitsProcessor` or
-    :class:`~transformers.LogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits from
-    list and adds a specific `__call__` method to apply each :class:`~transformers.LogitsProcessor` or
-    :class:`~transformers.LogitsWarper` to the inputs.
+    This class can be used to create a list of [`LogitsProcessor`] or
+    [`LogitsWarper`] to subsequently process a `scores` input tensor. This class inherits from
+    list and adds a specific *__call__* method to apply each [`LogitsProcessor`] or
+    [`LogitsWarper`] to the inputs.
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -98,13 +98,13 @@ class LogitsProcessorList(list):
 
 class MinLengthLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` enforcing a min-length by setting EOS probability to 0.
+    [`LogitsProcessor`] enforcing a min-length by setting EOS probability to 0.
 
     Args:
-        min_length (:obj:`int`):
-            The minimum length below which the score of :obj:`eos_token_id` is set to :obj:`-float("Inf")`.
-        eos_token_id (:obj:`int`):
-            The id of the `end-of-sequence` token.
+        min_length (`int`):
+            The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
     """
 
     def __init__(self, min_length: int, eos_token_id: int):
@@ -126,10 +126,10 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 
 class TemperatureLogitsWarper(LogitsWarper):
     r"""
-    :class:`transformers.LogitsWarper` for temperature (exponential scaling output probability distribution).
+    [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
 
     Args:
-        temperature (:obj:`float`):
+        temperature (`float`):
             The value used to module the logits distribution.
     """
 
@@ -146,12 +146,11 @@ class TemperatureLogitsWarper(LogitsWarper):
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` enforcing an exponential penalty on repeated sequences.
+    [`LogitsProcessor`] enforcing an exponential penalty on repeated sequences.
 
     Args:
-        repetition_penalty (:obj:`float`):
-            The parameter for repetition penalty. 1.0 means no penalty. See `this paper
-            <https://arxiv.org/pdf/1909.05858.pdf>`__ for more details.
+        repetition_penalty (`float`):
+            The parameter for repetition penalty. 1.0 means no penalty. See [this paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
     """
 
     def __init__(self, penalty: float):
@@ -172,16 +171,16 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
 class TopPLogitsWarper(LogitsWarper):
     """
-    :class:`transformers.LogitsWarper` that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
+    [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
     prob_cut_off.
 
     Args:
-        top_p (:obj:`float`):
-            If set to < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or higher are
+        top_p (`float`):
+            If set to < 1, only the most probable tokens with probabilities that add up to `top_p` or higher are
             kept for generation.
-        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
-        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
     """
 
@@ -215,14 +214,14 @@ class TopPLogitsWarper(LogitsWarper):
 
 class TopKLogitsWarper(LogitsWarper):
     r"""
-    :class:`transformers.LogitsWarper` that performs top-k, i.e. restricting to the k highest probability elements.
+    [`LogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
 
     Args:
-        top_k (:obj:`int`):
+        top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
-        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
     """
 
@@ -279,12 +278,11 @@ def _calc_banned_ngram_tokens(
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces no repetition of n-grams. See `Fairseq
-    <https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345>`__.
+    [`LogitsProcessor`] that enforces no repetition of n-grams. See [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
 
     Args:
-        ngram_size (:obj:`int`):
-            All ngrams of size :obj:`ngram_size` can only occur once.
+        ngram_size (`int`):
+            All ngrams of size `ngram_size` can only occur once.
     """
 
     def __init__(self, ngram_size: int):
@@ -305,13 +303,13 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
 
 class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces no repetition of encoder input ids n-grams for the decoder ids.
-    See `ParlAI <https://github.com/facebookresearch/ParlAI/blob/master/parlai/core/torch_generator_agent.py#L1350>`__.
+    [`LogitsProcessor`] that enforces no repetition of encoder input ids n-grams for the decoder ids.
+    See [ParlAI](https://github.com/facebookresearch/ParlAI/blob/master/parlai/core/torch_generator_agent.py#L1350).
 
     Args:
-        encoder_ngram_size (:obj:`int`):
-            All ngrams of size :obj:`ngram_size` can only occur within the encoder input ids.
-        encoder_input_ids (:obj:`int`):
+        encoder_ngram_size (`int`):
+            All ngrams of size `ngram_size` can only occur within the encoder input ids.
+        encoder_input_ids (`int`):
             The encoder_input_ids that should not be repeated within the decoder ids.
     """
 
@@ -346,15 +344,14 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
 
 class NoBadWordsLogitsProcessor(LogitsProcessor):
     """
-    :class:`transformers.LogitsProcessor` that enforces that specified sequences will never be sampled.
+    [`LogitsProcessor`] that enforces that specified sequences will never be sampled.
 
     Args:
-        bad_words_ids (:obj:`List[List[int]]`):
+        bad_words_ids (`List[List[int]]`):
             List of list of token ids that are not allowed to be generated. In order to get the tokens of the words
-            that should not appear in the generated text, use :obj:`tokenizer(bad_word,
-            add_prefix_space=True).input_ids`.
-        eos_token_id (:obj:`int`):
-            The id of the `end-of-sequence` token.
+            that should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True).input_ids`.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
@@ -474,16 +471,16 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces constrained generation and is useful for prefix-conditioned
-    constrained generation. See `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__ for more
+    [`LogitsProcessor`] that enforces constrained generation and is useful for prefix-conditioned
+    constrained generation. See [Autoregressive Entity Retrieval](https://arxiv.org/abs/2010.00904) for more
     information.
 
     Args:
-        prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`):
+        prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`):
             This function constraints the beam search to allowed tokens only at each step. This function takes 2
-            arguments :obj:`inputs_ids` and the batch ID :obj:`batch_id`. It has to return a list with the allowed
-            tokens for the next generation step conditioned on the previously generated tokens :obj:`inputs_ids` and
-            the batch ID :obj:`batch_id`.
+            arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed
+            tokens for the next generation step conditioned on the previously generated tokens `inputs_ids` and
+            the batch ID `batch_id`.
     """
 
     def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
@@ -501,20 +498,20 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces diverse beam search. Note that this logits processor is only
-    effective for :meth:`transformers.PreTrainedModel.group_beam_search`. See `Diverse Beam Search: Decoding Diverse
-    Solutions from Neural Sequence Models <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+    [`LogitsProcessor`] that enforces diverse beam search. Note that this logits processor is only
+    effective for [`PreTrainedModel.group_beam_search`]. See [Diverse Beam Search: Decoding Diverse
+    Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf) for more details.
 
     Args:
-        diversity_penalty (:obj:`float`):
+        diversity_penalty (`float`):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
-            particular time. Note that :obj:`diversity_penalty` is only effective if ``group beam search`` is enabled.
-        num_beams (:obj:`int`):
-            Number of beams used for group beam search. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for
+            particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
+        num_beams (`int`):
+            Number of beams used for group beam search. See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for
             more details.
-        num_beam_groups (:obj:`int`):
-            Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
-            beams. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+        num_beam_groups (`int`):
+            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of
+            beams. See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
     """
 
     def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
@@ -561,10 +558,10 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
 class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`~transformers.LogitsProcessor` that enforces the specified token as the first generated token.
+    [`LogitsProcessor`] that enforces the specified token as the first generated token.
 
     Args:
-        bos_token_id (:obj:`int`):
+        bos_token_id (`int`):
             The id of the token to force as the first generated token.
     """
 
@@ -582,14 +579,14 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
 
 class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`~transformers.LogitsProcessor` that enforces the specified token as the last generated token when
-    :obj:`max_length` is reached.
+    [`LogitsProcessor`] that enforces the specified token as the last generated token when
+    `max_length` is reached.
 
     Args:
-        max_length (:obj:`int`):
+        max_length (`int`):
             The maximum length of the sequence to be generated.
-        eos_token_id (:obj:`int`):
-            The id of the token to force as the last generated token when :obj:`max_length` is reached.
+        eos_token_id (`int`):
+            The id of the token to force as the last generated token when `max_length` is reached.
     """
 
     def __init__(self, max_length: int, eos_token_id: int):
@@ -607,9 +604,9 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
 
 class InfNanRemoveLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`~transformers.LogitsProcessor` that removes all :obj:`nan` and :obj:`inf` values to avoid the generation
+    [`LogitsProcessor`] that removes all `nan` and `inf` values to avoid the generation
     method to fail. Note that using the logits processor should only be used if necessary since it can slow down the
-    generation method. :obj:`max_length` is reached.
+    generation method. `max_length` is reached.
     """
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:

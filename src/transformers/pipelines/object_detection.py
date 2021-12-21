@@ -24,14 +24,13 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ObjectDetectionPipeline(Pipeline):
     """
-    Object detection pipeline using any :obj:`AutoModelForObjectDetection`. This pipeline predicts bounding boxes of
+    Object detection pipeline using any `AutoModelForObjectDetection`. This pipeline predicts bounding boxes of
     objects and their classes.
 
-    This object detection pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
-    identifier: :obj:`"object-detection"`.
+    This object detection pipeline can currently be loaded from [`pipeline`] using the following task
+    identifier: `"object-detection"`.
 
-    See the list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=object-detection>`__.
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=object-detection).
     """
 
     def __init__(self, *args, **kwargs):
@@ -54,7 +53,7 @@ class ObjectDetectionPipeline(Pipeline):
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            images (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image` or :obj:`List[PIL.Image]`):
+            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -63,7 +62,7 @@ class ObjectDetectionPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            threshold (:obj:`float`, `optional`, defaults to 0.9):
+            threshold (`float`, *optional*, defaults to 0.9):
                 The probability necessary to make a prediction.
 
         Return:
@@ -73,9 +72,9 @@ class ObjectDetectionPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The class label identified by the model.
-            - **score** (:obj:`float`) -- The score attributed by the model for that label.
-            - **box** (:obj:`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
+            - **label** (`str`) -- The class label identified by the model.
+            - **score** (`float`) -- The score attributed by the model for that label.
+            - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
 
         return super().__call__(*args, **kwargs)
@@ -120,10 +119,10 @@ class ObjectDetectionPipeline(Pipeline):
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 
         Args:
-            box (torch.Tensor): Tensor containing the coordinates in corners format.
+            box (`torch.Tensor`): Tensor containing the coordinates in corners format.
 
         Returns:
-            bbox (Dict[str, int]): Dict containing the coordinates in corners format.
+            bbox (`Dict[str, int]`): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
             raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")

@@ -72,159 +72,164 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
-            return_token_type_ids (:obj:`bool`, `optional`):
+            return_token_type_ids (`bool`, *optional*):
                 Whether to return token type IDs. If left to the default, will return the token type IDs according to
-                the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
+                the specific tokenizer's default, defined by the `return_outputs` attribute.
 
-                `What are token type IDs? <../glossary.html#token-type-ids>`__
-            return_attention_mask (:obj:`bool`, `optional`):
+                [What are token type IDs?](../glossary#token-type-ids)
+            return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
+                to the specific tokenizer's default, defined by the `return_outputs` attribute.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                [What are attention masks?](../glossary#attention-mask)
+            return_overflowing_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to return overflowing token sequences. If a pair of sequences of input ids (or a batch
-                of pairs) is provided with :obj:`truncation_strategy = longest_first` or :obj:`True`, an error is
+                of pairs) is provided with `truncation_strategy = longest_first` or `True`, an error is
                 raised instead of returning overflowing tokens.
-            return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
                 Whether or not to return special tokens mask information.
-            return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return :obj:`(char_start, char_end)` for each token.
+            return_offsets_mapping (`bool`, *optional*, defaults to `False`):
+                Whether or not to return `(char_start, char_end)` for each token.
 
                 This is only available on fast tokenizers inheriting from
-                :class:`~transformers.PreTrainedTokenizerFast`, if using Python's tokenizer, this method will raise
-                :obj:`NotImplementedError`.
-            return_length  (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                [`PreTrainedTokenizerFast`], if using Python's tokenizer, this method will raise
+                `NotImplementedError`.
+            return_length  (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the lengths of the encoded inputs.
-            verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
-            **kwargs: passed to the :obj:`self.tokenize()` method
+            **kwargs: passed to the `self.tokenize()` method
 
-        Return:
-            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+            Return:
+            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model.
 
-              `What are input IDs? <../glossary.html#input-ids>`__
+              [What are input IDs?](../glossary#input-ids)
 
-            - **token_type_ids** -- List of token type ids to be fed to a model (when :obj:`return_token_type_ids=True`
-              or if `"token_type_ids"` is in :obj:`self.model_input_names`).
+            - **token_type_ids** -- List of token type ids to be fed to a model (when `return_token_type_ids=True`
+              or if *"token_type_ids"* is in `self.model_input_names`).
 
-              `What are token type IDs? <../glossary.html#token-type-ids>`__
+              [What are token type IDs?](../glossary#token-type-ids)
 
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names`).
 
-              `What are attention masks? <../glossary.html#attention-mask>`__
+              [What are attention masks?](../glossary#attention-mask)
 
             - **entity_ids** -- List of entity ids to be fed to a model.
 
-              `What are input IDs? <../glossary.html#input-ids>`__
+              [What are input IDs?](../glossary#input-ids)
 
             - **entity_position_ids** -- List of entity positions in the input sequence to be fed to a model.
 
             - **entity_token_type_ids** -- List of entity token type ids to be fed to a model (when
-              :obj:`return_token_type_ids=True` or if `"entity_token_type_ids"` is in :obj:`self.model_input_names`).
+              `return_token_type_ids=True` or if *"entity_token_type_ids"* is in `self.model_input_names`).
 
-              `What are token type IDs? <../glossary.html#token-type-ids>`__
+              [What are token type IDs?](../glossary#token-type-ids)
 
             - **entity_attention_mask** -- List of indices specifying which entities should be attended to by the model
-              (when :obj:`return_attention_mask=True` or if `"entity_attention_mask"` is in
-              :obj:`self.model_input_names`).
+              (when `return_attention_mask=True` or if *"entity_attention_mask"* is in
+              `self.model_input_names`).
 
-              `What are attention masks? <../glossary.html#attention-mask>`__
+              [What are attention masks?](../glossary#attention-mask)
 
             - **entity_start_positions** -- List of the start positions of entities in the word token sequence (when
-              :obj:`task="entity_span_classification"`).
+              `task="entity_span_classification"`).
             - **entity_end_positions** -- List of the end positions of entities in the word token sequence (when
-              :obj:`task="entity_span_classification"`).
-            - **overflowing_tokens** -- List of overflowing tokens sequences (when a :obj:`max_length` is specified and
-              :obj:`return_overflowing_tokens=True`).
-            - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
-              :obj:`return_overflowing_tokens=True`).
+              `task="entity_span_classification"`).
+            - **overflowing_tokens** -- List of overflowing tokens sequences (when a `max_length` is specified and
+              `return_overflowing_tokens=True`).
+            - **num_truncated_tokens** -- Number of tokens truncated (when a `max_length` is specified and
+              `return_overflowing_tokens=True`).
             - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
-              regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
-            - **length** -- The length of the inputs (when :obj:`return_length=True`)
+              regular sequence tokens (when `add_special_tokens=True` and `return_special_tokens_mask=True`).
+            - **length** -- The length of the inputs (when `return_length=True`)
 
 """
 
 
 class MLukeTokenizer(PreTrainedTokenizer):
     """
-    Adapted from :class:`~transformers.XLMRobertaTokenizer` and :class:`~transformers.LukeTokenizer`. Based on
-    `SentencePiece <https://github.com/google/sentencepiece>`__.
+    Adapted from [`XLMRobertaTokenizer`] and [`LukeTokenizer`]. Based on
+    [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        entity_vocab_file (:obj:`str`):
+        entity_vocab_file (`str`):
             Path to the entity vocabulary file.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning of
-                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the `cls_token`.
+
+            </Tip>
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the end of
+            sequence. The token used is the `sep_token`.
+
+            </Tip>
+
+        sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        cls_token (`str`, *optional*, defaults to `"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        task (:obj:`str`, `optional`):
-            Task for which you want to prepare sequences. One of :obj:`"entity_classification"`,
-            :obj:`"entity_pair_classification"`, or :obj:`"entity_span_classification"`. If you specify this argument,
+        task (`str`, *optional*):
+            Task for which you want to prepare sequences. One of `"entity_classification"`,
+            `"entity_pair_classification"`, or `"entity_span_classification"`. If you specify this argument,
             the entity sequence is automatically created based on the given entity span(s).
-        max_entity_length (:obj:`int`, `optional`, defaults to 32):
-            The maximum length of :obj:`entity_ids`.
-        max_mention_length (:obj:`int`, `optional`, defaults to 30):
+        max_entity_length (`int`, *optional*, defaults to 32):
+            The maximum length of `entity_ids`.
+        max_mention_length (`int`, *optional*, defaults to 30):
             The maximum number of tokens inside an entity span.
-        entity_token_1 (:obj:`str`, `optional`, defaults to :obj:`<ent>`):
+        entity_token_1 (`str`, *optional*, defaults to `<ent>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
-            ``task`` is set to :obj:`"entity_classification"` or :obj:`"entity_pair_classification"`.
-        entity_token_2 (:obj:`str`, `optional`, defaults to :obj:`<ent2>`):
+            `task` is set to `"entity_classification"` or `"entity_pair_classification"`.
+        entity_token_2 (`str`, *optional*, defaults to `<ent2>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
-            ``task`` is set to :obj:`"entity_pair_classification"`.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
+            `task` is set to `"entity_pair_classification"`.
+        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-        sp_model_kwargs (:obj:`dict`, `optional`):
-            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
-            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
 
-            - ``enable_sampling``: Enable subword regularization.
-            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
 
-              - ``nbest_size = {0,1}``: No sampling is performed.
-              - ``nbest_size > 1``: samples from the nbest_size results.
-              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
                 using forward-filtering-and-backward-sampling algorithm.
 
-            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
 
     Attributes:
-        sp_model (:obj:`SentencePieceProcessor`):
-            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
+        sp_model (`SentencePieceProcessor`):
+            The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -373,39 +378,39 @@ class MLukeTokenizer(PreTrainedTokenizer):
         sequences, depending on the task you want to prepare them for.
 
         Args:
-            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence must be a string. Note that this
                 tokenizer does not support tokenization based on pretokenized strings.
-            text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+            text_pair (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence must be a string. Note that this
                 tokenizer does not support tokenization based on pretokenized strings.
-            entity_spans (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`):
+            entity_spans (`List[Tuple[int, int]]`, `List[List[Tuple[int, int]]]`, *optional*):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting character-based start and end positions of entities. If you specify
-                :obj:`"entity_classification"` or :obj:`"entity_pair_classification"` as the ``task`` argument in the
-                constructor, the length of each sequence must be 1 or 2, respectively. If you specify ``entities``, the
-                length of each sequence must be equal to the length of each sequence of ``entities``.
-            entity_spans_pair (:obj:`List[Tuple[int, int]]`, :obj:`List[List[Tuple[int, int]]]`, `optional`):
+                `"entity_classification"` or `"entity_pair_classification"` as the `task` argument in the
+                constructor, the length of each sequence must be 1 or 2, respectively. If you specify `entities`, the
+                length of each sequence must be equal to the length of each sequence of `entities`.
+            entity_spans_pair (`List[Tuple[int, int]]`, `List[List[Tuple[int, int]]]`, *optional*):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting character-based start and end positions of entities. If you specify the
-                ``task`` argument in the constructor, this argument is ignored. If you specify ``entities_pair``, the
-                length of each sequence must be equal to the length of each sequence of ``entities_pair``.
-            entities (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
+                `task` argument in the constructor, this argument is ignored. If you specify `entities_pair`, the
+                length of each sequence must be equal to the length of each sequence of `entities_pair`.
+            entities (`List[str]`, `List[List[str]]`, *optional*):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
-                Angeles). This argument is ignored if you specify the ``task`` argument in the constructor. The length
-                of each sequence must be equal to the length of each sequence of ``entity_spans``. If you specify
-                ``entity_spans`` without specifying this argument, the entity sequence or the batch of entity sequences
+                Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length
+                of each sequence must be equal to the length of each sequence of `entity_spans`. If you specify
+                `entity_spans` without specifying this argument, the entity sequence or the batch of entity sequences
                 is automatically constructed by filling it with the [MASK] entity.
-            entities_pair (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
+            entities_pair (`List[str]`, `List[List[str]]`, *optional*):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
-                Angeles). This argument is ignored if you specify the ``task`` argument in the constructor. The length
-                of each sequence must be equal to the length of each sequence of ``entity_spans_pair``. If you specify
-                ``entity_spans_pair`` without specifying this argument, the entity sequence or the batch of entity
+                Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length
+                of each sequence must be equal to the length of each sequence of `entity_spans_pair`. If you specify
+                `entity_spans_pair` without specifying this argument, the entity sequence or the batch of entity
                 sequences is automatically constructed by filling it with the [MASK] entity.
-            max_entity_length (:obj:`int`, `optional`):
-                The maximum length of :obj:`entity_ids`.
+            max_entity_length (`int`, *optional*):
+                The maximum length of `entity_ids`.
         """
         # Input type checking for clearer error
         is_valid_single_text = isinstance(text, str)
@@ -969,24 +974,24 @@ class MLukeTokenizer(PreTrainedTokenizer):
         Prepares a sequence of input id, entity id and entity span, or a pair of sequences of inputs ids, entity ids,
         entity spans so that it can be used by the model. It adds special tokens, truncates sequences if overflowing
         while taking into account the special tokens and manages a moving window (with user defined stride) for
-        overflowing tokens. Please Note, for `pair_ids` different than `None` and `truncation_strategy = longest_first`
-        or `True`, it is not possible to return overflowing tokens. Such a combination of arguments will raise an
+        overflowing tokens. Please Note, for *pair_ids* different than *None* and *truncation_strategy = longest_first*
+        or *True*, it is not possible to return overflowing tokens. Such a combination of arguments will raise an
         error.
 
         Args:
-            ids (:obj:`List[int]`):
+            ids (`List[int]`):
                 Tokenized input ids of the first sequence.
-            pair_ids (:obj:`List[int]`, `optional`):
+            pair_ids (`List[int]`, *optional*):
                 Tokenized input ids of the second sequence.
-            entity_ids (:obj:`List[int]`, `optional`):
+            entity_ids (`List[int]`, *optional*):
                 Entity ids of the first sequence.
-            pair_entity_ids (:obj:`List[int]`, `optional`):
+            pair_entity_ids (`List[int]`, *optional*):
                 Entity ids of the second sequence.
-            entity_token_spans (:obj:`List[Tuple[int, int]]`, `optional`):
+            entity_token_spans (`List[Tuple[int, int]]`, *optional*):
                 Entity spans of the first sequence.
-            pair_entity_token_spans (:obj:`List[Tuple[int, int]]`, `optional`):
+            pair_entity_token_spans (`List[Tuple[int, int]]`, *optional*):
                 Entity spans of the second sequence.
-            max_entity_length (:obj:`int`, `optional`):
+            max_entity_length (`int`, *optional*):
                 The maximum length of the entity sequence.
         """
 
@@ -1188,46 +1193,45 @@ class MLukeTokenizer(PreTrainedTokenizer):
         """
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch. Padding side (left/right) padding token ids are defined at the tokenizer level (with
-        ``self.padding_side``, ``self.pad_token_id`` and ``self.pad_token_type_id``) .. note:: If the
-        ``encoded_inputs`` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the result
-        will use the same type unless you provide a different tensor type with ``return_tensors``. In the case of
+        `self.padding_side`, `self.pad_token_id` and `self.pad_token_type_id`) .. note:: If the
+        `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the result
+        will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
         PyTorch tensors, you will lose the specific device of your tensors however.
 
         Args:
-            encoded_inputs (:class:`~transformers.BatchEncoding`, list of :class:`~transformers.BatchEncoding`, :obj:`Dict[str, List[int]]`, :obj:`Dict[str, List[List[int]]` or :obj:`List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input (:class:`~transformers.BatchEncoding` or :obj:`Dict[str,
-                List[int]]`) or a batch of tokenized inputs (list of :class:`~transformers.BatchEncoding`, `Dict[str,
-                List[List[int]]]` or `List[Dict[str, List[int]]]`) so you can use this method during preprocessing as
-                well as in a PyTorch Dataloader collate function. Instead of :obj:`List[int]` you can have tensors
+            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
+                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of tokenized inputs (list of [`BatchEncoding`], *Dict[str,
+                List[List[int]]]* or *List[Dict[str, List[int]]]*) so you can use this method during preprocessing as
+                well as in a PyTorch Dataloader collate function. Instead of `List[int]` you can have tensors
                 (numpy arrays, PyTorch tensors or TensorFlow tensors), see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
                   maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            max_length (:obj:`int`, `optional`):
+            max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
-            max_entity_length (:obj:`int`, `optional`):
+            max_entity_length (`int`, *optional*):
                 The maximum length of the entity sequence.
-            pad_to_multiple_of (:obj:`int`, `optional`):
+            pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_attention_mask (:obj:`bool`, `optional`):
+            return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute. `What are
-                attention masks? <../glossary.html#attention-mask>`__
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+                to the specific tokenizer's default, defined by the `return_outputs` attribute. [What are
+                attention masks?](../glossary#attention-mask)
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-            verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+            verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
@@ -1495,17 +1499,17 @@ class MLukeTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLM-RoBERTa sequence has the following format:
 
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s></s> B </s>``
+        - single sequence: `<s> X </s>`
+        - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -1520,18 +1524,18 @@ class MLukeTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -1552,13 +1556,13 @@ class MLukeTokenizer(PreTrainedTokenizer):
         not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
+            `List[int]`: List of zeros.
 
         """
 

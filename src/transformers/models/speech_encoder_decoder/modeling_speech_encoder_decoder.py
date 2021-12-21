@@ -435,26 +435,26 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2Processor
-            >>> from datasets import load_dataset
-            >>> import torch
+        ```python
+        >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2Processor
+        >>> from datasets import load_dataset
+        >>> import torch
 
-            >>> processor = Speech2Text2Processor.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
-            >>> model = SpeechEncoderDecoderModel.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
+        >>> processor = Speech2Text2Processor.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
+        >>> model = SpeechEncoderDecoderModel.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-            >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
-            >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
-            >>> outputs = model(input_values=input_values, decoder_input_ids=decoder_input_ids)
+        >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
+        >>> decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
+        >>> outputs = model(input_values=input_values, decoder_input_ids=decoder_input_ids)
 
-            >>> # inference (generation)
-            >>> generated = model.generate(input_values)
-            >>> translation = processor.batch_decode(generated)
-
-        """
+        >>> # inference (generation)
+        >>> generated = model.generate(input_values)
+        >>> translation = processor.batch_decode(generated)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}

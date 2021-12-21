@@ -120,60 +120,63 @@ def get_class_from_dynamic_module(
     """
     Extracts a class from a module file, present in the local folder or repository of a model.
 
-    .. warning::
+    <Tip warning={true}>
 
-        Calling this function will execute the code in the module file found locally or downloaded from the Hub. It
-        should therefore only be called on trusted repos.
+    Calling this function will execute the code in the module file found locally or downloaded from the Hub. It
+    should therefore only be called on trusted repos.
+
+    </Tip>
 
     Args:
-        pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+        pretrained_model_name_or_path (`str` or `os.PathLike`):
             This can be either:
 
-            - a string, the `model id` of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-              namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-            - a path to a `directory` containing a configuration file saved using the
-              :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g., ``./my_model_directory/``.
+            - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
+              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+              namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+            - a path to a *directory* containing a configuration file saved using the
+              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
 
-        module_file (:obj:`str`):
+        module_file (`str`):
             The name of the module file containing the class to look for.
-        class_name (:obj:`str`):
+        class_name (`str`):
             The name of the class to import in the module.
-        cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
+        cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
             cache should not be used.
-        force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        resume_download (`bool`, *optional*, defaults to `False`):
             Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
-        proxies (:obj:`Dict[str, str]`, `optional`):
-            A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
-            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (:obj:`str` or `bool`, `optional`):
-            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
+            generated when running `transformers-cli login` (stored in `~/.huggingface`).
+        revision(`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
-        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, will only try to load the tokenizer configuration from local files.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, will only try to load the tokenizer configuration from local files.
 
-    .. note::
+    <Tip>
 
-        Passing :obj:`use_auth_token=True` is required when you want to use a private model.
+    Passing `use_auth_token=True` is required when you want to use a private model.
 
+    </Tip>
 
     Returns:
-        :obj:`type`: The class, dynamically imported from the module.
+        `type`: The class, dynamically imported from the module.
 
-    Examples::
+    Examples:
 
-        # Download module `modeling.py` from huggingface.co and cache then extract the class `MyBertModel` from this
-        # module.
-        cls = get_class_from_dynamic_module("sgugger/my-bert-model", "modeling.py", "MyBertModel")
-    """
+    ```python
+    # Download module *modeling.py* from huggingface.co and cache then extract the class *MyBertModel* from this
+    # module.
+    cls = get_class_from_dynamic_module("sgugger/my-bert-model", "modeling.py", "MyBertModel")
+    ```"""
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True

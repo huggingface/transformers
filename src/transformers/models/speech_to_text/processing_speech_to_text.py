@@ -26,17 +26,17 @@ class Speech2TextProcessor:
     Constructs a Speech2Text processor which wraps a Speech2Text feature extractor and a Speech2Text tokenizer into a
     single processor.
 
-    :class:`~transformers.Speech2TextProcessor` offers all the functionalities of
-    :class:`~transformers.Speech2TextFeatureExtractor` and :class:`~transformers.Speech2TextTokenizer`. See the
-    :meth:`~transformers.Speech2TextProcessor.__call__` and :meth:`~transformers.Speech2TextProcessor.decode` for more
+    [`Speech2TextProcessor`] offers all the functionalities of
+    [`Speech2TextFeatureExtractor`] and [`Speech2TextTokenizer`]. See the
+    [`~Speech2TextProcessor.__call__`] and [`~Speech2TextProcessor.decode`] for more
     information.
 
     Args:
-        feature_extractor (:obj:`Speech2TextFeatureExtractor`):
-            An instance of :class:`~transformers.Speech2TextFeatureExtractor`. The feature extractor is a required
+        feature_extractor (`Speech2TextFeatureExtractor`):
+            An instance of [`Speech2TextFeatureExtractor`]. The feature extractor is a required
             input.
-        tokenizer (:obj:`Speech2TextTokenizer`):
-            An instance of :class:`~transformers.Speech2TextTokenizer`. The tokenizer is a required input.
+        tokenizer (`Speech2TextTokenizer`):
+            An instance of [`Speech2TextTokenizer`]. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -56,17 +56,19 @@ class Speech2TextProcessor:
     def save_pretrained(self, save_directory):
         """
         Save a Speech2Text feature extractor object and Speech2Text tokenizer object to the directory
-        ``save_directory``, so that it can be re-loaded using the
-        :func:`~transformers.Speech2TextProcessor.from_pretrained` class method.
+        `save_directory`, so that it can be re-loaded using the
+        [`~Speech2TextProcessor.from_pretrained`] class method.
 
-        .. note::
+        <Tip>
 
-            This class method is simply calling :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` and
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
+        This class method is simply calling [`~PreTrainedFeatureExtractor.save_pretrained`] and
+        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the
+        docstrings of the methods above for more information.
+
+        </Tip>
 
         Args:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
+            save_directory (`str` or `os.PathLike`):
                 Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
                 be created if it does not exist).
         """
@@ -77,30 +79,32 @@ class Speech2TextProcessor:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.Speech2TextProcessor` from a pretrained Speech2Text processor.
+        Instantiate a [`Speech2TextProcessor`] from a pretrained Speech2Text processor.
 
-        .. note::
+        <Tip>
 
-            This class method is simply calling Speech2TextFeatureExtractor's
-            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and Speech2TextTokenizer's
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
+        This class method is simply calling Speech2TextFeatureExtractor's
+        [`~PreTrainedFeatureExtractor.from_pretrained`] and Speech2TextTokenizer's
+        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
+        docstrings of the methods above for more information.
+
+        </Tip>
 
         Args:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
-                - a string, the `model id` of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-                  namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a feature extractor file saved using the
-                  :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` method, e.g.,
-                  ``./my_model_directory/``.
-                - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/preprocessor_config.json``.
+                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a feature extractor file saved using the
+                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g.,
+                  `./my_model_directory/`.
+                - a path or url to a saved feature extractor JSON *file*, e.g.,
+                  `./my_model_directory/preprocessor_config.json`.
             **kwargs
-                Additional keyword arguments passed along to both :class:`~transformers.PreTrainedFeatureExtractor` and
-                :class:`~transformers.PreTrainedTokenizer`
+                Additional keyword arguments passed along to both [`PreTrainedFeatureExtractor`] and
+                [`PreTrainedTokenizer`]
         """
         feature_extractor = Speech2TextFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
         tokenizer = Speech2TextTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -110,9 +114,9 @@ class Speech2TextProcessor:
     def __call__(self, *args, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to Speech2TextFeatureExtractor's
-        :meth:`~transformers.Speech2TextFeatureExtractor.__call__` and returns its output. If used in the context
-        :meth:`~transformers.Speech2TextProcessor.as_target_processor` this method forwards all its arguments to
-        Speech2TextTokenizer's :meth:`~transformers.Speech2TextTokenizer.__call__`. Please refer to the doctsring of
+        [`~Speech2TextFeatureExtractor.__call__`] and returns its output. If used in the context
+        [`~Speech2TextProcessor.as_target_processor`] this method forwards all its arguments to
+        Speech2TextTokenizer's [`~Speech2TextTokenizer.__call__`]. Please refer to the doctsring of
         the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
@@ -120,7 +124,7 @@ class Speech2TextProcessor:
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to Speech2TextTokenizer's
-        :meth:`~transformers.PreTrainedTokenizer.batch_decode`. Please refer to the docstring of this method for more
+        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more
         information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
@@ -128,7 +132,7 @@ class Speech2TextProcessor:
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to Speech2TextTokenizer's
-        :meth:`~transformers.PreTrainedTokenizer.decode`. Please refer to the docstring of this method for more
+        [`~PreTrainedTokenizer.decode`]. Please refer to the docstring of this method for more
         information.
         """
         return self.tokenizer.decode(*args, **kwargs)

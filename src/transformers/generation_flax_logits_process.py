@@ -29,22 +29,22 @@ logger = get_logger(__name__)
 
 LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`PreTrainedTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        scores (:obj:`jnp.ndarray` of shape :obj:`(batch_size, config.vocab_size)`):
+            [What are input IDs?](../glossary#input-ids)
+        scores (`jnp.ndarray` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
         kwargs:
             Additional logits processor specific kwargs.
 
     Return:
-        :obj:`jnp.ndarray` of shape :obj:`(batch_size, config.vocab_size)`: The processed prediction scores.
+        `jnp.ndarray` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
 
 """
 
@@ -73,10 +73,10 @@ class FlaxLogitsWarper(ABC):
 
 class FlaxLogitsProcessorList(list):
     """
-    This class can be used to create a list of :class:`~transformers.FlaxLogitsProcessor` or
-    :class:`~transformers.FlaxLogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits
-    from list and adds a specific `__call__` method to apply each :class:`~transformers.FlaxLogitsProcessor` or
-    :class:`~transformers.FlaxLogitsWarper` to the inputs.
+    This class can be used to create a list of [`FlaxLogitsProcessor`] or
+    [`FlaxLogitsWarper`] to subsequently process a `scores` input tensor. This class inherits
+    from list and adds a specific *__call__* method to apply each [`FlaxLogitsProcessor`] or
+    [`FlaxLogitsWarper`] to the inputs.
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -97,10 +97,10 @@ class FlaxLogitsProcessorList(list):
 
 class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     r"""
-    :class:`transformers.LogitsWarper` for temperature (exponential scaling output probability distribution).
+    [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
 
     Args:
-        temperature (:obj:`float`):
+        temperature (`float`):
             The value used to module the logits distribution.
     """
 
@@ -117,16 +117,16 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopPLogitsWarper(FlaxLogitsWarper):
     """
-    :class:`transformers.LogitsWarper` that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
+    [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
     prob_cut_off.
 
     Args:
-        top_p (:obj:`float`):
-            If set to < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or higher are
+        top_p (`float`):
+            If set to < 1, only the most probable tokens with probabilities that add up to `top_p` or higher are
             kept for generation.
-        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
-        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
     """
 
@@ -159,14 +159,14 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopKLogitsWarper(FlaxLogitsWarper):
     r"""
-    :class:`transformers.LogitsWarper` that performs top-k, i.e. restricting to the k highest probability elements.
+    [`LogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
 
     Args:
-        top_k (:obj:`int`):
+        top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
-        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
     """
 
@@ -195,10 +195,10 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
 
 class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    :class:`~transformers.FlaxLogitsProcessor` that enforces the specified token as the first generated token.
+    [`FlaxLogitsProcessor`] that enforces the specified token as the first generated token.
 
     Args:
-        bos_token_id (:obj:`int`):
+        bos_token_id (`int`):
             The id of the token to force as the first generated token.
     """
 
@@ -219,14 +219,14 @@ class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    :class:`~transformers.FlaxLogitsProcessor` that enforces the specified token as the last generated token when
-    :obj:`max_length` is reached.
+    [`FlaxLogitsProcessor`] that enforces the specified token as the last generated token when
+    `max_length` is reached.
 
     Args:
-        max_length (:obj:`int`):
+        max_length (`int`):
             The maximum length of the sequence to be generated.
-        eos_token_id (:obj:`int`):
-            The id of the token to force as the last generated token when :obj:`max_length` is reached.
+        eos_token_id (`int`):
+            The id of the token to force as the last generated token when `max_length` is reached.
     """
 
     def __init__(self, max_length: int, eos_token_id: int):
@@ -247,13 +247,13 @@ class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    :class:`transformers.FlaxLogitsProcessor` enforcing a min-length by setting EOS probability to 0.
+    [`FlaxLogitsProcessor`] enforcing a min-length by setting EOS probability to 0.
 
     Args:
-        min_length (:obj:`int`):
-            The minimum length below which the score of :obj:`eos_token_id` is set to :obj:`-float("Inf")`.
-        eos_token_id (:obj:`int`):
-            The id of the `end-of-sequence` token.
+        min_length (`int`):
+            The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
     """
 
     def __init__(self, min_length: int, eos_token_id: int):

@@ -124,28 +124,28 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a DETR feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
 
     Args:
-        format (:obj:`str`, `optional`, defaults to :obj:`"coco_detection"`):
+        format (`str`, *optional*, defaults to `"coco_detection"`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to 800):
-            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size
-            is a sequence like :obj:`(width, height)`, output size will be matched to this. If size is an int, smaller
-            edge of the image will be matched to this number. i.e, if :obj:`height > width`, then image will be
-            rescaled to :obj:`(size * height / width, size)`.
-        max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the input to a certain `size`.
+        size (`int`, *optional*, defaults to 800):
+            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`. If size
+            is a sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller
+            edge of the image will be matched to this number. i.e, if `height > width`, then image will be
+            rescaled to `(size * height / width, size)`.
+        max_size (`int`, *optional*, defaults to `1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
-            :obj:`do_resize` is set to :obj:`True`.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            `do_resize` is set to `True`.
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (:obj:`int`, `optional`, defaults to :obj:`[0.485, 0.456, 0.406]`):
+        image_mean (`int`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images. Defaults to the ImageNet mean.
-        image_std (:obj:`int`, `optional`, defaults to :obj:`[0.229, 0.224, 0.225]`):
+        image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
     """
@@ -416,39 +416,37 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
         real/which are padding.
 
-        .. warning::
+        <Tip warning={true}>
 
-           NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
-           PIL images.
+        NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
+        PIL images.
+
+        </Tip>
 
         Args:
-            images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            annotations (:obj:`Dict`, :obj:`List[Dict]`, `optional`):
+            annotations (`Dict`, `List[Dict]`, *optional*):
                 The corresponding annotations in COCO format.
 
-                In case :class:`~transformers.DetrFeatureExtractor` was initialized with :obj:`format =
-                "coco_detection"`, the annotations for each image should have the following format: {'image_id': int,
+                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_detection"`, the annotations for each image should have the following format: {'image_id': int,
                 'annotations': [annotation]}, with the annotations being a list of COCO object annotations.
 
-                In case :class:`~transformers.DetrFeatureExtractor` was initialized with :obj:`format =
-                "coco_panoptic"`, the annotations for each image should have the following format: {'image_id': int,
+                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`, the annotations for each image should have the following format: {'image_id': int,
                 'file_name': str, 'segments_info': [segment_info]} with segments_info being a list of COCO panoptic
                 annotations.
 
-            return_segmentation_masks (:obj:`Dict`, :obj:`List[Dict]`, `optional`, defaults to :obj:`False`):
-                Whether to also include instance segmentation masks as part of the labels in case :obj:`format =
-                "coco_detection"`.
+            return_segmentation_masks (`Dict`, `List[Dict]`, *optional*, defaults to `False`):
+                Whether to also include instance segmentation masks as part of the labels in case `format = "coco_detection"`.
 
-            masks_path (:obj:`pathlib.Path`, `optional`):
+            masks_path (`pathlib.Path`, *optional*):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
-                relevant in case :class:`~transformers.DetrFeatureExtractor` was initialized with :obj:`format =
-                "coco_panoptic"`.
+                relevant in case [`DetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`.
 
-            pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
 
                 If left to the default, will return a pixel mask that is:
@@ -456,17 +454,17 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch
-                :obj:`torch.Tensor` objects.
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch
+                `torch.Tensor` objects.
 
         Returns:
-            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
-            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
-              `"pixel_mask"` is in :obj:`self.model_input_names`).
-            - **labels** -- Optional labels to be fed to a model (when :obj:`annotations` are provided)
+            - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
+              *"pixel_mask"* is in `self.model_input_names`).
+            - **labels** -- Optional labels to be fed to a model (when `annotations` are provided)
         """
         # Input type checking for clearer error
 
@@ -634,21 +632,21 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None
     ):
         """
-        Pad images up to the largest image in a batch and create a corresponding :obj:`pixel_mask`.
+        Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
 
         Args:
-            pixel_values_list (:obj:`List[torch.Tensor]`):
+            pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch
-                :obj:`torch.Tensor` objects.
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch
+                `torch.Tensor` objects.
 
         Returns:
-            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
-            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
-              `"pixel_mask"` is in :obj:`self.model_input_names`).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
+              *"pixel_mask"* is in `self.model_input_names`).
 
         """
 
@@ -676,19 +674,19 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.
+        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api.
         Only supports PyTorch.
 
         Args:
-            outputs (:class:`~transformers.DetrObjectDetectionOutput`):
+            outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
-            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
 
         Returns:
-            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an
             image in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
@@ -714,21 +712,21 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
         """
-        Converts the output of :class:`~transformers.DetrForSegmentation` into image segmentation predictions. Only
+        Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only
         supports PyTorch.
 
         Parameters:
-            outputs (:class:`~transformers.DetrSegmentationOutput`):
+            outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
-            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
-            threshold (:obj:`float`, `optional`, defaults to 0.9):
+            threshold (`float`, *optional*, defaults to 0.9):
                 Threshold to use to filter out queries.
-            mask_threshold (:obj:`float`, `optional`, defaults to 0.5):
+            mask_threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to use when turning the predicted masks into binary values.
 
         Returns:
-            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an
             image in the batch as predicted by the model.
         """
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
@@ -757,26 +755,26 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
     def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
-        Converts the output of :class:`~transformers.DetrForSegmentation` into actual instance segmentation
+        Converts the output of [`DetrForSegmentation`] into actual instance segmentation
         predictions. Only supports PyTorch.
 
         Args:
-            results (:obj:`List[Dict]`):
-                Results list obtained by :meth:`~transformers.DetrFeatureExtractor.post_process`, to which "masks"
+            results (`List[Dict]`):
+                Results list obtained by [`~DetrFeatureExtractor.post_process`], to which "masks"
                 results will be added.
-            outputs (:class:`~transformers.DetrSegmentationOutput`):
+            outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
-            orig_target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
+            orig_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation).
-            max_target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`):
+            max_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the maximum size (h, w) of each image of the batch. For evaluation, this must be the
                 original image size (before any data augmentation).
-            threshold (:obj:`float`, `optional`, defaults to 0.5):
+            threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to use when turning the predicted masks into binary values.
 
         Returns:
-            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks
             for an image in the batch as predicted by the model.
         """
 
@@ -801,26 +799,26 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
-        Converts the output of :class:`~transformers.DetrForSegmentation` into actual panoptic predictions. Only
+        Converts the output of [`DetrForSegmentation`] into actual panoptic predictions. Only
         supports PyTorch.
 
         Parameters:
-            outputs (:class:`~transformers.DetrSegmentationOutput`):
+            outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
-            processed_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`):
+            processed_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data
                 augmentation but before batching.
-            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)` or :obj:`List[Tuple]` of length :obj:`batch_size`, `optional`):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
-                None, it will default to the :obj:`processed_sizes`.
-            is_thing_map (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
+                None, it will default to the `processed_sizes`.
+            is_thing_map (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
                 Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
-                If not set, defaults to the :obj:`is_thing_map` of COCO panoptic.
-            threshold (:obj:`float`, `optional`, defaults to 0.85):
+                If not set, defaults to the `is_thing_map` of COCO panoptic.
+            threshold (`float`, *optional*, defaults to 0.85):
                 Threshold to use to filter out queries.
 
         Returns:
-            :obj:`List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values
+            `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values
             for an image in the batch as predicted by the model.
         """
         if target_sizes is None:

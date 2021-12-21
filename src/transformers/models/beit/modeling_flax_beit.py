@@ -728,21 +728,23 @@ class FlaxBeitModel(FlaxBeitPreTrainedModel):
 FLAX_BEIT_MODEL_DOCSTRING = """
     Returns:
 
-    Examples::
+    Examples:
 
-        >>> from transformers import BeitFeatureExtractor, FlaxBeitModel
-        >>> from PIL import Image
-        >>> import requests
+    ```python
+    >>> from transformers import BeitFeatureExtractor, FlaxBeitModel
+    >>> from PIL import Image
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
-        >>> model = FlaxBeitModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+    >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+    >>> model = FlaxBeitModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 overwrite_call_docstring(FlaxBeitModel, FLAX_BEIT_MODEL_DOCSTRING)
@@ -897,24 +899,26 @@ class FlaxBeitForImageClassification(FlaxBeitPreTrainedModel):
 FLAX_BEIT_CLASSIF_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import BeitFeatureExtractor, FlaxBeitForImageClassification
-        >>> from PIL import Image
-        >>> import requests
+    ```python
+    >>> from transformers import BeitFeatureExtractor, FlaxBeitForImageClassification
+    >>> from PIL import Image
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
-        >>> model = FlaxBeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+    >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
+    >>> model = FlaxBeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_class_idx = logits.argmax(-1).item()
+    >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+    ```
 """
 
 overwrite_call_docstring(FlaxBeitForImageClassification, FLAX_BEIT_CLASSIF_DOCSTRING)

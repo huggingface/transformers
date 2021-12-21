@@ -15,15 +15,15 @@ class ReturnType(enum.Enum):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class TextGenerationPipeline(Pipeline):
     """
-    Language generation pipeline using any :obj:`ModelWithLMHead`. This pipeline predicts the words that will follow a
+    Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
     specified text prompt.
 
-    This language generation pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"text-generation"`.
+    This language generation pipeline can currently be loaded from [`pipeline`] using the following
+    task identifier: `"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
     objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available models
-    on `huggingface.co/models <https://huggingface.co/models?filter=text-generation>`__.
+    on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -134,38 +134,38 @@ class TextGenerationPipeline(Pipeline):
         Complete the prompt(s) given as inputs.
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`):
+            args (`str` or `List[str]`):
                 One or several prompts (or one list of prompts) to complete.
-            return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
-            return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to include the decoded texts in the outputs.
-            return_full_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                If set to :obj:`False` only added text is returned, otherwise the full text is returned Only meaningful
-                if `return_text` is set to True.
-            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            return_full_text (`bool`, *optional*, defaults to `True`):
+                If set to `False` only added text is returned, otherwise the full text is returned Only meaningful
+                if *return_text* is set to True.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
-            prefix (:obj:`str`, `optional`):
+            prefix (`str`, *optional*):
                 Prefix added to prompt.
-            handle_long_generation (:obj:`str`, `optional`):
+            handle_long_generation (`str`, *optional*):
                 By default, this pipelines does not handle long generation (ones that exceed in one form or the other
                 the model maximum length). There is no perfect way to adress this (more info
                 :https://github.com/huggingface/transformers/issues/14033#issuecomment-948385227). This provides common
                 strategies to work around that problem depending on your use case.
 
-                - :obj:`None` : default strategy where nothing in particular happens
-                - :obj:`"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
+                - `None` : default strategy where nothing in particular happens
+                - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
 
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework `here <./model.html#generative-models>`__).
+                corresponding to your framework [here](./model#generative-models)).
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the following keys:
+            A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **generated_text** (:obj:`str`, present when ``return_text=True``) -- The generated text.
-            - **generated_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
+            - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
+            - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`)
               -- The token ids of the generated text.
         """
         return super().__call__(text_inputs, **kwargs)
