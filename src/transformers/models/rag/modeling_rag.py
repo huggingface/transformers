@@ -1366,8 +1366,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         decoder_start_token_id=None,
         n_docs=None,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
+        logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
@@ -1460,11 +1460,11 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 conditioned on the previously generated tokens `inputs_ids` and the batch ID `batch_id`. This
                 argument is useful for constrained generation conditioned on the prefix, as described in
                 [Autoregressive Entity Retrieval](https://arxiv.org/abs/2010.00904).
-            logits_processor (:obj:`LogitsProcessorList`, `optional`):
+            logits_processor (`LogitsProcessorList`, *optional*):
                  Custom logits processors that complement the default logits processors built from arguments and a
                  model's config. If a logit processor is passed that is already created with the arguments or a model's
                  config an error is thrown.
-            stopping_criteria (:obj:`StoppingCriteriaList`, `optional`):
+            stopping_criteria (`StoppingCriteriaList`, *optional*):
                  Custom stopping criteria that complement the default stopping criteria built from arguments and a
                  model's config. If a stopping criteria is passed that is already created with the arguments or a
                  model's config an error is thrown.
