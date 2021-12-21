@@ -32,8 +32,8 @@ import datasets
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 from datasets import Dataset, load_dataset, load_metric
-from tqdm import tqdm
 from PIL import Image
+from tqdm import tqdm
 
 import jax
 import jax.numpy as jnp
@@ -47,14 +47,14 @@ from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_ke
 from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
-    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
     FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
     AutoTokenizer,
+    FlaxAutoModelForVision2Seq,
     HfArgumentParser,
     is_tensorboard_available,
-    FlaxAutoModelForVision2Seq,
 )
 from transformers.file_utils import get_full_repo_name, is_offline_mode
 
@@ -113,8 +113,7 @@ class TrainingArguments:
     per_device_eval_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
     )
-    _block_size_doc = \
-        """
+    _block_size_doc = """
         The default value `0` will preprocess (tokenization + feature extraction) the whole dataset before training and
         cache the results. This uses more disk space, but avoids (repeated) processing time during training. This is a
         good option if your disk space is large enough to store the whole processed dataset.
@@ -124,10 +123,7 @@ class TrainingArguments:
         `batch_size` are yielded before processing the next block. This could avoid the heavy disk usage when the
         dataset is large.
         """
-    block_size: int = field(
-        default=0,
-        metadata={"help": _block_size_doc}
-    )
+    block_size: int = field(default=0, metadata={"help": _block_size_doc})
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
     adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
@@ -197,16 +193,21 @@ class ModelArguments:
         },
     )
     model_type: Optional[str] = field(
-        default='vision-encoder-decoder',
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)}
+        default="vision-encoder-decoder",
+        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
     encoder_model_type: Optional[str] = field(
         default=None,
-        metadata={"help": "If training from scratch, pass a vision encoder model type from the library. For example, 'vit'"}
+        metadata={
+            "help": "If training from scratch, pass a vision encoder model type from the library. For example, 'vit'"
+        },
     )
     decoder_model_type: Optional[str] = field(
         default=None,
-        metadata={"help": "If training from scratch, pass a decoder model type from the list: " + ", ".join(DECODER_MODEL_TYPES)}
+        metadata={
+            "help": "If training from scratch, pass a decoder model type from the list: "
+            + ", ".join(DECODER_MODEL_TYPES)
+        },
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -218,10 +219,12 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained decoder config name or path if not the same as decoder_model_name"}
     )
     feature_extractor_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained encoder feature extractor_name or path if not the same as encoder_model_name"}
+        default=None,
+        metadata={"help": "Pretrained encoder feature extractor_name or path if not the same as encoder_model_name"},
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained decoder tokenizer name or path if not the same as decoder_model_name"}
+        default=None,
+        metadata={"help": "Pretrained decoder tokenizer name or path if not the same as decoder_model_name"},
     )
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
@@ -505,7 +508,7 @@ def main():
     # Use specified `model_type` (default to `vision-encoder-decoder`)
     else:
 
-        if not model_args.model_type in MODEL_TYPES:
+        if model_args.model_type not in MODEL_TYPES:
             raise ValueError(
                 f"Unrecognized model identifier: {model_args.model_type}. Should contain one of {', '.join(MODEL_TYPES)}."
             )
@@ -516,29 +519,41 @@ def main():
 
             # Use explicit specified encoder config
             if model_args.encoder_config_name:
-                encoder_config = AutoConfig.from_pretrained(model_args.encoder_config_name, cache_dir=encoder_cache_dir)
+                encoder_config = AutoConfig.from_pretrained(
+                    model_args.encoder_config_name, cache_dir=encoder_cache_dir
+                )
             # Use pretrained encoder model's config
             elif model_args.encoder_model_name_or_path:
-                encoder_config = AutoConfig.from_pretrained(model_args.encoder_model_name_or_path, cache_dir=encoder_cache_dir)
+                encoder_config = AutoConfig.from_pretrained(
+                    model_args.encoder_model_name_or_path, cache_dir=encoder_cache_dir
+                )
             # Use specified encoder model type
             elif model_args.encoder_model_type:
                 encoder_config = AutoConfig.for_model(model_args.encoder_model_type)
                 logger.warning("You are instantiating a new config instance from scratch for the encoder.")
             else:
-                raise ValueError("Encoder Config: if pretrained config or model location is not provided, `encoder_model_type` is required.")
+                raise ValueError(
+                    "Encoder Config: if pretrained config or model location is not provided, `encoder_model_type` is required."
+                )
 
             # Use explicit specified decoder config
             if model_args.decoder_config_name:
-                decoder_config = AutoConfig.from_pretrained(model_args.decoder_config_name, cache_dir=decoder_cache_dir)
+                decoder_config = AutoConfig.from_pretrained(
+                    model_args.decoder_config_name, cache_dir=decoder_cache_dir
+                )
             # Use pretrained decoder model's config
             elif model_args.decoder_model_name_or_path:
-                decoder_config = AutoConfig.from_pretrained(model_args.decoder_model_name_or_path, cache_dir=decoder_cache_dir)
+                decoder_config = AutoConfig.from_pretrained(
+                    model_args.decoder_model_name_or_path, cache_dir=decoder_cache_dir
+                )
             # Use specified decoder model type
             elif model_args.decoder_model_type:
                 decoder_config = AutoConfig.for_model(model_args.decoder_model_type)
                 logger.warning("You are instantiating a new config instance from scratch for the decoder.")
             else:
-                raise ValueError("Decoder Config: if pretrained config or model location is not provided, `decoder_model_type` is required.")
+                raise ValueError(
+                    "Decoder Config: if pretrained config or model location is not provided, `decoder_model_type` is required."
+                )
 
             logger.info("Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config")
             decoder_config.is_decoder = True
@@ -586,7 +601,9 @@ def main():
         )
     else:
         # model_class = FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING[config.__class__]
-        model = FlaxAutoModelForVision2Seq.from_config(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+        model = FlaxAutoModelForVision2Seq.from_config(
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+        )
         model_class = model.__class__
 
         # encoder_class = FlaxAutoModel
@@ -604,10 +621,12 @@ def main():
                     model_args.encoder_model_name_or_path,
                     config=config.encoder,
                     seed=training_args.seed,
-                    dtype=getattr(jnp, model_args.dtype)
+                    dtype=getattr(jnp, model_args.dtype),
                 )
             else:
-                encoder = encoder_class(config=config.encoder, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+                encoder = encoder_class(
+                    config=config.encoder, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+                )
                 logger.warning("You are instantiating a new model instance from scratch for the encoder.")
 
             if model_args.decoder_model_name_or_path:
@@ -615,10 +634,12 @@ def main():
                     model_args.decoder_model_name_or_path,
                     config=config.decoder,
                     seed=training_args.seed,
-                    dtype=getattr(jnp, model_args.dtype)
+                    dtype=getattr(jnp, model_args.dtype),
                 )
             else:
-                decoder = decoder_class(config=config.decoder, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
+                decoder = decoder_class(
+                    config=config.decoder, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
+                )
                 logger.warning("You are instantiating a new model instance from scratch for the decoder.")
 
             model = model_class.from_encoder_decoder_pretrained(
@@ -646,7 +667,8 @@ def main():
     feature_extractor = None
     if model_args.feature_extractor_name:
         feature_extractor = AutoFeatureExtractor.from_pretrained(
-            model_args.feature_extractor_name, cache_dir=model_args.cache_dir,
+            model_args.feature_extractor_name,
+            cache_dir=model_args.cache_dir,
         )
     elif model_args.model_name_or_path:
         try:
@@ -684,7 +706,9 @@ def main():
     if not tokenizer:
         if model_args.decoder_model_name_or_path:
             tokenizer = AutoTokenizer.from_pretrained(
-                model_args.decoder_model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+                model_args.decoder_model_name_or_path,
+                cache_dir=model_args.cache_dir,
+                use_fast=model_args.use_fast_tokenizer,
             )
         else:
             raise ValueError(
@@ -739,9 +763,9 @@ def main():
         for image_file in examples[image_column]:
             try:
                 image = Image.open(image_file)
-                encoder_inputs = feature_extractor(images=image, return_tensors="np")
+                feature_extractor(images=image, return_tensors="np")
                 bools.append(True)
-            except:
+            except Exception:
                 bools.append(False)
 
         return bools
@@ -752,7 +776,7 @@ def main():
 
         captions = []
         for caption in examples[caption_column]:
-                captions.append(caption.lower() + ' ' + tokenizer.eos_token)
+            captions.append(caption.lower() + " " + tokenizer.eos_token)
 
         targets = captions
 
@@ -795,7 +819,7 @@ def main():
                     img = Image.open(image_file)
                     images.append(img)
                     to_keep.append(True)
-                except:
+                except Exception:
                     to_keep.append(False)
 
             for k, v in examples.items():
@@ -831,9 +855,11 @@ def main():
                 ),
                 dtype="float32",
             ),
-            "labels": datasets.Sequence(feature=datasets.Value(dtype='int32', id=None), length=-1, id=None),
-            "decoder_input_ids": datasets.Sequence(feature=datasets.Value(dtype='int32', id=None), length=-1, id=None),
-            "decoder_attention_mask": datasets.Sequence(feature=datasets.Value(dtype='int32', id=None), length=-1, id=None),
+            "labels": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
+            "decoder_input_ids": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
+            "decoder_attention_mask": datasets.Sequence(
+                feature=datasets.Value(dtype="int32", id=None), length=-1, id=None
+            ),
         }
     )
 
@@ -909,7 +935,9 @@ def main():
         # (if feature extraction is performed at the beginning, the filtering is done during preprocessing below
         # instead here.)
         if not run_feat_ext_at_beginning:
-            predict_dataset = predict_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
+            predict_dataset = predict_dataset.filter(
+                filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers
+            )
         predict_dataset = predict_dataset.map(
             function=function_kwarg,
             batched=True,
@@ -930,7 +958,9 @@ def main():
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
 
     if training_args.block_size % train_batch_size > 0:
-        raise ValueError(f"`training_args.block_size` needs to be a multiple of the global batch size. Got {training_args.block_size} and {train_batch_size} instead.")
+        raise ValueError(
+            f"`training_args.block_size` needs to be a multiple of the global batch size. Got {training_args.block_size} and {train_batch_size} instead."
+        )
 
     if training_args.do_train:
         steps_per_epoch = len(train_dataset) // train_batch_size
@@ -951,13 +981,13 @@ def main():
         test_steps = num_test_examples // eval_batch_size
 
     def blockwise_data_loader(
-            rng: jax.random.PRNGKey,
-            ds: Dataset,
-            block_size: int,
-            batch_size: int,
-            shuffle: bool = False,
-            keep_in_memory: bool = False,
-            split: str = ""
+        rng: jax.random.PRNGKey,
+        ds: Dataset,
+        block_size: int,
+        batch_size: int,
+        shuffle: bool = False,
+        keep_in_memory: bool = False,
+        split: str = "",
     ):
         """
         Wrap the simple `data_loader` in a block-wise way if `block_size` > 0, else it's the same as `data_loader`.
@@ -1165,7 +1195,7 @@ def main():
 
     def generate_step(params, batch):
         model.params = params
-        output_ids = model.generate(batch['pixel_values'], **gen_kwargs)
+        output_ids = model.generate(batch["pixel_values"], **gen_kwargs)
         return output_ids.sequences
 
     # Create parallel version of the train and eval step
@@ -1212,7 +1242,13 @@ def main():
             if training_args.push_to_hub:
                 repo.push_to_hub(commit_message=commit_msg, blocking=False)
 
-    def evaluation_loop(rng: jax.random.PRNGKey, dataset: Dataset, metric_key_prefix: str = "eval", ckpt_dir: str = "", is_prediction=False):
+    def evaluation_loop(
+        rng: jax.random.PRNGKey,
+        dataset: Dataset,
+        metric_key_prefix: str = "eval",
+        ckpt_dir: str = "",
+        is_prediction=False,
+    ):
 
         logger.info(f"*** {'Predict' if is_prediction else 'Evaluate'} ***")
 
@@ -1230,7 +1266,9 @@ def main():
             split="prediction" if is_prediction else "validation",
         )
         steps = len(dataset) // eval_batch_size
-        for _ in tqdm(range(steps), desc=f"{'Predicting' if is_prediction else 'Evaluating'}...", position=2, leave=False):
+        for _ in tqdm(
+            range(steps), desc=f"{'Predicting' if is_prediction else 'Evaluating'}...", position=2, leave=False
+        ):
             # Model forward
             batch = next(batches)
             _labels = batch.get("labels", None)
@@ -1260,7 +1298,12 @@ def main():
             if labels:
                 rouge_metrics, decoded_preds, decoded_labels = compute_metrics(preds, labels)
                 metrics.update(rouge_metrics)
-                rouge_desc = " ".join([f"{'Predict' if is_prediction else 'Eval'} {key}: {value} |" for key, value in rouge_metrics.items()])
+                rouge_desc = " ".join(
+                    [
+                        f"{'Predict' if is_prediction else 'Eval'} {key}: {value} |"
+                        for key, value in rouge_metrics.items()
+                    ]
+                )
                 for pred, label in zip(decoded_preds, decoded_labels):
                     pred = pred.replace("\n", " ")
                     label = label.replace("\n", " ")
@@ -1293,28 +1336,37 @@ def main():
 
                 # Save metrics (only for the evaluation/prediction being done along with training)
                 if has_tensorboard and training_args.do_train:
-                    write_metric(summary_writer, metrics, train_time=None, step=cur_step, metric_key_prefix=metric_key_prefix)
+                    write_metric(
+                        summary_writer, metrics, train_time=None, step=cur_step, metric_key_prefix=metric_key_prefix
+                    )
 
                 # save final metrics in json
-                metrics = {f"{metric_key_prefix}_{metric_name}": round(value.item(), 6) for metric_name, value in metrics.items()}
+                metrics = {
+                    f"{metric_key_prefix}_{metric_name}": round(value.item(), 6)
+                    for metric_name, value in metrics.items()
+                }
                 _path = os.path.join(training_args.output_dir, ckpt_dir, f"{metric_key_prefix}_results.json")
                 with open(_path, "w") as f:
                     json.dump(metrics, f, indent=4, sort_keys=True)
 
                 # Update report
-                with open(os.path.join(training_args.output_dir, 'log'), 'a', encoding='UTF-8') as fp:
-                    fp.write(desc + '\n')
+                with open(os.path.join(training_args.output_dir, "log"), "a", encoding="UTF-8") as fp:
+                    fp.write(desc + "\n")
 
             # Save generations
             if generations:
-                with open(os.path.join(training_args.output_dir, ckpt_dir, f'{metric_key_prefix}_generation.json'), 'w', encoding='UTF-8') as fp:
+                with open(
+                    os.path.join(training_args.output_dir, ckpt_dir, f"{metric_key_prefix}_generation.json"),
+                    "w",
+                    encoding="UTF-8",
+                ) as fp:
                     json.dump(generations, fp, ensure_ascii=False, indent=4)
 
     def evaluate(rng: jax.random.PRNGKey, dataset: Dataset, ckpt_dir: str = ""):
-        evaluation_loop(rng, dataset, metric_key_prefix='eval', ckpt_dir=ckpt_dir)
+        evaluation_loop(rng, dataset, metric_key_prefix="eval", ckpt_dir=ckpt_dir)
 
     def predict(rng: jax.random.PRNGKey, dataset: Dataset):
-        evaluation_loop(rng, dataset, metric_key_prefix='test', is_prediction=True)
+        evaluation_loop(rng, dataset, metric_key_prefix="test", is_prediction=True)
 
     input_rng = None
 
@@ -1340,7 +1392,7 @@ def main():
                 batch_size=train_batch_size,
                 keep_in_memory=True,
                 shuffle=True,
-                split="train"
+                split="train",
             )
 
             # train
@@ -1364,16 +1416,26 @@ def main():
 
                     logger.info(desc)
 
-                    with open(os.path.join(training_args.output_dir, 'log'), 'a', encoding='UTF-8') as fp:
-                        fp.write(desc + '\n')
+                    with open(os.path.join(training_args.output_dir, "log"), "a", encoding="UTF-8") as fp:
+                        fp.write(desc + "\n")
 
                     # Save metrics
                     if has_tensorboard and jax.process_index() == 0:
-                        write_metric(summary_writer, train_metrics, train_time=train_time, step=cur_step, metric_key_prefix="train")
+                        write_metric(
+                            summary_writer,
+                            train_metrics,
+                            train_time=train_time,
+                            step=cur_step,
+                            metric_key_prefix="train",
+                        )
 
                 # ======================== Evaluating (inside an epoch) ==============================
 
-                if training_args.do_eval and (training_args.eval_steps is not None and training_args.eval_steps > 0) and cur_step % training_args.eval_steps == 0:
+                if (
+                    training_args.do_eval
+                    and (training_args.eval_steps is not None and training_args.eval_steps > 0)
+                    and cur_step % training_args.eval_steps == 0
+                ):
                     ckpt_dir = f"ckpt_epoch_{epoch + 1}_step_{cur_step}"
                     commit_msg = f"Saving weights and logs of epoch {epoch + 1} - step {cur_step}"
                     evaluate(input_rng, eval_dataset, ckpt_dir)
@@ -1386,12 +1448,14 @@ def main():
 
                 logger.info(desc)
 
-                with open(os.path.join(training_args.output_dir, 'log'), 'a', encoding='UTF-8') as fp:
-                    fp.write(desc + '\n')
+                with open(os.path.join(training_args.output_dir, "log"), "a", encoding="UTF-8") as fp:
+                    fp.write(desc + "\n")
 
                 # Save metrics
                 if has_tensorboard and jax.process_index() == 0:
-                    write_metric(summary_writer, train_metrics, train_time=train_time, step=cur_step, metric_key_prefix="train")
+                    write_metric(
+                        summary_writer, train_metrics, train_time=train_time, step=cur_step, metric_key_prefix="train"
+                    )
 
             # ======================== Evaluating (after each epoch) ==============================
 
