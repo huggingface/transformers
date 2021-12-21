@@ -264,11 +264,11 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     @functools.wraps(trainable)
     def dynamic_modules_import_trainable(*args, **kwargs):
         """
-        Wrapper around ``tune.with_parameters`` to ensure datasets_modules are loaded on each Actor.
+        Wrapper around `tune.with_parameters` to ensure datasets_modules are loaded on each Actor.
 
         Without this, an ImportError will be thrown. See https://github.com/huggingface/transformers/issues/11565.
 
-        Assumes that ``_objective``, defined above, is a function.
+        Assumes that `_objective`, defined above, is a function.
         """
         if is_datasets_available():
             import datasets.load
@@ -372,11 +372,10 @@ def rewrite_logs(d):
 
 class TensorBoardCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `TensorBoard
-    <https://www.tensorflow.org/tensorboard>`__.
+    A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
 
     Args:
-        tb_writer (:obj:`SummaryWriter`, `optional`):
+        tb_writer (`SummaryWriter`, *optional*):
             The writer to use. Will instantiate one if not set.
     """
 
@@ -461,7 +460,7 @@ class TensorBoardCallback(TrainerCallback):
 
 class WandbCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases <https://www.wandb.com/>`__.
+    A [`TrainerCallback`] that sends the logs to [Weight and Biases](https://www.wandb.com/).
     """
 
     def __init__(self):
@@ -478,22 +477,21 @@ class WandbCallback(TrainerCallback):
 
     def setup(self, args, state, model, **kwargs):
         """
-        Setup the optional Weights & Biases (`wandb`) integration.
+        Setup the optional Weights & Biases (*wandb*) integration.
 
-        One can subclass and override this method to customize the setup if needed. Find more information `here
-        <https://docs.wandb.ai/integrations/huggingface>`__. You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment variables:
 
         Environment:
-            WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            WANDB_LOG_MODEL (`bool`, *optional*, defaults to `False`):
                 Whether or not to log model as artifact at the end of training. Use along with
-                `TrainingArguments.load_best_model_at_end` to upload best model.
-            WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
-                Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
-                logging or :obj:`"all"` to log gradients and parameters.
-            WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
+                *TrainingArguments.load_best_model_at_end* to upload best model.
+            WANDB_WATCH (`str`, *optional* defaults to `"gradients"`):
+                Can be `"gradients"`, `"all"` or `"false"`. Set to `"false"` to disable gradient
+                logging or `"all"` to log gradients and parameters.
+            WANDB_PROJECT (`str`, *optional*, defaults to `"huggingface"`):
                 Set this to a custom string to store results in a different project.
-            WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
+            WANDB_DISABLED (`bool`, *optional*, defaults to `False`):
+                Whether or not to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
         """
         if self._wandb is None:
             return
@@ -585,7 +583,7 @@ class WandbCallback(TrainerCallback):
 
 class CometCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML <https://www.comet.ml/site/>`__.
+    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.ml/site/).
     """
 
     def __init__(self):
@@ -599,19 +597,18 @@ class CometCallback(TrainerCallback):
         Setup the optional Comet.ml integration.
 
         Environment:
-            COMET_MODE (:obj:`str`, `optional`):
+            COMET_MODE (`str`, *optional*):
                 Whether to create an online, offline experiment or disable Comet logging. Can be "OFFLINE", "ONLINE",
                 or "DISABLED". Defaults to "ONLINE".
-            COMET_PROJECT_NAME (:obj:`str`, `optional`):
+            COMET_PROJECT_NAME (`str`, *optional*):
                 Comet project name for experiments
-            COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
-                Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
-            COMET_LOG_ASSETS (:obj:`str`, `optional`):
+            COMET_OFFLINE_DIRECTORY (`str`, *optional*):
+                Folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+            COMET_LOG_ASSETS (`str`, *optional*):
                 Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be "TRUE", or
                 "FALSE". Defaults to "TRUE".
 
-        For a number of configurable items in the environment, see `here
-        <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
+        For a number of configurable items in the environment, see [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
         """
         self._initialized = True
         log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
@@ -661,8 +658,7 @@ class CometCallback(TrainerCallback):
 
 class AzureMLCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML
-    <https://pypi.org/project/azureml-sdk/>`__.
+    A [`TrainerCallback`] that sends the logs to [AzureML](https://pypi.org/project/azureml-sdk/).
     """
 
     def __init__(self, azureml_run=None):
@@ -685,7 +681,7 @@ class AzureMLCallback(TrainerCallback):
 
 class MLflowCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
+    A [`TrainerCallback`] that sends the logs to [MLflow](https://www.mlflow.org/).
     """
 
     def __init__(self):
@@ -705,11 +701,11 @@ class MLflowCallback(TrainerCallback):
         Setup the optional MLflow integration.
 
         Environment:
-            HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`):
+            HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to use MLflow .log_artifact() facility to log artifacts.
 
-                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or `1`, will copy
-                whatever is in :class:`~transformers.TrainingArguments`'s ``output_dir`` to the local or remote
+                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to *True* or *1*, will copy
+                whatever is in [`TrainingArguments`]'s `output_dir` to the local or remote
                 artifact storage. Using it without a remote storage will just copy the files to your artifact location.
         """
         log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
@@ -774,7 +770,7 @@ class MLflowCallback(TrainerCallback):
 
 class NeptuneCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Neptune <https://neptune.ai>`.
+    A [`TrainerCallback`] that sends the logs to *Neptune <https://neptune.ai>*.
     """
 
     def __init__(self):
@@ -793,13 +789,13 @@ class NeptuneCallback(TrainerCallback):
         Setup the Neptune integration.
 
         Environment:
-            NEPTUNE_PROJECT (:obj:`str`, `required`):
-                The project ID for neptune.ai account. Should be in format `workspace_name/project_name`
-            NEPTUNE_API_TOKEN (:obj:`str`, `required`):
+            NEPTUNE_PROJECT (`str`, *required*):
+                The project ID for neptune.ai account. Should be in format *workspace_name/project_name*
+            NEPTUNE_API_TOKEN (`str`, *required*):
                 API-token for neptune.ai account
-            NEPTUNE_CONNECTION_MODE (:obj:`str`, `optional`):
-                Neptune connection mode. `async` by default
-            NEPTUNE_RUN_NAME (:obj:`str`, `optional`):
+            NEPTUNE_CONNECTION_MODE (`str`, *optional*):
+                Neptune connection mode. *async* by default
+            NEPTUNE_RUN_NAME (`str`, *optional*):
                 The name of run process on Neptune dashboard
         """
         if state.is_world_process_zero:
@@ -831,7 +827,7 @@ class NeptuneCallback(TrainerCallback):
     def __del__(self):
         """
         Environment:
-            NEPTUNE_STOP_TIMEOUT (:obj:`int`, `optional`):
+            NEPTUNE_STOP_TIMEOUT (`int`, *optional*):
                 Number of seconsds to wait for all Neptune.ai tracking calls to finish, before stopping the tracked
                 run. If not set it will wait for all tracking calls to finish.
         """
@@ -845,7 +841,7 @@ class NeptuneCallback(TrainerCallback):
 
 class CodeCarbonCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that tracks the CO2 emission of training.
+    A [`TrainerCallback`] that tracks the CO2 emission of training.
     """
 
     def __init__(self):

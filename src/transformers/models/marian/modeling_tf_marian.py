@@ -555,23 +555,25 @@ MARIAN_START_DOCSTRING = r"""
 
 MARIAN_GENERATION_EXAMPLE = r"""
         TF version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints. Available
-        models are listed `here <https://huggingface.co/models?search=Helsinki-NLP>`__.
+        models are listed [here](https://huggingface.co/models?search=Helsinki-NLP).
 
-        Examples::
+        Examples:
 
-            >>> from transformers import MarianTokenizer, TFMarianMTModel
-            >>> from typing import List
-            >>> src = 'fr'  # source language
-            >>> trg = 'en'  # target language
-            >>> sample_text = "où est l'arrêt de bus ?"
-            >>> model_name = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+        ```python
+        >>> from transformers import MarianTokenizer, TFMarianMTModel
+        >>> from typing import List
+        >>> src = 'fr'  # source language
+        >>> trg = 'en'  # target language
+        >>> sample_text = "où est l'arrêt de bus ?"
+        >>> model_name = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
-            >>> model = TFMarianMTModel.from_pretrained(model_name)
-            >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
-            >>> batch = tokenizer([sample_text], return_tensors="tf")
-            >>> gen = model.generate(**batch)
-            >>> tokenizer.batch_decode(gen, skip_special_tokens=True)
-            "Where is the bus stop ?"
+        >>> model = TFMarianMTModel.from_pretrained(model_name)
+        >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+        >>> batch = tokenizer([sample_text], return_tensors="tf")
+        >>> gen = model.generate(**batch)
+        >>> tokenizer.batch_decode(gen, skip_special_tokens=True)
+        "Where is the bus stop ?"
+        ```
 """
 
 MARIAN_INPUTS_DOCSTRING = r"""

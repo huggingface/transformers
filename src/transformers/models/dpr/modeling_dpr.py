@@ -64,7 +64,7 @@ class DPRContextEncoderOutput(ModelOutput):
     Class for outputs of [`DPRQuestionEncoder`].
 
     Args:
-        pooler_output: (:obj:`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
             The DPR encoder outputs the *pooler_output* that corresponds to the context representation. Last layer
             hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
             This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
@@ -91,7 +91,7 @@ class DPRQuestionEncoderOutput(ModelOutput):
     Class for outputs of [`DPRQuestionEncoder`].
 
     Args:
-        pooler_output: (:obj:`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
             The DPR encoder outputs the *pooler_output* that corresponds to the question representation. Last layer
             hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
             This output is to be used to embed questions for nearest neighbors queries with context embeddings.
@@ -118,11 +118,11 @@ class DPRReaderOutput(ModelOutput):
     Class for outputs of [`DPRQuestionEncoder`].
 
     Args:
-        start_logits: (:obj:`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+        start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
             Logits of the start index of the span for each passage.
-        end_logits: (:obj:`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+        end_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
             Logits of the end index of the span for each passage.
-        relevance_logits: (``torch.FloatTensor``` of shape `(n_passages, )`):
+        relevance_logits (`torch.FloatTensor` of shape `(n_passages, )`):
             Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
             question, compared to all the other passages.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -350,17 +350,17 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
             (a) For sequence pairs (for a pair title+text for example):
 
-    ```
-    tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-    token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1
-    ```
+            ```
+            tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+            token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1
+            ```
 
             (b) For single sequences (for a question for example):
 
-    ```
-    tokens:         [CLS] the dog is hairy . [SEP]
-    token_type_ids:   0   0   0   0  0     0   0
-    ```
+            ```
+            tokens:         [CLS] the dog is hairy . [SEP]
+            token_type_ids:   0   0   0   0  0     0   0
+            ```
 
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
@@ -463,14 +463,15 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         r"""
         Return:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
-            >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-            >>> model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-            >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-            >>> embeddings = model(input_ids).pooler_output
-        """
+        ```python
+        >>> from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
+        >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        >>> model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -542,13 +543,15 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         r"""
         Return:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
-            >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-            >>> model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-            >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-            >>> embeddings = model(input_ids).pooler_output
+        ```python
+        >>> from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
+        >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+        >>> model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
+        ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -619,22 +622,23 @@ class DPRReader(DPRPretrainedReader):
         r"""
         Return:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import DPRReader, DPRReaderTokenizer
-            >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-            >>> model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
-            >>> encoded_inputs = tokenizer(
-            ...         questions=["What is love ?"],
-            ...         titles=["Haddaway"],
-            ...         texts=["'What Is Love' is a song recorded by the artist Haddaway"],
-            ...         return_tensors='pt'
-            ...     )
-            >>> outputs = model(**encoded_inputs)
-            >>> start_logits = outputs.start_logits
-            >>> end_logits = outputs.end_logits
-            >>> relevance_logits = outputs.relevance_logits
-
+        ```python
+        >>> from transformers import DPRReader, DPRReaderTokenizer
+        >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
+        >>> model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
+        >>> encoded_inputs = tokenizer(
+        ...         questions=["What is love ?"],
+        ...         titles=["Haddaway"],
+        ...         texts=["'What Is Love' is a song recorded by the artist Haddaway"],
+        ...         return_tensors='pt'
+        ...     )
+        >>> outputs = model(**encoded_inputs)
+        >>> start_logits = outputs.start_logits
+        >>> end_logits = outputs.end_logits
+        >>> relevance_logits = outputs.relevance_logits
+        ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

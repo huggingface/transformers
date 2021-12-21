@@ -26,91 +26,92 @@ OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://huggingface.c
 
 class OpenAIGPTConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a :class:`~transformers.OpenAIGPTModel` or a
-    :class:`~transformers.TFOpenAIGPTModel`. It is used to instantiate a GPT model according to the specified
+    This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a
+    [`TFOpenAIGPTModel`]. It is used to instantiate a GPT model according to the specified
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the `GPT <https://huggingface.co/openai-gpt>`__ architecture from OpenAI.
+    configuration to that of the [GPT](https://huggingface.co/openai-gpt) architecture from OpenAI.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 40478):
+        vocab_size (`int`, *optional*, defaults to 40478):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.OpenAIGPTModel` or
-            :class:`~transformers.TFOpenAIGPTModel`.
-        n_positions (:obj:`int`, `optional`, defaults to 512):
+            `inputs_ids` passed when calling [`OpenAIGPTModel`] or
+            [`TFOpenAIGPTModel`].
+        n_positions (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_embd (:obj:`int`, `optional`, defaults to 768):
+        n_embd (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
-        n_layer (:obj:`int`, `optional`, defaults to 12):
+        n_layer (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        n_head (:obj:`int`, `optional`, defaults to 12):
+        n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        afn (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
+        afn (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
-        resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
+            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        resid_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (:obj:`int`, `optional`, defaults to 0.1):
+        embd_pdrop (`int`, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
-        attn_pdrop (:obj:`float`, `optional`, defaults to 0.1):
+        attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
-        layer_norm_epsilon (:obj:`float`, `optional`, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        predict_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        predict_special_tokens (`bool`, *optional*, defaults to `True`):
             Whether or not special tokens should be predicted when the model has a language modeling head.
-        summary_type (:obj:`str`, `optional`, defaults to :obj:`"cls_index"`):
+        summary_type (`str`, *optional*, defaults to `"cls_index"`):
             Argument used when doing sequence summary, used in the models
-            :class:`~transformers.OpenAIGPTDoubleHeadsModel` and :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
+            [`OpenAIGPTDoubleHeadsModel`] and [`OpenAIGPTDoubleHeadsModel`].
 
             Has to be one of the following options:
 
-                - :obj:`"last"`: Take the last token hidden state (like XLNet).
-                - :obj:`"first"`: Take the first token hidden state (like BERT).
-                - :obj:`"mean"`: Take the mean of all tokens hidden states.
-                - :obj:`"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - :obj:`"attn"`: Not implemented now, use multi-head attention.
-        summary_use_proj (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                - `"last"`: Take the last token hidden state (like XLNet).
+                - `"first"`: Take the first token hidden state (like BERT).
+                - `"mean"`: Take the mean of all tokens hidden states.
+                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
+                - `"attn"`: Not implemented now, use multi-head attention.
+        summary_use_proj (`bool`, *optional*, defaults to `True`):
             Argument used when doing sequence summary, used in the models
-            :class:`~transformers.OpenAIGPTDoubleHeadsModel` and :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
+            [`OpenAIGPTDoubleHeadsModel`] and [`OpenAIGPTDoubleHeadsModel`].
 
             Whether or not to add a projection after the vector extraction.
-        summary_activation (:obj:`str`, `optional`):
+        summary_activation (`str`, *optional*):
             Argument used when doing sequence summary, used in the models
-            :class:`~transformers.OpenAIGPTDoubleHeadsModel` and :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
+            [`OpenAIGPTDoubleHeadsModel`] and [`OpenAIGPTDoubleHeadsModel`].
 
-            Pass :obj:`"tanh"` for a tanh activation to the output, any other value will result in no activation.
-        summary_proj_to_labels (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
+        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
             Argument used when doing sequence summary, used in the models
-            :class:`~transformers.OpenAIGPTDoubleHeadsModel` and :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
+            [`OpenAIGPTDoubleHeadsModel`] and [`OpenAIGPTDoubleHeadsModel`].
 
-            Whether the projection outputs should have :obj:`config.num_labels` or :obj:`config.hidden_size` classes.
-        summary_first_dropout (:obj:`float`, `optional`, defaults to 0.1):
+            Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
+        summary_first_dropout (`float`, *optional*, defaults to 0.1):
             Argument used when doing sequence summary, used in the models
-            :class:`~transformers.OpenAIGPTDoubleHeadsModel` and :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
+            [`OpenAIGPTDoubleHeadsModel`] and [`OpenAIGPTDoubleHeadsModel`].
 
             The dropout ratio to be used after the projection and activation.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
 
-    Examples::
+    Examples:
 
-        >>> from transformers import OpenAIGPTConfig, OpenAIGPTModel
+    ```python
+    >>> from transformers import OpenAIGPTConfig, OpenAIGPTModel
 
-        >>> # Initializing a GPT configuration
-        >>> configuration = OpenAIGPTConfig()
+    >>> # Initializing a GPT configuration
+    >>> configuration = OpenAIGPTConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = OpenAIGPTModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = OpenAIGPTModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "openai-gpt"
     attribute_map = {

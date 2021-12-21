@@ -67,17 +67,17 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
 
-    :class:`~transformers.FlaxPreTrainedModel` takes care of storing the configuration of the models and handles
+    [`FlaxPreTrainedModel`] takes care of storing the configuration of the models and handles
     methods for loading, downloading and saving models.
 
     Class attributes (overridden by derived classes):
 
-        - **config_class** (:class:`~transformers.PretrainedConfig`) -- A subclass of
-          :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-        - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
+        - **config_class** ([`PretrainedConfig`]) -- A subclass of
+          [`PretrainedConfig`] to use as configuration class for this model architecture.
+        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **main_input_name** (:obj:`str`) -- The name of the principal input to the model (often :obj:`input_ids` for
-          NLP models, :obj:`pixel_values` for vision models and :obj:`input_values` for speech models).
+        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for
+          NLP models, `pixel_values` for vision models and `input_values` for speech models).
     """
     config_class = None
     base_model_prefix = ""
@@ -159,7 +159,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def _cast_floating_to(self, params: Union[Dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
         """
-        Helper method to cast floating-point values of given parameter ``PyTree`` to given ``dtype``.
+        Helper method to cast floating-point values of given parameter `PyTree` to given `dtype`.
         """
 
         # taken from https://github.com/deepmind/jmp/blob/3a8318abc3292be38582794dbf7b094e6583b192/jmp/_src/policy.py#L27
@@ -183,94 +183,97 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point ``params`` to ``jax.numpy.bfloat16``. This returns a new ``params`` tree and does not
-        cast the ``params`` in place.
+        Cast the floating-point `params` to `jax.numpy.bfloat16`. This returns a new `params` tree and does not
+        cast the `params` in place.
 
         This method can be used on TPU to explicitly convert the model parameters to bfloat16 precision to do full
         half-precision training or to save weights in bfloat16 for inference in order to save memory and improve speed.
 
         Arguments:
-            params (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` of model parameters.
-            mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` with same structure as the ``params`` tree. The leaves should be booleans, :obj:`True` for
-                params you want to cast, and should be :obj:`False` for those you want to skip.
+            params (`Union[Dict, FrozenDict]`):
+                A `PyTree` of model parameters.
+            mask (`Union[Dict, FrozenDict]`):
+                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for
+                params you want to cast, and should be `False` for those you want to skip.
 
-        Examples::
+        Examples:
 
-            >>> from transformers import FlaxBertModel
-            >>> # load model
-            >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
-            >>> # By default, the model parameters will be in fp32 precision, to cast these to bfloat16 precision
-            >>> model.params = model.to_bf16(model.params)
-            >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
-            >>> # then pass the mask as follows
-            >>> from flax import traverse_util
-            >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
-            >>> flat_params = traverse_util.flatten_dict(model.params)
-            >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
-            >>> mask = traverse_util.unflatten_dict(mask)
-            >>> model.params = model.to_bf16(model.params, mask)
-        """
+        ```python
+        >>> from transformers import FlaxBertModel
+        >>> # load model
+        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> # By default, the model parameters will be in fp32 precision, to cast these to bfloat16 precision
+        >>> model.params = model.to_bf16(model.params)
+        >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
+        >>> # then pass the mask as follows
+        >>> from flax import traverse_util
+        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> flat_params = traverse_util.flatten_dict(model.params)
+        >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        >>> mask = traverse_util.unflatten_dict(mask)
+        >>> model.params = model.to_bf16(model.params, mask)
+        ```"""
         return self._cast_floating_to(params, jnp.bfloat16, mask)
 
     def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point ``parmas`` to ``jax.numpy.float32``. This method can be used to explicitly convert the
-        model parameters to fp32 precision. This returns a new ``params`` tree and does not cast the ``params`` in
+        Cast the floating-point `parmas` to `jax.numpy.float32`. This method can be used to explicitly convert the
+        model parameters to fp32 precision. This returns a new `params` tree and does not cast the `params` in
         place.
 
         Arguments:
-            params (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` of model parameters.
-            mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` with same structure as the ``params`` tree. The leaves should be booleans, :obj:`True` for
-                params you want to cast, and should be :obj:`False` for those you want to skip
+            params (`Union[Dict, FrozenDict]`):
+                A `PyTree` of model parameters.
+            mask (`Union[Dict, FrozenDict]`):
+                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for
+                params you want to cast, and should be `False` for those you want to skip
 
-        Examples::
+        Examples:
 
-            >>> from transformers import FlaxBertModel
-            >>> # Download model and configuration from huggingface.co
-            >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
-            >>> # By default, the model params will be in fp32, to illustrate the use of this method,
-            >>> # we'll first cast to fp16 and back to fp32
-            >>> model.params = model.to_f16(model.params)
-            >>> # now cast back to fp32
-            >>> model.params = model.to_fp32(model.params)
-        """
+        ```python
+        >>> from transformers import FlaxBertModel
+        >>> # Download model and configuration from huggingface.co
+        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> # By default, the model params will be in fp32, to illustrate the use of this method,
+        >>> # we'll first cast to fp16 and back to fp32
+        >>> model.params = model.to_f16(model.params)
+        >>> # now cast back to fp32
+        >>> model.params = model.to_fp32(model.params)
+        ```"""
         return self._cast_floating_to(params, jnp.float32, mask)
 
     def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point ``parmas`` to ``jax.numpy.float16``. This returns a new ``params`` tree and does not
-        cast the ``params`` in place.
+        Cast the floating-point `parmas` to `jax.numpy.float16`. This returns a new `params` tree and does not
+        cast the `params` in place.
 
         This method can be used on GPU to explicitly convert the model parameters to float16 precision to do full
         half-precision training or to save weights in float16 for inference in order to save memory and improve speed.
 
         Arguments:
-            params (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` of model parameters.
-            mask (:obj:`Union[Dict, FrozenDict]`):
-                A ``PyTree`` with same structure as the ``params`` tree. The leaves should be booleans, :obj:`True` for
-                params you want to cast, and should be :obj:`False` for those you want to skip
+            params (`Union[Dict, FrozenDict]`):
+                A `PyTree` of model parameters.
+            mask (`Union[Dict, FrozenDict]`):
+                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for
+                params you want to cast, and should be `False` for those you want to skip
 
-        Examples::
+        Examples:
 
-            >>> from transformers import FlaxBertModel
-            >>> # load model
-            >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
-            >>> # By default, the model params will be in fp32, to cast these to float16
-            >>> model.params = model.to_fp16(model.params)
-            >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
-            >>> # then pass the mask as follows
-            >>> from flax import traverse_util
-            >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
-            >>> flat_params = traverse_util.flatten_dict(model.params)
-            >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
-            >>> mask = traverse_util.unflatten_dict(mask)
-            >>> model.params = model.to_fp16(model.params, mask)
-        """
+        ```python
+        >>> from transformers import FlaxBertModel
+        >>> # load model
+        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> # By default, the model params will be in fp32, to cast these to float16
+        >>> model.params = model.to_fp16(model.params)
+        >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
+        >>> # then pass the mask as follows
+        >>> from flax import traverse_util
+        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> flat_params = traverse_util.flatten_dict(model.params)
+        >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        >>> mask = traverse_util.unflatten_dict(mask)
+        >>> model.params = model.to_fp16(model.params, mask)
+        ```"""
         return self._cast_floating_to(params, jnp.float16, mask)
 
     @classmethod
@@ -285,104 +288,104 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         r"""
         Instantiate a pretrained flax model from a pre-trained model configuration.
 
-        The warning `Weights from XXX not initialized from pretrained model` means that the weights of XXX do not come
+        The warning *Weights from XXX not initialized from pretrained model* means that the weights of XXX do not come
         pretrained with the rest of the model. It is up to you to train those weights with a downstream fine-tuning
         task.
 
-        The warning `Weights from XXX not used in YYY` means that the layer XXX is not used by YYY, therefore those
+        The warning *Weights from XXX not used in YYY* means that the layer XXX is not used by YYY, therefore those
         weights are discarded.
 
         Parameters:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
                 Can be either:
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `pt index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In this
-                      case, ``from_pt`` should be set to :obj:`True`.
-            dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
-                The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
-                GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
+                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                    - A path to a *directory* containing model weights saved using
+                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                    - A path or url to a *pt index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In this
+                      case, `from_pt` should be set to `True`.
+            dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+                The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
+                GPUs) and `jax.numpy.bfloat16` (on TPUs).
 
                 This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-                specified all the computation will be performed with the given ``dtype``.
+                specified all the computation will be performed with the given `dtype`.
 
                 **Note that this only specifies the dtype of the computation and does not influence the dtype of model
                 parameters.**
 
                 If you wish to change the dtype of the model parameters, see
-                :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and
-                :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
-            model_args (sequence of positional arguments, `optional`):
-                All remaining positional arguments will be passed to the underlying model's ``__init__`` method.
-            config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
+                [`~FlaxPreTrainedModel.to_fp16`] and
+                [`~FlaxPreTrainedModel.to_bf16`].
+            model_args (sequence of positional arguments, *optional*):
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
+            config (`Union[PretrainedConfig, str, os.PathLike]`, *optional*):
                 Can be either:
 
-                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
-                    - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
+                    - an instance of a class derived from [`PretrainedConfig`],
+                    - a string or path valid as input to [`~PretrainedConfig.from_pretrained`].
 
                 Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
-                    - The model is a model provided by the library (loaded with the `model id` string of a pretrained
+                    - The model is a model provided by the library (loaded with the *model id* string of a pretrained
                       model).
-                    - The model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
+                    - The model was saved using [`~PreTrainedModel.save_pretrained`] and is reloaded
                       by supplying the save directory.
-                    - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
-                      configuration JSON file named `config.json` is found in the directory.
-            cache_dir (:obj:`Union[str, os.PathLike]`, `optional`):
+                    - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
+                      configuration JSON file named *config.json* is found in the directory.
+            cache_dir (`Union[str, os.PathLike]`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
-            from_pt (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            from_pt (`bool`, *optional*, defaults to `False`):
                 Load the model weights from a PyTorch checkpoint save file (see docstring of
-                ``pretrained_model_name_or_path`` argument).
-            ignore_mismatched_sizes (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                `pretrained_model_name_or_path` argument).
+            ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`):
                 Whether or not to raise an error if some of the weights from the checkpoint do not have the same size
                 as the weights of the model (if for instance, you are instantiating a model with 10 labels from a
                 checkpoint with 3 labels).
-            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str]`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
-            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            kwargs (remaining dictionary of keyword arguments, `optional`):
+            kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
+                `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
                 automatically loaded:
 
-                    - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
-                      underlying model's ``__init__`` method (we assume all relevant updates to the configuration have
+                    - If a configuration is provided with `config`, `**kwargs` will be directly passed to the
+                      underlying model's `__init__` method (we assume all relevant updates to the configuration have
                       already been done)
-                    - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class
-                      initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of
-                      ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
-                      with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
-                      attribute will be passed to the underlying model's ``__init__`` function.
+                    - If a configuration is not provided, `kwargs` will be first passed to the configuration class
+                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of
+                      `kwargs` that corresponds to a configuration attribute will be used to override said attribute
+                      with the supplied `kwargs` value. Remaining keys that do not correspond to any configuration
+                      attribute will be passed to the underlying model's `__init__` function.
 
-        Examples::
+        Examples:
 
-            >>> from transformers import BertConfig, FlaxBertModel
-            >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
-            >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
-            >>> model = FlaxBertModel.from_pretrained('./test/saved_model/')
-            >>> # Loading from a PyTorch checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
-            >>> config = BertConfig.from_json_file('./pt_model/config.json')
-            >>> model = FlaxBertModel.from_pretrained('./pt_model/pytorch_model.bin', from_pt=True, config=config)
-        """
+        ```python
+        >>> from transformers import BertConfig, FlaxBertModel
+        >>> # Download model and configuration from huggingface.co and cache.
+        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
+        >>> model = FlaxBertModel.from_pretrained('./test/saved_model/')
+        >>> # Loading from a PyTorch checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
+        >>> config = BertConfig.from_json_file('./pt_model/config.json')
+        >>> model = FlaxBertModel.from_pretrained('./pt_model/pytorch_model.bin', from_pt=True, config=config)
+        ```"""
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_pt = kwargs.pop("from_pt", False)
@@ -592,24 +595,26 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def save_pretrained(self, save_directory: Union[str, os.PathLike], params=None, push_to_hub=False, **kwargs):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
-        `:func:`~transformers.FlaxPreTrainedModel.from_pretrained`` class method
+        `[`~FlaxPreTrainedModel.from_pretrained`]` class method
 
         Arguments:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
+            save_directory (`str` or `os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
-            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it.
 
-                .. warning::
+                <Tip warning={true}>
 
-                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
-                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
-                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
-                    instead.
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with
+                `save_directory`, which requires `save_directory` to be a local clone of the repo you are
+                pushing to if it's an existing folder. Pass along `temp_dir=True` to use a temporary directory
+                instead.
+
+                </Tip>
 
             kwargs:
                 Additional key word arguments passed along to the
-                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
+                [`~file_utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")

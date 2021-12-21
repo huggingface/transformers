@@ -428,20 +428,20 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer
+        ```python
+        >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer
 
-            >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
+        >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> input_ids = tokenizer.encode(text, return_tensors='np')
-            >>> encoder_outputs = model.encode(input_ids)
-
-        """
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> input_ids = tokenizer.encode(text, return_tensors='np')
+        >>> encoder_outputs = model.encode(input_ids)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -505,27 +505,27 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer
-            >>> import jax.numpy as jnp
+        ```python
+        >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer
+        >>> import jax.numpy as jnp
 
-            >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
+        >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> input_ids = tokenizer.encode(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(input_ids)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> input_ids = tokenizer.encode(text, max_length=1024, return_tensors='np')
+        >>> encoder_outputs = model.encode(input_ids)
 
-            >>> decoder_start_token_id = model.config.decoder.bos_token_id
-            >>> decoder_input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder.bos_token_id
+        >>> decoder_input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -631,32 +631,33 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer, GPT2Tokenizer
+        ```python
+        >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer, GPT2Tokenizer
 
-            >>> # load a fine-tuned bert2gpt2 model
-            >>> model = FlaxEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
-            >>> # load input & output tokenizer
-            >>> tokenizer_input = BertTokenizer.from_pretrained('bert-base-cased')
-            >>> tokenizer_output = GPT2Tokenizer.from_pretrained('gpt2')
+        >>> # load a fine-tuned bert2gpt2 model
+        >>> model = FlaxEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
+        >>> # load input & output tokenizer
+        >>> tokenizer_input = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> tokenizer_output = GPT2Tokenizer.from_pretrained('gpt2')
 
-            >>> article = '''Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members
-            ... singing a racist chant. SAE's national chapter suspended the students,
-            ... but University of Oklahoma President David Boren took it a step further,
-            ... saying the university's affiliation with the fraternity is permanently done.'''
+        >>> article = '''Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members
+        ... singing a racist chant. SAE's national chapter suspended the students,
+        ... but University of Oklahoma President David Boren took it a step further,
+        ... saying the university's affiliation with the fraternity is permanently done.'''
 
-            >>> input_ids = tokenizer_input(article, add_special_tokens=True, return_tensors='np').input_ids
+        >>> input_ids = tokenizer_input(article, add_special_tokens=True, return_tensors='np').input_ids
 
-            >>> # use GPT2's eos_token as the pad as well as eos token
-            >>> model.config.eos_token_id = model.config.decoder.eos_token_id
-            >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> # use GPT2's eos_token as the pad as well as eos token
+        >>> model.config.eos_token_id = model.config.decoder.eos_token_id
+        >>> model.config.pad_token_id = model.config.eos_token_id
 
-            >>> sequences = model.generate(input_ids, num_beams=4, max_length=12).sequences
+        >>> sequences = model.generate(input_ids, num_beams=4, max_length=12).sequences
 
-            >>> summary = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)[0]
-            >>> assert summary == "SAS Alpha Epsilon suspended Sigma Alpha Epsilon members"
-        """
+        >>> summary = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)[0]
+        >>> assert summary == "SAS Alpha Epsilon suspended Sigma Alpha Epsilon members"
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

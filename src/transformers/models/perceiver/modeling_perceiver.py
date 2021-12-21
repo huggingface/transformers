@@ -765,83 +765,84 @@ class PerceiverModel(PerceiverPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverFeatureExtractor, PerceiverModel
-            >>> from transformers.models.perceiver.modeling_perceiver import PerceiverTextPreprocessor, PerceiverImagePreprocessor, PerceiverClassificationDecoder
-            >>> import torch
-            >>> import requests
-            >>> from PIL import Image
+        ```python
+        >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverFeatureExtractor, PerceiverModel
+        >>> from transformers.models.perceiver.modeling_perceiver import PerceiverTextPreprocessor, PerceiverImagePreprocessor, PerceiverClassificationDecoder
+        >>> import torch
+        >>> import requests
+        >>> from PIL import Image
 
-            >>> # EXAMPLE 1: using the Perceiver to classify texts
-            >>> # - we define a TextPreprocessor, which can be used to embed tokens
-            >>> # - we define a ClassificationDecoder, which can be used to decode the
-            >>> # final hidden states of the latents to classification logits
-            >>> # using trainable position embeddings
-            >>> config = PerceiverConfig()
-            >>> preprocessor = PerceiverTextPreprocessor(config)
-            >>> decoder = PerceiverClassificationDecoder(config,
-            ...                                          num_channels=config.d_latents,
-            ...                                          trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
-            ...                                          use_query_residual=True)
-            >>> model = PerceiverModel(config, input_preprocessor=preprocessor, decoder=decoder)
+        >>> # EXAMPLE 1: using the Perceiver to classify texts
+        >>> # - we define a TextPreprocessor, which can be used to embed tokens
+        >>> # - we define a ClassificationDecoder, which can be used to decode the
+        >>> # final hidden states of the latents to classification logits
+        >>> # using trainable position embeddings
+        >>> config = PerceiverConfig()
+        >>> preprocessor = PerceiverTextPreprocessor(config)
+        >>> decoder = PerceiverClassificationDecoder(config,
+        ...                                          num_channels=config.d_latents,
+        ...                                          trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
+        ...                                          use_query_residual=True)
+        >>> model = PerceiverModel(config, input_preprocessor=preprocessor, decoder=decoder)
 
-            >>> # you can then do a forward pass as follows:
-            >>> tokenizer = PerceiverTokenizer()
-            >>> text = "hello world"
-            >>> inputs = tokenizer(text, return_tensors="pt").input_ids
+        >>> # you can then do a forward pass as follows:
+        >>> tokenizer = PerceiverTokenizer()
+        >>> text = "hello world"
+        >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 
-            >>> with torch.no_grad():
-            >>>    outputs = model(inputs=inputs)
-            >>> logits = outputs.logits
+        >>> with torch.no_grad():
+        >>>    outputs = model(inputs=inputs)
+        >>> logits = outputs.logits
 
-            >>> # to train, one can train the model using standard cross-entropy:
-            >>> criterion = torch.nn.CrossEntropyLoss()
+        >>> # to train, one can train the model using standard cross-entropy:
+        >>> criterion = torch.nn.CrossEntropyLoss()
 
-            >>> labels = torch.tensor([1])
-            >>> loss = criterion(logits, labels)
+        >>> labels = torch.tensor([1])
+        >>> loss = criterion(logits, labels)
 
-            >>> # EXAMPLE 2: using the Perceiver to classify images
-            >>> # - we define an ImagePreprocessor, which can be used to embed images
-            >>> preprocessor=PerceiverImagePreprocessor(
-            ...              config,
-            ...              prep_type="conv1x1",
-            ...              spatial_downsample=1,
-            ...              out_channels=256,
-            ...              position_encoding_type="trainable",
-            ...              concat_or_add_pos="concat",
-            ...              project_pos_dim=256,
-            ...              trainable_position_encoding_kwargs=dict(num_channels=256, index_dims=config.image_size ** 2,
-            ...              ),
-            ... )
+        >>> # EXAMPLE 2: using the Perceiver to classify images
+        >>> # - we define an ImagePreprocessor, which can be used to embed images
+        >>> preprocessor=PerceiverImagePreprocessor(
+        ...              config,
+        ...              prep_type="conv1x1",
+        ...              spatial_downsample=1,
+        ...              out_channels=256,
+        ...              position_encoding_type="trainable",
+        ...              concat_or_add_pos="concat",
+        ...              project_pos_dim=256,
+        ...              trainable_position_encoding_kwargs=dict(num_channels=256, index_dims=config.image_size ** 2,
+        ...              ),
+        ... )
 
-            >>> model = PerceiverModel(
-            ...         config,
-            ...         input_preprocessor=preprocessor,
-            ...         decoder=PerceiverClassificationDecoder(
-            ...              config,
-            ...              num_channels=config.d_latents,
-            ...              trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
-            ...              use_query_residual=True,
-            ...          ),
-            ... )
+        >>> model = PerceiverModel(
+        ...         config,
+        ...         input_preprocessor=preprocessor,
+        ...         decoder=PerceiverClassificationDecoder(
+        ...              config,
+        ...              num_channels=config.d_latents,
+        ...              trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
+        ...              use_query_residual=True,
+        ...          ),
+        ... )
 
-            >>> # you can then do a forward pass as follows:
-            >>> feature_extractor = PerceiverFeatureExtractor()
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-            >>> inputs = feature_extractor(image, return_tensors="pt").pixel_values
+        >>> # you can then do a forward pass as follows:
+        >>> feature_extractor = PerceiverFeatureExtractor()
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = feature_extractor(image, return_tensors="pt").pixel_values
 
-            >>> with torch.no_grad():
-            >>>    outputs = model(inputs=inputs)
-            >>> logits = outputs.logits
+        >>> with torch.no_grad():
+        >>>    outputs = model(inputs=inputs)
+        >>> logits = outputs.logits
 
-            >>> # to train, one can train the model using standard cross-entropy:
-            >>> criterion = torch.nn.CrossEntropyLoss()
+        >>> # to train, one can train the model using standard cross-entropy:
+        >>> criterion = torch.nn.CrossEntropyLoss()
 
-            >>> labels = torch.tensor([1])
-            >>> loss = criterion(logits, labels)
-        """
+        >>> labels = torch.tensor([1])
+        >>> loss = criterion(logits, labels)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
