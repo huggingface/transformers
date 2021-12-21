@@ -1,24 +1,22 @@
-.. 
-    Copyright 2021 The HuggingFace Team. All rights reserved.
+<!--Copyright 2021 The HuggingFace Team. All rights reserved.
 
-    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-    the License. You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-    specific language governing permissions and limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
 
-ViLT
------------------------------------------------------------------------------------------------------------------------
+# ViLT
 
-Overview
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## Overview
 
-The VilT model was proposed in `ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision
-<https://arxiv.org/abs/2102.03334>`__ by Wonjae Kim, Bokyung Son, Ildoo Kim. ViLT incorporates text embeddings into a
-Vision Transformer (ViT), allowing it to have a minimal design for Vision-and-Language Pre-training (VLP).
+The VilT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://arxiv.org/abs/2102.03334)
+by Wonjae Kim, Bokyung Son, Ildoo Kim. ViLT incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design
+for Vision-and-Language Pre-training (VLP).
 
 The abstract from the paper is the following:
 
@@ -36,66 +34,49 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by `Niels Rogge <https://huggingface.co/nielsr>`__. The original code can be found `here
-<https://github.com/dandelin/ViLT>`__.
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/dandelin/ViLT).
 
-ViltConfig
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ViltConfig
 
-.. autoclass:: transformers.ViltConfig
-    :members:
+[[autodoc]] ViltConfig
+    - all
 
+## ViltFeatureExtractor
 
-ViltFeatureExtractor
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[[autodoc]] ViltFeatureExtractor
+    - __call__
 
-.. autoclass:: transformers.ViltFeatureExtractor
-    :members: __call__
+## ViltProcessor
 
+[[autodoc]] ViltProcessor
+    - __call__
 
-ViltProcessor
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ViltModel
 
-.. autoclass:: transformers.ViltProcessor
-    :members: __call__
+[[autodoc]] ViltModel
+    - forward
 
+## ViltForPreTraining
 
-ViltModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[[autodoc]] ViltForPreTraining
+    - forward
 
-.. autoclass:: transformers.ViltModel
-    :members: forward
+## ViltForMaskedLM
 
+[[autodoc]] ViltForMaskedLM
+    - forward
 
-ViltForPreTraining
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## ViltForVisualQuestionAnswering
 
-.. autoclass:: transformers.ViltForPreTraining
-    :members: forward
+[[autodoc]] ViltForVisualQuestionAnswering
+    - forward
 
+## ViltForNaturalLanguageVisualReasoning
 
-ViltForMaskedLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[[autodoc]] ViltForNaturalLanguageVisualReasoning
+    - forward
 
-.. autoclass:: transformers.ViltForMaskedLM
-    :members: forward
+## ViltForImageRetrievalTextRetrieval
 
-
-ViltForVisualQuestionAnswering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.ViltForVisualQuestionAnswering
-    :members: forward
-
-ViltForNaturalLanguageVisualReasoning
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.ViltForNaturalLanguageVisualReasoning
-    :members: forward
-
-
-ViltForImageRetrievalTextRetrieval
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.ViltForImageRetrievalTextRetrieval
-    :members: forward
+[[autodoc]] ViltForImageRetrievalTextRetrieval
+    - forward
