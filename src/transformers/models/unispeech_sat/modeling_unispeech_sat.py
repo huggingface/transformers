@@ -1309,8 +1309,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         >>> # for contrastive loss training model should be put into train mode
         >>> model.train()
         >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

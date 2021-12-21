@@ -554,8 +554,7 @@ class TFRagModel(TFRagPreTrainedModel):
         >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf")
         >>> input_ids = input_dict["input_ids"]
         >>> outputs = model(input_ids)
-        ```
-"""
+        ```"""
         assert (
             "decoder_cached_states" not in kwargs
         ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py

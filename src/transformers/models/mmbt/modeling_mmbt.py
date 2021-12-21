@@ -215,8 +215,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         transformer = BertModel.from_pretrained('bert-base-uncased')
         encoder = ImageEncoder(args)
         mmbt = MMBTModel(config, transformer, encoder)
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

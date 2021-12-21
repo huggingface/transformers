@@ -337,8 +337,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         vision_outputs = self.vision_model(

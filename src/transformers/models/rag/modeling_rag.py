@@ -557,8 +557,7 @@ class RagModel(RagPreTrainedModel):
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
         >>> outputs = model(input_ids=inputs["input_ids"])
-        ```
-"""
+        ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

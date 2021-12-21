@@ -1093,8 +1093,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
         >>> scores = outputs[0]
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

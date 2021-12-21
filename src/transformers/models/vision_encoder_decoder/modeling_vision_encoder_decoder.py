@@ -439,8 +439,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         >>> # inference (generation)
         >>> generated_ids = model.generate(pixel_values)
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}

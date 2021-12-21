@@ -1614,8 +1614,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
         >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
         >>> assert logits[0][0] < logits[0][1] # the next sentence was random
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

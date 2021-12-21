@@ -454,8 +454,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         >>> # inference (generation)
         >>> generated = model.generate(input_values)
         >>> translation = processor.batch_decode(generated)
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}

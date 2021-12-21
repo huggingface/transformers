@@ -469,8 +469,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         >>> # generation
         >>> generated = model.generate(input_ids)
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}

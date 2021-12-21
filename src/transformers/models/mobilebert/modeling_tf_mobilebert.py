@@ -1042,8 +1042,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
         >>> prediction_scores, seq_relationship_scores = outputs[:2]
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1257,8 +1256,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
 
         >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

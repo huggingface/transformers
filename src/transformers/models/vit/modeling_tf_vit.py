@@ -690,8 +690,7 @@ class TFViTModel(TFViTPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

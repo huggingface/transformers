@@ -1024,8 +1024,7 @@ class TFTapasModel(TFTapasPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

@@ -717,8 +717,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output # pooled (EOS token) states
-        ```
-"""
+        ```"""
         return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -830,8 +829,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output # pooled CLS states
-        ```
-"""
+        ```"""
         return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -990,8 +988,7 @@ class CLIPModel(CLIPPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,

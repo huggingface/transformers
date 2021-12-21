@@ -975,8 +975,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

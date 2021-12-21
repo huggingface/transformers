@@ -1609,8 +1609,7 @@ class LongformerModel(LongformerPreTrainedModel):
         >>> outputs = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)
         >>> sequence_output = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

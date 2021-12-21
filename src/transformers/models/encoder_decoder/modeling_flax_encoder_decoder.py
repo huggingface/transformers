@@ -441,8 +441,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> text = "My friends are cool but they eat too many carbs."
         >>> input_ids = tokenizer.encode(text, return_tensors='np')
         >>> encoder_outputs = model.encode(input_ids)
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -526,8 +525,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -659,8 +657,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         >>> summary = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)[0]
         >>> assert summary == "SAS Alpha Epsilon suspended Sigma Alpha Epsilon members"
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

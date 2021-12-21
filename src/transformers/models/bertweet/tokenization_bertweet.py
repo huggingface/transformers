@@ -695,8 +695,7 @@ class TweetTokenizer:
     >>> s1 = '@remy: This is waaaaayyyy too much for you!!!!!!'
     >>> tknzr.tokenize(s1)
     [':', 'This', 'is', 'waaayyy', 'too', 'much', 'for', 'you', '!', '!', '!']
-    ```
-"""
+    ```"""
 
     def __init__(self, preserve_case=True, reduce_len=False, strip_handles=False):
         self.preserve_case = preserve_case

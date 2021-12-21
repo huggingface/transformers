@@ -2384,8 +2384,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         >>> logits = model(inputs=batch.input_ids).logits
         >>> probs = tf.nn.softmax(logits[0])
         >>> # probs[5] is associated with the mask token
-        ```
-"""
+        ```"""
 
         inputs = input_processing(
             func=self.call,

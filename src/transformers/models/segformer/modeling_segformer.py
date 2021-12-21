@@ -501,8 +501,7 @@ class SegformerModel(SegformerPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> sequence_output = outputs.last_hidden_state
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

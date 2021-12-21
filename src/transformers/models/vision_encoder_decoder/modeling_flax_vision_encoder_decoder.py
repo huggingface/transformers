@@ -412,8 +412,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -496,8 +495,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -629,8 +627,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> sequences = model.generate(pixel_values, num_beams=4, max_length=12).sequences
 
         >>> captions = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

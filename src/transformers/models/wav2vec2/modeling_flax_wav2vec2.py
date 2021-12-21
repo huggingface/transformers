@@ -1116,8 +1116,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
         ```python
 
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

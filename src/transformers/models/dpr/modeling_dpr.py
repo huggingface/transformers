@@ -471,8 +471,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         >>> model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
         >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
         >>> embeddings = model(input_ids).pooler_output
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

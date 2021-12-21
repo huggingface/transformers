@@ -1186,8 +1186,7 @@ class TFT5Model(TFT5PreTrainedModel):
         >>> # forward pass
         >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
             warnings.warn(_HEAD_MASK_WARNING_MSG, FutureWarning)
@@ -1638,8 +1637,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
         >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
         >>> outputs = model(input_ids)
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

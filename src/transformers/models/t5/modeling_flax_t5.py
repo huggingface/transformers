@@ -1065,8 +1065,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors='np')
         >>> encoder_outputs = model.encode(**inputs)
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1134,8 +1133,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1500,8 +1498,7 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
 
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

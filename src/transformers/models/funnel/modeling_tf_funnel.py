@@ -1278,8 +1278,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors= "tf")
         >>> logits = model(inputs).logits
-        ```
-"""
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

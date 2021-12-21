@@ -284,8 +284,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         ```python
         >>> from transformers import TFEncoderDecoderModel
         >>> model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
-        ```
-"""
+        ```"""
 
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
@@ -508,8 +507,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
         >>> # generation
         >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}

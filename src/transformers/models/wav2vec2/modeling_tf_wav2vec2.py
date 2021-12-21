@@ -1416,8 +1416,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
         >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
         >>> hidden_states = model(input_values).last_hidden_state
-        ```
-"""
+        ```"""
 
         inputs = input_values_processing(
             func=self.call,

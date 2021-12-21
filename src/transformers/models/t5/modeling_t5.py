@@ -1355,8 +1355,7 @@ class T5Model(T5PreTrainedModel):
         >>> # forward pass
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1803,8 +1802,7 @@ class T5EncoderModel(T5PreTrainedModel):
         >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(

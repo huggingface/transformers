@@ -503,8 +503,7 @@ class DeiTModel(DeiTPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
-        ```
-"""
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -750,8 +749,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deit(
