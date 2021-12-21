@@ -28,7 +28,7 @@ from datasets import load_dataset
 from transformers import PerceiverConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -756,6 +756,13 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                             )
 
                     loss.backward()
+
+    @require_torch_multi_gpu
+    @unittest.skip(
+        reason="Perceiver does not work with data parallel (DP) because of a bug in PyTorch: https://github.com/pytorch/pytorch/issues/36035"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
     def test_save_load_fast_init_from_base(self):
