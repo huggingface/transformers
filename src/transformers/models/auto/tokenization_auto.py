@@ -325,8 +325,7 @@ def get_tokenizer_config(
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
-    ```
-"""
+    ```"""
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -446,8 +445,7 @@ class AutoTokenizer:
 
         >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
         >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
-        ```
-"""
+        ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 

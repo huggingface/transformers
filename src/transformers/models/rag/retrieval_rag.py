@@ -362,8 +362,7 @@ class RagRetriever:
     >>> # To load the legacy index built originally for Rag's paper
     >>> from transformers import RagRetriever
     >>> retriever = RagRetriever.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', index_name='legacy')
-    ```
-"""
+    ```"""
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
         self._init_retrieval = init_retrieval

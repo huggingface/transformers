@@ -625,8 +625,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     [`PreTrainedTokenizer`] or a [`PreTrainedTokenizerFast`] with the
     argument `return_special_tokens_mask=True`.
 
-    </Tip>
-"""
+    </Tip>"""
 
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
@@ -854,8 +853,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     that do not adhere to this scheme, this collator will produce an output that is roughly equivalent to
     [`.DataCollatorForLanguageModeling`].
 
-    </Tip>
-"""
+    </Tip>"""
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         if isinstance(examples[0], (dict, BatchEncoding)):

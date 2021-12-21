@@ -1200,22 +1200,22 @@ class TrainingArguments:
     @contextlib.contextmanager
     def main_process_first(self, local=True, desc="work"):
         """
-            A context manager for torch distributed environment where on needs to do something on the main process,
-            while blocking replicas, and when it's finished releasing the replicas.
+        A context manager for torch distributed environment where on needs to do something on the main process,
+        while blocking replicas, and when it's finished releasing the replicas.
 
-            One such use is for `datasets`'s `map` feature which to be efficient should be run once on the main
-            process, which upon completion saves a cached version of results and which then automatically gets loaded
-            by the replicas.
+        One such use is for `datasets`'s `map` feature which to be efficient should be run once on the main
+        process, which upon completion saves a cached version of results and which then automatically gets loaded
+        by the replicas.
 
-            Args:
-                local (`bool`, *optional*, defaults to `True`):
-                    if `True` first means process of rank 0 of each node if `False` first means process of rank 0
-                    of node rank 0 In multi-node environment with a shared filesystem you most likely will want to use
-                    `local=False` so that only the main process of the first node will do the processing. If however, the
-                    filesystem is not shared, then the main process of each node will need to do the processing, which is
-                    the default behavior.
-                desc (`str`, *optional*, defaults to `"work"`):
-                    a work description to be used in debug logs
+        Args:
+            local (`bool`, *optional*, defaults to `True`):
+                if `True` first means process of rank 0 of each node if `False` first means process of rank 0
+                of node rank 0 In multi-node environment with a shared filesystem you most likely will want to use
+                `local=False` so that only the main process of the first node will do the processing. If however, the
+                filesystem is not shared, then the main process of each node will need to do the processing, which is
+                the default behavior.
+            desc (`str`, *optional*, defaults to `"work"`):
+                a work description to be used in debug logs
 
         """
         if is_torch_available() and self.world_size > 1:

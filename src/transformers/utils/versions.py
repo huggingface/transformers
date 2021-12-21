@@ -66,8 +66,7 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
     ```python
     require_version("pandas>1.1.2")
     require_version("numpy>1.18.5", "this is important to have for whatever reason")
-    ```
-"""
+    ```"""
 
     hint = f"\n{hint}" if hint is not None else ""
 

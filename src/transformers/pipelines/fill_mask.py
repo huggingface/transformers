@@ -48,8 +48,7 @@ class FillMaskPipeline(Pipeline):
     masks. The returned values are raw model output, and correspond to disjoint probabilities where one might
     expect joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
 
-    </Tip>
-"""
+    </Tip>"""
 
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
         if self.framework == "tf":

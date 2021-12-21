@@ -54,8 +54,7 @@ class Conversation:
     conversation.append_response("The Big lebowski.")
 
     conversation.add_user_input("Is it good?")
-    ```
-"""
+    ```"""
 
     def __init__(
         self, text: str = None, conversation_id: uuid.UUID = None, past_user_inputs=None, generated_responses=None
@@ -190,8 +189,7 @@ class ConversationalPipeline(Pipeline):
     conversation_2.add_user_input("What is the genre of this book?")
 
     conversational_pipeline([conversation_1, conversation_2])
-    ```
-"""
+    ```"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

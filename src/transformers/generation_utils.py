@@ -971,8 +971,7 @@ class GenerationMixin:
         >>> # generate sequences without allowing bad_words to be generated
         >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
         >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
-        ```
-"""
+        ```"""
         # 1. Set generation parameters if not already defined
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         num_beams = num_beams if num_beams is not None else self.config.num_beams
@@ -1349,8 +1348,7 @@ class GenerationMixin:
         >>> outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
-        ```
-"""
+        ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -1587,8 +1585,7 @@ class GenerationMixin:
         >>> outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
-        ```
-"""
+        ```"""
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -1842,8 +1839,7 @@ class GenerationMixin:
         >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
-        ```
-"""
+        ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2149,8 +2145,7 @@ class GenerationMixin:
         ... )
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
-        ```
-"""
+        ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2446,8 +2441,7 @@ class GenerationMixin:
         >>> outputs = model.group_beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
-        ```
-"""
+        ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()

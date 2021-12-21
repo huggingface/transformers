@@ -575,8 +575,7 @@ class AutoConfig:
         True
         >>> config.unused_kwargs
         {'foo': False}
-        ```
-"""
+        ```"""
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", False)

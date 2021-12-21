@@ -499,8 +499,7 @@ class PretrainedConfig(PushToHubMixin):
                                                    foo=False, return_unused_kwargs=True)
         assert config.output_attentions == True
         assert unused_kwargs == {'foo': False}
-        ```
-"""
+        ```"""
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warn(

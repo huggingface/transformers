@@ -1227,8 +1227,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
         >>> model = BertModel.from_pretrained('bert-base-uncased', from_flax=True)
-        ```
-"""
+        ```"""
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
@@ -2332,8 +2331,7 @@ def apply_chunking_to_forward(
     # implement a chunked forward function
     def forward(self, hidden_states):
         return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
-    ```
-"""
+    ```"""
 
     assert len(input_tensors) > 0, f"{input_tensors} has to be a tuple/list of tensors"
 

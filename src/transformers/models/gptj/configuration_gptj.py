@@ -81,8 +81,7 @@ class GPTJConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "gptj"
     attribute_map = {
         "max_position_embeddings": "n_positions",

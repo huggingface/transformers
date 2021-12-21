@@ -64,8 +64,7 @@ class LongformerConfig(RobertaConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "longformer"
 
     def __init__(self, attention_window: Union[List[int], int] = 512, sep_token_id: int = 2, **kwargs):

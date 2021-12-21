@@ -84,8 +84,7 @@ class FNetConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "fnet"
 
     def __init__(

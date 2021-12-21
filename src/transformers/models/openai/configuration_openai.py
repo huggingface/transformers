@@ -111,8 +111,7 @@ class OpenAIGPTConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
 
     model_type = "openai-gpt"
     attribute_map = {

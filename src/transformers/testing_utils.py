@@ -730,8 +730,7 @@ class CaptureStd:
     with CaptureStd(replay=False) as cs:
         print("Secret message")
     assert "message" in cs.out
-    ```
-"""
+    ```"""
 
     def __init__(self, out=True, err=True, replay=True):
 
@@ -969,8 +968,7 @@ class TestCasePlus(unittest.TestCase):
     ```python
     def test_whatever(self):
         env = self.get_env()
-    ```
-"""
+    ```"""
 
     def setUp(self):
         # get_auto_remove_tmp_dir feature:

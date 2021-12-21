@@ -122,8 +122,7 @@ class FSMTConfig(PretrainedConfig):
 
     >>> config = FSMTConfig.from_pretrained('facebook/wmt19-en-ru')
     >>> model = FSMTModel(config)
-    ```
-"""
+    ```"""
     model_type = "fsmt"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 

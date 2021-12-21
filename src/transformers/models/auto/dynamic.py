@@ -176,8 +176,7 @@ def get_class_from_dynamic_module(
     # Download module *modeling.py* from huggingface.co and cache then extract the class *MyBertModel* from this
     # module.
     cls = get_class_from_dynamic_module("sgugger/my-bert-model", "modeling.py", "MyBertModel")
-    ```
-"""
+    ```"""
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True

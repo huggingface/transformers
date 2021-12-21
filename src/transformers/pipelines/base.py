@@ -718,8 +718,7 @@ if is_torch_available():
                 for i in loader_batch_size:
                     item = items[i]
                     yield infer(item, **params)
-            ```
-"""
+            ```"""
             self.loader = loader
             self.infer = infer
             self.params = params

@@ -531,8 +531,7 @@ def symbolic_trace(
         batch_size=1,
         sequence_length=128,
     )
-    ```
-"""
+    ```"""
     if input_names is None:
         input_names = model.dummy_inputs.keys()
 

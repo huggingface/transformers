@@ -81,8 +81,7 @@ class DeiTConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "deit"
 
     def __init__(

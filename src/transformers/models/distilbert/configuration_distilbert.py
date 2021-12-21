@@ -91,8 +91,7 @@ class DistilBertConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "distilbert"
     attribute_map = {
         "hidden_size": "dim",

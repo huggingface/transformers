@@ -452,8 +452,7 @@ class Adafactor(Optimizer):
         scale_parameter=False,
         warmup_init=False
     )
-    ```
-"""
+    ```"""
 
     def __init__(
         self,

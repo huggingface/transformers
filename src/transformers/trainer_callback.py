@@ -206,8 +206,7 @@ class TrainerCallback:
             _ = logs.pop("total_flos", None)
             if state.is_local_process_zero:
                 print(logs)
-    ```
-"""
+    ```"""
 
     def on_init_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """

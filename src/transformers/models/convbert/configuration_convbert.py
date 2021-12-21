@@ -85,8 +85,7 @@ class ConvBertConfig(PretrainedConfig):
     >>> model = ConvBertModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "convbert"
 
     def __init__(

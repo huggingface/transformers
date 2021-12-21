@@ -361,8 +361,7 @@ def squad_convert_examples_to_features(
         max_query_length=args.max_query_length,
         is_training=not evaluate,
     )
-    ```
-"""
+    ```"""
     # Defining helper methods
     features = []
 
@@ -593,8 +592,7 @@ class SquadProcessor(DataProcessor):
 
         >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)
         >>> evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
-        ```
-"""
+        ```"""
 
         if evaluate:
             dataset = dataset["validation"]

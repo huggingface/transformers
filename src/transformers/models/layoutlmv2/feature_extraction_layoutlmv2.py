@@ -110,8 +110,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             LayoutLMv2FeatureExtractor uses Google's Tesseract OCR engine under the hood.
 
-            </Tip>
-"""
+            </Tip>"""
 
     model_input_names = ["pixel_values"]
 
@@ -174,8 +173,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         >>> encoding = feature_extractor(image, return_tensors="pt")
         >>> print(encoding.keys())
         >>> # dict_keys(['pixel_values'])
-        ```
-"""
+        ```"""
 
         # Input type checking for clearer error
         valid_images = False

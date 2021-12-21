@@ -59,8 +59,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
             passed for batched inference.
 
-            </Tip>
-"""
+            </Tip>"""
 
     model_input_names = ["input_values", "attention_mask"]
 

@@ -60,8 +60,7 @@ class RobertaConfig(BertConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "roberta"
 
     def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, **kwargs):

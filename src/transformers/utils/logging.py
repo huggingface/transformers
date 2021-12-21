@@ -137,8 +137,7 @@ def get_verbosity() -> int:
     - 20: `transformers.logging.INFO`
     - 10: `transformers.logging.DEBUG`
 
-    </Tip>
-"""
+    </Tip>"""
 
     _configure_library_root_logger()
     return _get_library_root_logger().getEffectiveLevel()

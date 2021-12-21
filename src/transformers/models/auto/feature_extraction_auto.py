@@ -144,8 +144,7 @@ class AutoFeatureExtractor:
 
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained('./test/saved_model/')
-        ```
-"""
+        ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 

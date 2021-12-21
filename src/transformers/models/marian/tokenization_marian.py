@@ -109,8 +109,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     >>> inputs["labels"] = labels["input_ids"]
     # keys  [input_ids, attention_mask, labels].
     >>> outputs = model(**inputs) should work
-    ```
-"""
+    ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

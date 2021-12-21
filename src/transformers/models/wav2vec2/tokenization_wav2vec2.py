@@ -305,8 +305,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         print('We have added', num_added_toks, 'tokens')
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
-        ```
-"""
+        ```"""
         new_tokens = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []

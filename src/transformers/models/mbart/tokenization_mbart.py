@@ -89,8 +89,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
     >>> inputs["labels"] = labels["input_ids"]
-    ```
-"""
+    ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES

@@ -139,8 +139,7 @@ class TapasConfig(PretrainedConfig):
     >>> model = TapasModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
 
     model_type = "tapas"
 

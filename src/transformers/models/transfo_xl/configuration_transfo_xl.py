@@ -103,8 +103,7 @@ class TransfoXLConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
 
     model_type = "transfo-xl"
     keys_to_ignore_at_inference = ["mems"]

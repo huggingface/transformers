@@ -212,8 +212,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
         >>> mask = traverse_util.unflatten_dict(mask)
         >>> model.params = model.to_bf16(model.params, mask)
-        ```
-"""
+        ```"""
         return self._cast_floating_to(params, jnp.bfloat16, mask)
 
     def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
@@ -240,8 +239,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> model.params = model.to_f16(model.params)
         >>> # now cast back to fp32
         >>> model.params = model.to_fp32(model.params)
-        ```
-"""
+        ```"""
         return self._cast_floating_to(params, jnp.float32, mask)
 
     def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
@@ -275,8 +273,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
         >>> mask = traverse_util.unflatten_dict(mask)
         >>> model.params = model.to_fp16(model.params, mask)
-        ```
-"""
+        ```"""
         return self._cast_floating_to(params, jnp.float16, mask)
 
     @classmethod
@@ -388,8 +385,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> # Loading from a PyTorch checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
         >>> config = BertConfig.from_json_file('./pt_model/config.json')
         >>> model = FlaxBertModel.from_pretrained('./pt_model/pytorch_model.bin', from_pt=True, config=config)
-        ```
-"""
+        ```"""
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_pt = kwargs.pop("from_pt", False)

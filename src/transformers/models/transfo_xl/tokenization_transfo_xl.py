@@ -423,8 +423,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
         >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
         ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
-        ```
-"""
+        ```"""
         text = self.moses_punct_norm(text)
         text = self.moses_tokenize(text)
         text = tokenize_numbers(text)

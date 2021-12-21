@@ -95,8 +95,7 @@ class NotebookProgressBar:
         pbar.update(val)
         time.sleep(0.07)
     pbar.update(100)
-    ```
-"""
+    ```"""
 
     warmup = 5
     update_every = 0.2

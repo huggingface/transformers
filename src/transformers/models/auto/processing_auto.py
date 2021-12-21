@@ -137,8 +137,7 @@ class AutoProcessor:
 
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> processor = AutoProcessor.from_pretrained('./test/saved_model/')
-        ```
-"""
+        ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 

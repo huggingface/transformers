@@ -172,8 +172,7 @@ class ModelCard:
         modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using *save_pretrained('./test/saved_model/')*
         modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
         modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
-        ```
-"""
+        ```"""
         # This imports every model so let's do it dynamically here.
         from transformers.models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 

@@ -282,8 +282,7 @@ class FeatureExtractionMixin:
                                                            foo=False, return_unused_kwargs=True)
         assert feature_extractor.return_attention_mask is False
         assert unused_kwargs == {'foo': False}
-        ```
-"""
+        ```"""
         feature_extractor_dict, kwargs = cls.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
 
         return cls.from_dict(feature_extractor_dict, **kwargs)

@@ -81,8 +81,7 @@ class QDQBertConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "qdqbert"
 
     def __init__(

@@ -101,8 +101,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
     >>> with tokenizer.as_target_tokenizer():
     ...    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
     >>> # model(**model_inputs, labels=labels) should work
-    ```
-"""
+    ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
