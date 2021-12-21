@@ -16,7 +16,7 @@ limitations under the License.
 
 # Installation
 
-Install 🤗 Transformers for whichever deep learning library you're working with, setup your cache, and configure 🤗 Transformers to run offline.
+Install 🤗 Transformers for whichever deep learning library you're working with, setup your cache, and optionally configure 🤗 Transformers to run offline.
 
 🤗 Transformers is tested on Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, and Flax. Follow the installation instructions below for the deep learning library you are using:
 
@@ -66,16 +66,21 @@ pip install transformers[tf-cpu]
 pip install transformers[flax]
 ```
 
-Check if 🤗 Transformers has been properly installed by running the following command. It will download a pretrained model and print out a label and score:
+Check if 🤗 Transformers has been properly installed by running the following command. It will download a pretrained model:
 
 ```bash
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('we love you'))"
+```
+
+Then print out a label and score:
+
+```bash
 [{'label': 'POSITIVE', 'score': 0.9998704791069031}]
 ```
 
 ## Installation from source
 
-Install `transformers` from source with the following command:
+Install 🤗 Transformers from source with the following command:
 
 ```bash
 pip install git+https://github.com/huggingface/transformers
@@ -94,7 +99,7 @@ python -c "from transformers import pipeline; print(pipeline('sentiment-analysis
 You will need an editable install if you'd like to:
 
 * Use the `master` version of the source code.
-* Contribute to `transformers` and need to test changes in the code.
+* Contribute to 🤗 Transformers and need to test changes in the code.
 
 Clone the repository and install 🤗 Transformers with the following command:
 
@@ -110,14 +115,14 @@ This command links the folder you cloned the repository to and your Python libra
 You must keep the `transformers` folder if you want to keep using the library.
 </Tip>
 
-Now you can easily update your clone to the latest version of `transformers` with the following commands:
+Now you can easily update your clone to the latest version of 🤗 Transformers with the following commands:
 
 ```bash
 cd ~/transformers/
 git pull
 ```
 
-Your Python environment will find the `master` version of `transformers` on the next run.
+Your Python environment will find the `master` version of 🤗 Transformers on the next run.
 
 ## Installation with conda
 
@@ -127,19 +132,20 @@ Install from the conda channel `huggingface`:
 conda install -c huggingface transformers
 ```
 
-# Cache setup
+## Cache setup
 
 Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/transformers/`. This is the default directory given by the shell environment variable `TRANSFORMERS_CACHE`. You can change the shell environment variables shown below - in order of priority - to specify a different cache directory:
 
-1. Shell environment variable: `HF_HOME`.
-2. Shell environment variable: `XDG_CACHE_HOME` + `/huggingface/`.
-3. Shell environment variable (default): `TRANSFORMERS_CACHE`.
+1. Shell environment variable: `TRANSFORMERS_CACHE`.
+2. Shell environment variable: `HF_HOME`.
+3. Shell environment variable: `XDG_CACHE_HOME` + `/huggingface/`.
+4. Shell environment variable (default): `TRANSFORMERS_CACHE`.
 
 <Tip>
 🤗 Transformers will use the shell environment variables `PYTORCH_TRANSFORMERS_CACHE` or `PYTORCH_PRETRAINED_BERT_CACHE` if you are coming from an earlier iteration of this library unless you specify the shell environment variable `TRANSFORMERS_CACHE`.
 </Tip>
 
-# Offline mode
+## Offline mode
 
 🤗 Transformers is able to run in a firewalled or offline environment by only using local files. Set the environment variable `TRANSFORMERS_OFFLINE=1` to enable this behavior.
 
@@ -162,13 +168,13 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path t5-s
 
 This should run the script without hanging or waiting to timeout.
 
-## Fetch models and tokenizers to use offline
+### Fetch models and tokenizers to use offline
 
 Another option for using 🤗 Transformers offline is to download the files ahead of time, and then point to their local path when you need to use them offline. There are two ways to do this:
 
 * Download a file through the user interface on the [Model Hub](https://huggingface.co/models) by clicking on the ↓ icon.
 
-    ![download-icon](/imgs/download.png)
+    ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/download-icon.png)
 
 * Programmatically download files with the [`huggingface_hub`](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) library:
 
@@ -182,6 +188,7 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 
         ```python
         >>> from huggingface_hub import hf_hub_download
+
         >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path")
         ```
 
@@ -189,6 +196,7 @@ Once your file is downloaded and locally cached, specify it's local path to load
 
 ```python
 >>> from transformers import AutoConfig
+
 >>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
 ```
 

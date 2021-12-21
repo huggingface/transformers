@@ -5,6 +5,10 @@
     title: Installation
   - local: quicktour
     title: Quick tour
+  - local: philosophy
+    title: Philosophy
+  - local: glossary
+    title: Glossary
   title: Get started
 - sections:
   - local: task_summary

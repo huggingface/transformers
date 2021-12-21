@@ -25,17 +25,27 @@ Our library supports seamless integration between three of the most popular deep
 
 Each Transformer architecture is defined in a standalone Python module so they can be easily customized for research and experiments.
 
-# Contents
+## If you are looking for custom support from the Hugging Face team
+
+<a target="_blank" href="https://huggingface.co/support">
+<img alt="HuggingFace Expert Acceleration Program" src="https://huggingface.co/front/thumbnails/support.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+</a><br>
+
+## Contents
 
 The documentation is organized in five parts:
 
-- Get Started will introduce you to 🤗 Transformers and showcase it's ease-of-use and high performance. You'll install our library, use the `pipeline` API to quickly use a pretrained model for inference, and then preprocess and fine-tune your own model.
-- Tutorials are a good starting point if you've never used 🤗 Transformers before. Learn from the ground up how to preprocess text, image or audio data, initialize a pretrained model with the `AutoClass` API, fine-tune a model with our `Trainer` or deep learning library of your choice, enable distributed training with [Accelerate](https://huggingface.co/docs/accelerate/), and share a model to the Hub.
-- Guides will show you how to apply your skills to solve real-world problems such as fine-tuning models for some of the most common downstream tasks, using multi-lingual models, and optimizing performance for larger models. If you are interested in contributing to our community and participating in open-source science, we will also show you how to add a model or pipeline to 🤗 Transformers.
-- Read the Concept guides to gain a deeper understanding about the 🤗 Transformers design philosophy, different kinds of Transformer models, types of tasks 🤗 Transformers can be applied to, and strategies for training increasingly large models.
-- Our API Reference describes the classes and functions for our main classes, models, and internal helpers.
+- **GET STARTED** contains a quick tour, the installation instructions and some useful information about our philosophy and a glossary.
+- **USING 🤗 TRANSFORMERS** contains general tutorials on how to use the library.
+- **ADVANCED GUIDES** contains more advanced guides that are more specific to a given script or part of the library.
+- **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general research in transformers model
+- **API** contains the documentation of each public class and function, grouped in:
 
-# Supported models
+  - **MAIN CLASSES** for the main classes exposing the important APIs of the library.
+  - **MODELS** for the classes and functions related to each model implemented in the library.
+  - **INTERNAL HELPERS** for the classes and functions we use internally.
+
+## Supported models
 
 <!--This list is updated automatically from the README with _make fix-copies_. Do not update manually! -->
 
@@ -127,7 +137,7 @@ The documentation is organized in five parts:
 1. **[XLSR-Wav2Vec2](model_doc/xlsr_wav2vec2)** (from Facebook AI) released with the paper [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://arxiv.org/abs/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
 
-# Supported frameworks
+## Supported frameworks
 
 The table below represents the current support in the library for each of those models, whether they have a Python
 tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers library, whether they have support in Jax (via

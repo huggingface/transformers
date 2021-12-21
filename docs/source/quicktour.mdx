@@ -21,7 +21,7 @@ All code examples presented in the documentation have a toggle on the top left f
 not, the code is expected to work for both backends without any change.
 </Tip>
 
-# Pipeline
+## Pipeline
 
 [`pipeline`] is the easiest way to use a pretrained model on a given task.
 
@@ -52,7 +52,7 @@ The [`pipeline`] supports many common tasks out-of-the-box:
 For more details about the [`pipeline`] and associated tasks, refer to the documentation [here](./main_classes/pipelines)
 </Tip>
 
-## Using the pipeline
+### Using the pipeline
 
 In the following example, we will look at how to use the [`pipeline`] for sentiment analysis.
 
@@ -66,21 +66,22 @@ pip install tensorflow
 
 Import the [`pipeline`] with the task you want to complete:
 
-```python
+```py
 >>> from transformers import pipeline
+
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
 The pipeline downloads and caches a default [pretrained model](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) and tokenizer for sentiment analysis. Now you can use the `classifier` on your target text:
 
-```python
+```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library."")
 [{"label": "POSITIVE", "score": 0.9998}]
 ```
 
 For more than one sentence, pass a list of sentences to the [`pipeline`] which returns a list of dictionaries:
 
-```python
+```py
 >>> results = classifier(["We are very happy to show you the 🤗 Transformers library.",
 ...            "We hope you don't hate it."])
 >>> for result in results:
@@ -95,55 +96,57 @@ The [`pipeline`] can also iterate over an entire dataset. Start by installing th
 pip install datasets 
 ```
 
-Create a [`pipeline`] with the task you want to solve for, and the model you want to use:
+Create a [`pipeline`] with the task you want to solve for, and the model you want to use. Setting the `device` argument to `0` allows you to place the tensors on a CUDA device:
 
-```python
+```py
 >>> from transformers import pipeline
->>> pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
+
+>>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
 ```
 
-Load the dataset you want to iterate over:
+Load the dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html#) for more details) you want to iterate over:
 
-```python
+```py
 >>> import datasets
+
 >>> dataset = datasets.load_dataset("superb", name="asr", split="test")
 ```
 
-Now iterate over the dataset with the pipeline. This should be just as fast as running a custom loop on a GPU.
+Now iterate over the dataset with the pipeline. `KeyDataset` retrieves the item in the dictionary returned by the dataset:
 
-```python
-# KeyDataset (only _pt_) will simply return the item in the dict returned by the dataset item
-# as we're not interested in the _target_ part of the dataset.
+```py
 >>> for out in tqdm.tqdm(pipe(KeyDataset(dataset, "file"))):
-...    print(out)
-...    # {"text": "HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE"}
-...    # {"text": ....}
-...    # ....
+        print(out)
+        # {"text": "HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE"}
+        # {"text": ....}
+        # ....
 ```
 
-## Use another model and tokenizer in the pipeline
+### Use another model and tokenizer in the pipeline
 
 The [`pipeline`] can accommodate any model from the Model Hub, making it easy to adapt the [`pipeline`] for other use-cases. For example, if you'd like a model capable of handling French text, use the tags on the [Model Hub](https://huggingface.co/models) to filter for an appropriate model. In this case, we will use a multilingual [BERT model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) fine-tuned for sentiment analysis:
 
-```python
+```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
 Use the `AutoClasses` to load the pretrained model and it's associated tokenizer (more on the `AutoClasses` below):
 
-```python
+```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ===PT-TF-SPLIT===
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+
 >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
 Then you can specify the model and tokenizer, and apply the `classifier` on your target text:
 
-```python
+```py
 >>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
 >>> classifier("Nous sommes très heureux de vous présenter la bibliothèque 🤗 Transformers.")
 [{"label": "5 stars", "score": 0.7272651791572571}]
@@ -151,7 +154,7 @@ Then you can specify the model and tokenizer, and apply the `classifier` on your
 
 If you can't find a model for your use-case, you will need to fine-tune a pretrained model on your data. Take a look at our [fine-tuning tutorial](./training) to learn how. Finally, after you've fine-tuned your pretrained model, please consider sharing it (see tutorial [here](./model_sharing)) with the community on the Model Hub to democratize NLP for everyone! 🤗
 
-# AutoClasses
+## AutoClasses
 
 <Youtube id="AhChOFRegn4"/>
 
@@ -159,18 +162,20 @@ Under the hood, the [`AutoTokenizer`] and [`AutoModel`] classes work together to
 
 Let's return to our example and see how we can use the `AutoClasses` to replicate the results of the [`pipeline`].
 
-## Using the AutoTokenizer
+### Using the AutoTokenizer
 
 A tokenizer is responsible for preprocessing text in a way that is understandable by the model. First, the tokenizer will split a given text into words called *tokens*. There are multiple rules that govern the tokenization process, including how to split a word and at what level (learn more [here](./tokenizer_summary)). The most important thing to remember though is you need to instantiate the tokenizer with the name of the model to ensure you're using the same tokenization rules a model was pretrained with.
 
 Load a tokenizer with [`AutoTokenizer`]:
 
-```python
+```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ===PT-TF-SPLIT===
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
@@ -179,9 +184,9 @@ Next, the tokenizer converts the tokens into numbers in order to construct a ten
 
 Pass your text to the tokenizer:
 
-```python
->>> input = tokenizer("We are very happy to show you the 🤗 Transformers library.")
->>> print(input)
+```py
+>>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
+>>> print(encoding)
 {"input_ids": [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 100, 19081, 3075, 1012, 102],
  "attention_mask": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
@@ -193,7 +198,7 @@ The tokenizer will return a dictionary containing:
 
 Just like the [`pipeline`], the tokenizer can accept a list of inputs. In addition, the tokenizer can also pad and truncate the text to return a batch with uniform length:
 
-```python
+```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
 ...     padding=True,
@@ -213,11 +218,11 @@ Just like the [`pipeline`], the tokenizer can accept a list of inputs. In additi
 
 Read the [preprocessing](./preprocessing) tutorial for more details about tokenization.
 
-## Using the AutoModel
+### Using the AutoModel
 
 🤗 Transformers provides a simple and unified way to load pretrained instances, which means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. Since we are doing text - or sequence - classification, load the [`AutoModelForSequenceClassification`]. The TensorFlow equivalent is simply [`TFAutoModelForSequenceClassification`]:
 
-```python
+```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 ===PT-TF-SPLIT===
@@ -232,22 +237,24 @@ See the [task summary](./task_summary) for which [`AutoModel`] to use for which 
 
 Now you can pass your preprocessed batch of inputs directly to the model. If you are using a PyTorch model, unpack the dictionary by adding `**`. For TensorFlow models, pass the dictionary keys directly to the tensors:
 
-```python
+```py
 >>> pt_outputs = pt_model(**pt_batch)
 ===PT-TF-SPLIT===
 >>> tf_outputs = tf_model(tf_batch)
 ```
 
-The model outputs the model's final activations in the `logits` attribute. Apply the softmax activation to the `logits` to retrieve the predictions:
+The model outputs the model's final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
 
-```python
+```py
 >>> from torch import nn
+
 >>> pt_predictions = nn.functional.softmax(pt_outputs.logits, dim=-1)
 >>> print(pt_predictions)
 tensor([[2.2043e-04, 9.9978e-01],
         [5.3086e-01, 4.6914e-01]], grad_fn=<SoftmaxBackward>)
 ===PT-TF-SPLIT===
 >>> import tensorflow as tf
+
 >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
 >>> print(tf_predictios)
 tf.Tensor(
@@ -256,11 +263,11 @@ tf.Tensor(
 ```
 
 <Tip>
-All 🤗 Transformers models (PyTorch or TensorFlow) return the model activations *before* the final activation
+All 🤗 Transformers models (PyTorch or TensorFlow) outputs the tensors *before* the final activation
 function (like softmax) because the final activation function is often fused with the loss.
 </Tip>
 
-Models are standard [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit()` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
+Models are standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit()` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
 
 <Tip>
 PyTorch model outputs are special dataclasses so their attributes are autocompleted in an IDE.
@@ -268,11 +275,11 @@ The model outputs also behave like a tuple or a dictionary (e.g., you can index 
 case the attributes that are `None` are ignored.
 </Tip>
 
-## Save your model
+### Save your model
 
-Once your model is fine-tuned, you can save it with its tokenizer using `save_pretrained`:
+Once your model is fine-tuned, you can save it with its tokenizer using [`PreTrainedModel.save_pretrained`]:
 
-```python
+```py
 >>> pt_save_directory = "./pt_save_pretrained"
 >>> tokenizer.save_pretrained(pt_save_directory)
 >>> pt_model.save_pretrained(pt_save_directory)
@@ -282,9 +289,9 @@ Once your model is fine-tuned, you can save it with its tokenizer using `save_pr
 >>> tf_model.save_pretrained(tf_save_directory)
 ```
 
-When you are ready to use the model again, reload it with `from_pretrained`:
+When you are ready to use the model again, reload it with [`PreTrainedModel.from_pretrained`]:
 
-```python
+```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ===PT-TF-SPLIT===
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
@@ -292,12 +299,14 @@ When you are ready to use the model again, reload it with `from_pretrained`:
 
 One particularly cool 🤗 Transformers feature is the ability to save a model and reload it as either a PyTorch or TensorFlow model. The `from_pt` or `from_tf` parameter can convert the model from one framework to the other:
 
-```python
+```py
 >>> from transformers import AutoModel
+
 >>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ===PT-TF-SPLIT===
 >>> from transformers import TFAutoModel
+
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
