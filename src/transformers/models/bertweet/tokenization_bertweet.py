@@ -680,21 +680,23 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
 class TweetTokenizer:
     r"""
-    Examples::
+    Examples:
 
-        >>> # Tokenizer for tweets.
-        >>> from nltk.tokenize import TweetTokenizer
-        >>> tknzr = TweetTokenizer()
-        >>> s0 = "This is a cooool #dummysmiley: :-) :-P <3 and some arrows < > -> <--"
-        >>> tknzr.tokenize(s0)
-        ['This', 'is', 'a', 'cooool', '#dummysmiley', ':', ':-)', ':-P', '<3', 'and', 'some', 'arrows', '<', '>', '->', '<--']
+    ```python
+    >>> # Tokenizer for tweets.
+    >>> from nltk.tokenize import TweetTokenizer
+    >>> tknzr = TweetTokenizer()
+    >>> s0 = "This is a cooool #dummysmiley: :-) :-P <3 and some arrows < > -> <--"
+    >>> tknzr.tokenize(s0)
+    ['This', 'is', 'a', 'cooool', '#dummysmiley', ':', ':-)', ':-P', '<3', 'and', 'some', 'arrows', '<', '>', '->', '<--']
 
-        >>> # Examples using `strip_handles` and `reduce_len parameters`:
-        >>> tknzr = TweetTokenizer(strip_handles=True, reduce_len=True)
-        >>> s1 = '@remy: This is waaaaayyyy too much for you!!!!!!'
-        >>> tknzr.tokenize(s1)
-        [':', 'This', 'is', 'waaayyy', 'too', 'much', 'for', 'you', '!', '!', '!']
-    """
+    >>> # Examples using *strip_handles* and *reduce_len parameters*:
+    >>> tknzr = TweetTokenizer(strip_handles=True, reduce_len=True)
+    >>> s1 = '@remy: This is waaaaayyyy too much for you!!!!!!'
+    >>> tknzr.tokenize(s1)
+    [':', 'This', 'is', 'waaayyy', 'too', 'much', 'for', 'you', '!', '!', '!']
+    ```
+"""
 
     def __init__(self, preserve_case=True, reduce_len=False, strip_handles=False):
         self.preserve_case = preserve_case

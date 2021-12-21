@@ -66,15 +66,17 @@ class Trie:
 
         This function is idempotent, adding twice the same word will leave the trie unchanged
 
-        Example::
+        Example:
 
-            >>> trie = Trie()
-            >>> trie.add("Hello 友達")
-            >>> trie.data
-            {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
-            >>> trie.add("Hello")
-            >>> trie.data
-            {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
+        ```python
+        >>> trie = Trie()
+        >>> trie.add("Hello 友達")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
+        >>> trie.add("Hello")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
+        ```
         """
         if not word:
             # Prevent empty string
@@ -92,16 +94,18 @@ class Trie:
 
         This trie will match the longest possible word first !
 
-        Example::
+        Example:
 
-            >>> trie = Trie()
-            >>> trie.split("[CLS] This is a extra_id_100")
-            ["[CLS] This is a extra_id_100"]
-            >>> trie.add("[CLS]")
-            >>> trie.add("extra_id_1")
-            >>> trie.add("extra_id_100")
-            >>> trie.split("[CLS] This is a extra_id_100")
-            ["[CLS]", " This is a ", "extra_id_100"]
+        ```python
+        >>> trie = Trie()
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS] This is a extra_id_100"]
+        >>> trie.add("[CLS]")
+        >>> trie.add("extra_id_1")
+        >>> trie.add("extra_id_100")
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS]", " This is a ", "extra_id_100"]
+        ```
         """
         # indexes are counted left of the chars index.
         # "hello", index 0, is left of h, index 1 is between h and e.
