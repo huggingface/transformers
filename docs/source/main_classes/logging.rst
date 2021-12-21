@@ -1,4 +1,4 @@
-.. 
+..
     Copyright 2020 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -31,6 +31,15 @@ to one of the following: ``debug``, ``info``, ``warning``, ``error``, ``critical
 .. code-block:: bash
 
     TRANSFORMERS_VERBOSITY=error ./myprogram.py
+
+Additionally, some ``warnings`` can be disabled by setting the environment variable
+``TRANSFORMERS_NO_ADVISORY_WARNINGS`` to a true value, like `1`. This will disable any warning that is logged using
+:meth:`logger.warning_advice`. For example:
+
+
+.. code-block:: bash
+
+    TRANSFORMERS_NO_ADVISORY_WARNINGS=1 ./myprogram.py
 
 All the methods of this logging module are documented below, the main ones are
 :func:`transformers.logging.get_verbosity` to get the current level of verbosity in the logger and

@@ -232,8 +232,10 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         return
 
     @require_torch_multi_gpu
+    @unittest.skip(
+        reason="Transfo-XL does not work with data parallel (DP) because of a bug in PyTorch: https://github.com/pytorch/pytorch/issues/36035"
+    )
     def test_multi_gpu_data_parallel_forward(self):
-        # Opt-out of this test.
         pass
 
     @slow

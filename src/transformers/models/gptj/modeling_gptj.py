@@ -335,65 +335,63 @@ class GPTJPreTrainedModel(PreTrainedModel):
 
 
 GPTJ_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.GPTJConfig`): Model configuration class with all the parameters of the model.
+        config ([`GPTJConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 GPTJ_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.GPTJTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`GPTJTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.n_positions - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_attention_heads,)` or :obj:`(n_layer, num_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_attention_heads,)` or `(n_layer, num_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_dim)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_dim)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
             than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 PARALLELIZE_DOCSTRING = r"""
@@ -402,7 +400,7 @@ PARALLELIZE_DOCSTRING = r"""
     across all devices.
 
     Args:
-        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
+        device_map (`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the GPT-J models have the
@@ -410,14 +408,17 @@ PARALLELIZE_DOCSTRING = r"""
 
                 - gpt-j-6B: 28
 
-    Example::
-        # Here is an example of a device map on a machine with 4 GPUs using gpt-j-6B, which has a total of 28 attention modules:
-        model = GPTJForCausalLM.from_pretrained('EleutherAI/gpt-j-6B')
-        device_map = {0: [0, 1, 2, 3, 4, 5, 6],
-                      1: [7, 8, 9, 10, 11, 12, 13],
-                      2: [14, 15, 16, 17, 18, 19, 20],
-                      3: [21, 22, 23, 24, 25, 26, 27]}
-        model.parallelize(device_map)
+    Example:
+
+    ```python
+    # Here is an example of a device map on a machine with 4 GPUs using gpt-j-6B, which has a total of 28 attention modules:
+    model = GPTJForCausalLM.from_pretrained('EleutherAI/gpt-j-6B')
+    device_map = {0: [0, 1, 2, 3, 4, 5, 6],
+              1: [7, 8, 9, 10, 11, 12, 13],
+              2: [14, 15, 16, 17, 18, 19, 20],
+              3: [21, 22, 23, 24, 25, 26, 27]}
+    model.parallelize(device_map)
+    ```
 """
 
 DEPARALLELIZE_DOCSTRING = r"""
@@ -772,10 +773,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
-            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to
+            `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -830,9 +831,9 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     @staticmethod
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
-        This function is used to re-order the :obj:`past_key_values` cache if
-        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
-        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+        This function is used to re-order the `past_key_values` cache if
+        [`~PretrainedModel.beam_search`] or [`~PretrainedModel.beam_sample`] is
+        called. This is required to match `past_key_values` with the correct beam_idx at every generation step.
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
@@ -844,13 +845,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     """
     The GPT-J Model transformer with a sequence classification head on top (linear layer).
 
-    :class:`~transformers.GPTJForSequenceClassification` uses the last token in order to do the classification, as
+    [`GPTJForSequenceClassification`] uses the last token in order to do the classification, as
     other causal models (e.g. GPT, GPT-2, GPT-Neo) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
-    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
-    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
-    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
+    row. If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take
     the last value in each row of the batch).
     """,
     GPTJ_START_DOCSTRING,
@@ -894,10 +895,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1019,13 +1019,13 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

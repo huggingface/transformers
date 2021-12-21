@@ -17,7 +17,6 @@
 import inspect
 import os
 import re
-import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -376,11 +375,10 @@ class ModuleUtilsMixin:
         Returns:
             :obj:`int`: The total number of tokens.
         """
-        token_inputs = [tensor for key, tensor in input_dict.items() if "input" in key]
-        if token_inputs:
-            return sum([token_input.numel() for token_input in token_inputs])
+        if self.main_input_name in input_dict:
+            return input_dict[self.main_input_name].numel()
         else:
-            warnings.warn(
+            logger.warn(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
             )
             return 0
@@ -438,9 +436,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
         - **is_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model parallelization.
+        - **main_input_name** (:obj:`str`) -- The name of the principal input to the model (often :obj:`input_ids` for
+          NLP models, :obj:`pixel_values` for vision models and :obj:`input_values` for speech models).
     """
     config_class = None
     base_model_prefix = ""
+    main_input_name = "input_ids"
+
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_missing = None
