@@ -47,7 +47,7 @@ class LayoutLMTokenizer(BertTokenizer):
     r"""
     Constructs a LayoutLM tokenizer.
 
-    [`LayoutLMTokenizer is identical to :class:`]~transformers.BertTokenizer` and runs end-to-end
+    [`LayoutLMTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning

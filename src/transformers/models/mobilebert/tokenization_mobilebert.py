@@ -37,7 +37,7 @@ class MobileBertTokenizer(BertTokenizer):
     r"""
     Construct a MobileBERT tokenizer.
 
-    [`MobileBertTokenizer is identical to :class:`]~transformers.BertTokenizer` and runs end-to-end
+    [`MobileBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning

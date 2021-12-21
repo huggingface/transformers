@@ -48,7 +48,7 @@ class SqueezeBertTokenizer(BertTokenizer):
     r"""
     Constructs a SqueezeBert tokenizer.
 
-    [`SqueezeBertTokenizer is identical to :class:`]~transformers.BertTokenizer` and runs end-to-end
+    [`SqueezeBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
