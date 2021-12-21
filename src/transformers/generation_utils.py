@@ -733,7 +733,7 @@ class GenerationMixin:
         default_list: Union[LogitsProcessorList, StoppingCriteriaList],
         custom_list: Union[LogitsProcessorList, StoppingCriteriaList],
     ) -> Union[LogitsProcessorList, StoppingCriteriaList]:
-        if custom_list is None:
+        if len(custom_list) == 0:
             return default_list
         for default in default_list:
             for custom in custom_list:
@@ -773,8 +773,8 @@ class GenerationMixin:
         num_beam_groups: Optional[int] = None,
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
+        logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
+        stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
