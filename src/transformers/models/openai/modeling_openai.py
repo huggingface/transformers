@@ -303,22 +303,21 @@ class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
     Base class for outputs of models predicting if two sentences are consecutive or not.
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss.
-        mc_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`mc_labels` is provided):
+        mc_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mc_labels` is provided):
             Multiple choice classification loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
+        logits (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        mc_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
+        mc_logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
             Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -334,69 +333,67 @@ class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
 
 OPENAI_GPT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.OpenAIGPTConfig`): Model configuration class with all the parameters of the model.
+        config ([`OpenAIGPTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 OPENAI_GPT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.OpenAIGPTTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`OpenAIGPTTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -571,10 +568,10 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
-            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to
+            `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -658,38 +655,37 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input):
-            Index of the classification token in each input sequence. Selected in the range ``[0, input_ids.size(-1) -
-            1]``.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
+            Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) - 1]`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            ``labels = input_ids`` Indices are selected in ``[-1, 0, ..., config.vocab_size]`` All labels set to
-            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
-        mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
-            `input_ids` above)
+            `labels = input_ids` Indices are selected in `[-1, 0, ..., config.vocab_size]` All labels set to
+            `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        mc_labels (`torch.LongTensor` of shape `(batch_size)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]` where *num_choices* is the size of the second dimension of the input tensors. (see
+            *input_ids* above)
 
         Return:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
-            >>> import torch
+        ```python
+        >>> from transformers import OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
+        >>> import torch
 
-            >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-            >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
-            >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
-            >>> model.resize_token_embeddings(len(tokenizer))
+        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+        >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
+        >>> model.resize_token_embeddings(len(tokenizer))
 
-            >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-            >>> input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-            >>> mc_token_ids = torch.tensor([input_ids.size(-1)-1, input_ids.size(-1)-1]).unsqueeze(0)  # Batch size 1
+        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+        >>> input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        >>> mc_token_ids = torch.tensor([input_ids.size(-1)-1, input_ids.size(-1)-1]).unsqueeze(0)  # Batch size 1
 
-            >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-            >>> lm_logits = outputs.lm_logits
-            >>> mc_logits = outputs.mc_logits
-        """
+        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+        >>> lm_logits = outputs.lm_logits
+        >>> mc_logits = outputs.mc_logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -737,12 +733,12 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
 @add_start_docstrings(
     """
     The Original OpenAI GPT Model transformer with a sequence classification head on top (linear layer).
-    :class:`~transformers.OpenAIGPTForSequenceClassification` uses the last token in order to do the classification, as
+    [`OpenAIGPTForSequenceClassification`] uses the last token in order to do the classification, as
     other causal models (e.g. GPT-2) do. Since it does classification on the last token, it requires to know the
-    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
-    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
-    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
-    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
+    position of the last token. If a `pad_token_id` is defined in the configuration, it finds the last token that
+    is not a padding token in each row. If no `pad_token_id` is defined, it simply takes the last value in each
+    row of the batch. Since it cannot guess the padding tokens when `inputs_embeds` are passed instead of
+    `input_ids`, it does the same (take the last value in each row of the batch).
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
@@ -777,10 +773,9 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

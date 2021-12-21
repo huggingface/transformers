@@ -27,52 +27,54 @@ _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 class FlaxMT5Model(FlaxT5Model):
     r"""
-    This class overrides :class:`~transformers.FlaxT5Model`. Please check the superclass for the appropriate
+    This class overrides [`FlaxT5Model`]. Please check the superclass for the appropriate
     documentation alongside usage examples.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import FlaxMT5Model, T5Tokenizer
+    ```python
+    >>> from transformers import FlaxMT5Model, T5Tokenizer
 
-        >>> model = FlaxMT5Model.from_pretrained("google/mt5-small")
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> model = FlaxMT5Model.from_pretrained("google/mt5-small")
+    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
 
-        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
-        >>> summary = "Weiter Verhandlung in Syrien."
-        >>> inputs = tokenizer(article, return_tensors="np")
+    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+    >>> summary = "Weiter Verhandlung in Syrien."
+    >>> inputs = tokenizer(article, return_tensors="np")
 
-        >>> with tokenizer.as_target_tokenizer():
-        ...     decoder_input_ids = tokenizer(summary, return_tensors="np").input_ids
+    >>> with tokenizer.as_target_tokenizer():
+    ...     decoder_input_ids = tokenizer(summary, return_tensors="np").input_ids
 
-        >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=decoder_input_ids)
-        >>> hidden_states = outputs.last_hidden_state
-    """
+    >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=decoder_input_ids)
+    >>> hidden_states = outputs.last_hidden_state
+    ```"""
     model_type = "mt5"
     config_class = MT5Config
 
 
 class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
     r"""
-    This class overrides :class:`~transformers.FlaxT5ForConditionalGeneration`. Please check the superclass for the
+    This class overrides [`FlaxT5ForConditionalGeneration`]. Please check the superclass for the
     appropriate documentation alongside usage examples.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import FlaxMT5ForConditionalGeneration, T5Tokenizer
+    ```python
+    >>> from transformers import FlaxMT5ForConditionalGeneration, T5Tokenizer
 
-        >>> model = FlaxMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> model = FlaxMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
+    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
 
-        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
-        >>> summary = "Weiter Verhandlung in Syrien."
-        >>> inputs = tokenizer(article, return_tensors="np")
+    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+    >>> summary = "Weiter Verhandlung in Syrien."
+    >>> inputs = tokenizer(article, return_tensors="np")
 
-        >>> with tokenizer.as_target_tokenizer():
-        ...     decoder_input_ids = tokenizer(summary, return_tensors="np").input_ids
+    >>> with tokenizer.as_target_tokenizer():
+    ...     decoder_input_ids = tokenizer(summary, return_tensors="np").input_ids
 
-        >>> outputs = model(**inputs, decoder_input_ids=decoder_input_ids)
-        >>> logits = outputs.logits
-    """
+    >>> outputs = model(**inputs, decoder_input_ids=decoder_input_ids)
+    >>> logits = outputs.logits
+    ```"""
 
     model_type = "mt5"
     config_class = MT5Config

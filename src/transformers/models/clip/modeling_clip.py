@@ -76,24 +76,24 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class CLIPOutput(ModelOutput):
     """
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`return_loss` is :obj:`True`):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for image-text similarity.
-        logits_per_image:(:obj:`torch.FloatTensor` of shape :obj:`(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between :obj:`image_embeds` and :obj:`text_embeds`. This represents the
+        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the
             image-text similarity scores.
-        logits_per_text:(:obj:`torch.FloatTensor` of shape :obj:`(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between :obj:`text_embeds` and :obj:`image_embeds`. This represents the
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the
             text-image similarity scores.
-        text_embeds(:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`):
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.CLIPTextModel`.
-        image_embeds(:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`):
+            [`CLIPTextModel`].
+        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.CLIPVisionModel`.
-        text_model_output(:obj:`BaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.CLIPTextModel`.
-        vision_model_output(:obj:`BaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.CLIPVisionModel`.
+            [`CLIPVisionModel`].
+        text_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`CLIPTextModel`].
+        vision_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`CLIPVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -299,12 +299,12 @@ class CLIPEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(batch, seq_len, embed_dim)`
-            attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                :obj:`(config.encoder_attention_heads,)`.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(config.encoder_attention_heads,)`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
         residual = hidden_states
@@ -391,110 +391,108 @@ class CLIPPreTrainedModel(PreTrainedModel):
 
 
 CLIP_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.CLIPConfig`): Model configuration class with all the parameters of the model.
+        config ([`CLIPConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 CLIP_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`CLIPTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are position IDs?](../glossary#position-ids)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 CLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
+            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for
             details.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 CLIP_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`CLIPTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
+            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for
             details.
-        return_loss (:obj:`bool`, `optional`):
+        return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 class CLIPEncoder(nn.Module):
     """
-    Transformer encoder consisting of :obj:`config.num_hidden_layers` self attention layers. Each layer is a
-    :class:`~transformers.CLIPEncoderLayer`.
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`CLIPEncoderLayer`].
 
     Args:
         config: CLIPConfig
@@ -517,32 +515,32 @@ class CLIPEncoder(nn.Module):
     ):
         r"""
         Args:
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert `input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            causal_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Causal mask for the text model. Mask values selected in ``[0, 1]``:
+                [What are attention masks?](../glossary#attention-mask)
+            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Causal mask for the text model. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                [What are attention masks?](../glossary#attention-mask)
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -884,19 +882,20 @@ class CLIPModel(CLIPPreTrainedModel):
     ):
         r"""
         Returns:
-            text_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.CLIPTextModel`.
+            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings
+            obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
 
-        Examples::
+        Examples:
 
-            >>> from transformers import CLIPTokenizer, CLIPModel
+        ```python
+        >>> from transformers import CLIPTokenizer, CLIPModel
 
-            >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
-            >>> text_features = model.get_text_features(**inputs)
-        """
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -921,25 +920,26 @@ class CLIPModel(CLIPPreTrainedModel):
     ):
         r"""
         Returns:
-            image_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.CLIPVisionModel`.
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings
+            obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
 
-        Examples::
+        Examples:
 
-            >>> from PIL import Image
-            >>> import requests
-            >>> from transformers import CLIPProcessor, CLIPModel
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import CLIPProcessor, CLIPModel
 
-            >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="pt")
 
-            >>> image_features = model.get_image_features(**inputs)
-        """
+        >>> image_features = model.get_image_features(**inputs)
+        ```"""
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,

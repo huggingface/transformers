@@ -410,37 +410,37 @@ class DeiTPreTrainedModel(PreTrainedModel):
 
 
 DEIT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.DeiTConfig`): Model configuration class with all the parameters of the model.
+        config ([`DeiTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 DEIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.DeiTFeatureExtractor`. See
-            :meth:`transformers.DeiTFeatureExtractor.__call__` for details.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`DeiTFeatureExtractor`]. See
+            [`DeiTFeatureExtractor.__call__`] for details.
 
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -591,34 +591,34 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
-            >>> # so the head will be randomly initialized, hence the predictions will be random
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-            >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
+        >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
+        >>> # so the head will be randomly initialized, hence the predictions will be random
+        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
+        >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deit(
@@ -659,24 +659,23 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 @dataclass
 class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.DeiTForImageClassificationWithTeacher`.
+    Output type of [`DeiTForImageClassificationWithTeacher`].
 
     Args:
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores as the average of the cls_logits and distillation logits.
-        cls_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+        cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
             class token).
-        distillation_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+        distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
             distillation token).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
             each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
             weighted average in the self-attention heads.
     """
 

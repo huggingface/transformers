@@ -784,137 +784,133 @@ class FlaxT5Stack(nn.Module):
 
 T5_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`T5Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             detail.
 
-            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
-            <./t5.html#training>`__.
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are attention masks?](../glossary#attention-mask)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 T5_DECODE_INPUTS_DOCSTRING = r"""
     Args:
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`):
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`T5Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            For training, :obj:`decoder_input_ids` should be provided.
-        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+            For training, `decoder_input_ids` should be provided.
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
+            `attentions`) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`,
+            *optional*) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+        encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in `the paper
-            <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
-        past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
+            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 T5_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`T5Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             detail.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
-            <./t5.html#training>`__.
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`T5Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            T5 uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
-            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
-            :obj:`past_key_values`).
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
+            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
 
-            To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
-            <./t5.html#training>`__.
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5 Training](./t5#training).
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
             also be used by default.
-        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`:
-            `attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`, *optional*):
+            Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`:
+            *attentions*) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a
             sequence of hidden states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
-        past_key_values (:obj:`tuple(tuple(jnp.ndarray))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`tuple(tuple(jnp.ndarray))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
+            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
 
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1010,15 +1006,14 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
         Args:
-            batch_size (:obj:`int`):
+            batch_size (`int`):
                 batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
-            max_length (:obj:`int`):
+            max_length (`int`):
                 maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
                 cache.
-            encoder_outputs (:obj:`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
-                ``encoder_outputs`` consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`,
-                `optional`: :obj:`attentions`). :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length,
-                hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the
+            encoder_outputs (`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
+                `encoder_outputs` consists of (`last_hidden_state`, *optional*: `hidden_states`,
+                *optional*: `attentions`). `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of hidden-states at the output of the last layer of the
                 encoder. Used in the cross-attention of the decoder.
         """
         # init input variables to retrieve cache
@@ -1204,43 +1199,41 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
 
 T5_START_DOCSTRING = r"""
-    The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
-    <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
+    The T5 model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
     Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a text-to-text
     denoising generative setting.
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    This model is also a Flax Linen [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a regular Flax
     Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config ([`T5Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the
             model weights.
-        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
-            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
-            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
+            GPUs) and `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-            specified all the computation will be performed with the given ``dtype``.
+            specified all the computation will be performed with the given `dtype`.
 
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
             If you wish to change the dtype of the model parameters, see
-            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
+            [`~FlaxPreTrainedModel.to_fp16`] and [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 

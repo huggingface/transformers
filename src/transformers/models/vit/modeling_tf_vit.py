@@ -563,7 +563,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+            `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
@@ -582,7 +582,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         Method used for serving the model.
 
         Args:
-            inputs (:obj:`Dict[str, tf.Tensor]`):
+            inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
         output = self.call(inputs)
@@ -592,57 +592,57 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
 
 VIT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
     and behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
+    the tensors in the first argument of the model call function: `model(inputs)`.
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
+        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the
             model weights.
 """
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
-            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`): Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See [`ViTFeatureExtractor.__call__`] for details.
 
-        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        interpolate_pos_encoding (:obj:`bool`, `optional`):
+        interpolate_pos_encoding (`bool`, *optional*):
             Whether to interpolate the pre-trained position encodings.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
             argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -786,33 +786,33 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import ViTFeatureExtractor, TFViTForImageClassification
-            >>> import tensorflow as tf
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import ViTFeatureExtractor, TFViTForImageClassification
+        >>> import tensorflow as tf
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-            >>> model = TFViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+        >>> model = TFViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="tf")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
-            >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
+        >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

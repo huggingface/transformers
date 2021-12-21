@@ -45,22 +45,21 @@ logger = logging.get_logger(__name__)
 @flax.struct.dataclass
 class FlaxWav2Vec2BaseModelOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.FlaxWav2Vec2BaseModelOutput`, with potential hidden states and attentions.
+    Output type of [`FlaxWav2Vec2BaseModelOutput`], with potential hidden states and attentions.
 
     Args:
-        last_hidden_state (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`jnp.ndarray` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        extract_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, last_conv_dim)`):
-            Sequence of extracted feature vectors of the last convolutional layer of the model with ``last_conv_dim``
+        extract_features (`jnp.ndarray` of shape `(batch_size, sequence_length, last_conv_dim)`):
+            Sequence of extracted feature vectors of the last convolutional layer of the model with `last_conv_dim`
             being the dimension of the last convolutional layer.
-        hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
-            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        attentions (`tuple(jnp.ndarray)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -75,27 +74,26 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
 @flax.struct.dataclass
 class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.FlaxWav2Vec2ForPreTrainingOutput`, with potential hidden states and
+    Output type of [`FlaxWav2Vec2ForPreTrainingOutput`], with potential hidden states and
     attentions.
 
     Args:
-        loss (`optional`, returned when model is in train mode, ``jnp.ndarray`` of shape :obj:`(1,)`):
-            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the `official
-            paper <https://arxiv.org/pdf/2006.11477.pdf>`__ . (classification) loss.
-        projected_states (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Hidden-states of the model projected to `config.proj_codevector_dim` that can be used to predict the masked
+        loss (*optional*, returned when model is in train mode, `jnp.ndarray` of shape `(1,)`):
+            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
+            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        projected_states (`jnp.ndarray` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
-        projected_quantized_states (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Quantized extracted feature vectors projected to `config.proj_codevector_dim` representing the positive
+        projected_quantized_states (`jnp.ndarray` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
             target vectors for contrastive loss.
-        hidden_states (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
-            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(jnp.ndarray)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`jnp.ndarray` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        attentions (`tuple(jnp.ndarray)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -213,77 +211,73 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attentio
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
-    Wav2Vec2 was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
-    <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
+    Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    This model is also a Flax Linen [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a regular Flax
     Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.Wav2Vec2Config`): Model configuration class with all the parameters of the model.
+        config ([`Wav2Vec2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the
             model weights.
-        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
-            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
-            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
+            GPUs) and `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-            specified all the computation will be performed with the given ``dtype``.
+            specified all the computation will be performed with the given `dtype`.
 
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
             If you wish to change the dtype of the model parameters, see
-            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
+            [`~FlaxPreTrainedModel.to_fp16`] and [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
-            be used for padding and conversion into a tensor of type `jnp.ndarray`. See
-            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
-            1]``:
+        input_values (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should
+            be used for padding and conversion into a tensor of type *jnp.ndarray*. See
+            [`Wav2Vec2Processor.__call__`] for details.
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__ .. warning:: :obj:`attention_mask` should
-            only be passed if the corresponding processor has ``config.return_attention_mask == True``. For all models
-            whose processor has ``config.return_attention_mask == False``, such as `wav2vec2-base
-            <https://huggingface.co/facebook/wav2vec2-base-960h>`__, :obj:`attention_mask` should **not** be passed to
-            avoid degraded performance when doing batched inference. For such models :obj:`input_values` should simply
-            be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield slightly
-            different results depending on whether :obj:`input_values` is padded or not.
-        mask_time_indices (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask) .. warning:: `attention_mask` should
+            only be passed if the corresponding processor has `config.return_attention_mask == True`. For all models
+            whose processor has `config.return_attention_mask == False`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), `attention_mask` should **not** be passed to
+            avoid degraded performance when doing batched inference. For such models `input_values` should simply
+            be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
+            different results depending on whether `input_values` is padded or not.
+        mask_time_indices (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in `config.proj_codevector_dim` space.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            masked extracted features in *config.proj_codevector_dim* space.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 

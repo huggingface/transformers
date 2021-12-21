@@ -123,7 +123,7 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
+            final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -826,7 +826,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+            `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
         # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
@@ -841,91 +841,91 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
     Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
     usage and behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having
+    all the tensors in the first argument of the model call function: `model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors
+    in the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`): Model configuration class with all the parameters of the model.
+        config ([`~{{cookiecutter.camelcase_modelname}}Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 {{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+        inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
             argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -967,24 +967,24 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
         r"""
-        encoder_hidden_states  (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
+            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
+            decoding (see `past_key_values`). Set to `False` during training, `True` during generation
         """
         inputs = input_processing(
             func=self.call,
@@ -1087,10 +1087,9 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
         **kwargs,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         inputs = input_processing(
             func=self.call,
@@ -1200,27 +1199,26 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
         **kwargs,
     ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
         r"""
-        encoder_hidden_states  (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
-            config.vocab_size - 1]``.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
+            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
+            decoding (see `past_key_values`). Set to `False` during training, `True` during generation
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the cross entropy classification loss. Indices should be in `[0, ..., config.vocab_size - 1]`.
         """
         inputs = input_processing(
             func=self.call,
@@ -1363,10 +1361,9 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
         **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         inputs = input_processing(
             func=self.call,
@@ -1469,10 +1466,9 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         **kwargs,
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
-            :obj:`input_ids` above)
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            `input_ids` above)
         """
         inputs = input_processing(
             func=self.call,
@@ -1612,9 +1608,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
         **kwargs,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         inputs = input_processing(
             func=self.call,
@@ -1709,13 +1704,13 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
         **kwargs,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
-        start_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
-        end_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
+        end_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
         inputs = input_processing(
@@ -2057,11 +2052,11 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
     def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
         """
         Args:
-            hidden_states (:obj:`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`tf.Tensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`
+            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            attention_mask (`tf.Tensor`): attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
+                *(encoder_attention_heads,)*
         """
         residual = hidden_states
         hidden_states, self_attn_weights, _ = self.self_attn(
@@ -2133,17 +2128,17 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (:obj:`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`tf.Tensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:obj:`tf.Tensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (:obj:`tf.Tensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
-                `(decoder_attention_heads,)`
-            cross_attn_layer_head_mask (:obj:`tf.Tensor`): mask for heads of the cross-attention module.
-                `(decoder_attention_heads,)`
-            past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
+            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            attention_mask (`tf.Tensor`): attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            encoder_hidden_states (`tf.Tensor`): cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+            encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
+                *(decoder_attention_heads,)*
+            cross_attn_layer_head_mask (`tf.Tensor`): mask for heads of the cross-attention module.
+                *(decoder_attention_heads,)*
+            past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
 
@@ -2234,116 +2229,118 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
 
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
     and behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
+    the tensors in the first argument of the model call function: `model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+    the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(input_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`): Model configuration class with all the parameters of the model.
+        config ([`~{{cookiecutter.camelcase_modelname}}Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the
             model weights.
 """
 
 {{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
+        input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            [What are input IDs?](../glossary#input-ids)
 
-            {{cookiecutter.camelcase_modelname}} uses the :obj:`eos_token_id` as the starting token for
-            :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
-            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
+            {{cookiecutter.camelcase_modelname}} uses the `eos_token_id` as the starting token for
+            `decoder_input_ids` generation. If `past_key_values` is used, optionally only the last
+            `decoder_input_ids` have to be input (see `past_key_values`).
 
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            For translation and summarization training, `decoder_input_ids` should be provided. If no
+            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to
             the right for denoising pre-training following the paper.
-        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+        decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
-        head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+        head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        decoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+        decoder_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
+        cross_attn_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
+        encoder_outputs (`tf.FloatTensor`, *optional*):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-            of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers`)
+            of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
+            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
+            decoding (see `past_key_values`). Set to `False` during training, `True` during generation
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
             argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -2354,7 +2351,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`TF{{cookiecutter.camelcase_modelname}}EncoderLayer`.
+    [`TF{{cookiecutter.camelcase_modelname}}EncoderLayer`].
 
     Args:
         config: {{cookiecutter.camelcase_modelname}}Config
@@ -2398,44 +2395,43 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
     ):
         """
         Args:
-            input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
                 for details.
 
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+                [What are attention masks?](../glossary#attention-mask)
+            head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, `optional): Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+            inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert `input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
                 in the config will be used instead.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail. This argument can be used only in eager mode, in graph mode the value in the config
                 will be used instead.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
                 argument can be used in eager mode, in graph mode the value will always be set to True.
-            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            training (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the model in training mode (some modules like dropout modules have different
                 behaviors between training and evaluation).
         """
@@ -2521,7 +2517,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
 class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`TF{{cookiecutter.camelcase_modelname}}DecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TF{{cookiecutter.camelcase_modelname}}DecoderLayer`]
 
     Args:
         config: {{cookiecutter.camelcase_modelname}}Config
@@ -2570,69 +2566,66 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
     ):
         r"""
         Args:
-            input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
                 for details.
 
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            encoder_hidden_states (:obj:`tf.Tensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
+                [What are attention masks?](../glossary#attention-mask)
+            encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            encoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, encoder_sequence_length)`, `optional`):
+            encoder_attention_mask (`tf.Tensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
                 Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in ``[0, 1]``:
+                selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+                [What are attention masks?](../glossary#attention-mask)
+            head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
+            cross_attn_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding.
 
-                If :obj:`past_key_values` are used, the user can optionally input only the last
-                :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
-                shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
-                sequence_length)`.
-            inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                If `past_key_values` are used, the user can optionally input only the last
+                `decoder_input_ids` (those that don't have their past key value states given to this model) of
+                shape `(batch_size, 1)` instead of all ``decoder_input_ids``` of shape `(batch_size,
+                sequence_length)`. inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
                 in the config will be used instead.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail. This argument can be used only in eager mode, in graph mode the value in the config
                 will be used instead.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
                 argument can be used in eager mode, in graph mode the value will always be set to True.
-            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            training (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the model in training mode (some modules like dropout modules have different
                 behaviors between training and evaluation).
         """
