@@ -823,12 +823,12 @@ LXMERT_INPUTS_DOCSTRING = r"""
             details.
 
             [What are input IDs?](../glossary#input-ids)
-        visual_feats: (`torch.FloatTensor` of shape :obj:՝(batch_size, num_visual_features, visual_feat_dim)՝):
+        visual_feats: (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
             This input represents visual features. They ROI pooled object features from bounding boxes using a
             faster-RCNN model)
 
             These are currently not provided by the transformers library.
-        visual_pos: (`torch.FloatTensor` of shape :obj:՝(batch_size, num_visual_features, visual_pos_dim)՝):
+        visual_pos: (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_pos_dim)`):
             This input represents spacial features corresponding to their relative (via index) visual features. The
             pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
             1.
@@ -1176,7 +1176,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
             - 0 indicates that the sentence does not match the image,
             - 1 indicates that the sentence does match the image.
-        ans: (`Torch.Tensor` of shape `(batch_size)`, *optional*):
+        ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             a one hot representation hof the correct answer *optional*
 
         Returns:
@@ -1397,8 +1397,6 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         r"""
         labels: (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             A one-hot representation of the correct answer
-
-        Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
