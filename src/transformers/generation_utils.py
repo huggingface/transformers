@@ -740,7 +740,11 @@ class GenerationMixin:
                 if type(custom) is type(default):
                     object_type = "stopping criteria" if isinstance(custom, StoppingCriteria) else "logits processor"
                     raise ValueError(
-                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to `generate`, but it has already been created with the values {default}. {default} has been created by passing the corresponding arguments to generate or by the model's config default values. If you just want to change the default values of {object_type} consider passing them as arguments to `generate` instead of using a custom {object_type}."
+                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to `generate`, "
+                        f"but it has already been created with the values {default}. {default} has been created by passing the "
+                        "corresponding arguments to generate or by the model's config default values. "
+                        f"If you just want to change the default values of {object_type} consider passing them as arguments "
+                        f"to `generate` instead of using a custom {object_type}."
                     )
         default_list.extend(custom_list)
         return default_list
