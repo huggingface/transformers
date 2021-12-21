@@ -335,7 +335,7 @@ By default `--random-order-bucket=module` is implied, which will shuffle the fil
 shuffle on `class`, `package`, `global` and `none` levels. For the complete details please see its
 [documentation](https://github.com/jbasko/pytest-random-order).
 
-Another randomization alternative is: `pytest-randomly` <https://github.com/pytest-dev/pytest-randomly>`__. This
+Another randomization alternative is: [`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly). This
 module has a very similar functionality/interface, but it doesn't have the bucket modes available in
 `pytest-random-order`. It has the same problem of imposing itself once installed.
 
@@ -459,7 +459,7 @@ Inside tests:
 
 - How many GPUs are available:
 
-```bash
+```python
 from transformers.testing_utils import get_gpu_count
 n_gpu = get_gpu_count() # works with torch and tf
 ```

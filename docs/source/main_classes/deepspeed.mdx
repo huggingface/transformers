@@ -274,9 +274,8 @@ Notes:
 - if you need to run on a specific GPU, which is different from GPU 0, you can't use `CUDA_VISIBLE_DEVICES` to limit
   the visible scope of available GPUs. Instead, you have to use the following syntax:
 
-```bash
-deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
-```
+  ```bash
+  deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
 
   In this example, we tell DeepSpeed to use GPU 1 (second gpu).
 
@@ -382,14 +381,14 @@ EOT
 If the training script is in a normal file and not in the notebook cells, you can launch `deepspeed` normally via
 shell from a cell. For example, to use `run_translation.py` you would launch it with:
 
-```
+```python
 !git clone https://github.com/huggingface/transformers
 !cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
 ```
 
 or with `%%bash` magic, where you can write a multi-line code for the shell program to run:
 
-```
+```python
 %%bash
 
 git clone https://github.com/huggingface/transformers
@@ -1190,7 +1189,7 @@ For example, for `WarmupDecayLR`, you can use the following entry:
 }
 ```
 
-and ``total_num_steps`, `warmup_max_lr`, `warmup_num_steps` and `total_num_steps` will be set at loading time.
+and `total_num_steps`, `warmup_max_lr`, `warmup_num_steps` and `total_num_steps` will be set at loading time.
 
 
 
@@ -1538,7 +1537,7 @@ As you can see this gives you a randomly initialized model.
 
 If you want to use a pretrained model, `model_class.from_pretrained` will activate this feature as long as
 `is_deepspeed_zero3_enabled()` returns `True`, which currently is setup by the
-class:*~transformers.TrainingArguments* object if the passed DeepSpeed configuration file contains ZeRO-3 config
+[`TrainingArguments`] object if the passed DeepSpeed configuration file contains ZeRO-3 config
 section. Thus you must create the [`TrainingArguments`] object **before** calling
 `from_pretrained`. Here is an example of a possible sequence:
 
@@ -1637,11 +1636,11 @@ In your report please always include:
 
 3. Output of:
 
-```bash
-python -c 'import torch; print(f"torch: {torch.__version__}")'
-python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
-python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
-```
+    ```bash
+    python -c 'import torch; print(f"torch: {torch.__version__}")'
+    python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
+    python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
+    ```
 
 4. If possible include a link to a Google Colab notebook that we can reproduce the problem with. You can use this
    [notebook](https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb) as
