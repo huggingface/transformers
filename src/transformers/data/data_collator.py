@@ -17,6 +17,8 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
+import numpy as np
+
 from ..file_utils import PaddingStrategy
 from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
@@ -68,42 +70,6 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
         return tf_default_data_collator(features)
     elif return_tensors == "np":
         return numpy_default_data_collator(features)
-
-
-def luke_entity_span_classification_data_collator(batch, tokenizer):
-    import torch
-
-    def create_padded_sequence(target, padding_value):
-        if isinstance(target, str):
-            tensors = [torch.tensor(o[target], dtype=torch.long) for o in batch]
-        else:
-            tensors = [torch.tensor(o, dtype=torch.long) for o in target]
-        return torch.nn.utils.rnn.pad_sequence(tensors, batch_first=True, padding_value=padding_value)
-    
-    def padding_tensor(sequences):
-        num = len(sequences)
-        out_dims = (num, tokenizer.max_entity_length)
-        out_tensor = sequences[0].data.new(*out_dims).fill_(0)
-        for i, tensor in enumerate(sequences):
-            length = tensor.size(0)
-            out_tensor[i, :length] = tensor
-            
-        return out_tensor
-
-    ret = dict(
-        input_ids=create_padded_sequence("input_ids", tokenizer.pad_token_id),
-        attention_mask=create_padded_sequence("attention_mask", 0),
-        entity_start_positions=create_padded_sequence("entity_start_positions", 0),
-        entity_end_positions=create_padded_sequence("entity_end_positions", 0),
-        entity_ids=create_padded_sequence("entity_ids", 0),
-        entity_attention_mask=create_padded_sequence("entity_attention_mask", 0),
-        entity_position_ids=create_padded_sequence("entity_position_ids", -1),
-    )
-    ret["labels"] = padding_tensor(create_padded_sequence("labels", -100))
-    ret["original_entity_spans"] = [torch.tensor(o["original_entity_spans"], dtype=torch.long) for o in batch]
-    ret["ner_tags"] = [torch.tensor(o["ner_tags"], dtype=torch.long) for o in batch]
-
-    return ret
 
 
 @dataclass
@@ -351,7 +317,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         if labels is None:
             return batch
 
-        sequence_length = torch.tensor(batch["input_ids"]).shape[1]
+        prop = "entity_ids" if "entity_ids" in batch.keys() else "input_ids"
+        sequence_length = torch.tensor(batch[prop]).shape[1]
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
             batch[label_name] = [
@@ -362,6 +329,33 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
                 [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
             ]
 
+        def padding_tensor(sequences, padding_value):
+            if isinstance(padding_value, tuple):
+                out_tensor = np.full((len(sequences), sequence_length, 2), padding_value)
+            else:
+                out_tensor = np.full((len(sequences), sequence_length), padding_value)
+
+            for i, tensor in enumerate(sequences):
+                if padding_side == "right":
+                    if isinstance(padding_value, tuple):
+                        out_tensor[i, :len(tensor[:sequence_length]), :2] = tensor[:sequence_length]
+                    else:
+                        out_tensor[i, :len(tensor[:sequence_length])] = tensor[:sequence_length]
+                else:
+                    if isinstance(padding_value, tuple):
+                        out_tensor[i, len(tensor[:sequence_length]) - 1:, :2] = tensor[:sequence_length]
+                    else:
+                        out_tensor[i, len(tensor[:sequence_length]) - 1:] = tensor[:sequence_length]
+
+                
+            return out_tensor.tolist()
+        
+        if prop == "entity_ids":
+            ner_tags = [feature["ner_tags"] for feature in features]
+            batch["ner_tags"] = padding_tensor(ner_tags, -1)
+            original_entity_spans = [feature["original_entity_spans"] for feature in features]
+            batch["original_entity_spans"] = padding_tensor(original_entity_spans, (-1, -1))
+        
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         return batch
 

@@ -28,6 +28,7 @@ import unicodedata
 
 import datasets
 import torch
+import numpy as np
 from datasets import ClassLabel, load_dataset, load_metric, concatenate_datasets
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -46,7 +47,7 @@ from transformers import (
     PretrainedConfig,
     SchedulerType,
     default_data_collator,
-    luke_entity_span_classification_data_collator,
+    #luke_entity_span_classification_data_collator,
     get_scheduler,
     set_seed,
 )
@@ -422,14 +423,7 @@ def main():
         examples["sentence_boundaries"] = sentence_boundaries
         
         return examples
-
-    if config.model_type == "luke":
-        with accelerator.main_process_first():
-            raw_datasets = raw_datasets.map(
-                compute_sentence_boundaries_for_luke,
-                batched=True,
-                desc="Adding sentence boundaries",
-            )
+            
 
     def compute_entity_spans_for_luke(examples):
         def is_punctuation(char):
@@ -507,14 +501,7 @@ def main():
         examples["original_entity_spans"] = all_original_entity_spans
 
         return examples
-
-    if config.model_type == "luke":
-        with accelerator.main_process_first():
-            raw_datasets = raw_datasets.map(
-                compute_entity_spans_for_luke,
-                batched=True,
-                desc="Adding sentence spans",
-            )
+            
 
     def tokenize_and_align_labels(examples):
         if config.model_type == "luke":
@@ -541,9 +528,34 @@ def main():
             )
 
         if config.model_type == "luke":
-            tokenized_inputs["labels"] = examples["labels_entity_spans"]
-            tokenized_inputs["original_entity_spans"] = examples["original_entity_spans"]
-            tokenized_inputs["ner_tags"] = [ex[:tokenizer.max_entity_length] for ex in examples["ner_tags"]]
+            def padding_tensor(sequences, padding_value):
+                if isinstance(padding_value, tuple):
+                    out_tensor = np.full((len(sequences), tokenizer.max_entity_length, 2), padding_value)
+                else:
+                    out_tensor = np.full((len(sequences), tokenizer.max_entity_length), padding_value)
+
+                for i, tensor in enumerate(sequences):
+                    if tokenizer.padding_side == "right":
+                        if isinstance(padding_value, tuple):
+                            out_tensor[i, :len(tensor[:tokenizer.max_entity_length]), :2] = tensor[:tokenizer.max_entity_length]
+                        else:
+                            out_tensor[i, :len(tensor[:tokenizer.max_entity_length])] = tensor[:tokenizer.max_entity_length]
+                    else:
+                        if isinstance(padding_value, tuple):
+                            out_tensor[i, len(tensor[:tokenizer.max_entity_length]) - 1:, :2] = tensor[:tokenizer.max_entity_length]
+                        else:
+                            out_tensor[i, len(tensor[:tokenizer.max_entity_length]) - 1:] = tensor[:tokenizer.max_entity_length]
+                    
+                return out_tensor.tolist()
+            
+            if padding == "max_length":
+                tokenized_inputs["labels"] = padding_tensor(examples["labels_entity_spans"], -100)
+                tokenized_inputs["original_entity_spans"] = padding_tensor(examples["original_entity_spans"], (-1, -1))
+                tokenized_inputs["ner_tags"] = padding_tensor(examples["ner_tags"], -1)
+            else:
+                tokenized_inputs["labels"] = [ex[:tokenizer.max_entity_length] for ex in examples["labels_entity_spans"]]
+                tokenized_inputs["original_entity_spans"] = [ex[:tokenizer.max_entity_length] for ex in examples["original_entity_spans"]]
+                tokenized_inputs["ner_tags"] = [ex[:tokenizer.max_entity_length] for ex in examples["ner_tags"]]
         else:
             labels = []
             for i, label in enumerate(examples[label_column_name]):
@@ -573,6 +585,18 @@ def main():
         return tokenized_inputs
 
     with accelerator.main_process_first():
+        if config.model_type == "luke":
+            raw_datasets = raw_datasets.map(
+                compute_sentence_boundaries_for_luke,
+                batched=True,
+                desc="Adding sentence boundaries",
+            )
+            raw_datasets = raw_datasets.map(
+                compute_entity_spans_for_luke,
+                batched=True,
+                desc="Adding sentence spans",
+            )
+
         processed_raw_datasets = raw_datasets.map(
             tokenize_and_align_labels,
             batched=True,
@@ -591,10 +615,7 @@ def main():
     if args.pad_to_max_length:
         # If padding was already done ot max length, we use the default data collator that will just convert everything
         # to tensors.
-        if config.model_type == "luke":
-            data_collator = luke_entity_span_classification_data_collator
-        else:
-            data_collator = default_data_collator
+        data_collator = default_data_collator
     else:
         # Otherwise, `DataCollatorForTokenClassification` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
@@ -657,24 +678,26 @@ def main():
         true_labels = []
     
         for output, original_spans, tags in zip(outputs.logits, original_entity_spans, ner_tags):
+            true_tags = [val for val in tags if val != -1]
+            true_original_spans = [val for val in original_spans if val != (-1, -1)]
             max_indices = torch.argmax(output, axis=1)
             max_logits = torch.max(output, axis=1).values
             predictions = []
 
-            for logit, index, span in zip(max_logits, max_indices, original_spans):
+            for logit, index, span in zip(max_logits, max_indices, true_original_spans):
                 if index != 0:
                     predictions.append((logit, span, label_list[index]))
             
-            predicted_sequence = [label_list[0]] * len(tags)
+            predicted_sequence = [label_list[0]] * len(true_tags)
 
             for _, span, label in sorted(predictions, key=lambda o: o[0], reverse=True):
-                if all([o == "O" for o in predicted_sequence[span[0] : span[1]]]):
+                if all([o == label_list[0] for o in predicted_sequence[span[0] : span[1]]]):
                     predicted_sequence[span[0]] = label
                     if span[1] - span[0] > 1:
                         predicted_sequence[span[0] + 1 : span[1]] = [label] * (span[1] - span[0] - 1)
 
             true_predictions.append(predicted_sequence)
-            true_labels.append([label_list[tag_id] for tag_id in tags])
+            true_labels.append([label_list[tag_id] for tag_id in true_tags])
         
         return true_predictions, true_labels
 
@@ -735,9 +758,6 @@ def main():
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
-            if config.model_type == "luke":
-                ner_tags = batch.pop("ner_tags")
-                original_entity_spans = batch.pop("original_entity_spans")
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
@@ -754,9 +774,6 @@ def main():
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            if config.model_type == "luke":
-                ner_tags = batch.pop("ner_tags")
-                original_entity_spans = batch.pop("original_entity_spans")
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
@@ -768,7 +785,7 @@ def main():
             predictions_gathered = accelerator.gather(predictions)
             labels_gathered = accelerator.gather(labels)
             if config.model_type == "luke":
-                preds, refs = get_luke_labels(outputs, ner_tags, original_entity_spans)
+                preds, refs = get_luke_labels(outputs, batch["ner_tags"], batch["original_entity_spans"])
             else:
                 preds, refs = get_labels(predictions_gathered, labels_gathered)
             metric.add_batch(
