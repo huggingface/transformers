@@ -25,7 +25,13 @@ from torchvision import transforms as T
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import BertTokenizer, ViltConfig, ViltForPreTraining, ViltForVisualQuestionAnswering
+from transformers import (
+    BertTokenizer,
+    ViltConfig,
+    ViltForNaturalLanguageVisualReasoning,
+    ViltForPreTraining,
+    ViltForVisualQuestionAnswering,
+)
 from transformers.utils import logging
 
 
@@ -34,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, vqa_model=False):
+def create_rename_keys(config, vqa_model=False, nlvr_model=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
@@ -102,6 +108,19 @@ def create_rename_keys(config, vqa_model=False):
                 ("vqa_classifier.1.bias", "classifier.1.bias"),
                 ("vqa_classifier.3.weight", "classifier.3.weight"),
                 ("vqa_classifier.3.bias", "classifier.3.bias"),
+            ]
+        )
+
+    if nlvr_model:
+        # classification head
+        rename_keys.extend(
+            [
+                ("nlvr2_classifier.0.weight", "classifier.0.weight"),
+                ("nlvr2_classifier.0.bias", "classifier.0.bias"),
+                ("nlvr2_classifier.1.weight", "classifier.1.weight"),
+                ("nlvr2_classifier.1.bias", "classifier.1.bias"),
+                ("nlvr2_classifier.3.weight", "classifier.3.weight"),
+                ("nlvr2_classifier.3.bias", "classifier.3.bias"),
             ]
         )
         # rename_keys.extend(
@@ -176,6 +195,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # define default ViT configuration
     config = ViltConfig(image_size=384, patch_size=32, tie_word_embeddings=False)
     vqa_model = False
+    nlvr_model = False
     if "vqa" in checkpoint_url:
         vqa_model = True
         config.num_labels = 3129
@@ -185,10 +205,16 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
+    elif "nlvr" in checkpoint_url:
+        nlvr_model = True
+        config.num_labels = 2
+        config.id2label = {0: "True", 1: "False"}
+        config.label2id = {v: k for k, v in config.id2label.items()}
+        config.modality_type_vocab_size = 3
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
-    rename_keys = create_rename_keys(config, vqa_model)
+    rename_keys = create_rename_keys(config, vqa_model, nlvr_model)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config)
@@ -196,6 +222,8 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # load HuggingFace model
     if vqa_model:
         model = ViltForVisualQuestionAnswering(config).eval()
+    elif nlvr_model:
+        model = ViltForNaturalLanguageVisualReasoning(config).eval()
     else:
         model = ViltForPreTraining(config).eval()
     model.load_state_dict(state_dict)
@@ -211,8 +239,12 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     transformations = T.Compose([T.Resize(384), T.ToTensor(), T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
     pixel_values = transformations(image).unsqueeze(0)
     # Forward pass
-    outputs = model(input_ids=input_ids, pixel_values=pixel_values)
-    if vqa_model:
+    if nlvr_model:
+        outputs = model(input_ids=input_ids, pixel_values=pixel_values, pixel_values_2=pixel_values)
+    else:
+        outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+    # Verify outputs
+    if vqa_model or nlvr_model:
         print(outputs.logits.shape)
         predicted_idx = outputs.logits.argmax(-1).item()
         print(model.config.id2label[predicted_idx])

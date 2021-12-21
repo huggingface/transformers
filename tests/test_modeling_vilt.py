@@ -198,7 +198,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             ViltForVisualQuestionAnswering,
             ViltForImageRetrievalTextRetrieval,
             ViltForPreTraining,
-            #ViltForNaturalLanguageVisualReasoning,
+            # ViltForNaturalLanguageVisualReasoning,
         )
         if is_torch_available()
         else ()

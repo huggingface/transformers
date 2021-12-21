@@ -118,8 +118,8 @@ class ViltEmbeddings(nn.Module):
         )
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
-        # token type (text/patch) embeddings
-        self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
+        # modality type (text/patch) embeddings
+        self.token_type_embeddings = nn.Embedding(config.modality_type_vocab_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
@@ -214,7 +214,16 @@ class ViltEmbeddings(nn.Module):
 
         return x, x_mask, (patch_index, (H, W))
 
-    def forward(self, input_ids, attention_mask, token_type_ids, pixel_values, pixel_mask, inputs_embeds):
+    def forward(
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        pixel_values,
+        pixel_mask,
+        inputs_embeds,
+        image_token_type_idx=1,
+    ):
         # PART 1: text embeddings
         text_embeds = self.text_embeddings(
             input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -225,15 +234,19 @@ class ViltEmbeddings(nn.Module):
             pixel_values, pixel_mask, max_image_length=self.config.max_image_length
         )
 
-        # PART 3: add token type embeddings
-        # 0 indicates text, 1 indicates patch
-        text_tokens_shape = text_embeds.size()[:2]
-        image_tokens_shape = image_embeds.size()[:2]
+        # PART 3: add modality type embeddings
+        # 0 indicates text, 1 indicates image, 2 is optionally used when a second image is provided (NLVR2)
+        if image_token_type_idx is None:
+            image_token_type_idx = 1
         text_embeds, image_embeds = (
             text_embeds
-            + self.token_type_embeddings(torch.zeros(text_tokens_shape, dtype=torch.long, device=text_embeds.device)),
+            + self.token_type_embeddings(
+                torch.zeros_like(attention_mask, dtype=torch.long, device=text_embeds.device)
+            ),
             image_embeds
-            + self.token_type_embeddings(torch.ones(image_tokens_shape, dtype=torch.long, device=text_embeds.device)),
+            + self.token_type_embeddings(
+                torch.full_like(image_masks, image_token_type_idx, dtype=torch.long, device=text_embeds.device)
+            ),
         )
 
         # PART 4: concatenate
@@ -697,6 +710,7 @@ class ViltModel(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         pixel_mask=None,
+        image_token_type_idx=None,
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
@@ -758,7 +772,13 @@ class ViltModel(ViltPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output, attention_mask = self.embeddings(
-            input_ids, attention_mask, token_type_ids, pixel_values, pixel_mask, inputs_embeds
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            pixel_values,
+            pixel_mask,
+            inputs_embeds,
+            image_token_type_idx=image_token_type_idx,
         )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
@@ -1191,6 +1211,7 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
+            image_token_type_idx=1,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1204,6 +1225,7 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values_2,
             pixel_mask=pixel_mask_2,
+            image_token_type_idx=2,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,

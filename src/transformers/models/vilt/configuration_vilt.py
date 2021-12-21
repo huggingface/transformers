@@ -41,6 +41,10 @@ class ViltConfig(PretrainedConfig):
             represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.ViltModel`.
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.ViltModel`.
+            This is used when encoding text.
+        modality_type_vocab_size (:obj:`int`, `optional`, defaults to 2):
+            The vocabulary size of the modalities passed when calling :class:`~transformers.ViltModel`.
+            This is used after concatening the embeddings of the text and image modalities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 40):
             The maximum sequence length that this model might ever be used with.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
@@ -94,6 +98,7 @@ class ViltConfig(PretrainedConfig):
         self,
         vocab_size=30522,
         type_vocab_size=2,
+        modality_type_vocab_size=2,
         max_position_embeddings=40,
         hidden_size=768,
         num_hidden_layers=12,
@@ -117,6 +122,7 @@ class ViltConfig(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
+        self.modality_type_vocab_size = modality_type_vocab_size
         self.max_position_embeddings = max_position_embeddings
 
         self.hidden_size = hidden_size
