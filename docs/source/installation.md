@@ -24,7 +24,7 @@ Install 🤗 Transformers for whichever deep learning library you're working wit
 * [TensorFlow 2.0](https://www.tensorflow.org/install/pip) installation instructions.
 * [Flax](https://flax.readthedocs.io/en/latest/) installation instructions.
 
-You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). A virtual environment makes it easier to manage different projects, and to avoid any compatibility issues between dependencies.
+You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, take a look at this [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). A virtual environment makes it easier to manage different projects, and avoid compatibility issues between dependencies.
 
 Start by creating a virtual environment in your project directory:
 
@@ -40,7 +40,7 @@ source .env/bin/activate
 
 Now you're ready to install 🤗 Transformers! If you'd like to experiment with the source code, you must install it from source.
 
-## Installation with pip
+## Install with pip
 
 Install 🤗 Transformers with the following command:
 
@@ -66,7 +66,7 @@ pip install transformers[tf-cpu]
 pip install transformers[flax]
 ```
 
-Check if 🤗 Transformers has been properly installed by running the following command. It will download a pretrained model:
+Finally, check if 🤗 Transformers has been properly installed by running the following command. It will download a pretrained model:
 
 ```bash
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('we love you'))"
@@ -78,7 +78,7 @@ Then print out a label and score:
 [{'label': 'POSITIVE', 'score': 0.9998704791069031}]
 ```
 
-## Installation from source
+## Install from source
 
 Install 🤗 Transformers from source with the following command:
 
@@ -86,7 +86,7 @@ Install 🤗 Transformers from source with the following command:
 pip install git+https://github.com/huggingface/transformers
 ```
 
-This command installs the bleeding edge `master` version rather than the latest released version. The `master` version can be useful when a bug has been fixed since the last official release, but the new release hasn't been rolled out yet. However, this means the `master` version may not always be stable. We strive to keep the `master` version operational, and most issues are usually resolved within a few hours or a day. If you encounter an issue, please open an [Issue](https://github.com/huggingface/transformers/issues) so it can get fixed even sooner!
+This command installs the bleeding edge `master` version rather than the latest `stable` version. The `master` version is useful for staying up-to-date with the latest developments. For instance, if a bug has been fixed since the last official release but a new release hasn't been rolled out yet. However, this means the `master` version may not always be stable. We strive to keep the `master` version operational, and most issues are usually resolved within a few hours or a day. If you encounter an issue, please open an [Issue](https://github.com/huggingface/transformers/issues) so we can fix it even sooner!
 
 Check if 🤗 Transformers has been properly installed by running the following command:
 
@@ -101,7 +101,7 @@ You will need an editable install if you'd like to:
 * Use the `master` version of the source code.
 * Contribute to 🤗 Transformers and need to test changes in the code.
 
-Clone the repository and install 🤗 Transformers with the following command:
+Clone the repository and install 🤗 Transformers with the following commands:
 
 ```bash
 git clone https://github.com/huggingface/transformers.git
@@ -109,7 +109,7 @@ cd transformers
 pip install -e .
 ```
 
-This command links the folder you cloned the repository to and your Python library paths. Python will now look inside this folder in addition to the normal library paths. For example, if your Python packages are typically installed in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python will also search the folder you cloned to: `~/transformers/`.
+These commands will link the folder you cloned the repository to and your Python library paths. Python will now look inside this folder in addition to the normal library paths. For example, if your Python packages are typically installed in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python will also search the folder you cloned to: `~/transformers/`.
 
 <Tip warning={true}>
 You must keep the `transformers` folder if you want to keep using the library.
@@ -124,7 +124,7 @@ git pull
 
 Your Python environment will find the `master` version of 🤗 Transformers on the next run.
 
-## Installation with conda
+## Install with conda
 
 Install from the conda channel `huggingface`:
 
@@ -136,10 +136,9 @@ conda install -c huggingface transformers
 
 Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/transformers/`. This is the default directory given by the shell environment variable `TRANSFORMERS_CACHE`. You can change the shell environment variables shown below - in order of priority - to specify a different cache directory:
 
-1. Shell environment variable: `TRANSFORMERS_CACHE`.
+1. Shell environment variable (default): `TRANSFORMERS_CACHE`.
 2. Shell environment variable: `HF_HOME`.
 3. Shell environment variable: `XDG_CACHE_HOME` + `/huggingface/`.
-4. Shell environment variable (default): `TRANSFORMERS_CACHE`.
 
 <Tip>
 🤗 Transformers will use the shell environment variables `PYTORCH_TRANSFORMERS_CACHE` or `PYTORCH_PRETRAINED_BERT_CACHE` if you are coming from an earlier iteration of this library unless you specify the shell environment variable `TRANSFORMERS_CACHE`.
@@ -153,20 +152,20 @@ Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/tr
 Add 🤗 [Datasets](https://huggingface.co/docs/datasets/) to your offline training workflow by setting the environment variable `HF_DATASETS_OFFLINE=1`.
 </Tip>
 
-For example, you would typically run a program on a normal network firewalled to external world instances with the following command:
+For example, you would typically run a program on a normal network firewalled to external instances with the following command:
 
 ```bash
 python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
-Run this same program in an offline instance by:
+Run this same program in an offline instance with:
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
-This should run the script without hanging or waiting to timeout.
+The script should now run without hanging or waiting to timeout because it knows it should only look for local files.
 
 ### Fetch models and tokenizers to use offline
 
@@ -184,12 +183,12 @@ Another option for using 🤗 Transformers offline is to download the files ahea
         python -m pip install huggingface_hub
         ```
 
-    2. Use the [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, here is how you can download the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
+    2. Use the [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, the following command downloads the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
 
         ```python
         >>> from huggingface_hub import hf_hub_download
 
-        >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path")
+        >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
         ```
 
 Once your file is downloaded and locally cached, specify it's local path to load and use it:
