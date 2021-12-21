@@ -26,7 +26,6 @@ from .data_collator import (
     DataCollatorWithPadding,
     DefaultDataCollator,
     default_data_collator,
-    luke_entity_span_classification_data_collator,
 )
 from .metrics import glue_compute_metrics, xnli_compute_metrics
 from .processors import (
