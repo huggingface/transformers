@@ -29,7 +29,7 @@ import unicodedata
 import datasets
 import torch
 import numpy as np
-from datasets import ClassLabel, load_dataset, load_metric, concatenate_datasets
+from datasets import ClassLabel, load_dataset, load_metric, concatenate_datasets, DatasetDict
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -281,12 +281,17 @@ def main():
         dataset_configs = args.dataset_config_name.split(",")
         
         if len(dataset_configs) > 1:
-            datasets = []
+            datasets = {}
 
             for dataset_config_name in args.dataset_config_name.split(","):
-                datasets.append(load_dataset(args.dataset_name, dataset_config_name))
+                tmp_dataset = load_dataset(args.dataset_name, dataset_config_name)
+                
+                for split in tmp_dataset.keys():
+                    datasets.setdefault(split, []).append(tmp_dataset[split])
             
-            raw_datasets = concatenate_datasets(datasets)
+            raw_datasets = DatasetDict()
+            for split, value in datasets.items():
+                raw_datasets[split] = concatenate_datasets(value)
         else:
             raw_datasets = load_dataset(args.dataset_name, dataset_configs[0])
     else:
