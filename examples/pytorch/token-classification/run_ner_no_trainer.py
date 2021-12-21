@@ -107,6 +107,15 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--max_entity_length",
+        type=int,
+        default=32,
+        help=(
+            "The maximum total input entity sequence length after tokenization (Used only for (M)Luke models). Sequences longer than this will be truncated,"
+            " sequences shorter will be padded if `--pad_to_max_length` is passed."
+        ),
+    )
+    parser.add_argument(
         "--pad_to_max_length",
         action="store_true",
         help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
@@ -371,7 +380,7 @@ def main():
     if config.model_type in {"gpt2", "roberta"}:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
     elif config.model_type in {"luke"}:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=False, task="entity_span_classification")
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=False, task="entity_span_classification", max_entity_length=args.max_entity_length)
     else:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
 
