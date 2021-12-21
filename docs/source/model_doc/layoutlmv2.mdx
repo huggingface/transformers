@@ -54,14 +54,14 @@ Tips:
 - LayoutLMv2 uses Facebook AI's [Detectron2](https://github.com/facebookresearch/detectron2/) package for its visual
   backbone. See [this link](https://detectron2.readthedocs.io/en/latest/tutorials/install.html) for installation
   instructions.
-- In addition to `input_ids`, [`~transformers.LayoutLMv2Model.forward`] expects 2 additional inputs, namely
+- In addition to `input_ids`, [`~LayoutLMv2Model.forward`] expects 2 additional inputs, namely
   `image` and `bbox`. The `image` input corresponds to the original document image in which the text
   tokens occur. The model expects each document image to be of size 224x224. This means that if you have a batch of
   document images, `image` should be a tensor of shape (batch_size, 3, 224, 224). This can be either a
   `torch.Tensor` or a `Detectron2.structures.ImageList`. You don't need to normalize the channels, as this is
   done by the model. Important to note is that the visual backbone expects BGR channels instead of RGB, as all models
   in Detectron2 are pre-trained using the BGR format. The `bbox` input are the bounding boxes (i.e. 2D-positions)
-  of the input text tokens. This is identical to [`~transformers.LayoutLMModel`]. These can be obtained using an
+  of the input text tokens. This is identical to [`LayoutLMModel`]. These can be obtained using an
   external OCR engine such as Google's [Tesseract](https://github.com/tesseract-ocr/tesseract) (there's a [Python
   wrapper](https://pypi.org/project/pytesseract/) available). Each bounding box should be in (x0, y0, x1, y1)
   format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1, y1)
