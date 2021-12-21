@@ -39,20 +39,20 @@ PRETRAINED_INIT_CONFIGURATION = {}
 
 class HerbertTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "Fast" BPE tokenizer for HerBERT (backed by HuggingFace's `tokenizers` library).
+    Construct a "Fast" BPE tokenizer for HerBERT (backed by HuggingFace's *tokenizers* library).
 
     Peculiarities:
 
     - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurrence of
       a punctuation character will be treated separately.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
     """
 
@@ -94,17 +94,17 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An HerBERT, like BERT sequence has the following format:
 
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s> B </s>``
+        - single sequence: `<s> X </s>`
+        - pair of sequences: `<s> A </s> B </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
 
         cls = [self.cls_token_id]
@@ -119,18 +119,18 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -148,19 +148,19 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. HerBERT, like
         BERT sequence pair mask has the following format:
 
-        ::
-
-            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
             sequence(s).
         """
         sep = [self.sep_token_id]
