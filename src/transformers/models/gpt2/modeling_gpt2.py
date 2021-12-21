@@ -642,17 +642,19 @@ PARALLELIZE_DOCSTRING = r"""
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
 
-    Example::
+    Example:
 
-        # On a 4 GPU machine with gpt2-large:
-        model = GPT2LMHeadModel.from_pretrained('gpt2-large')
-        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
+    ```python
+    # On a 4 GPU machine with gpt2-large:
+    model = GPT2LMHeadModel.from_pretrained('gpt2-large')
+    device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
 
-                    1: [8, 9, 10, 11, 12, 13, 14, 15],
-                    2: [16, 17, 18, 19, 20, 21, 22, 23],
-                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+                1: [8, 9, 10, 11, 12, 13, 14, 15],
+                2: [16, 17, 18, 19, 20, 21, 22, 23],
+                3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
+    model.parallelize(device_map) # Splits the model across several devices
+    model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    ```
 """
 
 

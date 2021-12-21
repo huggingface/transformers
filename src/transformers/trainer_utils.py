@@ -49,11 +49,11 @@ if is_tf_available():
 
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if
     installed).
 
     Args:
-        seed (:obj:`int`): The seed to set.
+        seed (`int`): The seed to set.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -70,8 +70,8 @@ class EvalPrediction(NamedTuple):
     Evaluation output (always contains labels), to be used to compute metrics.
 
     Parameters:
-        predictions (:obj:`np.ndarray`): Predictions of the model.
-        label_ids (:obj:`np.ndarray`): Targets to be matched.
+        predictions (`np.ndarray`): Predictions of the model.
+        label_ids (`np.ndarray`): Targets to be matched.
     """
 
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
@@ -134,15 +134,15 @@ class HubStrategy(ExplicitEnum):
 
 class BestRun(NamedTuple):
     """
-    The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
+    The best run found by an hyperparameter search (see [`~Trainer.hyperparameter_search`]).
 
     Parameters:
-        run_id (:obj:`str`):
+        run_id (`str`):
             The id of the best run (if models were saved, the corresponding checkpoint will be in the folder ending
             with run-{run_id}).
-        objective (:obj:`float`):
+        objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (:obj:`Dict[str, Any]`):
+        hyperparameters (`Dict[str, Any]`):
             The hyperparameters picked to get this run.
     """
 
@@ -154,13 +154,13 @@ class BestRun(NamedTuple):
 def default_compute_objective(metrics: Dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no
-    metrics are provided to the :class:`~transformers.Trainer`, the sum of all metrics otherwise.
+    metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (:obj:`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
-        :obj:`float`: The objective to minimize or maximize
+        `float`: The objective to minimize or maximize
     """
     metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
@@ -292,22 +292,23 @@ class TrainerMemoryTracker:
     """
     A helper class that tracks cpu and gpu memory.
 
-    This class will silently skip unless ``psutil`` is available. Install with ``pip install psutil``.
+    This class will silently skip unless `psutil` is available. Install with `pip install psutil`.
 
     When a stage completes, it can pass metrics dict to update with the memory metrics gathered during this stage.
 
-    Example ::
+    Example :
 
-        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
-        self._memory_tracker.start()
-        code ...
-        metrics = {"train_runtime": 10.5}
-        self._memory_tracker.stop_and_update_metrics(metrics)
+    ```python
+    self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+    self._memory_tracker.start()
+    code ...
+    metrics = {"train_runtime": 10.5}
+    self._memory_tracker.stop_and_update_metrics(metrics)
+    ```
 
-    At the moment GPU tracking is only for ``pytorch``, but can be extended to support ``tensorflow``.
+    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
 
-    To understand this class' intricacies please read the documentation of :meth:`~transformers.Trainer.log_metrics`.
-
+    To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
 
     # map trainer methods to metrics prefix

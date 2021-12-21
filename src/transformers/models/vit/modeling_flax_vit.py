@@ -515,21 +515,23 @@ class FlaxViTModel(FlaxViTPreTrainedModel):
 FLAX_VISION_MODEL_DOCSTRING = """
     Returns:
 
-    Examples::
+    Examples:
 
-        >>> from transformers import ViTFeatureExtractor, FlaxViTModel
-        >>> from PIL import Image
-        >>> import requests
+    ```python
+    >>> from transformers import ViTFeatureExtractor, FlaxViTModel
+    >>> from PIL import Image
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-        >>> model = FlaxViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+    >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+    >>> model = FlaxViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 overwrite_call_docstring(FlaxViTModel, FLAX_VISION_MODEL_DOCSTRING)
@@ -594,26 +596,28 @@ class FlaxViTForImageClassification(FlaxViTPreTrainedModel):
 FLAX_VISION_CLASSIF_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import ViTFeatureExtractor, FlaxViTForImageClassification
-        >>> from PIL import Image
-        >>> import jax
-        >>> import requests
+    ```python
+    >>> from transformers import ViTFeatureExtractor, FlaxViTForImageClassification
+    >>> from PIL import Image
+    >>> import jax
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-        >>> model = FlaxViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+    >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+    >>> model = FlaxViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
 
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
+    >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])
+    ```
 """
 
 overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)

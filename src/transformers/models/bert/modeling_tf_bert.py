@@ -1599,21 +1599,22 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         r"""
         Return:
 
-        Examples::
+        Examples:
 
-            >>> import tensorflow as tf
-            >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
-            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-            >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
 
-            >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-            >>> assert logits[0][0] < logits[0][1] # the next sentence was random
-        """
+        >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
+        >>> assert logits[0][0] < logits[0][1] # the next sentence was random
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

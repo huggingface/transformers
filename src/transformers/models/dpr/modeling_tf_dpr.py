@@ -61,7 +61,7 @@ class TFDPRContextEncoderOutput(ModelOutput):
     Class for outputs of [`TFDPRContextEncoder`].
 
     Args:
-        pooler_output: (:obj:`tf.Tensor` of shape `(batch_size, embeddings_size)`):
+        pooler_output (`tf.Tensor` of shape `(batch_size, embeddings_size)`):
             The DPR encoder outputs the *pooler_output* that corresponds to the context representation. Last layer
             hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
             This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
@@ -88,7 +88,7 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
     Class for outputs of [`TFDPRQuestionEncoder`].
 
     Args:
-        pooler_output: (:obj:`tf.Tensor` of shape `(batch_size, embeddings_size)`):
+        pooler_output (`tf.Tensor` of shape `(batch_size, embeddings_size)`):
             The DPR encoder outputs the *pooler_output* that corresponds to the question representation. Last layer
             hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
             This output is to be used to embed questions for nearest neighbors queries with context embeddings.
@@ -115,11 +115,11 @@ class TFDPRReaderOutput(ModelOutput):
     Class for outputs of [`TFDPRReaderEncoder`].
 
     Args:
-        start_logits: (:obj:`tf.Tensor` of shape `(n_passages, sequence_length)`):
+        start_logits (`tf.Tensor` of shape `(n_passages, sequence_length)`):
             Logits of the start index of the span for each passage.
-        end_logits: (:obj:`tf.Tensor` of shape `(n_passages, sequence_length)`):
+        end_logits (`tf.Tensor` of shape `(n_passages, sequence_length)`):
             Logits of the end index of the span for each passage.
-        relevance_logits: (``tf.Tensor``` of shape `(n_passages, )`):
+        relevance_logits (`tf.Tensor` of shape `(n_passages, )`):
             Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
             question, compared to all the other passages.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -485,17 +485,17 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
             (a) For sequence pairs (for a pair title+text for example):
 
-    ```
-    tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-    token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1
-    ```
+            ```
+            tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+            token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1
+            ```
 
             (b) For single sequences (for a question for example):
 
-    ```
-    tokens:         [CLS] the dog is hairy . [SEP]
-    token_type_ids:   0   0   0   0  0     0   0
-    ```
+            ```
+            tokens:         [CLS] the dog is hairy . [SEP]
+            token_type_ids:   0   0   0   0  0     0   0
+            ```
 
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
@@ -610,13 +610,15 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         r"""
         Return:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import TFDPRContextEncoder, DPRContextEncoderTokenizer
-            >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-            >>> model = TFDPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', from_pt=True)
-            >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
-            >>> embeddings = model(input_ids).pooler_output
+        ```python
+        >>> from transformers import TFDPRContextEncoder, DPRContextEncoderTokenizer
+        >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        >>> model = TFDPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', from_pt=True)
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
+        ```
         """
         inputs = input_processing(
             func=self.call,
@@ -708,13 +710,15 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         r"""
         Return:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import TFDPRQuestionEncoder, DPRQuestionEncoderTokenizer
-            >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-            >>> model = TFDPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', from_pt=True)
-            >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
-            >>> embeddings = model(input_ids).pooler_output
+        ```python
+        >>> from transformers import TFDPRQuestionEncoder, DPRQuestionEncoderTokenizer
+        >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+        >>> model = TFDPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', from_pt=True)
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
+        ```
         """
         inputs = input_processing(
             func=self.call,
@@ -804,22 +808,23 @@ class TFDPRReader(TFDPRPretrainedReader):
         r"""
         Return:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import TFDPRReader, DPRReaderTokenizer
-            >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-            >>> model = TFDPRReader.from_pretrained('facebook/dpr-reader-single-nq-base', from_pt=True)
-            >>> encoded_inputs = tokenizer(
-            ...         questions=["What is love ?"],
-            ...         titles=["Haddaway"],
-            ...         texts=["'What Is Love' is a song recorded by the artist Haddaway"],
-            ...         return_tensors='tf'
-            ...     )
-            >>> outputs = model(encoded_inputs)
-            >>> start_logits = outputs.start_logits
-            >>> end_logits = outputs.end_logits
-            >>> relevance_logits = outputs.relevance_logits
-
+        ```python
+        >>> from transformers import TFDPRReader, DPRReaderTokenizer
+        >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
+        >>> model = TFDPRReader.from_pretrained('facebook/dpr-reader-single-nq-base', from_pt=True)
+        >>> encoded_inputs = tokenizer(
+        ...         questions=["What is love ?"],
+        ...         titles=["Haddaway"],
+        ...         texts=["'What Is Love' is a song recorded by the artist Haddaway"],
+        ...         return_tensors='tf'
+        ...     )
+        >>> outputs = model(encoded_inputs)
+        >>> start_logits = outputs.start_logits
+        >>> end_logits = outputs.end_logits
+        >>> relevance_logits = outputs.relevance_logits
+        ```
         """
         inputs = input_processing(
             func=self.call,
