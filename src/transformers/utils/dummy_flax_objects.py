@@ -963,42 +963,6 @@ class FlaxWav2Vec2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxXGLMForConditionalGeneration:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["flax"])
-
-    def __call__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxXGLMForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["flax"])
-
-    def __call__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxXGLMForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["flax"])
-
-    def __call__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxXGLMModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])

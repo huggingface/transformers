@@ -1468,9 +1468,6 @@ if is_torch_available():
         [
             "XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "XGLMForCausalLM",
-            "XGLMForConditionalGeneration",
-            "XGLMForQuestionAnswering",
-            "XGLMForSequenceClassification",
             "XGLMModel",
             "XGLMPreTrainedModel",
         ]
@@ -2220,9 +2217,6 @@ if is_flax_available():
     )
     _import_structure["models.xglm"].extend(
         [
-            "FlaxXGLMForConditionalGeneration",
-            "FlaxXGLMForQuestionAnswering",
-            "FlaxXGLMForSequenceClassification",
             "FlaxXGLMModel",
             "FlaxXGLMPreTrainedModel",
         ]
@@ -3431,15 +3425,7 @@ if TYPE_CHECKING:
             WavLMModel,
             WavLMPreTrainedModel,
         )
-        from .models.xglm import (
-            XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XGLMForCausalLM,
-            XGLMForConditionalGeneration,
-            XGLMForQuestionAnswering,
-            XGLMForSequenceClassification,
-            XGLMModel,
-            XGLMPreTrainedModel,
-        )
+        from .models.xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
         from .models.xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMForMultipleChoice,
@@ -4054,13 +4040,7 @@ if TYPE_CHECKING:
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
         )
-        from .models.xglm import (
-            FlaxXGLMForConditionalGeneration,
-            FlaxXGLMForQuestionAnswering,
-            FlaxXGLMForSequenceClassification,
-            FlaxXGLMModel,
-            FlaxXGLMPreTrainedModel,
-        )
+        from .models.xglm import FlaxXGLMModel, FlaxXGLMPreTrainedModel
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

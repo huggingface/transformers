@@ -33,9 +33,6 @@ if is_torch_available():
     _import_structure["modeling_xglm"] = [
         "XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XGLMForCausalLM",
-        "XGLMForConditionalGeneration",
-        "XGLMForQuestionAnswering",
-        "XGLMForSequenceClassification",
         "XGLMModel",
         "XGLMPreTrainedModel",
     ]
@@ -43,9 +40,6 @@ if is_torch_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_xglm"] = [
-        "FlaxXGLMForConditionalGeneration",
-        "FlaxXGLMForQuestionAnswering",
-        "FlaxXGLMForSequenceClassification",
         "FlaxXGLMModel",
         "FlaxXGLMPreTrainedModel",
     ]
@@ -59,24 +53,10 @@ if TYPE_CHECKING:
         from .tokenization_xglm_fast import XGLMTokenizerFast
 
     if is_torch_available():
-        from .modeling_xglm import (
-            XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XGLMForCausalLM,
-            XGLMForConditionalGeneration,
-            XGLMForQuestionAnswering,
-            XGLMForSequenceClassification,
-            XGLMModel,
-            XGLMPreTrainedModel,
-        )
+        from .modeling_xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
 
     if is_flax_available():
-        from .modeling_xglm import (
-            FlaxXGLMForConditionalGeneration,
-            FlaxXGLMForQuestionAnswering,
-            FlaxXGLMForSequenceClassification,
-            FlaxXGLMModel,
-            FlaxXGLMPreTrainedModel,
-        )
+        from .modeling_xglm import FlaxXGLMModel, FlaxXGLMPreTrainedModel
 
 
 else:
