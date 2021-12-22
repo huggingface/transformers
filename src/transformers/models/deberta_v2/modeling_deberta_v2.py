@@ -97,6 +97,7 @@ class XSoftmax(torch.autograd.Function):
 
     >>> # Specify the dimension to apply softmax
     >>> dim = -1
+
     >>> y = XSoftmax.apply(x, mask, dim)
     ```"""
 
