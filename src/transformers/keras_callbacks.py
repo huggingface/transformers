@@ -24,7 +24,7 @@ class KerasMetricCallback(Callback):
 
     Args:
         metric_fn: Metric function provided by the user.
-        val_dataset: Validation data to be used to evaluate the model at
+        eval_dataset: Validation data to be used to evaluate the model at
         the end of the epoch.
         batch_size: Batch size.
         labels: Labels.
@@ -33,7 +33,7 @@ class KerasMetricCallback(Callback):
     def __init__(
         self,
         metric_fn: Callable,
-        val_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
+        eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
         output_cols: Optional[List[str]] = None,
         label_cols: Optional[List[str]] = None,
         batch_size: Optional[int] = None,
@@ -42,24 +42,24 @@ class KerasMetricCallback(Callback):
         super().__init__()
         self.metric_fn = metric_fn
         self.batch_size = batch_size
-        if not isinstance(val_dataset, tf.data.Dataset):
+        if not isinstance(eval_dataset, tf.data.Dataset):
             if batch_size is None:
                 raise ValueError(
                     "When passing data to KerasMetricCallback that is not a pre-batched tf.data.Dataset "
                     "the batch_size argument must be set."
                 )
             # Wrap a tf.data.Dataset around it
-            val_dataset = tf.data.Dataset.from_tensor_slices(val_dataset).batch(batch_size, drop_remainder=False)
-        self.val_dataset = val_dataset
+            eval_dataset = tf.data.Dataset.from_tensor_slices(eval_dataset).batch(batch_size, drop_remainder=False)
+        self.eval_dataset = eval_dataset
         self.predict_with_generate = predict_with_generate
         self.output_cols = output_cols
 
         # This next block attempts to parse out which elements of the dataset should be appended to the labels list
         # that is passed to the metric_fn
-        if isinstance(val_dataset.element_spec, tuple) and len(val_dataset.element_spec) == 2:
-            input_spec, label_spec = val_dataset.element_spec
+        if isinstance(eval_dataset.element_spec, tuple) and len(eval_dataset.element_spec) == 2:
+            input_spec, label_spec = eval_dataset.element_spec
         else:
-            input_spec = val_dataset.element_spec
+            input_spec = eval_dataset.element_spec
             label_spec = None
         if label_cols is not None:
             for label in label_cols:
@@ -104,7 +104,7 @@ class KerasMetricCallback(Callback):
         label_list = []
 
         # The whole predict/generate loop is handled inside this method
-        for batch in self.val_dataset:
+        for batch in self.eval_dataset:
             if isinstance(batch, tuple):
                 batch, labels = batch
             else:
