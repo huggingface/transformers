@@ -1115,19 +1115,20 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "An image of two cats chilling on a couch"
+        >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
-        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-        >>> model = ViltForImageRetrievalTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-coco")
+        >>> model = ViltForImageRetrievalTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-coco")
 
         >>> # prepare inputs
         >>> encoding = processor(image, text, return_tensors="pt")
 
         >>> # forward pass
-        >>> outputs = model(**encoding)
-        
-        >>> # the score tells us how well the image and text pair go together
-        >>> score = outputs.logits[:, 0].item()
+        >>> scores = dict()
+        >>> for text in texts:
+        ...     encoding = processor(image, text, return_tensors="pt")
+        ...     outputs = model(**encoding)
+        ...     scores[text] = outputs.logits[0,:].item()
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
