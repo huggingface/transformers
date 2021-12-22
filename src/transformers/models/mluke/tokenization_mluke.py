@@ -253,6 +253,10 @@ class MLukeTokenizer(PreTrainedTokenizer):
         max_mention_length=30,
         entity_token_1="<ent>",
         entity_token_2="<ent2>",
+        entity_unk_token="[UNK]",
+        entity_pad_token="[PAD]",
+        entity_mask_token="[MASK]",
+        entity_mask2_token="[MASK2]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
@@ -290,6 +294,10 @@ class MLukeTokenizer(PreTrainedTokenizer):
             max_mention_length=max_mention_length,
             entity_token_1=entity_token_1,
             entity_token_2=entity_token_2,
+            entity_unk_token=entity_unk_token,
+            entity_pad_token=entity_pad_token,
+            entity_mask_token=entity_mask_token,
+            entity_mask2_token=entity_mask2_token,
             **kwargs,
         )
 
@@ -314,6 +322,16 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         with open(entity_vocab_file, encoding="utf-8") as entity_vocab_handle:
             self.entity_vocab = json.load(entity_vocab_handle)
+        for entity_special_token in [entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token]:
+            if entity_special_token not in self.entity_vocab:
+                raise ValueError(
+                    f"Specified entity special token ``{entity_special_token}`` is not found in entity_vocab. "
+                    f"Probably an incorrect entity vocab file is loaded: {entity_vocab_file}."
+                )
+        self.entity_unk_token_id = self.entity_vocab[entity_unk_token]
+        self.entity_pad_token_id = self.entity_vocab[entity_pad_token]
+        self.entity_mask_token_id = self.entity_vocab[entity_mask_token]
+        self.entity_mask2_token_id = self.entity_vocab[entity_mask2_token]
 
         self.task = task
         if task is None or task == "entity_span_classification":
@@ -753,8 +771,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
         first_entity_token_spans, second_entity_token_spans = None, None
 
         if self.task is None:
-            unk_entity_id = self.entity_vocab["[UNK]"]
-            mask_entity_id = self.entity_vocab["[MASK]"]
 
             if entity_spans is None:
                 first_ids = get_input_ids(text)
@@ -763,9 +779,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
                 first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
                 if entities is None:
-                    first_entity_ids = [mask_entity_id] * len(entity_spans)
+                    first_entity_ids = [self.entity_mask_token_id] * len(entity_spans)
                 else:
-                    first_entity_ids = [self.entity_vocab.get(entity, unk_entity_id) for entity in entities]
+                    first_entity_ids = [self.entity_vocab.get(entity, self.entity_unk_token_id) for entity in entities]
 
             if text_pair is not None:
                 if entity_spans_pair is None:
@@ -777,9 +793,11 @@ class MLukeTokenizer(PreTrainedTokenizer):
                         text_pair, entity_spans_pair
                     )
                     if entities_pair is None:
-                        second_entity_ids = [mask_entity_id] * len(entity_spans_pair)
+                        second_entity_ids = [self.entity_mask_token_id] * len(entity_spans_pair)
                     else:
-                        second_entity_ids = [self.entity_vocab.get(entity, unk_entity_id) for entity in entities_pair]
+                        second_entity_ids = [
+                            self.entity_vocab.get(entity, self.entity_unk_token_id) for entity in entities_pair
+                        ]
 
         elif self.task == "entity_classification":
             if not (isinstance(entity_spans, list) and len(entity_spans) == 1 and isinstance(entity_spans[0], tuple)):
@@ -787,7 +805,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                     "Entity spans should be a list containing a single tuple "
                     "containing the start and end character indices of an entity"
                 )
-            first_entity_ids = [self.entity_vocab["[MASK]"]]
+            first_entity_ids = [self.entity_mask_token_id]
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
 
             # add special tokens to input ids
@@ -815,7 +833,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 )
 
             head_span, tail_span = entity_spans
-            first_entity_ids = [self.entity_vocab["[MASK]"], self.entity_vocab["[MASK2]"]]
+            first_entity_ids = [self.entity_mask_token_id, self.entity_mask2_token_id]
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
 
             head_token_span, tail_token_span = first_entity_token_spans
@@ -836,7 +854,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 first_ids = first_ids[:entity_token_start] + [special_token_id] + first_ids[entity_token_start:]
 
         elif self.task == "entity_span_classification":
-            mask_entity_id = self.entity_vocab["[MASK]"]
 
             if not (isinstance(entity_spans, list) and len(entity_spans) > 0 and isinstance(entity_spans[0], tuple)):
                 raise ValueError(
@@ -845,7 +862,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 )
 
             first_ids, first_entity_token_spans = get_input_ids_and_entity_token_spans(text, entity_spans)
-            first_entity_ids = [mask_entity_id] * len(entity_spans)
+            first_entity_ids = [self.entity_mask_token_id] * len(entity_spans)
 
         else:
             raise ValueError(f"Task {self.task} not supported")
@@ -1422,7 +1439,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
                 if entities_provided:
                     encoded_inputs["entity_ids"] = (
-                        encoded_inputs["entity_ids"] + [self.entity_vocab["[PAD]"]] * entity_difference
+                        encoded_inputs["entity_ids"] + [self.entity_pad_token_id] * entity_difference
                     )
                     encoded_inputs["entity_position_ids"] = (
                         encoded_inputs["entity_position_ids"] + [[-1] * self.max_mention_length] * entity_difference
@@ -1452,7 +1469,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
                 if entities_provided:
-                    encoded_inputs["entity_ids"] = [self.entity_vocab["[PAD]"]] * entity_difference + encoded_inputs[
+                    encoded_inputs["entity_ids"] = [self.entity_pad_token_id] * entity_difference + encoded_inputs[
                         "entity_ids"
                     ]
                     encoded_inputs["entity_position_ids"] = [
