@@ -20,7 +20,22 @@ logger = logging.getLogger(__name__)
 
 class KerasMetricCallback(Callback):
     """
-    Callback to prompt metrics at the end of every epoch.
+    Callback to compute metrics at the end of every epoch. Unlike normal Keras metrics, these do not need to be
+    compilable by TF. It is particularly useful for common NLP metrics like BLEU and ROUGE that require string
+    operations or generation loops that cannot be compiled. Predictions (or generations) will be computed on the
+    `eval_dataset` before being passed to the `metric_fn` in `np.ndarray` format. The `metric_fn` should compute
+    metrics and return a dict mapping metric names to metric values.
+
+    A simple example of a suitable metric_fn that computes accuracy on a SequenceClassification model:
+
+    ```py
+    def accuracy_fn(predictions, labels):
+        class_predictions = np.argmax(predictions['logits'], axis=-1)
+        correct = np.sum(class_predictions == labels)
+        return {"accuracy": correct / len(labels)}
+    ```
+
+    In practice, of course, functions this simple should usually be implemented as a straightforward Keras metric!
 
     Args:
         metric_fn (`Callable`):
@@ -70,7 +85,10 @@ class KerasMetricCallback(Callback):
         self.eval_dataset = eval_dataset
         self.predict_with_generate = predict_with_generate
         self.output_cols = output_cols
-        self.model_input_names = tokenizer.model_input_names
+        if tokenizer is not None:
+            self.model_input_names = tokenizer.model_input_names
+        else:
+            self.model_input_names = None
 
         # This next block attempts to parse out which elements of the dataset should be appended to the labels list
         # that is passed to the metric_fn
