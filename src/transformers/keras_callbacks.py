@@ -6,6 +6,7 @@ from typing import Callable, List, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+from packaging.version import parse
 from tensorflow.keras.callbacks import Callback
 
 from huggingface_hub import Repository
@@ -128,6 +129,8 @@ class KerasMetricCallback(Callback):
             logging.warning("No label_cols specified for KerasMetricCallback, assuming you want the 'labels' key.")
         else:
             raise ValueError("Could not autodetect label_cols for KerasMetricCallback, please specify them!")
+        if parse(tf.__version__).minor < parse("2.7"):
+            logging.warning("TF versions less than 2.7 may encounter issues with KerasMetricCallback!")
 
     @staticmethod
     def _concatenate_batches(batches):
