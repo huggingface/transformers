@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from shutil import copyfile
 
-from transformers import AutoProcessor, Wav2Vec2Config, Wav2Vec2Processor
+from transformers import AutoProcessor, AutoTokenizer, Wav2Vec2Config, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 
 
@@ -51,6 +51,33 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # copy relevant files
             copyfile(SAMPLE_PROCESSOR_CONFIG, os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME))
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
+
+            processor = AutoProcessor.from_pretrained(tmpdirname)
+
+        self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    def test_processor_from_processor_class(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            feature_extractor = Wav2Vec2FeatureExtractor()
+            tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+
+            processor = Wav2Vec2Processor(feature_extractor, tokenizer)
+
+            # save in new folder
+            processor.save_pretrained(tmpdirname)
+            processor = AutoProcessor.from_pretrained(tmpdirname)
+
+        self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    def test_processor_from_local_directory_from_model_config(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model_config = Wav2Vec2Config(processor_class="Wav2Vec2Processor")
+            model_config.save_pretrained(tmpdirname)
+            # copy relevant files
+            copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
+            # create emtpy sample processor
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+                f.write("{}")
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
 
