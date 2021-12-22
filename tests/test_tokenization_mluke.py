@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import os
 import unittest
 from typing import Tuple
 
@@ -23,7 +24,10 @@ from transformers.testing_utils import require_torch, slow
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-@slow
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
+SAMPLE_ENTITY_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_entity_vocab.json")
+
+
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MLukeTokenizer
     test_rust_tokenizer = False
@@ -37,7 +41,9 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, task=None, **kwargs):
         kwargs.update(self.special_tokens_map)
         kwargs.update({"task": task})
-        return self.tokenizer_class.from_pretrained("studio-ousia/mluke-base", **kwargs)
+        tokenizer = MLukeTokenizer(vocab_file=SAMPLE_VOCAB, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
+        tokenizer.sanitize_special_tokens()
+        return tokenizer
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -45,14 +51,14 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base")
+        tokenizer = self.get_tokenizer()
         text = "lower newer"
-        spm_tokens = ["▁lower", "▁new", "er"]
+        spm_tokens = ["▁l", "ow", "er", "▁new", "er"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, spm_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_spm_tokens = [92319, 3525, 56, 3]
+        input_spm_tokens = [149, 116, 40, 410, 40] + [3]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_spm_tokens)
 
     def mluke_dict_integration_testing(self):
@@ -140,7 +146,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         sentence = "ISO 639-3 uses the code fas for the dialects spoken across Iran and Afghanistan."
-        entities = ["en:ISO 639-3"]
+        entities = ["DUMMY"]
         spans = [(0, 9)]
 
         with self.assertRaises(ValueError):
