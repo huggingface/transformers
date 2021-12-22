@@ -3550,14 +3550,14 @@ class ViltForImageRetrievalTextRetrieval(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ViltForNaturalLanguageVisualReasoning(metaclass=DummyObject):
+class ViltForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ViltForPreTraining(metaclass=DummyObject):
+class ViltForNaturalLanguageVisualReasoning(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

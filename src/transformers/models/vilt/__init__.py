@@ -33,8 +33,8 @@ if is_torch_available():
     _import_structure["modeling_vilt"] = [
         "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViltForImageRetrievalTextRetrieval",
-        "ViltForNaturalLanguageVisualReasoning",
         "ViltForMaskedLM",
+        "ViltForNaturalLanguageVisualReasoning",
         "ViltForVisualQuestionAnswering",
         "ViltLayer",
         "ViltModel",

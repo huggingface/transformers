@@ -124,21 +124,6 @@ def create_rename_keys(config, vqa_model=False, nlvr_model=False, irtr_model=Fal
                 ("nlvr2_classifier.3.bias", "classifier.3.bias"),
             ]
         )
-        # rename_keys.extend(
-        #     [
-        #         ("mlm_score.bias"),
-        #         ("mlm_score.transform.dense.weight"),
-        #         ("mlm_score.transform.dense.bias"),
-        #         ("mlm_score.transform.LayerNorm.weight"),
-        #         ("mlm_score.transform.LayerNorm.bias"),
-        #         ("mlm_score.decoder.weight"),
-        #         ("itm_score.fc.weight"),
-        #         ("itm_score.fc.bias"),
-        #     ]
-        # )
-
-        # if just the base model, we should remove "vilt" from all keys that start with "vilt"
-        # rename_keys = [(pair[0], pair[1][5:]) if pair[1].startswith("vilt") else pair for pair in rename_keys]
     else:
         pass
 
@@ -188,6 +173,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # define configuration and initialize HuggingFace model
     config = ViltConfig(image_size=384, patch_size=32, tie_word_embeddings=False)
+    mlm_model = False
     vqa_model = False
     nlvr_model = False
     irtr_model = False
@@ -212,6 +198,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         irtr_model = True
         model = ViltForImageRetrievalTextRetrieval(config)
     elif "mlm_itm" in checkpoint_url:
+        mlm_model = True
         model = ViltForMaskedLM(config)
     else:
         raise ValueError("Unknown model type")
@@ -222,7 +209,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config)
-    if irtr_model or "mlm_itm" in checkpoint_url:
+    if mlm_model or irtr_model:
         ignore_keys = ["itm_score.fc.weight", "itm_score.fc.bias"]
         for k in ignore_keys:
             state_dict.pop(k, None)
@@ -250,21 +237,38 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         )
     else:
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-        text = "How many cats are there?"
+        if mlm_model:
+            text = "a bunch of [MASK] laying on a [MASK]."
+        else:
+            text = "How many cats are there?"
         encoding = processor(image, text, return_tensors="pt")
         outputs = model(**encoding)
-    # Verify outputs
-    if vqa_model or nlvr_model or irtr_model:
-        print(outputs.logits.shape)
-        print(outputs.logits[0, :3])
-        predicted_idx = outputs.logits.argmax(-1).item()
-        print(model.config.id2label[predicted_idx])
-    else:
-        print(outputs.prediction_logits.shape)
 
-    if vqa_model:
+    # Verify outputs
+    if mlm_model:
+        expected_shape = torch.Size([1, 11, 30522])
+        expected_slice = torch.tensor([-6.6323, -6.6392, -6.6440])
+        assert outputs.logits.shape == expected_shape
+        assert torch.allclose(outputs.logits[0, 0, :3], expected_slice, atol=1e-4)
+
+        # verify masked token prediction equals "cats"
+        predicted_id = outputs.logits[0, 4, :].argmax(-1).item()
+        assert tokenizer.decode([predicted_id]) == "cats"
+    elif vqa_model:
+        expected_shape = torch.Size([1, 3129])
         expected_slice = torch.tensor([-15.9495, -18.1472, -10.3041])
         assert torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
+        assert outputs.logits.shape == expected_shape
+        assert torch.allclose(outputs.logits[0, 0, :3], expected_slice, atol=1e-4)
+
+        # verify vqa prediction equals "2"
+        predicted_idx = outputs.logits.argmax(-1).item()
+        assert model.config.id2label[predicted_idx] == "2"
+    elif nlvr_model:
+        expected_shape = torch.Size([1, 2])
+        expected_slice = torch.tensor([-2.8721, 2.1291])
+        assert torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4)
+        assert outputs.logits.shape == expected_shape
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model and processor to {pytorch_dump_folder_path}")

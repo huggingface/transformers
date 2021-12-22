@@ -1150,6 +1150,7 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.num_labels = config.num_labels
         self.vilt = ViltModel(config)
 
         # Classifier head
