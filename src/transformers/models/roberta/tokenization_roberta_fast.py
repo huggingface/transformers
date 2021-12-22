@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization classes for RoBERTa."""
-
+import json
 from typing import List, Optional
+
+from tokenizers import processors
 
 from ...tokenization_utils_base import AddedToken
 from ...utils import logging
@@ -162,6 +164,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
+        trim_offsets=True,
         **kwargs
     ):
         super().__init__(
@@ -177,8 +180,36 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
             **kwargs,
         )
+
+        # the pre_tokenizer is already updated in the GPT2TokenizerFast `__init__`
+        tokenizer_component = "post_processor"
+        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
+        if tokenizer_component_instance:
+            state = json.loads(tokenizer_component_instance.__getstate__())
+
+            # The lists 'sep' and 'cls' must be cased in tuples for the object `post_processor_class`
+            if "sep" in state:
+                state["sep"] = tuple(state["sep"])
+            if "cls" in state:
+                state["cls"] = tuple(state["cls"])
+
+            changes_to_apply = False
+
+            if state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+                state["add_prefix_space"] = add_prefix_space
+                changes_to_apply = True
+
+            if state.get("trim_offsets", trim_offsets) != trim_offsets:
+                state["trim_offsets"] = trim_offsets
+                changes_to_apply = True
+
+            if changes_to_apply:
+                component_class = getattr(processors, state.pop("type"))
+                new_value = component_class(**state)
+                setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
     @property
     def mask_token(self) -> str:
