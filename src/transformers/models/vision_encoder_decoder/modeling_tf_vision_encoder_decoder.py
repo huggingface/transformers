@@ -146,6 +146,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     load_weight_prefix = "tf_vision_encoder_decoder_model_1"
+    main_input_name = "pixel_values"
 
     def __init__(
         self,
