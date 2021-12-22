@@ -23,8 +23,9 @@ class KerasMetricCallback(Callback):
     Callback to prompt metrics at the end of every epoch.
 
     Args:
-        metric_fn: Metric function provided by the user.
-        eval_dataset: Validation data to be used to evaluate the model at
+        metric_fn (`Callable`):
+            Metric function provided by the user.
+        eval_dataset (`tf.data.Dataset` or `dict` or `tuple` ) : Validation data to be used to evaluate the model at
         the end of the epoch.
         batch_size: Batch size.
         labels: Labels.
@@ -111,9 +112,10 @@ class KerasMetricCallback(Callback):
                 batch, labels = batch
             else:
                 labels = None
-            if isinstance(batch, dict):
-                batch = {key: array for key, array in batch.items() if key in self.model_input_names}
             if self.predict_with_generate:
+                if isinstance(batch, dict):
+                    # generate() gets stressed out by any unexpected keys
+                    batch = {key: array for key, array in batch.items() if key in self.model_input_names}
                 predictions = self.model.generate(batch)
             else:
                 predictions = self.model.predict(batch)
