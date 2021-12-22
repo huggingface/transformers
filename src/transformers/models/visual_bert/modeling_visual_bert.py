@@ -679,8 +679,8 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
 class VisualBertModel(VisualBertPreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    The model can behave as an encoder (with only self-attention) following the architecture described in [Attention is
+    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 

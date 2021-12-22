@@ -36,7 +36,7 @@ class CpmTokenizerFast(XLNetTokenizerFast):
 
     def __init__(self, *args, **kwargs):
         """
-        Construct a CPM tokenizer. Based on *Jieba <https://pypi.org/project/jieba/>* and [SentencePiece](https://github.com/google/sentencepiece).
+        Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and [SentencePiece](https://github.com/google/sentencepiece).
 
         This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main
         methods. Users should refer to this superclass for more information regarding those methods.

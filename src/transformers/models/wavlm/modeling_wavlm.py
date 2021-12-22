@@ -130,8 +130,8 @@ def _compute_mask_indices(
     min_masks: int = 0,
 ) -> np.ndarray:
     """
-    Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
-    ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
+    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run
     on CPU as part of the preprocessing during training.
 
     Args:
@@ -866,8 +866,8 @@ class WavLMEncoderStableLayerNorm(nn.Module):
 
 class WavLMGumbelVectorQuantizer(nn.Module):
     """
-    Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION WITH GUMBEL-SOFTMAX
-    <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
+    Vector quantization using gumbel softmax. See [CATEGORICAL REPARAMETERIZATION WITH
+    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
     """
 
     def __init__(self, config):
@@ -1167,8 +1167,8 @@ class WavLMModel(WavLMPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
-        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
-        <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False

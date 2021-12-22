@@ -214,8 +214,8 @@ def _compute_mask_indices(
         mask_length: size of the mask
         min_masks: minimum number of masked spans
 
-    Adapted from `fairseq's data_utils.py
-    <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
+    Adapted from [fairseq's
+    data_utils.py](https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376).
     """
     batch_size, sequence_length = shape
 
@@ -1137,8 +1137,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
     def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: Optional[tf.Tensor] = None):
         """
-        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
-        <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
         batch_size, sequence_length, hidden_size = shape_list(hidden_states)
 
