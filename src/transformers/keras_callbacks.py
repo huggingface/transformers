@@ -44,7 +44,7 @@ class KerasMetricCallback(Callback):
 
     The above function will return a dict containing values which will be logged like any other Keras metric:
 
-    ```py
+    ```
     {'rouge1': 37.4199, 'rouge2': 13.9768, 'rougeL': 34.361, 'rougeLsum': 35.0781
     ```
 
