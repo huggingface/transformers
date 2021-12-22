@@ -506,10 +506,7 @@ class TFVisionEncoderDecoderMixin:
 @require_tf
 class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "ydshieh/vit-base-patch16-224-in21k", "gpt2"
-        )
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFViTModel(config, name="encoder")
@@ -553,10 +550,7 @@ class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.Te
 @require_tf
 class TFVisionEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "ydshieh/vit-base-patch16-224-in21k", "gpt2"
-        )
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
 
     def get_decoder_config(self):
         config = AutoConfig.from_pretrained("gpt2")
@@ -568,8 +562,7 @@ class TFVisionEncoderDecoderModelTest(unittest.TestCase):
         return TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
     def get_encoder_decoder_models(self):
-        # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
-        encoder_model = TFViTModel.from_pretrained("ydshieh/vit-base-patch16-224-in21k", name="encoder")
+        encoder_model = TFViTModel.from_pretrained("google/vit-base-patch16-224-in21k", name="encoder")
         decoder_model = TFGPT2LMHeadModel.from_pretrained("gpt2", config=self.get_decoder_config(), name="decoder")
         return {"encoder": encoder_model, "decoder": decoder_model}
 
@@ -725,8 +718,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             # So we create pretrained models (without `load_weight_prefix`), save them, and later,
             # we load them using `from_pretrained`.
             # (we don't need to do this for encoder, but let's make the code more similar between encoder/decoder)
-            # TODO: change to "google/vit-base-patch16-224-in21k" once the `TFViTModel` checkpoints are uploaded
-            encoder = TFAutoModel.from_pretrained("ydshieh/vit-base-patch16-224-in21k", name="encoder")
+            encoder = TFAutoModel.from_pretrained("google/vit-base-patch16-224-in21k", name="encoder")
             # It's necessary to specify `add_cross_attention=True` here.
             decoder = TFAutoModelForCausalLM.from_pretrained(
                 "gpt2", is_decoder=True, add_cross_attention=True, name="decoder"
