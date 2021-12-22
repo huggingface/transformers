@@ -635,7 +635,7 @@ def check_docstrings_are_in_md():
         raise ValueError(
             "The following files have docstrings written in rst:\n"
             + "\n".join([f"- {f}" for f in files_with_rst])
-            + "To fix this run `doc_builder convert path_to_py_file` after installing `doc_builder`\n"
+            + "To fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
             "(`pip install git+https://github.com/huggingface/doc-builder`)"
         )
 
