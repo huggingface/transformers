@@ -171,6 +171,10 @@ class DataTrainingArguments:
             "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
         },
     )
+    do_lower_case: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Whether the target text should be lower cased."},
+    )
 
 
 @dataclass
@@ -349,7 +353,7 @@ def main():
     num_workers = data_args.preprocessing_num_workers
     text_column_name = data_args.text_column_name
     model_input_name = feature_extractor.model_input_names[0]
-    do_normalize = True  # (TODO) make input arg
+    do_lower_case = data_args.do_lower_case
 
     if data_args.max_train_samples is not None:
         raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
@@ -366,7 +370,7 @@ def main():
         batch["input_length"] = len(batch["input_values"])
 
         # process targets
-        input_str = batch[text_column_name].lower() if do_normalize else batch[text_column_name]
+        input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
         batch["labels"] = tokenizer(input_str).input_ids
         return batch
 
@@ -465,7 +469,9 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        metrics = trainer.evaluate(metric_key_prefix="eval")
+        metrics = trainer.evaluate(
+            metric_key_prefix="eval", max_length=model.config.max_length, num_beams=model.config.num_beams
+        )
         max_eval_samples = (
             data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
         )
