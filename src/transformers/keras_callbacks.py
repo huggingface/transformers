@@ -112,8 +112,7 @@ class KerasMetricCallback(Callback):
             else:
                 labels = None
             if isinstance(batch, dict):
-                batch = {key: array for key, array in batch.items()
-                         if key in self.model_input_names}
+                batch = {key: array for key, array in batch.items() if key in self.model_input_names}
             if self.predict_with_generate:
                 predictions = self.model.generate(batch)
             else:
