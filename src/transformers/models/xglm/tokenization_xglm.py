@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -170,7 +170,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
-    
+
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -194,8 +194,8 @@ class XGLMTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return [self.sep_token_id] + token_ids_0
         sep = [self.sep_token_id]
-        return sep + token_ids_0 + sep + sep + token_ids_1 
-    
+        return sep + token_ids_0 + sep + sep + token_ids_1
+
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -223,7 +223,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0))
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1))
-    
+
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
