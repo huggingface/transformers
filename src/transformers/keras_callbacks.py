@@ -26,16 +26,26 @@ class KerasMetricCallback(Callback):
     `eval_dataset` before being passed to the `metric_fn` in `np.ndarray` format. The `metric_fn` should compute
     metrics and return a dict mapping metric names to metric values.
 
-    A simple example of a suitable metric_fn that computes accuracy on a SequenceClassification model:
+    An example of a suitable metric_fn that computes ROUGE scores for a summarization model:
 
     ```py
-    def accuracy_fn(predictions, labels):
-        class_predictions = np.argmax(predictions['logits'], axis=-1)
-        correct = np.sum(class_predictions == labels)
-        return {"accuracy": correct / len(labels)}
+    from datasets import load_metric
+    rouge_metric = load_metric("rouge")
+
+    def rouge_fn(predictions, labels):
+        # Note that this example skips some post-processing for readability and simplicity,
+        # and may not be directly applicable to any particular use-case
+        decoded_predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True))
+        decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+        result = rouge_metric.compute(predictions=decoded_predictions, references=decoded_labels)
+        return {key: value.mid.fmeasure * 100 for key, value in result.items()}
     ```
 
-    In practice, of course, functions this simple should usually be implemented as a straightforward Keras metric!
+    The above function will return a dict containing values which will be logged like any other Keras metric:
+
+    ```py
+    {'rouge1': 37.4199, 'rouge2': 13.9768, 'rougeL': 34.361, 'rougeLsum': 35.0781
+    ```
 
     Args:
         metric_fn (`Callable`):
@@ -44,6 +54,8 @@ class KerasMetricCallback(Callback):
             metric names to numerical values.
         eval_dataset (`tf.data.Dataset` or `dict` or `tuple` or `np.ndarray` or `tf.Tensor`):
             Validation data to be used to generate predictions for the `metric_fn`.
+        metric_fn_kwargs (`dict`, *optional*):
+            Additional keyword arguments to be passed to the metric_fn.
         tokenizer ([`PretrainedTokenizerBase`], *optional*):
             Tokenizer used to validate column names to be passed to the generate() function. Required only if
             predict_with_generate is True.
@@ -64,6 +76,7 @@ class KerasMetricCallback(Callback):
         metric_fn: Callable,
         eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        metric_fn_kwargs: Optional[dict] = None,
         output_cols: Optional[List[str]] = None,
         label_cols: Optional[List[str]] = None,
         batch_size: Optional[int] = None,
@@ -85,6 +98,7 @@ class KerasMetricCallback(Callback):
         self.eval_dataset = eval_dataset
         self.predict_with_generate = predict_with_generate
         self.output_cols = output_cols
+        self.metric_fn_kwargs = metric_fn_kwargs or dict()
         if tokenizer is not None:
             self.model_input_names = tokenizer.model_input_names
         else:
@@ -171,7 +185,7 @@ class KerasMetricCallback(Callback):
         prediction_list = self._postprocess_predictions_or_labels(prediction_list)
         label_list = self._postprocess_predictions_or_labels(label_list)
 
-        metric_output = self.metric_fn(prediction_list, label_list)
+        metric_output = self.metric_fn(prediction_list, label_list, **self.metric_fn_kwargs)
         if not isinstance(metric_output, dict):
             raise TypeError(
                 f"metric_fn should return a dict mapping metric names to values but instead returned {metric_output}"
