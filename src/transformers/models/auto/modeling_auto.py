@@ -33,6 +33,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vilt", "ViltModel"),
         ("vit_mae", "ViTMAEModel"),
         ("nystromformer", "NystromformerModel"),
+        ("xglm", "XGLMModel"),
         ("imagegpt", "ImageGPTModel"),
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
@@ -158,6 +159,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         # Model with LM heads mapping
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
+        ("xglm", "XGLMForConditionalGeneration"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -209,6 +211,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("xglm", "XGLMForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -332,6 +335,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("xglm", "XGLMForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),
@@ -362,6 +366,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Sequence Classification mapping
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
+        ("xglm", "XGLMForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
@@ -411,6 +416,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         # Model for Question Answering mapping
         ("yoso", "YosoForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
+        ("xglm", "XGLMForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
         ("fnet", "FNetForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),

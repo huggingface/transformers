@@ -328,6 +328,7 @@ _import_structure = {
         "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "WavLMConfig",
     ],
+    "models.xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig", "XGLMTokenizer"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
@@ -422,6 +423,7 @@ else:
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.realm"].append("RealmTokenizerFast")
+    _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
@@ -633,6 +635,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1461,6 +1464,17 @@ if is_torch_available():
             "WavLMPreTrainedModel",
         ]
     )
+    _import_structure["models.xglm"].extend(
+        [
+            "XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XGLMForCausalLM",
+            "XGLMForConditionalGeneration",
+            "XGLMForQuestionAnswering",
+            "XGLMForSequenceClassification",
+            "XGLMModel",
+            "XGLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2076,6 +2090,7 @@ if is_flax_available():
             "FlaxBeitPreTrainedModel",
         ]
     )
+
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -2202,6 +2217,15 @@ if is_flax_available():
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
+    )
+    _import_structure["models.xglm"].extend(
+        [
+            "FlaxXGLMForConditionalGeneration",
+            "FlaxXGLMForQuestionAnswering",
+            "FlaxXGLMForSequenceClassification",
+            "FlaxXGLMModel",
+            "FlaxXGLMPreTrainedModel",
+        ]
     )
 else:
     from .utils import dummy_flax_objects
@@ -2463,6 +2487,7 @@ if TYPE_CHECKING:
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
+    from .models.xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig, XGLMTokenizer
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -2591,6 +2616,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -2673,6 +2699,7 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3404,6 +3431,15 @@ if TYPE_CHECKING:
             WavLMModel,
             WavLMPreTrainedModel,
         )
+        from .models.xglm import (
+            XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XGLMForCausalLM,
+            XGLMForConditionalGeneration,
+            XGLMForQuestionAnswering,
+            XGLMForSequenceClassification,
+            XGLMModel,
+            XGLMPreTrainedModel,
+        )
         from .models.xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMForMultipleChoice,
@@ -4017,6 +4053,13 @@ if TYPE_CHECKING:
             FlaxWav2Vec2ForPreTraining,
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
+        )
+        from .models.xglm import (
+            FlaxXGLMForConditionalGeneration,
+            FlaxXGLMForQuestionAnswering,
+            FlaxXGLMForSequenceClassification,
+            FlaxXGLMModel,
+            FlaxXGLMPreTrainedModel,
         )
     else:
         # Import the same objects as dummies to get them in the namespace.

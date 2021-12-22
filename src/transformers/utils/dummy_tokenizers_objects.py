@@ -293,6 +293,13 @@ class SqueezeBertTokenizerFast(metaclass=DummyObject):
 class T5TokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
+
+class XGLMTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class XLMRobertaTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 

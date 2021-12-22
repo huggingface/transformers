@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("xglm", "FlaxXGLMModel"),
         ("blenderbot-small", "FlaxBlenderbotSmallModel"),
         ("pegasus", "FlaxPegasusModel"),
         ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
@@ -74,6 +75,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("xglm", "FlaxXGLMForConditionalGeneration"),
         ("distilbert", "FlaxDistilBertForMaskedLM"),
         ("albert", "FlaxAlbertForMaskedLM"),
         ("roberta", "FlaxRobertaForMaskedLM"),
@@ -89,6 +91,7 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("xglm", "FlaxXGLMForConditionalGeneration"),
         ("blenderbot-small", "FlaxBlenderbotSmallForConditionalGeneration"),
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("bart", "FlaxBartForConditionalGeneration"),
@@ -127,6 +130,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("xglm", "FlaxXGLMForSequenceClassification"),
         ("distilbert", "FlaxDistilBertForSequenceClassification"),
         ("albert", "FlaxAlbertForSequenceClassification"),
         ("roberta", "FlaxRobertaForSequenceClassification"),
@@ -142,6 +146,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("xglm", "FlaxXGLMForQuestionAnswering"),
         ("distilbert", "FlaxDistilBertForQuestionAnswering"),
         ("albert", "FlaxAlbertForQuestionAnswering"),
         ("roberta", "FlaxRobertaForQuestionAnswering"),
