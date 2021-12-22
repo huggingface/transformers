@@ -139,6 +139,13 @@ class T5Tokenizer(metaclass=DummyObject):
 class XLMProphetNetTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
+
+class XGLMTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
+class XLMProphetNetTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
 
