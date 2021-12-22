@@ -126,6 +126,16 @@ class XGLMTokenizer(PreTrainedTokenizer):
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        # Compatibility with the original tokenizer
+        self.num_madeup_words = 7
+        sp_size = 256000
+        madeup_words = {f"<madeupword{i}>": sp_size + i + self.fairseq_offset for i in range(self.num_madeup_words)}
+
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] += [
+            word for word in madeup_words.keys() if word not in kwargs["additional_special_tokens"]
+        ]
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -153,10 +163,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
         # Mimic fairseq token-to-id alignment for the first 4 token
         self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
 
-        # Compatibility with the original tokenizer
-        self.num_madeup_words = 7
-        sp_size = len(self.sp_model)
-        madeup_words = {f"<madeupword{i}>": sp_size + i + self.fairseq_offset for i in range(self.num_madeup_words)}
         self.fairseq_tokens_to_ids.update(madeup_words)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
