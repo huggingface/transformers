@@ -60,7 +60,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class RoFormerTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a RoFormer tokenizer. Based on *Rust Jieba <https://pypi.org/project/rjieba/>*.
+    Construct a RoFormer tokenizer. Based on [Rust Jieba](https://pypi.org/project/rjieba/).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.

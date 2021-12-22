@@ -943,8 +943,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     """
     LayoutLMv2 Model with a sequence classification head on top (a linear layer on top of the concatenation of the
     final hidden state of the [CLS] token, average-pooled initial visual embeddings and average-pooled final visual
-    embeddings, e.g. for document image classification tasks such as the `RVL-CDIP
-    <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset.
+    embeddings, e.g. for document image classification tasks such as the
+    [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset.
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -1110,9 +1110,9 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 @add_start_docstrings(
     """
     LayoutLMv2 Model with a token classification head on top (a linear layer on top of the text part of the hidden
-    states) e.g. for sequence labeling (information extraction) tasks such as `FUNSD
-    <https://guillaumejaume.github.io/FUNSD/>`__, `SROIE <https://rrc.cvc.uab.es/?ch=13>`__, `CORD
-    <https://github.com/clovaai/cord>`__ and `Kleister-NDA <https://github.com/applicaai/kleister-nda>`__.
+    states) e.g. for sequence labeling (information extraction) tasks such as
+    [FUNSD](https://guillaumejaume.github.io/FUNSD/), [SROIE](https://rrc.cvc.uab.es/?ch=13),
+    [CORD](https://github.com/clovaai/cord) and [Kleister-NDA](https://github.com/applicaai/kleister-nda).
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -1226,8 +1226,8 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    LayoutLMv2 Model with a span classification head on top for extractive question-answering tasks such as `DocVQA
-    <https://rrc.cvc.uab.es/?ch=17>`__ (a linear layer on top of the text part of the hidden-states output to compute
+    LayoutLMv2 Model with a span classification head on top for extractive question-answering tasks such as
+    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the text part of the hidden-states output to compute
     `span start logits` and `span end logits`).
     """,
     LAYOUTLMV2_START_DOCSTRING,
