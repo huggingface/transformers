@@ -43,6 +43,8 @@ substantially fewer computational resources to train.*
 
 Tips:
 
+- Demo notebooks regarding inference as well as fine-tuning ViT on custom data can be found `here
+  <https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer>`__.
 - To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
   which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image, which can be
   used for classification. The authors also add absolute position embeddings, and feed the resulting sequence of

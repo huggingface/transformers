@@ -37,45 +37,44 @@ T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class T5Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.T5Model` or a
-    :class:`~transformers.TFT5Model`. It is used to instantiate a T5 model according to the specified arguments,
+    This is the configuration class to store the configuration of a [`T5Model`] or a
+    [`TFT5Model`]. It is used to instantiate a T5 model according to the specified arguments,
     defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the T5 `t5-small <https://huggingface.co/t5-small>`__ architecture.
+    to that of the T5 [t5-small](https://huggingface.co/t5-small) architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
-        vocab_size (:obj:`int`, `optional`, defaults to 32128):
+        vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.T5Model` or :class:`~transformers.TFT5Model`.
-        d_model (:obj:`int`, `optional`, defaults to 512):
+            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+        d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
-        d_kv (:obj:`int`, `optional`, defaults to 64):
-            Size of the key, query, value projections per attention head. :obj:`d_kv` has to be equal to :obj:`d_model
-            // num_heads`.
-        d_ff (:obj:`int`, `optional`, defaults to 2048):
-            Size of the intermediate feed forward layer in each :obj:`T5Block`.
-        num_layers (:obj:`int`, `optional`, defaults to 6):
+        d_kv (`int`, *optional*, defaults to 64):
+            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model // num_heads`.
+        d_ff (`int`, *optional*, defaults to 2048):
+            Size of the intermediate feed forward layer in each `T5Block`.
+        num_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (:obj:`int`, `optional`):
-            Number of hidden layers in the Transformer decoder. Will use the same value as :obj:`num_layers` if not
+        num_decoder_layers (`int`, *optional*):
+            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not
             set.
-        num_heads (:obj:`int`, `optional`, defaults to 8):
+        num_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (:obj:`int`, `optional`, defaults to 32):
+        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
-        dropout_rate (:obj:`float`, `optional`, defaults to 0.1):
+        dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        initializer_factor (:obj:`float`, `optional`, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        feed_forward_proj (:obj:`string`, `optional`, defaults to :obj:`"relu"`):
-            Type of feed forward layer to be used. Should be one of :obj:`"relu"` or :obj:`"gated-gelu"`. T5v1.1 uses
-            the :obj:`"gated-gelu"` feed forward projection. Original T5 uses :obj:`"relu"`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
+            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses
+            the `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
     model_type = "t5"

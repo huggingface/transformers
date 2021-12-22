@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch, slow
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-class Luke(TokenizerTesterMixin, unittest.TestCase):
+class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LukeTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
@@ -79,8 +79,8 @@ class Luke(TokenizerTesterMixin, unittest.TestCase):
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
-        assert encoded_sentence == encoded_text_from_decode
-        assert encoded_pair == encoded_pair_from_decode
+        self.assertEqual(encoded_sentence, encoded_text_from_decode)
+        self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
     def get_clean_sequence(self, tokenizer, max_length=20) -> Tuple[str, list]:
         txt = "Beyonce lives in Los Angeles"
@@ -158,6 +158,81 @@ class Luke(TokenizerTesterMixin, unittest.TestCase):
                 self.assertSequenceEqual(
                     tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
+
+    def test_padding_entity_inputs(self):
+        tokenizer = self.get_tokenizer()
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        span = (15, 34)
+        pad_id = tokenizer.entity_vocab["[PAD]"]
+        mask_id = tokenizer.entity_vocab["[MASK]"]
+
+        encoding = tokenizer([sentence, sentence], entity_spans=[[span], [span, span]], padding=True)
+        self.assertEqual(encoding["entity_ids"], [[mask_id, pad_id], [mask_id, mask_id]])
+
+        # test with a sentence with no entity
+        encoding = tokenizer([sentence, sentence], entity_spans=[[], [span, span]], padding=True)
+        self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
+
+    def test_if_tokenize_single_text_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer()
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        spans = [(15, 34)]
+        entities = ["East Asian language"]
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=[0], entity_spans=spans)
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=entities, entity_spans=[0])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entities=entities, entity_spans=spans + [(0, 9)])
+
+    def test_if_tokenize_entity_classification_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer(task="entity_classification")
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        span = (15, 34)
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[span, span])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[0])
+
+    def test_if_tokenize_entity_pair_classification_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer(task="entity_pair_classification")
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+        # head and tail information
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[0, 0])
+
+    def test_if_tokenize_entity_span_classification_raise_error_with_invalid_inputs(self):
+        tokenizer = self.get_tokenizer(task="entity_span_classification")
+
+        sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[])
+
+        with self.assertRaises(ValueError):
+            tokenizer(sentence, entity_spans=[0, 0, 0])
 
 
 @require_torch

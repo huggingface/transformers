@@ -36,30 +36,31 @@ ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RobertaConfig(BertConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.RobertaModel` or a
-    :class:`~transformers.TFRobertaModel`. It is used to instantiate a RoBERTa model according to the specified
+    This is the configuration class to store the configuration of a [`RobertaModel`] or a
+    [`TFRobertaModel`]. It is used to instantiate a RoBERTa model according to the specified
     arguments, defining the model architecture.
 
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
-    The :class:`~transformers.RobertaConfig` class directly inherits :class:`~transformers.BertConfig`. It reuses the
+    The [`RobertaConfig`] class directly inherits [`BertConfig`]. It reuses the
     same defaults. Please check the parent class for more information.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import RobertaConfig, RobertaModel
+    ```python
+    >>> from transformers import RobertaConfig, RobertaModel
 
-        >>> # Initializing a RoBERTa configuration
-        >>> configuration = RobertaConfig()
+    >>> # Initializing a RoBERTa configuration
+    >>> configuration = RobertaConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = RobertaModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = RobertaModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "roberta"
 
     def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, **kwargs):
