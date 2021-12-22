@@ -26,15 +26,15 @@ class KerasMetricCallback(Callback):
     `eval_dataset` before being passed to the `metric_fn` in `np.ndarray` format. The `metric_fn` should compute
     metrics and return a dict mapping metric names to metric values.
 
-    An example of a suitable metric_fn that computes ROUGE scores for a summarization model:
+    We provide an example of a suitable metric_fn that computes ROUGE scores for a summarization model below.
+    Note that this example skips some post-processing for readability and simplicity, and should probably
+    not be used as-is!
 
     ```py
     from datasets import load_metric
     rouge_metric = load_metric("rouge")
 
     def rouge_fn(predictions, labels):
-        # Note that this example skips some post-processing for readability and simplicity,
-        # and may not be directly applicable to any particular use-case
         decoded_predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True))
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
         result = rouge_metric.compute(predictions=decoded_predictions, references=decoded_labels)
