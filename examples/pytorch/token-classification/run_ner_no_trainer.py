@@ -23,13 +23,13 @@ import logging
 import math
 import os
 import random
-from pathlib import Path
 import unicodedata
+from pathlib import Path
 
 import datasets
-import torch
 import numpy as np
-from datasets import ClassLabel, load_dataset, load_metric, concatenate_datasets, DatasetDict
+import torch
+from datasets import ClassLabel, DatasetDict, concatenate_datasets, load_dataset, load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -252,10 +252,12 @@ def main():
     logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
     if accelerator.is_local_main_process:
         import datasets
+
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
     else:
         import datasets
+
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
@@ -287,16 +289,16 @@ def main():
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset_configs = args.dataset_config_name.split(",")
-        
+
         if len(dataset_configs) > 1:
             datasets = {}
 
             for dataset_config_name in args.dataset_config_name.split(","):
                 tmp_dataset = load_dataset(args.dataset_name, dataset_config_name)
-                
+
                 for split in tmp_dataset.keys():
                     datasets.setdefault(split, []).append(tmp_dataset[split])
-            
+
             raw_datasets = DatasetDict()
             for split, value in datasets.items():
                 raw_datasets[split] = concatenate_datasets(value)
@@ -379,7 +381,12 @@ def main():
     if config.model_type in {"gpt2", "roberta"}:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
     elif config.model_type in {"luke"}:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=False, task="entity_span_classification", max_entity_length=args.max_entity_length)
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name_or_path,
+            use_fast=False,
+            task="entity_span_classification",
+            max_entity_length=args.max_entity_length,
+        )
     else:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
 
@@ -426,22 +433,26 @@ def main():
     # Tokenize all texts and align the labels with them.
     def add_entity_spans(examples):
         return []
-    
+
     def compute_sentence_boundaries_for_luke(examples):
         sentence_boundaries = []
-        
+
         for tokens in examples["tokens"]:
             sentence_boundaries.append([0, len(tokens)])
-        
+
         examples["sentence_boundaries"] = sentence_boundaries
-        
+
         return examples
-            
 
     def compute_entity_spans_for_luke(examples):
         def is_punctuation(char):
             cp = ord(char)
-            if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
+            if (
+                (cp >= 33 and cp <= 47)
+                or (cp >= 58 and cp <= 64)
+                or (cp >= 91 and cp <= 96)
+                or (cp >= 123 and cp <= 126)
+            ):
                 return True
             cat = unicodedata.category(char)
             if cat.startswith("P"):
@@ -453,11 +464,13 @@ def main():
         all_labels_entity_spans = []
         all_original_entity_spans = []
 
-        for labels, tokens, sentence_boundaries in zip(examples["ner_tags"], examples["tokens"], examples["sentence_boundaries"]):
+        for labels, tokens, sentence_boundaries in zip(
+            examples["ner_tags"], examples["tokens"], examples["sentence_boundaries"]
+        ):
             subword_lengths = [len(tokenizer.tokenize(token)) for token in tokens]
             total_subword_length = sum(subword_lengths)
             _, context_end = sentence_boundaries
-        
+
             if total_subword_length > args.max_length - 2:
                 cur_length = sum(subword_lengths[:context_end])
                 idx = context_end - 1
@@ -477,7 +490,7 @@ def main():
             for word, label in zip(sentence_words, labels):
                 if word[0] == "'" or (len(word) == 1 and is_punctuation(word)):
                     text = text.rstrip()
-                
+
                 word_start_char_positions.append(len(text))
                 text += word
                 word_end_char_positions.append(len(text))
@@ -492,29 +505,34 @@ def main():
 
             for word_start in range(len(sentence_words)):
                 for word_end in range(word_start, len(sentence_words)):
-                    if sum(sentence_subword_lengths[word_start:word_end]) <= tokenizer.max_mention_length and len(entity_spans) < tokenizer.max_entity_length:
-                        entity_spans.append(
-                            (word_start_char_positions[word_start], word_end_char_positions[word_end])
-                        )
-                        original_entity_spans.append(
-                            (word_start, word_end + 1)
-                        )
-                        if (word_start_char_positions[word_start], word_end_char_positions[word_end]) in labels_positions:
-                            labels_entity_spans.append(labels_positions[(word_start_char_positions[word_start], word_end_char_positions[word_end])])
+                    if (
+                        sum(sentence_subword_lengths[word_start:word_end]) <= tokenizer.max_mention_length
+                        and len(entity_spans) < tokenizer.max_entity_length
+                    ):
+                        entity_spans.append((word_start_char_positions[word_start], word_end_char_positions[word_end]))
+                        original_entity_spans.append((word_start, word_end + 1))
+                        if (
+                            word_start_char_positions[word_start],
+                            word_end_char_positions[word_end],
+                        ) in labels_positions:
+                            labels_entity_spans.append(
+                                labels_positions[
+                                    (word_start_char_positions[word_start], word_end_char_positions[word_end])
+                                ]
+                            )
                         else:
                             labels_entity_spans.append(0)
-            
+
             all_entity_spans.append(entity_spans)
             all_labels_entity_spans.append(labels_entity_spans)
             all_original_entity_spans.append(original_entity_spans)
-                
+
         examples["entity_spans"] = all_entity_spans
         examples["text"] = texts
         examples["labels_entity_spans"] = all_labels_entity_spans
         examples["original_entity_spans"] = all_original_entity_spans
 
         return examples
-            
 
     def tokenize_and_align_labels(examples):
         if config.model_type == "luke":
@@ -522,7 +540,7 @@ def main():
 
             for v in examples["entity_spans"]:
                 entity_spans.append(list(map(tuple, v)))
-            
+
             tokenized_inputs = tokenizer(
                 examples["text"],
                 entity_spans=entity_spans,
@@ -541,6 +559,7 @@ def main():
             )
 
         if config.model_type == "luke":
+
             def padding_tensor(sequences, padding_value):
                 if isinstance(padding_value, tuple):
                     out_tensor = np.full((len(sequences), tokenizer.max_entity_length, 2), padding_value)
@@ -550,25 +569,37 @@ def main():
                 for i, tensor in enumerate(sequences):
                     if tokenizer.padding_side == "right":
                         if isinstance(padding_value, tuple):
-                            out_tensor[i, :len(tensor[:tokenizer.max_entity_length]), :2] = tensor[:tokenizer.max_entity_length]
+                            out_tensor[i, : len(tensor[: tokenizer.max_entity_length]), :2] = tensor[
+                                : tokenizer.max_entity_length
+                            ]
                         else:
-                            out_tensor[i, :len(tensor[:tokenizer.max_entity_length])] = tensor[:tokenizer.max_entity_length]
+                            out_tensor[i, : len(tensor[: tokenizer.max_entity_length])] = tensor[
+                                : tokenizer.max_entity_length
+                            ]
                     else:
                         if isinstance(padding_value, tuple):
-                            out_tensor[i, len(tensor[:tokenizer.max_entity_length]) - 1:, :2] = tensor[:tokenizer.max_entity_length]
+                            out_tensor[i, len(tensor[: tokenizer.max_entity_length]) - 1 :, :2] = tensor[
+                                : tokenizer.max_entity_length
+                            ]
                         else:
-                            out_tensor[i, len(tensor[:tokenizer.max_entity_length]) - 1:] = tensor[:tokenizer.max_entity_length]
-                    
+                            out_tensor[i, len(tensor[: tokenizer.max_entity_length]) - 1 :] = tensor[
+                                : tokenizer.max_entity_length
+                            ]
+
                 return out_tensor.tolist()
-            
+
             if padding == "max_length":
                 tokenized_inputs["labels"] = padding_tensor(examples["labels_entity_spans"], -100)
                 tokenized_inputs["original_entity_spans"] = padding_tensor(examples["original_entity_spans"], (-1, -1))
                 tokenized_inputs["ner_tags"] = padding_tensor(examples["ner_tags"], -1)
             else:
-                tokenized_inputs["labels"] = [ex[:tokenizer.max_entity_length] for ex in examples["labels_entity_spans"]]
-                tokenized_inputs["original_entity_spans"] = [ex[:tokenizer.max_entity_length] for ex in examples["original_entity_spans"]]
-                tokenized_inputs["ner_tags"] = [ex[:tokenizer.max_entity_length] for ex in examples["ner_tags"]]
+                tokenized_inputs["labels"] = [
+                    ex[: tokenizer.max_entity_length] for ex in examples["labels_entity_spans"]
+                ]
+                tokenized_inputs["original_entity_spans"] = [
+                    ex[: tokenizer.max_entity_length] for ex in examples["original_entity_spans"]
+                ]
+                tokenized_inputs["ner_tags"] = [ex[: tokenizer.max_entity_length] for ex in examples["ner_tags"]]
         else:
             labels = []
             for i, label in enumerate(examples[label_column_name]):
@@ -594,7 +625,7 @@ def main():
 
                 labels.append(label_ids)
             tokenized_inputs["labels"] = labels
-        
+
         return tokenized_inputs
 
     with accelerator.main_process_first():
@@ -689,7 +720,7 @@ def main():
     def get_luke_labels(outputs, ner_tags, original_entity_spans):
         true_predictions = []
         true_labels = []
-    
+
         for output, original_spans, tags in zip(outputs.logits, original_entity_spans, ner_tags):
             true_tags = [val for val in tags if val != -1]
             true_original_spans = [val for val in original_spans if val != (-1, -1)]
@@ -700,7 +731,7 @@ def main():
             for logit, index, span in zip(max_logits, max_indices, true_original_spans):
                 if index != 0:
                     predictions.append((logit, span, label_list[index]))
-            
+
             predicted_sequence = [label_list[0]] * len(true_tags)
 
             for _, span, label in sorted(predictions, key=lambda o: o[0], reverse=True):
@@ -711,7 +742,7 @@ def main():
 
             true_predictions.append(predicted_sequence)
             true_labels.append([label_list[tag_id] for tag_id in true_tags])
-        
+
         return true_predictions, true_labels
 
     def get_labels(predictions, references):

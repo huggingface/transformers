@@ -338,24 +338,23 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             for i, tensor in enumerate(sequences):
                 if padding_side == "right":
                     if isinstance(padding_value, tuple):
-                        out_tensor[i, :len(tensor[:sequence_length]), :2] = tensor[:sequence_length]
+                        out_tensor[i, : len(tensor[:sequence_length]), :2] = tensor[:sequence_length]
                     else:
-                        out_tensor[i, :len(tensor[:sequence_length])] = tensor[:sequence_length]
+                        out_tensor[i, : len(tensor[:sequence_length])] = tensor[:sequence_length]
                 else:
                     if isinstance(padding_value, tuple):
-                        out_tensor[i, len(tensor[:sequence_length]) - 1:, :2] = tensor[:sequence_length]
+                        out_tensor[i, len(tensor[:sequence_length]) - 1 :, :2] = tensor[:sequence_length]
                     else:
-                        out_tensor[i, len(tensor[:sequence_length]) - 1:] = tensor[:sequence_length]
+                        out_tensor[i, len(tensor[:sequence_length]) - 1 :] = tensor[:sequence_length]
 
-                
             return out_tensor.tolist()
-        
+
         if prop == "entity_ids":
             ner_tags = [feature["ner_tags"] for feature in features]
             batch["ner_tags"] = padding_tensor(ner_tags, -1)
             original_entity_spans = [feature["original_entity_spans"] for feature in features]
             batch["original_entity_spans"] = padding_tensor(original_entity_spans, (-1, -1))
-        
+
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         return batch
 
