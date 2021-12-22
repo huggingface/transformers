@@ -58,8 +58,7 @@ class KerasMetricCallback(Callback):
         metric_fn_kwargs (`dict`, *optional*):
             Additional keyword arguments to be passed to the metric_fn.
         tokenizer ([`PretrainedTokenizerBase`], *optional*):
-            Tokenizer used to validate column names to be passed to the generate() function. Required only if
-            predict_with_generate is True.
+            Tokenizer used to validate column names to be passed to the generate() function.
         output_cols (`List[str], *optional*):
             A list of columns to be retained from the model output as the predictions. Defaults to all.
         label_cols ('`List[str]`, *optional*'):
@@ -86,8 +85,6 @@ class KerasMetricCallback(Callback):
         super().__init__()
         self.metric_fn = metric_fn
         self.batch_size = batch_size
-        if predict_with_generate and tokenizer is None:
-            raise ValueError("A tokenizer is required when using predict_with_generate!")
         if not isinstance(eval_dataset, tf.data.Dataset):
             if batch_size is None:
                 raise ValueError(
@@ -103,7 +100,7 @@ class KerasMetricCallback(Callback):
         if tokenizer is not None:
             self.model_input_names = tokenizer.model_input_names
         else:
-            self.model_input_names = None
+            self.model_input_names = ["input_ids"]
 
         # This next block attempts to parse out which elements of the dataset should be appended to the labels list
         # that is passed to the metric_fn
