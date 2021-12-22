@@ -67,7 +67,7 @@ class KerasMetricCallback(Callback):
             supplied.
         batch_size (`int`, *optional*):
             Batch size. Only used when the data is not a pre-batched `tf.data.Dataset`.
-        predict_with_generate: (`bool`, *optional*, defaults to *False*):
+        predict_with_generate: (`bool`, *optional*, defaults to `False`):
             Whether we should use `model.generate()` to get outputs for the model.
 
     """
