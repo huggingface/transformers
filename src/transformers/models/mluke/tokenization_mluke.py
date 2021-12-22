@@ -100,7 +100,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 Whether or not to print more information and warnings.
             **kwargs: passed to the `self.tokenize()` method
 
-            Return:
+        Return:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model.
