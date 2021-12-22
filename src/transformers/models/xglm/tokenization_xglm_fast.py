@@ -44,7 +44,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class XGLMRobertaTokenizerFast(PreTrainedTokenizerFast):
+class XGLMTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" XGLM tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
     [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
