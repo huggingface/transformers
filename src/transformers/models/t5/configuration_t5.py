@@ -15,7 +15,6 @@
 """ T5 model configuration """
 from typing import Mapping
 
-# from ... import is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
