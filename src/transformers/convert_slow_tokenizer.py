@@ -662,9 +662,7 @@ class XLMRobertaConverter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        # fmt: off
-        vocab += [("<madeupword0>", 0.0), ("<madeupword1>", 0.0), ("<madeupword2>", 0.0), ("<madeupword3>", 0.0), ("<madeupword4>", 0.0), ("<madeupword5>", 0.0), ("<madeupword6>", 0.0)]
-        # fmt: on
+        vocab += [("<mask>", 0.0)]
         return vocab
 
     def unk_id(self, proto):
@@ -921,6 +919,9 @@ class XGLMConverter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        # fmt: off
+        vocab += [("<madeupword0>", 0.0), ("<madeupword1>", 0.0), ("<madeupword2>", 0.0), ("<madeupword3>", 0.0), ("<madeupword4>", 0.0), ("<madeupword5>", 0.0), ("<madeupword6>", 0.0)]
+        # fmt: on
         return vocab
 
     def unk_id(self, proto):
