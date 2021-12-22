@@ -9,50 +9,24 @@ from transformers import (  # LongformerConfig,; T5Config,
     BartConfig,
     DistilBertConfig,
     GPT2Config,
-<<<<<<< HEAD
-    MBartConfig,
-    RobertaConfig,
-    TFAlbertModel,
-    TFBartModel,
-    TFBertModel,
-    TFDistilBertModel,
-    TFGPT2Model,
-    TFMBartModel,
-    TFRobertaModel,
-    TFXLMRobertaModel,
-    XLMRobertaConfig,
-    is_tf_available,
-=======
     GPTNeoConfig,
     LayoutLMConfig,
     MBartConfig,
     RobertaConfig,
     XLMRobertaConfig,
->>>>>>> Revert "Added support for other features for already supported models (#14358)" (#14679)
-    is_torch_available,
+    is_torch_available, is_tf_available, TFAlbertModel, TFBartModel, TFBertModel, TFDistilBertModel, TFGPT2Model,
+    TFRobertaModel, TFXLMRobertaModel, TFMBartModel,
 )
 from transformers.models.albert import AlbertOnnxConfig
 from transformers.models.bart import BartOnnxConfig
 from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
 from transformers.models.distilbert import DistilBertOnnxConfig
-<<<<<<< HEAD
-from transformers.models.gpt2 import GPT2OnnxConfig
-from transformers.models.mbart import MBartOnnxConfig
-from transformers.models.roberta import RobertaOnnxConfig
-from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
-
-=======
-
-# from transformers.models.longformer import LongformerOnnxConfig
 from transformers.models.gpt2 import GPT2OnnxConfig
 from transformers.models.gpt_neo import GPTNeoOnnxConfig
 from transformers.models.layoutlm import LayoutLMOnnxConfig
 from transformers.models.mbart import MBartOnnxConfig
 from transformers.models.roberta import RobertaOnnxConfig
-
-# from transformers.models.t5 import T5OnnxConfig
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
->>>>>>> Revert "Added support for other features for already supported models (#14358)" (#14679)
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -60,14 +34,12 @@ from transformers.onnx import (
     export,
     validate_model_outputs,
 )
-<<<<<<< HEAD
-from transformers.onnx.config import OnnxConfigWithPast, DEFAULT_ONNX_OPSET
-from transformers.onnx.features import FeaturesManager
-=======
 from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
->>>>>>> Revert "Added support for other features for already supported models (#14358)" (#14679)
 from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
 from transformers.testing_utils import require_onnx, require_tf, require_torch, slow
+
+if is_torch_available():
+    from transformers.onnx.features import FeaturesManager
 
 
 @require_onnx
@@ -167,11 +139,12 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
     Cover the tests for model which have use_cache feature (i.e. "with_past" for ONNX)
     """
 
-    SUPPORTED_WITH_PAST_CONFIGS = {
-        ("BART", BartConfig),
-        ("GPT2", GPT2Config),
-        # ("T5", T5Config)
-    }
+    SUPPORTED_WITH_PAST_CONFIGS = {}
+    # SUPPORTED_WITH_PAST_CONFIGS = {
+    #     ("BART", BartConfig),
+    #     ("GPT2", GPT2Config),
+    #     # ("T5", T5Config)
+    # }
 
     @patch.multiple(OnnxConfigWithPast, __abstractmethods__=set())
     def test_use_past(self):
@@ -216,6 +189,30 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 
 
 if is_torch_available():
+    PYTORCH_EXPORT_MODELS = {
+        ("albert", "hf-internal-testing/tiny-albert"),
+        ("bert", "bert-base-cased"),
+        ("ibert", "kssteven/ibert-roberta-base"),
+        ("camembert", "camembert-base"),
+        ("distilbert", "distilbert-base-cased"),
+        # ("longFormer", "longformer-base-4096"),
+        ("roberta", "roberta-base"),
+        ("xlm-roberta", "xlm-roberta-base"),
+        ("layoutlm", "microsoft/layoutlm-base-uncased"),
+    }
+
+    PYTORCH_EXPORT_WITH_PAST_MODELS = {
+        ("gpt2", "gpt2"),
+        ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+    }
+
+    PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
+        ("bart", "facebook/bart-base"),
+        ("mbart", "sshleifer/tiny-mbart"),
+        ("t5", "t5-small"),
+        ("marian", "Helsinki-NLP/opus-mt-en-de"),
+    }
+    
     from transformers import (  # T5Model,
         AlbertModel,
         BartModel,
@@ -250,11 +247,6 @@ if is_torch_available():
         # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
     }
 
-    PYTORCH_EXPORT_WITH_PAST_MODELS = {
-        # ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
-        # ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
-        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
-    }
 
 
 if is_tf_available():
@@ -303,8 +295,7 @@ class OnnxExportTestCaseV2(TestCase):
     def test_pytorch_export_default(self):
         from transformers.onnx import export
 
-<<<<<<< HEAD
-        for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_MODELS:
+        for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_DEFAULT_MODELS:
             with self.subTest(name):
                 self.assertTrue(hasattr(onnx_config_class, "from_model_config"))
 
@@ -313,12 +304,18 @@ class OnnxExportTestCaseV2(TestCase):
                 onnx_config = onnx_config_class.from_model_config(model.config)
 
                 with NamedTemporaryFile("w") as output:
-                    onnx_inputs, onnx_outputs = export(
-                        tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, Path(output.name)
-                    )
-
                     try:
-                        validate_model_outputs(onnx_config, tokenizer, model, Path(output.name), onnx_outputs, 1e-5)
+                        onnx_inputs, onnx_outputs = export(
+                            tokenizer, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
+                        )
+                        validate_model_outputs(
+                            onnx_config,
+                            tokenizer,
+                            model,
+                            Path(output.name),
+                            onnx_outputs,
+                            onnx_config.atol_for_validation,
+                        )
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")
 
@@ -345,7 +342,6 @@ class OnnxExportTestCaseV2(TestCase):
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")
 
-    @slow
     @require_torch
     def test_pytorch_export_with_past(self):
         from transformers.onnx import export
@@ -369,8 +365,16 @@ class OnnxExportTestCaseV2(TestCase):
 
                     try:
                         validate_model_outputs(onnx_config, tokenizer, model, output, onnx_outputs, 1e-5)
-=======
-        for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_DEFAULT_MODELS:
+                    except ValueError as ve:
+                        self.fail(f"{name} -> {ve}")
+
+
+    @slow
+    @require_tf
+    def test_tensorflow_export_default_with_past(self):
+        from transformers.onnx import export
+
+        for name, model, model_class, config_class, onnx_config_class in TENSORFLOW_EXPORT_WITH_PAST_MODELS:
             with self.subTest(name):
                 self.assertTrue(hasattr(onnx_config_class, "from_model_config"))
 
@@ -385,41 +389,5 @@ class OnnxExportTestCaseV2(TestCase):
 
                     try:
                         validate_model_outputs(onnx_config, tokenizer, model, Path(output.name), onnx_outputs, 1e-5)
->>>>>>> Revert "Added support for other features for already supported models (#14358)" (#14679)
-                    except ValueError as ve:
-                        self.fail(f"{name} -> {ve}")
-
-    @slow
-<<<<<<< HEAD
-    @require_tf
-    def test_tensorflow_export_with_past(self):
-        from transformers.onnx import export
-
-        for name, model, model_class, config_class, onnx_config_class in TENSORFLOW_EXPORT_WITH_PAST_MODELS:
-=======
-    @require_torch
-    def test_pytorch_export_with_past(self):
-        from transformers.onnx import export
-
-        for name, model, model_class, config_class, onnx_config_class in PYTORCH_EXPORT_WITH_PAST_MODELS:
->>>>>>> Revert "Added support for other features for already supported models (#14358)" (#14679)
-            with self.subTest(name):
-                self.assertTrue(hasattr(onnx_config_class, "with_past"), "OnnxConfigWithPast should have with_past()")
-
-                tokenizer = AutoTokenizer.from_pretrained(model)
-                model = model_class(config_class())
-                onnx_config = onnx_config_class.with_past(model.config)
-
-                self.assertTrue(hasattr(onnx_config, "use_past"), "OnnxConfigWithPast should have use_past attribute.")
-                self.assertTrue(
-                    onnx_config.use_past, "OnnxConfigWithPast.use_past should be if called with with_past()"
-                )
-
-                with NamedTemporaryFile("w") as output:
-                    output = Path(output.name)
-                    onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, DEFAULT_ONNX_OPSET, output)
-
-                    try:
-                        validate_model_outputs(onnx_config, tokenizer, model, output, onnx_outputs, 1e-5)
                     except ValueError as ve:
                         self.fail(f"{name} -> {ve}")

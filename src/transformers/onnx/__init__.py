@@ -19,14 +19,26 @@ from ..file_utils import _LazyModule
 
 
 _import_structure = {
-    "config": ["EXTERNAL_DATA_FORMAT_SIZE_LIMIT", "OnnxConfig", "OnnxConfigWithPast", "PatchingSpec"],
+    "config": [
+        "EXTERNAL_DATA_FORMAT_SIZE_LIMIT",
+        "OnnxConfig",
+        "OnnxConfigWithPast",
+        "OnnxSeq2SeqConfigWithPast",
+        "PatchingSpec",
+    ],
     "convert": ["export", "validate_model_outputs"],
     "utils": ["ParameterFormat", "compute_serialized_parameters_size"],
 }
 
 
 if TYPE_CHECKING:
-    from .config import EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig, OnnxConfigWithPast, PatchingSpec
+    from .config import (
+        EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
+        OnnxConfig,
+        OnnxConfigWithPast,
+        OnnxSeq2SeqConfigWithPast,
+        PatchingSpec,
+    )
     from .convert import export, validate_model_outputs
     from .utils import ParameterFormat, compute_serialized_parameters_size
 
