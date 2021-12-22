@@ -109,13 +109,13 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         **kwargs
     ):
+        # Compatibility with the original tokenizer
         self.num_madeup_words = 7
-        sp_size = 256000
-        madeup_words = {f"<madeupword{i}>": sp_size + i + self.fairseq_offset for i in range(self.num_madeup_words)}
+        madeup_words = [f"<madeupword{i}>" for i in range(self.num_madeup_words)]
 
         kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
         kwargs["additional_special_tokens"] += [
-            word for word in madeup_words.keys() if word not in kwargs["additional_special_tokens"]
+            word for word in madeup_words if word not in kwargs["additional_special_tokens"]
         ]
 
         super().__init__(
