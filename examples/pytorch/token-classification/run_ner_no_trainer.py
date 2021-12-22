@@ -26,7 +26,6 @@ import random
 import unicodedata
 from pathlib import Path
 
-import datasets
 import numpy as np
 import torch
 from datasets import ClassLabel, DatasetDict, concatenate_datasets, load_dataset, load_metric
