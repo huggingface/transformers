@@ -444,32 +444,32 @@ class EncoderDecoderModel(PreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import EncoderDecoderModel, BertTokenizer
-            >>> import torch
+        ```python
+        >>> from transformers import EncoderDecoderModel, BertTokenizer
+        >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
 
-            >>> # training
-            >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
-            >>> model.config.pad_token_id = tokenizer.pad_token_id
-            >>> model.config.vocab_size = model.config.decoder.vocab_size
+        >>> # training
+        >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
+        >>> model.config.pad_token_id = tokenizer.pad_token_id
+        >>> model.config.vocab_size = model.config.decoder.vocab_size
 
-            >>> input_ids = tokenizer("This is a really long text", return_tensors="pt").input_ids
-            >>> labels = tokenizer("This is the corresponding summary", return_tensors="pt").input_ids
-            >>> outputs = model(input_ids=input_ids, labels=input_ids)
-            >>> loss, logits = outputs.loss, outputs.logits
+        >>> input_ids = tokenizer("This is a really long text", return_tensors="pt").input_ids
+        >>> labels = tokenizer("This is the corresponding summary", return_tensors="pt").input_ids
+        >>> outputs = model(input_ids=input_ids, labels=input_ids)
+        >>> loss, logits = outputs.loss, outputs.logits
 
-            >>> # save and load from pretrained
-            >>> model.save_pretrained("bert2bert")
-            >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
+        >>> # save and load from pretrained
+        >>> model.save_pretrained("bert2bert")
+        >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
 
-            >>> # generation
-            >>> generated = model.generate(input_ids)
-
-        """
+        >>> # generation
+        >>> generated = model.generate(input_ids)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}

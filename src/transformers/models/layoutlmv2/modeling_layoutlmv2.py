@@ -820,21 +820,22 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model
-            >>> from PIL import Image
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model
+        >>> from PIL import Image
 
-            >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
-            >>> model = LayoutLMv2Model.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> model = LayoutLMv2Model.from_pretrained('microsoft/layoutlmv2-base-uncased')
 
-            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
-            >>> encoding = processor(image, return_tensors="pt")
+        >>> encoding = processor(image, return_tensors="pt")
 
-            >>> outputs = model(**encoding)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

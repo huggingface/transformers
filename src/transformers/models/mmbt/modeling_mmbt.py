@@ -208,13 +208,14 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            # For example purposes. Not runnable.
-            transformer = BertModel.from_pretrained('bert-base-uncased')
-            encoder = ImageEncoder(args)
-            mmbt = MMBTModel(config, transformer, encoder)
-        """
+        ```python
+        # For example purposes. Not runnable.
+        transformer = BertModel.from_pretrained('bert-base-uncased')
+        encoder = ImageEncoder(args)
+        mmbt = MMBTModel(config, transformer, encoder)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

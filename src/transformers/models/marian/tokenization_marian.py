@@ -55,61 +55,61 @@ PRETRAINED_INIT_CONFIGURATION = {}
 
 class MarianTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a Marian tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+    Construct a Marian tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        source_spm (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension) that
+        source_spm (`str`):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
             contains the vocabulary for the source language.
-        target_spm (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension) that
+        target_spm (`str`):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
             contains the vocabulary for the target language.
-        source_lang (:obj:`str`, `optional`):
+        source_lang (`str`, *optional*):
             A string representing the source language.
-        target_lang (:obj:`str`, `optional`):
+        target_lang (`str`, *optional*):
             A string representing the target language.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        model_max_length (:obj:`int`, `optional`, defaults to 512):
+        model_max_length (`int`, *optional*, defaults to 512):
             The maximum sentence length the model accepts.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<eop>", "<eod>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
             Additional special tokens used by the tokenizer.
-        sp_model_kwargs (:obj:`dict`, `optional`):
-            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
-            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
 
-            - ``enable_sampling``: Enable subword regularization.
-            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
 
-              - ``nbest_size = {0,1}``: No sampling is performed.
-              - ``nbest_size > 1``: samples from the nbest_size results.
-              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
                 using forward-filtering-and-backward-sampling algorithm.
 
-            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import MarianTokenizer
-        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-        >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
-        >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-        >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
-        >>> with tokenizer.as_target_tokenizer():
-        ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
-        >>> inputs["labels"] = labels["input_ids"]
-        # keys  [input_ids, attention_mask, labels].
-        >>> outputs = model(**inputs) should work
-    """
+    ```python
+    >>> from transformers import MarianTokenizer
+    >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+    >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
+    >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
+    >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
+    >>> with tokenizer.as_target_tokenizer():
+    ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
+    >>> inputs["labels"] = labels["input_ids"]
+    # keys  [input_ids, attention_mask, labels].
+    >>> outputs = model(**inputs) should work
+    ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -202,20 +202,20 @@ class MarianTokenizer(PreTrainedTokenizer):
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (:obj:`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
-                List of tokenized input ids. Can be obtained using the ``__call__`` method.
-            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            sequences (`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
-            use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).
-            kwargs (additional keyword arguments, `optional`):
+            kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            :obj:`List[str]`: The list of decoded sentences.
+            `List[str]`: The list of decoded sentences.
         """
         return super().batch_decode(sequences, **kwargs)
 
@@ -224,23 +224,23 @@ class MarianTokenizer(PreTrainedTokenizer):
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
         tokens and clean up tokenization spaces.
 
-        Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
+        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (:obj:`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
-                List of tokenized input ids. Can be obtained using the ``__call__`` method.
-            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
-            use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).
-            kwargs (additional keyword arguments, `optional`):
+            kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            :obj:`str`: The decoded sentence.
+            `str`: The decoded sentence.
         """
         return super().decode(token_ids, **kwargs)
 

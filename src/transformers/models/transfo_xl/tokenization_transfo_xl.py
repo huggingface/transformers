@@ -76,10 +76,12 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
     Returns:
         A list of strings with tokenized numbers.
 
-    Example::
-        >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
-        ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
-    """
+    Example:
+
+    ```python
+    >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
+    ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
+    ```"""
     tokenized = []
     for i in range(len(text_array)):
         reg, sub = MATCH_NUMBERS
@@ -91,7 +93,7 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
 
 def detokenize_numbers(text: str) -> str:
     """
-    Inverts the operation of `tokenize_numbers`. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+    Inverts the operation of *tokenize_numbers*. This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
 
     Args:
         text: A string where the number should be detokenized.
@@ -99,10 +101,12 @@ def detokenize_numbers(text: str) -> str:
     Returns:
         A detokenized string.
 
-    Example::
-        >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
-        "$ 5,000 1.73 m"
-    """
+    Example:
+
+    ```python
+    >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
+    "$ 5,000 1.73 m"
+    ```"""
     for reg, sub in DETOKENIZE_NUMBERS:
         text = re.sub(reg, sub, text)
     return text
@@ -110,41 +114,40 @@ def detokenize_numbers(text: str) -> str:
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
-    Construct a Transformer-XL tokenizer adapted from Vocab class in `the original code
-    <https://github.com/kimiyoung/transformer-xl>`__. The Transformer-XL tokenizer is a word-level tokenizer (no
+    Construct a Transformer-XL tokenizer adapted from Vocab class in [the original code](https://github.com/kimiyoung/transformer-xl). The Transformer-XL tokenizer is a word-level tokenizer (no
     sub-word tokenization).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        special (:obj:`List[str]`, `optional`):
+        special (`List[str]`, *optional*):
             A list of special tokens (to be treated by the original implementation of this tokenizer).
-        min_freq (:obj:`int`, `optional`, defaults to 0):
+        min_freq (`int`, *optional*, defaults to 0):
             The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
-            will be mapped to :obj:`unk_token`).
-        max_size (:obj:`int`, `optional`):
+            will be mapped to `unk_token`).
+        max_size (`int`, *optional*):
             The maximum size of the vocabulary. If left unset, it will default to the size of the vocabulary found
-            after excluding the tokens according to the :obj:`min_freq` rule.
-        lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            after excluding the tokens according to the `min_freq` rule.
+        lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
-        delimiter (:obj:`str`, `optional`):
+        delimiter (`str`, *optional*):
             The delimiter used between tokens.
-        vocab_file (:obj:`str`, `optional`):
+        vocab_file (`str`, *optional*):
             File containing the vocabulary (from the original implementation).
-        pretrained_vocab_file (:obj:`str`, `optional`):
-            File containing the vocabulary as saved with the :obj:`save_pretrained()` method.
-        never_split (:obj:`List[str]`, `optional`):
+        pretrained_vocab_file (`str`, *optional*):
+            File containing the vocabulary as saved with the `save_pretrained()` method.
+        never_split (`List[str]`, *optional*):
             List of tokens that should never be split. If no list is specified, will simply use the existing special
             tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"<eos>"`):
+        eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<formula>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `["<formula>"]`):
             A list of additional special tokens (for the HuggingFace functionality).
-        language (:obj:`str`, `optional`, defaults to :obj:`"en"`):
+        language (`str`, *optional*, defaults to `"en"`):
             The language of this tokenizer (used for mose preprocessing).
     """
 
@@ -407,8 +410,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def moses_pipeline(self, text: str) -> List[str]:
         """
-        Does basic tokenization using :class:`sacremoses.MosesPunctNormalizer` and :class:`sacremoses.MosesTokenizer`
-        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`). Additionally,
+        Does basic tokenization using [`sacremoses.MosesPunctNormalizer`] and [`sacremoses.MosesTokenizer`]
+        with *aggressive_dash_splits=True* (see [`sacremoses.tokenize.MosesTokenizer.tokenize`]). Additionally,
         large comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23
         @,@ 000 people are 1 @.@ 80m tall"
 
@@ -418,11 +421,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         Returns:
             A list of tokenized string
 
-        Example::
-            >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
-            >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
-            ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
-        """
+        Example:
+
+        ```python
+        >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
+        >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
+        ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
+        ```"""
         text = self.moses_punct_norm(text)
         text = self.moses_tokenize(text)
         text = tokenize_numbers(text)

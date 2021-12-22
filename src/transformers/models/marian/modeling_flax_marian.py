@@ -38,7 +38,13 @@ from ...modeling_flax_outputs import (
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
 )
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
 from ...utils import logging
 from .configuration_marian import MarianConfig
 
@@ -975,17 +981,18 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+        ```python
+        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-            >>> tokenizer = MarianTokenizer.from_pretrained('facebook/marian-large-cnn')
-            >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained('facebook/marian-large-cnn')
+        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
-            >>> encoder_outputs = model.encode(**inputs)
-        """
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
+        >>> encoder_outputs = model.encode(**inputs)
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1041,23 +1048,24 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+        ```python
+        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-            >>> tokenizer = MarianTokenizer.from_pretrained('facebook/marian-large-cnn')
-            >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained('facebook/marian-large-cnn')
+        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1308,23 +1316,24 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+        ```python
+        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-            >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-            >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1468,23 +1477,26 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
 FLAX_MARIAN_MT_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import MarianTokenizer, FlaxMarianMTModel
+    ```python
+    >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+    >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+    >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
 
-        >>> text = "My friends are cool but they eat too many carbs."
-        >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
+    >>> text = "My friends are cool but they eat too many carbs."
+    >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
 
-        >>> sequences = model.generate(input_ids, max_length=64, num_beams=2).sequences
+    >>> sequences = model.generate(input_ids, max_length=64, num_beams=2).sequences
 
-        >>> outputs = tokenizer.batch_decode(sequences, skip_special_tokens=True)
-        >>> # should give `Meine Freunde sind cool, aber sie essen zu viele Kohlenhydrate.`
+    >>> outputs = tokenizer.batch_decode(sequences, skip_special_tokens=True)
+    >>> # should give *Meine Freunde sind cool, aber sie essen zu viele Kohlenhydrate.*
+    ```
 """
 
 overwrite_call_docstring(
     FlaxMarianMTModel,
     MARIAN_INPUTS_DOCSTRING + FLAX_MARIAN_MT_DOCSTRING,
 )
+append_replace_return_docstrings(FlaxMarianMTModel, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

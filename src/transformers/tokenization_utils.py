@@ -66,15 +66,17 @@ class Trie:
 
         This function is idempotent, adding twice the same word will leave the trie unchanged
 
-        Example::
+        Example:
 
-            >>> trie = Trie()
-            >>> trie.add("Hello 友達")
-            >>> trie.data
-            {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
-            >>> trie.add("Hello")
-            >>> trie.data
-            {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
+        ```python
+        >>> trie = Trie()
+        >>> trie.add("Hello 友達")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
+        >>> trie.add("Hello")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
+        ```
         """
         if not word:
             # Prevent empty string
@@ -92,16 +94,18 @@ class Trie:
 
         This trie will match the longest possible word first !
 
-        Example::
+        Example:
 
-            >>> trie = Trie()
-            >>> trie.split("[CLS] This is a extra_id_100")
-            ["[CLS] This is a extra_id_100"]
-            >>> trie.add("[CLS]")
-            >>> trie.add("extra_id_1")
-            >>> trie.add("extra_id_100")
-            >>> trie.split("[CLS] This is a extra_id_100")
-            ["[CLS]", " This is a ", "extra_id_100"]
+        ```python
+        >>> trie = Trie()
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS] This is a extra_id_100"]
+        >>> trie.add("[CLS]")
+        >>> trie.add("extra_id_1")
+        >>> trie.add("extra_id_100")
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS]", " This is a ", "extra_id_100"]
+        ```
         """
         # indexes are counted left of the chars index.
         # "hello", index 0, is left of h, index 1 is between h and e.
@@ -323,7 +327,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
     Base class for all slow tokenizers.
 
-    Inherits from :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase`.
+    Inherits from [`~tokenization_utils_base.PreTrainedTokenizerBase`].
 
     Handle all the shared methods for tokenization and special tokens as well as methods downloading/caching/loading
     pretrained tokenizers as well as adding tokens to the vocabulary.
@@ -351,7 +355,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     @property
     def vocab_size(self) -> int:
         """
-        :obj:`int`: Size of the base vocabulary (without the added tokens).
+        `int`: Size of the base vocabulary (without the added tokens).
         """
         raise NotImplementedError
 
@@ -360,7 +364,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of token to index.
 
         Returns:
-            :obj:`Dict[str, int]`: The added tokens.
+            `Dict[str, int]`: The added tokens.
         """
         return self.added_tokens_encoder
 
@@ -376,26 +380,27 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens (:obj:`List[str]`or :obj:`List[tokenizers.AddedToken]`):
+            new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
                 Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
-                checking if the tokenizer assign the index of the ``unk_token`` to them).
-            special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                checking if the tokenizer assign the index of the `unk_token` to them).
+            special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the tokens should be added as special tokens.
 
         Returns:
-            :obj:`int`: The number of tokens actually added to the vocabulary.
+            `int`: The number of tokens actually added to the vocabulary.
 
-        Examples::
+        Examples:
 
-            # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertModel.from_pretrained('bert-base-uncased')
+        ```python
+        # Let's see how to increase the vocabulary of Bert model and tokenizer
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertModel.from_pretrained('bert-base-uncased')
 
-            num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-            print('We have added', num_added_toks, 'tokens')
-            # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-            model.resize_token_embeddings(len(tokenizer))
-        """
+        num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
+        print('We have added', num_added_toks, 'tokens')
+        # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+        model.resize_token_embeddings(len(tokenizer))
+        ```"""
         new_tokens = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []
@@ -447,17 +452,20 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Returns the number of added tokens when encoding a sequence with special tokens.
 
-        .. note::
-            This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
-            put this inside your training loop.
+        <Tip>
+
+        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
+        put this inside your training loop.
+
+        </Tip>
 
         Args:
-            pair (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            pair (`bool`, *optional*, defaults to `False`):
                 Whether the number of added tokens should be computed in the case of a sequence pair or a single
                 sequence.
 
         Returns:
-            :obj:`int`: Number of special tokens added to sequences.
+            `int`: Number of special tokens added to sequences.
         """
         token_ids_0 = []
         token_ids_1 = []
@@ -471,13 +479,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         (BPE/SentencePieces/WordPieces). Takes care of added tokens.
 
         Args:
-            text (:obj:`str`):
+            text (`str`):
                 The sequence to be encoded.
             **kwargs (additional keyword arguments):
-                Passed along to the model-specific ``prepare_for_tokenization`` preprocessing method.
+                Passed along to the model-specific `prepare_for_tokenization` preprocessing method.
 
         Returns:
-            :obj:`List[str]`: The list of tokens.
+            `List[str]`: The list of tokens.
         """
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
@@ -548,10 +556,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         vocabulary.
 
         Args:
-            tokens (:obj:`str` or :obj:`List[str]`): One or several token(s) to convert to token id(s).
+            tokens (`str` or `List[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
-            :obj:`int` or :obj:`List[int]`: The token id or list of token ids.
+            `int` or `List[int]`: The token id or list of token ids.
         """
         if tokens is None:
             return None
@@ -807,21 +815,21 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Performs any necessary transformations before tokenization.
 
-        This method should pop the arguments from kwargs and return the remaining :obj:`kwargs` as well. We test the
-        :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
+        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
+        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
 
         Args:
-            text (:obj:`str`):
+            text (`str`):
                 The text to prepare.
-            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
+            is_split_into_words (`bool`, *optional*, defaults to `False`):
+                Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
             kwargs:
                 Keyword arguments to use for the tokenization.
 
         Returns:
-            :obj:`Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+            `Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
         """
         return (text, kwargs)
 
@@ -830,14 +838,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 List of ids of the second sequence.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
@@ -871,13 +879,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added tokens.
 
         Args:
-            ids (:obj:`int` or :obj:`List[int]`):
+            ids (`int` or `List[int]`):
                 The token id (or token ids) to convert to tokens.
-            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
         Returns:
-            :obj:`str` or :obj:`List[str]`: The decoded token(s).
+            `str` or `List[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
             if ids in self.added_tokens_decoder:

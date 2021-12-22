@@ -1635,18 +1635,20 @@ class FlaxBigBirdForPreTraining(FlaxBigBirdPreTrainedModel):
 FLAX_BIG_BIRD_FOR_PRETRAINING_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import BigBirdTokenizer, FlaxBigBirdForPreTraining
+    ```python
+    >>> from transformers import BigBirdTokenizer, FlaxBigBirdForPreTraining
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
-        >>> model = FlaxBigBirdForPreTraining.from_pretrained('google/bigbird-roberta-base')
+    >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
+    >>> model = FlaxBigBirdForPreTraining.from_pretrained('google/bigbird-roberta-base')
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
-        >>> outputs = model(**inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+    >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
+    >>> prediction_logits = outputs.prediction_logits
+    >>> seq_relationship_logits = outputs.seq_relationship_logits
+    ```
 """
 
 overwrite_call_docstring(

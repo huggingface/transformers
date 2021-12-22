@@ -485,7 +485,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             qlen: TODO Lysandre didn't fill
             mlen: TODO Lysandre didn't fill
 
-        ::
+        ```
 
                   same_length=False:      same_length=True:
                   <mlen > <  qlen >       <mlen > <  qlen >
@@ -494,7 +494,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             qlen [0 0 0 0 0 0 0 1 1]     [1 1 0 0 0 0 0 1 1]
                  [0 0 0 0 0 0 0 0 1]     [1 1 1 0 0 0 0 0 1]
                v [0 0 0 0 0 0 0 0 0]     [1 1 1 1 0 0 0 0 0]
-
+        ```
         """
         attn_mask = tf.ones([qlen, qlen])
         mask_u = tf.linalg.band_part(attn_mask, 0, -1)
@@ -1069,15 +1069,15 @@ XLNET_START_DOCSTRING = r"""
 
 XLNET_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
+        input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See
-            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
+            Indices can be obtained using [`XLNetTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1089,8 +1089,8 @@ XLNET_INPUTS_DOCSTRING = r"""
             decoding. The token ids which have their past given to this model should not be passed as `input_ids`
             as they have already been computed.
 
-            :obj:`use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+            `use_mems` has to be set to `True` to make use of `mems`.
+        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -1098,17 +1098,18 @@ XLNET_INPUTS_DOCSTRING = r"""
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`tf.Tensor` or `Numpy array` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k
-            is on the j-th token.
-        token_type_ids (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            is on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
+            (generation).
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        input_mask (`tf.Tensor` or `Numpy array` of shape `({0})`, *optional*):
+        input_mask (`torch.FloatTensor` of shape `{0}`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0
             for real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -1118,30 +1119,24 @@ XLNET_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **not masked**.
 
             You can only uses one of `input_mask` and `attention_mask`.
-        head_mask (`Numpy array` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
-            config will be used instead.
+            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
-            used instead.
+            more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the model in training mode (some modules like dropout modules have different
-            behaviors between training and evaluation).
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 

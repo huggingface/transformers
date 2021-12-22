@@ -485,22 +485,23 @@ class SegformerModel(SegformerPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import SegformerFeatureExtractor, SegformerModel
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import SegformerFeatureExtractor, SegformerModel
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-            >>> model = SegformerModel("nvidia/segformer-b0-finetuned-ade-512-512")
+        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        >>> model = SegformerModel("nvidia/segformer-b0-finetuned-ade-512-512")
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> sequence_output = outputs.last_hidden_state
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> sequence_output = outputs.last_hidden_state
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

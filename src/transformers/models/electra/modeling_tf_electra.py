@@ -1082,17 +1082,18 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> import tensorflow as tf
-            >>> from transformers import ElectraTokenizer, TFElectraForPreTraining
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import ElectraTokenizer, TFElectraForPreTraining
 
-            >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-            >>> model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
-            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-            >>> outputs = model(input_ids)
-            >>> scores = outputs[0]
-        """
+        >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        >>> model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        >>> outputs = model(input_ids)
+        >>> scores = outputs[0]
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

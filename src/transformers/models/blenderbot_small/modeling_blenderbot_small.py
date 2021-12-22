@@ -1115,19 +1115,20 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallModel
+        ```python
+        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallModel
 
-            >>> model = BlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
-            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> model = BlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
