@@ -47,7 +47,6 @@ from transformers import (
     PretrainedConfig,
     SchedulerType,
     default_data_collator,
-    #luke_entity_span_classification_data_collator,
     get_scheduler,
     set_seed,
 )
