@@ -33,6 +33,7 @@ class KerasMetricCallback(Callback):
     def __init__(
         self,
         metric_fn: Callable,
+        tokenizer: PreTrainedTokenizerBase,
         eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
         output_cols: Optional[List[str]] = None,
         label_cols: Optional[List[str]] = None,
@@ -53,6 +54,7 @@ class KerasMetricCallback(Callback):
         self.eval_dataset = eval_dataset
         self.predict_with_generate = predict_with_generate
         self.output_cols = output_cols
+        self.model_input_names = tokenizer.model_input_names
 
         # This next block attempts to parse out which elements of the dataset should be appended to the labels list
         # that is passed to the metric_fn
@@ -109,6 +111,9 @@ class KerasMetricCallback(Callback):
                 batch, labels = batch
             else:
                 labels = None
+            if isinstance(batch, dict):
+                batch = {key: array for key, array in batch.items()
+                         if key in self.model_input_names}
             if self.predict_with_generate:
                 predictions = self.model.generate(batch)
             else:
