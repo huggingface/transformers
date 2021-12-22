@@ -22,13 +22,15 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 import datasets
+import transformers
 import torch
 from datasets import DatasetDict, load_dataset, load_metric
 
-import transformers
+from transformers import AutoProcessor
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -39,7 +41,6 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -197,8 +198,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             7.5 (Volta).
     """
 
-    feature_extractor: AutoFeatureExtractor
-    tokenizer: AutoTokenizer
+    processor: Any
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
@@ -209,14 +209,14 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
-        batch = self.feature_extractor.pad(
+        batch = self.processor.feature_extractor.pad(
             input_features,
             padding=self.padding,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
 
-        labels_batch = self.tokenizer.pad(
+        labels_batch = self.processor.tokenizer.pad(
             label_features,
             padding=self.padding,
             pad_to_multiple_of=self.pad_to_multiple_of_labels,
@@ -257,12 +257,19 @@ def main():
     transformers.utils.logging.enable_default_handler()
     transformers.utils.logging.enable_explicit_format()
 
+    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
+
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
+    logger.info("Training/evaluation parameters %s", training_args)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -343,9 +350,11 @@ def main():
         model.freeze_feature_extractor()
 
     # make sure that dataset decodes audio with correct sampling rate
-    raw_datasets = raw_datasets.cast_column(
-        data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
-    )
+    dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
+    if dataset_sampling_rate != feature_extractor.sampling_rate:
+        raw_datasets = raw_datasets.cast_column(
+            data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+        )
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -354,8 +363,10 @@ def main():
     max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
     min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
     audio_column_name = data_args.audio_column_name
+    num_workers = data_args.preprocessing_num_workers
     text_column_name = data_args.text_column_name
     model_input_name = feature_extractor.model_input_names[0]
+    do_normalize = True  # (TODO) make input arg
 
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
@@ -363,13 +374,14 @@ def main():
         # load audio
         sample = batch[audio_column_name]
 
-        batch[model_input_name] = feature_extractor(
-            sample["array"], sampling_rate=sample["sampling_rate"], truncate=True, max_length=max_input_length
-        ).input_values[0]
+        inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
+        batch[model_input_name] = inputs.input_values[0]
         batch["input_length"] = len(batch["input_values"])
 
+        input_str = batch[text_column_name].lower() if do_normalize else batch[text_column_name]
+
         # Setup the processor for targets
-        batch["labels"] = tokenizer(batch[text_column_name]).input_ids
+        batch["labels"] = tokenizer(input_str).input_ids
         return batch
 
     if training_args.do_train:
@@ -384,15 +396,15 @@ def main():
                 desc="preprocess train dataset",
             )
 
-            if min_input_length > 0.0:
-                # filter data that is shorter than min_input_length
-                train_dataset = train_dataset.filter(
-                    lambda x: x > min_input_length,
-                    num_proc=data_args.preprocessing_num_workers,
-                    input_columns=["input_length"],
-                )
+        def is_audio_in_length_range(length):
+            return length > min_input_length and length < max_input_length
 
-            train_dataset = train_dataset.remove_columns("input_length")
+        # filter data that is shorter than min_input_length
+        train_dataset = train_dataset.filter(
+            is_audio_in_length_range,
+            num_proc=num_workers,
+            input_columns=["input_length"],
+        )
 
     if training_args.do_eval:
         eval_dataset = raw_datasets["eval"]
@@ -406,21 +418,15 @@ def main():
                 desc="preprocess eval dataset",
             )
 
-            if min_input_length > 0.0:
-                # filter data that is shorter than min_input_length
-                eval_dataset = eval_dataset.filter(
-                    lambda x: x > min_input_length,
-                    num_proc=data_args.preprocessing_num_workers,
-                    input_columns=["input_length"],
-                )
+        def is_audio_in_length_range(length):
+            return length > min_input_length and length < max_input_length
 
-            eval_dataset = eval_dataset.remove_columns("input_length")
-
-    # Data collator
-    data_collator = DataCollatorSpeechSeq2SeqWithPadding(
-        feature_extractor=feature_extractor,
-        tokenizer=tokenizer,
-    )
+        # filter data that is shorter than min_input_length
+        eval_dataset = eval_dataset.filter(
+            is_audio_in_length_range,
+            num_proc=num_workers,
+            input_columns=["input_length"],
+        )
 
     # Metric
     metric = load_metric("wer")
@@ -439,15 +445,32 @@ def main():
     def compute_metrics(pred):
         pred_ids = pred.predictions
 
-        pred.label_ids[pred.label_ids == -100] = feature_extractor.tokenizer.pad_token_id
+        pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
 
-        pred_str = tokenizer.batch_decode(pred_ids)
+        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         # we do not want to group tokens when computing the metrics
-        label_str = tokenizer.batch_decode(pred.label_ids)
+        label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
+
+        if is_main_process(training_args.local_rank):
+            print(f"Preds {pred_str[:10]} | Targets {label_str[:10]}")
 
         wer = metric.compute(predictions=pred_str, references=label_str)
 
         return {"wer": wer}
+
+    # Now create a single processor
+    if is_main_process(training_args.local_rank):
+        # save feature extractor, tokenizer and config
+        feature_extractor.save_pretrained(training_args.output_dir)
+        tokenizer.save_pretrained(training_args.output_dir)
+        config.save_pretrained(training_args.output_dir)
+
+    processor = AutoProcessor.from_pretrained(training_args.output_dir)
+
+    # Data collator
+    data_collator = DataCollatorSpeechSeq2SeqWithPadding(
+        processor=processor
+    )
 
     # Initialize our Trainer
     trainer = Seq2SeqTrainer(
