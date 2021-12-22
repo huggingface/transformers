@@ -966,7 +966,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
 @add_start_docstrings(
     """
     LayoutLM Model with a sequence classification head on top (a linear layer on top of the pooled output) e.g. for
-    document image classification tasks such as the `RVL-CDIP <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset.
+    document image classification tasks such as the [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset.
     """,
     LAYOUTLM_START_DOCSTRING,
 )
@@ -1096,8 +1096,8 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
 @add_start_docstrings(
     """
     LayoutLM Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    sequence labeling (information extraction) tasks such as the `FUNSD <https://guillaumejaume.github.io/FUNSD/>`__
-    dataset and the `SROIE <https://rrc.cvc.uab.es/?ch=13>`__ dataset.
+    sequence labeling (information extraction) tasks such as the [FUNSD](https://guillaumejaume.github.io/FUNSD/)
+    dataset and the [SROIE](https://rrc.cvc.uab.es/?ch=13) dataset.
     """,
     LAYOUTLM_START_DOCSTRING,
 )

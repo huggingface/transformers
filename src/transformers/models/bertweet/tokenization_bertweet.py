@@ -441,7 +441,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
 # Author: Christopher Potts <cgpotts@stanford.edu>
 #         Ewan Klein <ewan@inf.ed.ac.uk> (modifications)
 #         Pierpaolo Pantone <> (modifications)
-# URL: <http://nltk.org/>
+# URL: http://nltk.org/
 # For license information, see LICENSE.TXT
 #
 

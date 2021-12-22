@@ -955,8 +955,8 @@ class BeitPyramidPoolingModule(nn.ModuleList):
 
 class BeitUperHead(nn.Module):
     """
-    Unified Perceptual Parsing for Scene Understanding. This head is the implementation of `UPerNet
-    <https://arxiv.org/abs/1807.10221>`_.
+    Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
+    [UPerNet](https://arxiv.org/abs/1807.10221).
 
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
@@ -1040,8 +1040,8 @@ class BeitUperHead(nn.Module):
 
 class BeitFCNHead(nn.Module):
     """
-    Fully Convolution Networks for Semantic Segmentation. This head is implemented of `FCNNet
-    <https://arxiv.org/abs/1411.4038>`_.
+    Fully Convolution Networks for Semantic Segmentation. This head is implemented of
+    [FCNNet](https://arxiv.org/abs/1411.4038>).
 
     Args:
         config (BeitConfig): Configuration.

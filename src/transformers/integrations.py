@@ -770,7 +770,7 @@ class MLflowCallback(TrainerCallback):
 
 class NeptuneCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that sends the logs to *Neptune <https://neptune.ai>*.
+    A [`TrainerCallback`] that sends the logs to [Neptune](https://neptune.ai).
     """
 
     def __init__(self):
