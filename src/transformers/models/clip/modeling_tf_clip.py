@@ -92,24 +92,24 @@ def clip_loss(similarity: tf.Tensor) -> tf.Tensor:
 class TFCLIPOutput(ModelOutput):
     """
     Args:
-        loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`return_loss` is :obj:`True`):
+        loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for image-text similarity.
-        logits_per_image:(:obj:`tf.Tensor` of shape :obj:`(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between :obj:`image_embeds` and :obj:`text_embeds`. This represents the
+        logits_per_image:(`tf.Tensor` of shape `(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the
             image-text similarity scores.
-        logits_per_text:(:obj:`tf.Tensor` of shape :obj:`(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between :obj:`text_embeds` and :obj:`image_embeds`. This represents the
+        logits_per_text:(`tf.Tensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the
             text-image similarity scores.
-        text_embeds(:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`):
+        text_embeds(`tf.Tensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.TFCLIPTextModel`.
-        image_embeds(:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`):
+            [`TFCLIPTextModel`].
+        image_embeds(`tf.Tensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.TFCLIPVisionModel`.
-        text_model_output(:class:`~transformers.modeling_tf_utils.TFBaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.TFCLIPTextModel`.
-        vision_model_output(:class:`~transformers.modeling_tf_utils.TFBaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.TFCLIPVisionModel`.
+            [`TFCLIPVisionModel`].
+        text_model_output([`~modeling_tf_utils.TFBaseModelOutputWithPooling`]):
+            The output of the [`TFCLIPTextModel`].
+        vision_model_output([`~modeling_tf_utils.TFBaseModelOutputWithPooling`]):
+            The output of the [`TFCLIPVisionModel`].
     """
 
     loss: Optional[tf.Tensor] = None
@@ -236,7 +236,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
+            final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
@@ -399,13 +399,13 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor]:
         """
         Args:
-            hidden_states (:obj:`tf.Tensor`): input to the layer of shape :obj:`(batch, seq_len, embed_dim)`
-            attention_mask (:obj:`tf.Tensor`): attention mask of size
-                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            causal_attention_mask (:obj:`tf.Tensor`): causal attention mask of size
-                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (:obj:`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See ``outputs`` under returned
+            hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`tf.Tensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            causal_attention_mask (`tf.Tensor`): causal attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            output_attentions (`bool`):
+                Whether or not to return the attentions tensors of all attention layers. See `outputs` under returned
                 tensors for more detail.
         """
         residual = hidden_states
@@ -433,8 +433,8 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
 
 class TFCLIPEncoder(tf.keras.layers.Layer):
     """
-    Transformer encoder consisting of :obj:`config.num_hidden_layers` self attention layers. Each layer is a
-    :class:`~transformers.TFCLIPEncoderLayer`.
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`TFCLIPEncoderLayer`].
 
     Args:
         config: CLIPConfig
@@ -965,138 +965,134 @@ class TFCLIPPreTrainedModel(TFPreTrainedModel):
 
 CLIP_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
     and behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
+    the tensors in the first argument of the model call function: `model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+    the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(input_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+      `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+      `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.CLIPConfig`): Model configuration class with all the parameters of the model.
+        config ([`CLIPConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the
             model weights.
 """
 
 CLIP_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are position IDs?](../glossary#position-ids)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
             argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
 
 CLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.CLIPFeatureExtractor`. See
-            :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`): Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details. output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
             argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
 
 CLIP_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        pixel_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.CLIPFeatureExtractor`. See
-            :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
+            [`CLIPFeatureExtractor.__call__`] for details.
+        attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        return_loss (:obj:`bool`, `optional`):
+            [What are position IDs?](../glossary#position-ids)
+        return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
             argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -1126,19 +1122,20 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import CLIPTokenizer, TFCLIPTextModel
+        ```python
+        >>> from transformers import CLIPTokenizer, TFCLIPTextModel
 
-            >>> model = TFCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = TFCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="tf")
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="tf")
 
-            >>> outputs = model(**inputs)
-            >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooler_output # pooled (EOS token) states
-        """
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output # pooled (EOS token) states
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1189,7 +1186,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+            `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(len(DUMMY_INPUTS), 3, self.config.image_size, self.config.image_size), dtype=tf.float32
@@ -1208,7 +1205,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         Method used for serving the model.
 
         Args:
-            inputs (:obj:`Dict[str, tf.Tensor]`):
+            inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
         output = self.call(inputs)
@@ -1229,24 +1226,25 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from PIL import Image
-            >>> import requests
-            >>> from transformers import CLIPProcessor, TFCLIPVisionModel
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import CLIPProcessor, TFCLIPVisionModel
 
-            >>> model = TFCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = TFCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(images=image, return_tensors="tf")
+        >>> inputs = processor(images=image, return_tensors="tf")
 
-            >>> outputs = model(**inputs)
-            >>> last_hidden_state = outputs.last_hidden_state
-            >>> pooled_output = outputs.pooler_output # pooled CLS states
-        """
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output # pooled CLS states
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1298,7 +1296,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
+            `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(len(DUMMY_INPUTS), 3, self.config.vision_config.image_size, self.config.vision_config.image_size),
@@ -1323,7 +1321,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         Method used for serving the model.
 
         Args:
-            inputs (:obj:`Dict[str, tf.Tensor]`):
+            inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
         output = self.call(inputs)
@@ -1344,19 +1342,20 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            text_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of :class:`~transformers.TFCLIPTextModel`.
+            text_features (`tf.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of [`TFCLIPTextModel`].
 
-        Examples::
+        Examples:
 
-            >>> from transformers import CLIPTokenizer, TFCLIPModel
+        ```python
+        >>> from transformers import CLIPTokenizer, TFCLIPModel
 
-            >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="tf")
-            >>> text_features = model.get_text_features(**inputs)
-        """
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="tf")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
         inputs = input_processing(
             func=self.get_text_features,
             config=self.config,
@@ -1393,25 +1392,26 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            image_features (:obj:`tf.Tensor` of shape :obj:`(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of :class:`~transformers.TFCLIPVisionModel`.
+            image_features (`tf.Tensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`TFCLIPVisionModel`].
 
-        Examples::
+        Examples:
 
-            >>> from PIL import Image
-            >>> import requests
-            >>> from transformers import CLIPProcessor, TFCLIPModel
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import CLIPProcessor, TFCLIPModel
 
-            >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(images=image, return_tensors="tf")
+        >>> inputs = processor(images=image, return_tensors="tf")
 
-            >>> image_features = model.get_image_features(**inputs)
-        """
+        >>> image_features = model.get_image_features(**inputs)
+        ```"""
         inputs = input_processing(
             func=self.get_image_features,
             config=self.config,
@@ -1453,26 +1453,26 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> import tensorflow as tf
-            >>> from PIL import Image
-            >>> import requests
-            >>> from transformers import CLIPProcessor, TFCLIPModel
+        ```python
+        >>> import tensorflow as tf
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import CLIPProcessor, TFCLIPModel
 
-            >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="tf", padding=True)
+        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="tf", padding=True)
 
-            >>> outputs = model(**inputs)
-            >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-            >>> probs = tf.nn.softmax(logits_per_image, axis=1) # we can take the softmax to get the label probabilities
-
-        """
+        >>> outputs = model(**inputs)
+        >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
+        >>> probs = tf.nn.softmax(logits_per_image, axis=1) # we can take the softmax to get the label probabilities
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
