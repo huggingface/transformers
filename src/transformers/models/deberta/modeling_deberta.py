@@ -551,9 +551,9 @@ class DisentangledSelfAttention(nn.Module):
                 self.max_relative_positions = config.max_position_embeddings
             self.pos_dropout = StableDropout(config.hidden_dropout_prob)
 
-            if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "c2p" in self.pos_att_type:
                 self.pos_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-            if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "p2c" in self.pos_att_type:
                 self.pos_q_proj = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = StableDropout(config.attention_probs_dropout_prob)
@@ -671,39 +671,35 @@ class DisentangledSelfAttention(nn.Module):
         rel_embeddings = rel_embeddings[
             self.max_relative_positions - att_span : self.max_relative_positions + att_span, :
         ].unsqueeze(0)
-        if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
-            pos_key_layer = self.pos_proj(rel_embeddings)
-            pos_key_layer = self.transpose_for_scores(pos_key_layer)
-
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
-            pos_query_layer = self.pos_q_proj(rel_embeddings)
-            pos_query_layer = self.transpose_for_scores(pos_query_layer)
 
         score = 0
+
         # content->position
         if "c2p" in self.pos_att_type:
+            pos_key_layer = self.pos_proj(rel_embeddings)
+            pos_key_layer = self.transpose_for_scores(pos_key_layer)
             c2p_att = torch.matmul(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(c2p_att, dim=-1, index=c2p_dynamic_expand(c2p_pos, query_layer, relative_pos))
             score += c2p_att
 
         # position->content
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+        if "p2c" in self.pos_att_type:
+            pos_query_layer = self.pos_q_proj(rel_embeddings)
+            pos_query_layer = self.transpose_for_scores(pos_query_layer)
             pos_query_layer /= math.sqrt(pos_query_layer.size(-1) * scale_factor)
             if query_layer.size(-2) != key_layer.size(-2):
                 r_pos = build_relative_position(key_layer.size(-2), key_layer.size(-2), query_layer.device)
             else:
                 r_pos = relative_pos
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
-            if query_layer.size(-2) != key_layer.size(-2):
-                pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
-
-        if "p2c" in self.pos_att_type:
             p2c_att = torch.matmul(key_layer, pos_query_layer.transpose(-1, -2))
             p2c_att = torch.gather(
                 p2c_att, dim=-1, index=p2c_dynamic_expand(p2c_pos, query_layer, key_layer)
             ).transpose(-1, -2)
+
             if query_layer.size(-2) != key_layer.size(-2):
+                pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
                 p2c_att = torch.gather(p2c_att, dim=-2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
             score += p2c_att
 
