@@ -875,10 +875,10 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.decoder.embed_tokens
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.decoder.embed_tokens = value
+        self.model.embed_tokens = value
 
     def get_output_embeddings(self):
         return self.lm_head
