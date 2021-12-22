@@ -24,18 +24,31 @@ class KerasMetricCallback(Callback):
 
     Args:
         metric_fn (`Callable`):
-            Metric function provided by the user.
-        eval_dataset (`tf.data.Dataset` or `dict` or `tuple` ) : Validation data to be used to evaluate the model at
-        the end of the epoch.
-        batch_size: Batch size.
-        labels: Labels.
+            Metric function provided by the user. It will be called with two arguments - `predictions` and `labels`.
+            These contain the model's outputs and matching labels from the dataset. It should return a dict mapping
+            metric names to numerical values.
+        eval_dataset (`tf.data.Dataset` or `dict` or `tuple` or `np.ndarray` or `tf.Tensor`):
+            Validation data to be used to generate predictions for the `metric_fn`.
+        tokenizer ([`PretrainedTokenizerBase`], *optional*):
+            Tokenizer used to validate column names to be passed to the generate() function. Required only if
+            predict_with_generate is True.
+        output_cols: (`List[str], *optional*):
+            A list of columns to be retained from the model output as the predictions. Defaults to all.
+        label_cols: ('`List[str]`, *optional*'):
+            A list of columns to be retained from the input dataset as the labels. Will be autodetected if this is not
+            supplied.
+        batch_size (`int`, *optional*):
+            Batch size. Only used when the data is not a pre-batched `tf.data.Dataset`.
+        predict_with_generate: (`bool`, *optional*, defaults to *False*):
+            Whether we should use `model.generate()` to get outputs for the model.
+
     """
 
     def __init__(
         self,
         metric_fn: Callable,
-        tokenizer: PreTrainedTokenizerBase,
         eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
         output_cols: Optional[List[str]] = None,
         label_cols: Optional[List[str]] = None,
         batch_size: Optional[int] = None,
@@ -44,6 +57,8 @@ class KerasMetricCallback(Callback):
         super().__init__()
         self.metric_fn = metric_fn
         self.batch_size = batch_size
+        if predict_with_generate and tokenizer is None:
+            raise ValueError("A tokenizer is required when using predict_with_generate!")
         if not isinstance(eval_dataset, tf.data.Dataset):
             if batch_size is None:
                 raise ValueError(
