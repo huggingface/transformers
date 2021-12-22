@@ -121,7 +121,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        mask_token="<mask>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> None:
@@ -137,7 +136,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             cls_token=cls_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
@@ -257,7 +255,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + self.fairseq_offset + 1  # Add the <mask> token
+        return len(self.sp_model) + self.fairseq_offset
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
