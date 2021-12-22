@@ -106,7 +106,7 @@ class XGLMConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=256008,
         max_position_embeddings=2048,
         decoder_layers=24,
         decoder_ffn_dim=4096,
