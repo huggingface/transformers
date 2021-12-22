@@ -516,14 +516,14 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
             if self.max_relative_positions < 1:
                 self.max_relative_positions = config.max_position_embeddings
             self.pos_dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="pos_dropout")
-            if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "c2p" in self.pos_att_type:
                 self.pos_proj = tf.keras.layers.Dense(
                     self.all_head_size,
                     kernel_initializer=get_initializer(config.initializer_range),
                     name="pos_proj",
                     use_bias=False,
                 )
-            if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "p2c" in self.pos_att_type:
                 self.pos_q_proj = tf.keras.layers.Dense(
                     self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="pos_q_proj"
                 )
@@ -677,32 +677,28 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         rel_embeddings = tf.expand_dims(
             rel_embeddings[self.max_relative_positions - att_span : self.max_relative_positions + att_span, :], 0
         )
-        if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
-            pos_key_layer = self.pos_proj(rel_embeddings)
-            pos_key_layer = self.transpose_for_scores(pos_key_layer)
-
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
-            pos_query_layer = self.pos_q_proj(rel_embeddings)
-            pos_query_layer = self.transpose_for_scores(pos_query_layer)
 
         score = 0
+
         # content->position
         if "c2p" in self.pos_att_type:
+            pos_key_layer = self.pos_proj(rel_embeddings)
+            pos_key_layer = self.transpose_for_scores(pos_key_layer)
             c2p_att = tf.matmul(query_layer, tf.transpose(pos_key_layer, [0, 1, 3, 2]))
             c2p_pos = tf.clip_by_value(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch_gather(c2p_att, c2p_dynamic_expand(c2p_pos, query_layer, relative_pos), -1)
             score += c2p_att
 
         # position->content
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+        if "p2c" in self.pos_att_type:
+            pos_query_layer = self.pos_q_proj(rel_embeddings)
+            pos_query_layer = self.transpose_for_scores(pos_query_layer)
             pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=tf.float32))
             if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
                 r_pos = build_relative_position(shape_list(key_layer)[-2], shape_list(key_layer)[-2])
             else:
                 r_pos = relative_pos
             p2c_pos = tf.clip_by_value(-r_pos + att_span, 0, att_span * 2 - 1)
-
-        if "p2c" in self.pos_att_type:
             p2c_att = tf.matmul(key_layer, tf.transpose(pos_query_layer, [0, 1, 3, 2]))
             p2c_att = tf.transpose(
                 torch_gather(p2c_att, p2c_dynamic_expand(p2c_pos, query_layer, key_layer), -1), [0, 1, 3, 2]
