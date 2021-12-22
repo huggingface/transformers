@@ -62,7 +62,7 @@ class KerasMetricCallback(Callback):
             predict_with_generate is True.
         output_cols (`List[str], *optional*):
             A list of columns to be retained from the model output as the predictions. Defaults to all.
-        label_cols: ('`List[str]`, *optional*'):
+        label_cols ('`List[str]`, *optional*'):
             A list of columns to be retained from the input dataset as the labels. Will be autodetected if this is not
             supplied.
         batch_size (`int`, *optional*):
