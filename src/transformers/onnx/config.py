@@ -89,10 +89,6 @@ class OnnxConfig(ABC):
                 final_spec = dataclasses.replace(spec, orig_op=getattr(spec.o, spec.name))
             self._patching_specs.append(final_spec)
 
-    @property
-    def is_encoder_decoder(self) -> bool:
-        return getattr(self._config, "is_encoder_decoder", False)
-
     @classmethod
     def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
         """
