@@ -1881,14 +1881,29 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import PerceiverForMultimodalAutoencoding
         >>> import torch
+        >>> import numpy as np
 
+        >>> # create multimodal inputs
         >>> images = torch.randn((1, 16, 3, 224, 224))
         >>> audio = torch.randn((1, 30720, 1))
         >>> inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
 
         >>> model = PerceiverForMultimodalAutoencoding.from_pretrained('deepmind/multimodal-perceiver')
 
-        >>> outputs = model(inputs=inputs)
+        >>> # in the Perceiver IO paper, videos are auto-encoded in chunks
+        >>> # each chunk subsamples different index dimensions of the image and audio modality decoder queries
+        >>> nchunks = 128
+        >>> image_chunk_size = np.prod((16, 224, 224)) // nchunks
+        >>> audio_chunk_size = audio.shape[1] // model.config.samples_per_patch // nchunks
+        >>> # process the first chunk
+        >>> chunk_idx = 0
+        >>> subsampling = {
+        ... "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
+        ... "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
+        ... "label": None,
+        ... }
+
+        >>> outputs = model(inputs=inputs, subsampled_output_points=subsampling)
         >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
