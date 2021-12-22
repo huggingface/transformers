@@ -36,119 +36,117 @@ _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
 VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
     as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded
-    via the :meth:`~transformers.AutoModel.from_pretrained` method. The projection layers are automatically added to
+    via the [`~AutoModel.from_pretrained`] method. The projection layers are automatically added to
     the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
-    In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
+    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
     leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
     on new zero-shot vision tasks such as image classification or retrieval.
 
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
     models (see the examples for more information).
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.VisionEncoderDecoderConfig`): Model configuration class with all the parameters of the model.
+        config ([`VisionEncoderDecoderConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 
 VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`PreTrainedTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are position IDs?](../glossary#position-ids)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
+            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for
             details.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`CLIPTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             a feature extractor (e.g. if you use ViT as the encoder, you should use
-            :class:`~transformers.ViTFeatureExtractor`). See :meth:`transformers.ViTFeatureExtractor.__call__` for
+            [`ViTFeatureExtractor`]). See [`ViTFeatureExtractor.__call__`] for
             details.
-        return_loss (:obj:`bool`, `optional`):
+        return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -225,19 +223,20 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     ):
         r"""
         Returns:
-            text_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`): The text embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.CLIPTextModel`.
+            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings
+            obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
 
-        Examples::
+        Examples:
 
-            >>> from transformers import VisionTextDualEncoderModel, AutoTokenizer
+        ```python
+        >>> from transformers import VisionTextDualEncoderModel, AutoTokenizer
 
-            >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
-            >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
+        >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
+        >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
 
-            >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"],  padding=True, return_tensors="pt")
-            >>> text_features = model.get_text_features(**inputs)
-        """
+        >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"],  padding=True, return_tensors="pt")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -262,25 +261,26 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     ):
         r"""
         Returns:
-            image_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, output_dim`): The image embeddings
-            obtained by applying the projection layer to the pooled output of :class:`~transformers.CLIPVisionModel`.
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings
+            obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
 
-        Examples::
+        Examples:
 
-            >>> from PIL import Image
-            >>> import requests
-            >>> from transformers import VisionTextDualEncoderModel, AutoFeatureExtractor
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import VisionTextDualEncoderModel, AutoFeatureExtractor
 
-            >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
-            >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+        >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
-            >>> image_features = model.get_image_features(**inputs)
-        """
+        >>> image_features = model.get_image_features(**inputs)
+        ```"""
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -407,55 +407,56 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     ) -> PreTrainedModel:
         """
         Params:
-            vision_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+            vision_model_name_or_path (:obj: *str*, *optional*, defaults to *None*):
                 Information necessary to initiate the vision model. Can be either:
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In this case, ``from_pt``
-                      should be set to :obj:`True` and a configuration object should be provided as ``config``
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
+                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                    - A path to a *directory* containing model weights saved using
+                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
+                      should be set to `True` and a configuration object should be provided as `config`
                       argument. This loading path is slower than converting the PyTorch checkpoint in a Flax model
                       using the provided conversion scripts and loading the Flax model afterwards.
 
-            text_model_name_or_path (:obj: `str`, `optional`):
+            text_model_name_or_path (:obj: *str*, *optional*):
                 Information necessary to initiate the text model. Can be either:
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In this case, ``from_pt``
-                      should be set to :obj:`True` and a configuration object should be provided as ``config``
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
+                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                    - A path to a *directory* containing model weights saved using
+                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
+                      should be set to `True` and a configuration object should be provided as `config`
                       argument. This loading path is slower than converting the PyTorch checkpoint in a Flax model
                       using the provided conversion scripts and loading the Flax model afterwards.
 
-            model_args (remaining positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+            model_args (remaining positional arguments, *optional*):
+                All remaning positional arguments will be passed to the underlying model's `__init__` method.
 
-            kwargs (remaining dictionary of keyword arguments, `optional`):
+            kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                :obj:`output_attentions=True`).
+                `output_attentions=True`).
 
-                - To update the text configuration, use the prefix `text_` for each configuration parameter.
-                - To update the vision configuration, use the prefix `vision_` for each configuration parameter.
+                - To update the text configuration, use the prefix *text_* for each configuration parameter.
+                - To update the vision configuration, use the prefix *vision_* for each configuration parameter.
                 - To update the parent model configuration, do not use a prefix for each configuration parameter.
 
-                Behaves differently depending on whether a :obj:`config` is provided or automatically loaded.
+                Behaves differently depending on whether a `config` is provided or automatically loaded.
 
-        Example::
+        Example:
 
-            >>> from transformers import VisionTextDualEncoderModel
-            >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
-            >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained('bert-base-uncased', 'google/vit-base-patch16-224')
-            >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./vit-bert")
-            >>> # load fine-tuned model
-            >>> model = VisionTextDualEncoderModel.from_pretrained("./vit-bert")
-        """
+        ```python
+        >>> from transformers import VisionTextDualEncoderModel
+        >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
+        >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained('bert-base-uncased', 'google/vit-base-patch16-224')
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./vit-bert")
+        >>> # load fine-tuned model
+        >>> model = VisionTextDualEncoderModel.from_pretrained("./vit-bert")
+        ```"""
         kwargs_vision = {
             argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
         }
