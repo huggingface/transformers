@@ -279,12 +279,14 @@ def main():
 
     def train_transforms(example_batch):
         """Apply _train_transforms across a batch."""
-        example_batch["pixel_values"] = [_train_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
+        example_batch["pixel_values"] = [
+            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]
+        ]
         return example_batch
 
     def val_transforms(example_batch):
         """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [_val_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
+        example_batch["pixel_values"] = [_val_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]]
         return example_batch
 
     if training_args.do_train:

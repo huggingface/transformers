@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import sys
-import unittest
 from unittest.mock import patch
 
 import torch
@@ -409,7 +408,6 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_bleu"], 30)
 
-    @unittest.skip("Fix me Nate!")
     def test_run_image_classification(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
