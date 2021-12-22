@@ -98,17 +98,16 @@ class XGLMConfig(PretrainedConfig):
     model_type = "xglm"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    attribute_map = {"num_attention_heads": "decoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {"num_attention_heads": "attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
         vocab_size=256008,
         max_position_embeddings=2048,
-        decoder_layers=24,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
+        num_layers=24,
+        ffn_dim=4096,
+        attention_heads=16,
+        layerdrop=0.0,
         use_cache=True,
         activation_function="gelu",
         d_model=1024,
@@ -117,7 +116,6 @@ class XGLMConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=2,
-        classifier_dropout=0.0,
         scale_embedding=True,
         pad_token_id=1,
         bos_token_id=0,
@@ -127,17 +125,15 @@ class XGLMConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
+        self.ffn_dim = ffn_dim
+        self.num_layers = num_layers
+        self.attention_heads = attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.activation_function = activation_function
         self.init_std = init_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
+        self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 

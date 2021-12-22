@@ -413,7 +413,7 @@ class XGLMDecoderLayer(nn.Module):
 
         self.self_attn = XGLMAttention(
             embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
+            num_heads=config.attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
@@ -424,15 +424,15 @@ class XGLMDecoderLayer(nn.Module):
         if config.add_cross_attention:
             self.crossattention = XGLMAttention(
                 embed_dim=self.embed_dim,
-                num_heads=config.decoder_attention_heads,
+                num_heads=config.attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
             )
             self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
+        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -458,7 +458,7 @@ class XGLMDecoderLayer(nn.Module):
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
                 *(encoder_attention_heads,)*.
             cross_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
+                size *(attention_heads,)*.
             past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -551,7 +551,7 @@ class XGLMPreTrainedModel(PreTrainedModel):
 )
 class XGLMModel(XGLMPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`XGLMDecoderLayer`]
+    Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`XGLMDecoderLayer`]
 
     Args:
         config: XGLMConfig
@@ -561,7 +561,7 @@ class XGLMModel(XGLMPreTrainedModel):
     def __init__(self, config: XGLMConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
         self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
+        self.layerdrop = config.layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
@@ -576,7 +576,7 @@ class XGLMModel(XGLMPreTrainedModel):
             config.d_model,
             config.pad_token_id,
         )
-        self.layers = nn.ModuleList([XGLMDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([XGLMDecoderLayer(config) for _ in range(config.num_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -658,13 +658,13 @@ class XGLMModel(XGLMPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            head_mask (`torch.Tensor` of shape `(num_layers, attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            cross_attn_head_mask (`torch.Tensor` of shape `(num_layers, attention_heads)`, *optional*):
                 Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
