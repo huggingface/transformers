@@ -180,9 +180,12 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     Args:
         processor (:class:`~transformers.Wav2Vec2Processor`)
             The processor used for proccessing the data.
+        decoder_start_token_id (:obj:`int`)
+            The begin-of-sentence of the decoder.
     """
 
     processor: Any
+    decoder_start_token_id: int
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lenghts and need
@@ -199,7 +202,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
         # if bos token is appended in previous tokenization step,
         # cut bos token here as it's append later anyways
-        if (labels[:, 0] == self.processor.tokenizer.bos_token_id).all().cpu().item():
+        if (labels[:, 0] == self.decoder_start_token_id).all().cpu().item():
             labels = labels[:, 1:]
 
         batch["labels"] = labels
@@ -422,7 +425,9 @@ def main():
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
     # 10. Define data collator
-    data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
+    data_collator = DataCollatorSpeechSeq2SeqWithPadding(
+        processor=processor, decoder_start_token_id=model.config.decoder_start_token_id
+    )
 
     # 11. Initialize Trainer
     trainer = Seq2SeqTrainer(

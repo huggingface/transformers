@@ -491,7 +491,7 @@ class ExamplesTests(TestCasePlus):
             --do_eval
             --learning_rate 1e-4
             --per_device_train_batch_size 2
-            --per_device_eval_batch_size 1
+            --per_device_eval_batch_size 4
             --remove_unused_columns False
             --overwrite_output_dir True
             --preprocessing_num_workers 16
