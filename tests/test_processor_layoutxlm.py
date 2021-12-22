@@ -86,7 +86,11 @@ class LayoutXLMProcessorTest(unittest.TestCase):
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
 
-            self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+            processor_class_str = processor.__class__.__name__
+            self.assertEqual(
+                processor.feature_extractor.to_json_string(),
+                feature_extractor.to_json_string(processor_class_str=processor_class_str),
+            )
             self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):

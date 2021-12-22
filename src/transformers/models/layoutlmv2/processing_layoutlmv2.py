@@ -78,7 +78,7 @@ class LayoutLMv2Processor:
                 be created if it does not exist).
         """
 
-        self.feature_extractor.save_pretrained(save_directory)
+        self.feature_extractor.save_pretrained(save_directory, processor_class_str=self.__class__.__name__)
         self.tokenizer.save_pretrained(save_directory)
 
     @classmethod
