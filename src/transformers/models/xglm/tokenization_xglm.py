@@ -147,11 +147,17 @@ class XGLMTokenizer(PreTrainedTokenizer):
         # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
         # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
 
+        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
+        self.fairseq_offset = 1
+
         # Mimic fairseq token-to-id alignment for the first 4 token
         self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
 
-        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
-        self.fairseq_offset = 1
+        # Compatibility with the original tokenizer
+        self.num_madeup_words = 7
+        sp_size = len(self.sp_model)
+        madeup_words = {f"<madeupword{i}>": sp_size + i + self.fairseq_offset for i in range(self.num_madeup_words)}
+        self.fairseq_tokens_to_ids.update(madeup_words)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
@@ -250,7 +256,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + self.fairseq_offset
+        return len(self.sp_model) + self.fairseq_offset + self.num_madeup_words
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
