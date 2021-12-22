@@ -41,27 +41,27 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a ViLT feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to resize the input based on :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to 384):
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the input based on `size`.
+        size (`int`, *optional*, defaults to 384):
             Resize the shorter side of the input to the given size. Should be an integer. The longer side will be
             limited to under int((1333 / 800) * size) while preserving the aspect ratio. Only has an effect if
-            :obj:`do_resize` is set to :obj:`True`.
-        size_divisor (:obj:`int`, `optional`, defaults to 32):
+            `do_resize` is set to `True`.
+        size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided.
-        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
-            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
-            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`.
+            Only has an effect if `do_resize` is set to `True`.
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_mean (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_std (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
@@ -89,23 +89,23 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=Image.BICUBIC):
         """
-        Resizes the shorter edge of :obj:`image` to :obj:`shorter` and limits the longer edge to under :obj:`longer`,
+        Resizes the shorter edge of `image` to `shorter` and limits the longer edge to under `longer`,
         while preserving the aspect ratio. Also makes sure that both the height and width can be divided by
-        :obj:`size_divisor`.
+        `size_divisor`.
 
         Based on original implementation:
         https://github.com/dandelin/ViLT/blob/3db8b5035464afee84d951bf6322e1b27f1d072d/vilt/transforms/utils.py#L5
 
         Args:
-            image (:obj:`PIL.Image`):
+            image (`PIL.Image`):
                 The image to resize.
-            shorter (:obj:`int`, `optional`, defaults to :obj:`800`):
+            shorter (`int`, *optional*, defaults to `800`):
                 The size to which to resize the shorter side of the image.
-            longer (:obj:`int`, `optional`, defaults to :obj:`1333`):
+            longer (`int`, *optional*, defaults to `1333`):
                 The size by which to limit the longer side of the image, while preserving the aspect ratio.
-            size_divisor (:obj:`int`, `optional`, defaults to :obj:`32`):
+            size_divisor (`int`, *optional*, defaults to `32`):
                 The size by which both the height and the width must be divisible.
-            resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
+            resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
                 An optional resampling filter.
         """
         if not isinstance(image, Image.Image):
@@ -142,21 +142,21 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None
     ):
         """
-        Pad images up to the largest image in a batch and create a corresponding :obj:`pixel_mask`.
+        Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
 
         Args:
-            pixel_values_list (:obj:`List[torch.Tensor]`):
+            pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                If set, will return tensors instead of NumPy arrays. If set to :obj:`'pt'`, return PyTorch
-                :obj:`torch.Tensor` objects.
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch
+                `torch.Tensor` objects.
 
         Returns:
-            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
-            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`pad_and_return_pixel_mask=True` or if
-              `"pixel_mask"` is in :obj:`self.model_input_names`).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
+              *"pixel_mask"* is in `self.model_input_names`).
         """
 
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
@@ -189,18 +189,20 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         Main method to prepare for the model one or several image(s).
 
-        .. warning::
+        <Tip warning={true}>
 
-           NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
-           PIL images.
+        NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
+        PIL images.
+
+        </Tip>
 
         Args:
-            images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            pad_and_return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
 
                 If left to the default, will return a pixel mask that is:
@@ -208,21 +210,21 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to :obj:`'np'`):
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return NumPy :obj:`np.ndarray` objects.
-                * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
-            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
-            - **pixel_mask** -- Pixel mask to be fed to a model (when :obj:`return_pixel_mask=True` or if
-              `"pixel_mask"` is in :obj:`self.model_input_names`).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when `return_pixel_mask=True` or if
+              *"pixel_mask"* is in `self.model_input_names`).
         """
         # Input type checking for clearer error
         valid_images = False

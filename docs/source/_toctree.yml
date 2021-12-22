@@ -282,7 +282,9 @@
       title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
-    - local: model_doc/vision-encoder-decoder
+    - local: model_doc/vilt
+      title: ViLT
+    - local: model_doc/visionencoderdecoder
       title: Vision Encoder Decoder Models
     - local: model_doc/vision-text-dual-encoder
       title: Vision Text Dual Encoder

@@ -695,22 +695,23 @@ class ViltModel(ViltPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import ViltFeatureExtractor, ViltModel
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import ViltFeatureExtractor, ViltModel
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViltFeatureExtractor.from_pretrained('dandelin/vilt-b32-mlm-itm')
-            >>> model = ViltModel.from_pretrained('dandelin/vilt-b32-mlm-itm')
+        >>> feature_extractor = ViltFeatureExtractor.from_pretrained('dandelin/vilt-b32-mlm-itm')
+        >>> model = ViltModel.from_pretrained('dandelin/vilt-b32-mlm-itm')
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -839,32 +840,34 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        labels (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in *[-100, 0, ...,
+            config.vocab_size]* (see *input_ids* docstring) Tokens with indices set to *-100* are ignored
+            (masked), the loss is only computed for the tokens with labels in *[0, ..., config.vocab_size]*
 
         Returns:
 
-        Examples::
-            >>> from transformers import ViltProcessor, ViltForMaskedLM
-            >>> import requests
-            >>> from PIL import Image
+        Examples:
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-            >>> text = "How many cats are there?"
+        ```python
+        >>> from transformers import ViltProcessor, ViltForMaskedLM
+        >>> import requests
+        >>> from PIL import Image
 
-            >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
-            >>> model = ViltForMaskedLM.from_pretrained("dandelin/vilt-b32-mlm")
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "How many cats are there?"
 
-            >>> # prepare inputs
-            >>> encoding = processor(image, text, return_tensors="pt")
+        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
+        >>> model = ViltForMaskedLM.from_pretrained("dandelin/vilt-b32-mlm")
 
-            >>> # forward pass
-            >>> outputs = model(**encoding)
-            >>> logits = outputs.logits
-        """
+        >>> # prepare inputs
+        >>> encoding = processor(image, text, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**encoding)
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vilt(
@@ -994,34 +997,36 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, num_labels)`, *optional*):
+        labels (*torch.FloatTensor* of shape *(batch_size, num_labels)*, *optional*):
             Labels for computing the visual question answering loss. This tensor must be either a one-hot encoding of
             all answers that are applicable for a given example in the batch, or a soft encoding indicating which
             answers are applicable, where 1.0 is the highest score.
 
         Returns:
 
-        Examples::
-            >>> from transformers import ViltProcessor, ViltForVisualQuestionAnswering
-            >>> import requests
-            >>> from PIL import Image
+        Examples:
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-            >>> text = "How many cats are there?"
+        ```python
+        >>> from transformers import ViltProcessor, ViltForVisualQuestionAnswering
+        >>> import requests
+        >>> from PIL import Image
 
-            >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-            >>> model = ViltForVisualQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "How many cats are there?"
 
-            >>> # prepare inputs
-            >>> encoding = processor(image, text, return_tensors="pt")
+        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+        >>> model = ViltForVisualQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
 
-            >>> # forward pass
-            >>> outputs = model(**encoding)
-            >>> logits = outputs.logits
-            >>> idx = logits.argmax(-1).item()
-            >>> print("Predicted answer:", model.config.id2label[idx])
-        """
+        >>> # prepare inputs
+        >>> encoding = processor(image, text, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**encoding)
+        >>> logits = outputs.logits
+        >>> idx = logits.argmax(-1).item()
+        >>> print("Predicted answer:", model.config.id2label[idx])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vilt(
@@ -1096,14 +1101,34 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            ...
+        labels (*torch.LongTensor* of shape *(batch_size,)*, *optional*):
+            Labels are currently not supported.
 
         Returns:
 
-        Examples::
-            >>> TODO
-        """
+        Examples:
+
+        ```python
+        >>> from transformers import ViltProcessor, ViltForImageRetrievalTextRetrieval
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "An image of two cats chilling on a couch"
+
+        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+        >>> model = ViltForImageRetrievalTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+
+        >>> # prepare inputs
+        >>> encoding = processor(image, text, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**encoding)
+        
+        >>> # the score tells us how well the image and text pair go together
+        >>> score = outputs.logits[:, 0].item()
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vilt(
@@ -1184,36 +1209,38 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        labels (*torch.LongTensor* of shape *(batch_size,)*, *optional*):
             Binary classification labels.
 
         Returns:
 
-        Examples::
-            >>> from transformers import ViltProcessor, ViltForNaturalLanguageVisualReasoning
-            >>> import requests
-            >>> from PIL import Image
+        Examples:
 
-            >>> image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
-            >>> image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_1.jpg", stream=True).raw)
-            >>> text = "The left image contains twice the number of dogs as the right image."
+        ```python
+        >>> from transformers import ViltProcessor, ViltForNaturalLanguageVisualReasoning
+        >>> import requests
+        >>> from PIL import Image
 
-            >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
-            >>> model = ViltForNaturalLanguageVisualReasoning.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
+        >>> image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
+        >>> image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_1.jpg", stream=True).raw)
+        >>> text = "The left image contains twice the number of dogs as the right image."
 
-            >>> # prepare inputs
-            >>> encoding_1 = processor(image1, text, return_tensors="pt")
-            >>> encoding_2 = processor(image2, text, return_tensors="pt")
+        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
+        >>> model = ViltForNaturalLanguageVisualReasoning.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
 
-            >>> # forward pass
-            >>> outputs = model(input_ids=encoding_1.input_ids,
-            ...                 pixel_values=encoding_1.pixel_values,
-            ...                 pixel_values_2=encoding_2.pixel_values_2
-            ... )
-            >>> logits = outputs.logits
-            >>> idx = logits.argmax(-1).item()
-            >>> print("Predicted answer:", model.config.id2label[idx])
-        """
+        >>> # prepare inputs
+        >>> encoding_1 = processor(image1, text, return_tensors="pt")
+        >>> encoding_2 = processor(image2, text, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(input_ids=encoding_1.input_ids,
+        ...                 pixel_values=encoding_1.pixel_values,
+        ...                 pixel_values_2=encoding_2.pixel_values_2
+        ... )
+        >>> logits = outputs.logits
+        >>> idx = logits.argmax(-1).item()
+        >>> print("Predicted answer:", model.config.id2label[idx])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs_1 = self.vilt(
