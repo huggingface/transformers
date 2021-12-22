@@ -94,15 +94,11 @@ class XGLMConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "xglm"
     keys_to_ignore_at_inference = ["past_key_values"]
-    
-    attribute_map = {
-        "num_attention_heads": "decoder_attention_heads",
-        "hidden_size": "d_model"
-    }
+
+    attribute_map = {"num_attention_heads": "decoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -150,7 +146,5 @@ class XGLMConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
-
-    

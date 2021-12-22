@@ -218,6 +218,7 @@ XGLM_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
@@ -228,7 +229,6 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
 
     return shifted_input_ids
-    
 
 
 class FlaxXGLMAttention(nn.Module):
@@ -407,7 +407,7 @@ class FlaxXGLMEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.encoder_attention_heads,
             dropout=self.config.attention_dropout,
-            dtype=self.dtype
+            dtype=self.dtype,
         )
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -1723,4 +1723,3 @@ append_call_sample_docstring(
     FlaxSeq2SeqQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
-

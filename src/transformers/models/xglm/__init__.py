@@ -18,10 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available
-from ...file_utils import is_torch_available
-
-from ...file_utils import is_flax_available
+from ...file_utils import _LazyModule, is_flax_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -44,7 +41,6 @@ if is_torch_available():
     ]
 
 
-
 if is_flax_available():
     _import_structure["modeling_flax_xglm"] = [
         "FlaxXGLMForConditionalGeneration",
@@ -53,8 +49,6 @@ if is_flax_available():
         "FlaxXGLMModel",
         "FlaxXGLMPreTrainedModel",
     ]
-
-
 
 
 if TYPE_CHECKING:
@@ -67,15 +61,13 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_xglm import (
             XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XGLMForConditionalGeneration,
             XGLMForCausalLM,
+            XGLMForConditionalGeneration,
             XGLMForQuestionAnswering,
             XGLMForSequenceClassification,
             XGLMModel,
             XGLMPreTrainedModel,
         )
-
-
 
     if is_flax_available():
         from .modeling_xglm import (
@@ -85,7 +77,6 @@ if TYPE_CHECKING:
             FlaxXGLMModel,
             FlaxXGLMPreTrainedModel,
         )
-
 
 
 else:

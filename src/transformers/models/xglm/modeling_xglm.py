@@ -16,13 +16,12 @@
 
 
 import math
-import copy
 import random
 from typing import Optional, Tuple
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -35,11 +34,7 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
-    CausalLMOutputWithCrossAttentions
+    CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -235,9 +230,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(
-    mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
-):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -260,6 +253,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices
+
 
 class XGLMLearnedPositionalEmbedding(nn.Embedding):
     """
@@ -593,7 +587,7 @@ class XGLMPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-    
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (XGLMDecoder, XGLMEncoder)):
             module.gradient_checkpointing = value
@@ -760,7 +754,9 @@ class XGLMDecoder(XGLMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -799,7 +795,9 @@ class XGLMDecoder(XGLMPreTrainedModel):
             if self.gradient_checkpointing and self.training:
 
                 if use_cache:
-                    logger.warning("`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`...")
+                    logger.warning(
+                        "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`..."
+                    )
                     use_cache = False
 
                 def create_custom_forward(module):
@@ -978,8 +976,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
