@@ -52,57 +52,62 @@ logger = logging.get_logger(__name__)
 
 class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" LayoutXLM tokenizer (backed by HuggingFace's `tokenizers` library). Adapted from
-    :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on `BPE
-    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
+    Construct a "fast" LayoutXLM tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
+    [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning of
-                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the beginning of
+            sequence. The token used is the `cls_token`.
+
+            </Tip>
+
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            When building a sequence using special tokens, this is not the token that is used for the end of
+            sequence. The token used is the `sep_token`.
+
+            </Tip>
+
+        sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        cls_token (`str`, *optional*, defaults to `"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        cls_token_box (:obj:`List[int]`, `optional`, defaults to :obj:`[0, 0, 0, 0]`):
+        cls_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [CLS] token.
-        sep_token_box (:obj:`List[int]`, `optional`, defaults to :obj:`[1000, 1000, 1000, 1000]`):
+        sep_token_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
             The bounding box to use for the special [SEP] token.
-        pad_token_box (:obj:`List[int]`, `optional`, defaults to :obj:`[0, 0, 0, 0]`):
+        pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
-        pad_token_label (:obj:`int`, `optional`, defaults to -100):
-            The label to use for padding tokens. Defaults to -100, which is the :obj:`ignore_index` of PyTorch's
+        pad_token_label (`int`, *optional*, defaults to -100):
+            The label to use for padding tokens. Defaults to -100, which is the `ignore_index` of PyTorch's
             CrossEntropyLoss.
-        only_label_first_subword (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
     """
 
@@ -189,16 +194,16 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         sequences with word-level normalized bounding boxes and optional labels.
 
         Args:
-            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
                 (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
                 words).
-            text_pair (:obj:`List[str]`, :obj:`List[List[str]]`):
+            text_pair (`List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
-            boxes (:obj:`List[List[int]]`, :obj:`List[List[List[int]]]`):
+            boxes (`List[List[int]]`, `List[List[List[int]]]`):
                 Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
-            word_labels (:obj:`List[int]`, :obj:`List[List[int]]`, `optional`):
+            word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
         # Input type checking for clearer error
@@ -630,17 +635,17 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLM-RoBERTa sequence has the following format:
 
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s></s> B </s>``
+        - single sequence: `<s> X </s>`
+        - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -657,13 +662,13 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
+            `List[int]`: List of zeros.
 
         """
 

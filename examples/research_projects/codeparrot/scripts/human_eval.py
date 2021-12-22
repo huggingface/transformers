@@ -51,14 +51,23 @@ def main():
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
     model = AutoModelForCausalLM.from_pretrained(args.model_ckpt)
-    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=-1)
+    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=args.device_int)
 
     # Load evaluation dataset and metric
     human_eval = load_dataset("openai_humaneval")
     code_eval_metric = load_metric("code_eval")
 
+    # Run a quick test to see if code evaluation is enabled
+    try:
+        _ = code_eval_metric.compute(references=[""], predictions=[[""]])
+    except ValueError as exception:
+        print(
+            'Code evaluation not enabled. Read the warning below carefully and then use `--HF_ALLOW_CODE_EVAL="1"` flag to enable code evaluation.'
+        )
+        raise exception
+
     # Generate completions for evaluation set
-    n_tasks = 4  # len(human_eval["test"])
+    n_tasks = args.num_tasks if args.num_tasks is not None else len(human_eval["test"])
     generations, references = [], []
     for task in tqdm(range(n_tasks)):
         task_generations = []

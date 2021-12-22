@@ -52,10 +52,10 @@ class LayoutLMTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a "Fast" LayoutLMTokenizer.
 
-    :class:`~transformers.LayoutLMTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    [`LayoutLMTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
     end-to-end tokenization: punctuation splitting + wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
     parameters.
     """
 

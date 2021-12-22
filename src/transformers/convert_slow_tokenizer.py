@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Utilities to convert slow tokenizers in their fast tokenizers counterparts.
+Utilities to convert slow tokenizers in their fast tokenizers counterparts.
 
-    All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
-    allow to make our dependency on SentencePiece optional.
+All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
+allow to make our dependency on SentencePiece optional.
 """
 
 from typing import Dict, List, Tuple
@@ -960,13 +960,13 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
-        transformer_tokenizer (:class:`~transformers.tokenization_utils_base.PreTrainedTokenizer`):
+        transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
-            :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`.
+            [`~tokenization_utils_base.PreTrainedTokenizerFast`].
 
     Return:
-        A instance of :class:`~tokenizers.Tokenizer` to be used as the backend tokenizer of a
-        :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`
+        A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
+        [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__

@@ -27,50 +27,51 @@ logger = logging.get_logger(__name__)
 
 class VisionTextDualEncoderConfig(PretrainedConfig):
     r"""
-    :class:`~transformers.VisionTextDualEncoderConfig` is the configuration class to store the configuration of a
-    :class:`~transformers.VisionTextDualEncoderModel`. It is used to instantiate
-    :class:`~transformers.VisionTextDualEncoderModel` model according to the specified arguments, defining the text
+    [`VisionTextDualEncoderConfig`] is the configuration class to store the configuration of a
+    [`VisionTextDualEncoderModel`]. It is used to instantiate
+    [`VisionTextDualEncoderModel`] model according to the specified arguments, defining the text
     model and vision model configs.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
+    outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (:obj:`dict`):
+        text_config_dict (`dict`):
             Dictionary of configuration options that defines text model config.
-        vision_config_dict (:obj:`dict`):
+        vision_config_dict (`dict`):
             Dictionary of configuration options that defines vison model config.
-        projection_dim (:obj:`int`, `optional`, defaults to 512):
+        projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
-        logit_scale_init_value (:obj:`float`, `optional`, defaults to 2.6592):
-            The inital value of the `logit_scale` paramter. Default is used as per the original CLIP implementation.
-        kwargs (`optional`):
+        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
+            The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
+        kwargs (*optional*):
             Dictionary of keyword arguments.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import ViTConfig, BertConfig, VisionTextDualEncoderConfig, VisionTextDualEncoderModel
+    ```python
+    >>> from transformers import ViTConfig, BertConfig, VisionTextDualEncoderConfig, VisionTextDualEncoderModel
 
-        >>> # Initializing a BERT and ViT configuration
-        >>> config_vision = ViTConfig()
-        >>> config_text = BertConfig()
+    >>> # Initializing a BERT and ViT configuration
+    >>> config_vision = ViTConfig()
+    >>> config_text = BertConfig()
 
-        >>> config = VisionTextDualEncoderConfig.from_vision_text_configs(config_vision, config_text, projection_dim=512)
+    >>> config = VisionTextDualEncoderConfig.from_vision_text_configs(config_vision, config_text, projection_dim=512)
 
-        >>> # Initializing a BERT and ViT model
-        >>> model = VisionTextDualEncoderModel(config=config)
+    >>> # Initializing a BERT and ViT model
+    >>> model = VisionTextDualEncoderModel(config=config)
 
-        >>> # Accessing the model configuration
-        >>> config_vision  = model.config.vision_config
-        >>> config_text = model.config.text_config
+    >>> # Accessing the model configuration
+    >>> config_vision  = model.config.vision_config
+    >>> config_text = model.config.text_config
 
-        >>> # Saving the model, including its configuration
-        >>> model.save_pretrained('my-model')
+    >>> # Saving the model, including its configuration
+    >>> model.save_pretrained('my-model')
 
-        >>> # loading model and config from pretrained folder
-        >>> vision_text_config = VisionTextDualEncoderConfig.from_pretrained('vit-bert')
-        >>> model = VisionTextDualEncoderModel.from_pretrained('vit-bert', config=vision_text_config)
-    """
+    >>> # loading model and config from pretrained folder
+    >>> vision_text_config = VisionTextDualEncoderConfig.from_pretrained('vit-bert')
+    >>> model = VisionTextDualEncoderModel.from_pretrained('vit-bert', config=vision_text_config)
+    ```"""
 
     model_type = "vision-text-dual-encoder"
     is_composition = True
@@ -105,11 +106,11 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     @classmethod
     def from_vision_text_configs(cls, vision_config: PretrainedConfig, text_config: PretrainedConfig, **kwargs):
         r"""
-        Instantiate a :class:`VisionTextDualEncoderConfig` (or a derived class) from text model configuration and
+        Instantiate a [`VisionTextDualEncoderConfig`] (or a derived class) from text model configuration and
         vision model configuration.
 
         Returns:
-            :class:`VisionTextDualEncoderConfig`: An instance of a configuration object
+            [`VisionTextDualEncoderConfig`]: An instance of a configuration object
         """
 
         return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
@@ -117,10 +118,10 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default
-        :meth:`~transformers.PretrainedConfig.to_dict`.
+        [`~PretrainedConfig.to_dict`].
 
         Returns:
-            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
         output["vision_config"] = self.vision_config.to_dict()

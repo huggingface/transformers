@@ -40,10 +40,10 @@ class LEDTokenizer(BartTokenizer):
     """
     Construct a LED tokenizer.
 
-    :class:`~transformers.LEDTokenizer` is identical to :class:`~transformers.BartTokenizer` and runs end-to-end
+    [`LEDTokenizer`] is identical to [`BartTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BartTokenizer` for usage examples and documentation concerning
+    Refer to superclass [`BartTokenizer`] for usage examples and documentation concerning
     parameters.
     """
 
