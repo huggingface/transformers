@@ -282,18 +282,18 @@ def main():
             data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
         )
 
-    if data_args.audio_column_name not in raw_datasets["train"].column_names:
+    if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:
         raise ValueError(
             f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--audio_column_name` to the correct audio column - one of "
-            f"{', '.join(raw_datasets['train'].column_names)}."
+            f"{', '.join(next(iter(raw_datasets.values())).column_names)}."
         )
 
-    if data_args.text_column_name not in raw_datasets["train"].column_names:
+    if data_args.text_column_name not in next(iter(raw_datasets.values())).column_names:
         raise ValueError(
             f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--text_column_name` to the correct text column - one of "
-            f"{', '.join(raw_datasets['train'].column_names)}."
+            f"{', '.join(next(iter(raw_datasets.values())).column_names)}."
         )
 
     # 5. Load pretrained model, tokenizer, and feature extractor
