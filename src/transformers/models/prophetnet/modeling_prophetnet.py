@@ -55,7 +55,7 @@ PROPHETNET_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    Original ProphetNet code can be found at <https://github.com/microsoft/ProphetNet> . Checkpoints were converted
+    Original ProphetNet code can be found [here](https://github.com/microsoft/ProphetNet). Checkpoints were converted
     from original Fairseq checkpoints. For more information on the checkpoint conversion, please take a look at the
     file `convert_prophetnet_original_pytorch_checkpoint_to_pytorch.py`.
 
