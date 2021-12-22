@@ -764,7 +764,7 @@ class XGLMDecoder(XGLMPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
 
