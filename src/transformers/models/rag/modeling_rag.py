@@ -214,8 +214,8 @@ class RetrievAugLMOutput(ModelOutput):
 
 class RagPreTrainedModel(PreTrainedModel):
     r"""
-    RAG models were released with the paper `Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
-    <https://arxiv.org/abs/2005.11401>`_ by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
+    RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
+    Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
     RAG is a retriever augmented model and encapsulate three components: a question encoder, a dataset retriever and a
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
