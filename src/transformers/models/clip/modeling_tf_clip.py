@@ -1174,6 +1174,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
 class TFCLIPVisionModel(TFCLIPPreTrainedModel):
     config_class = CLIPVisionConfig
+    main_input_name = "pixel_values"
 
     def __init__(self, config: CLIPVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
