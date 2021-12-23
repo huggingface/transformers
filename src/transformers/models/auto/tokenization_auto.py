@@ -350,7 +350,7 @@ def get_tokenizer_config(
             use_auth_token=use_auth_token,
         )
 
-    except EnvironmentError:
+    except (EnvironmentError, ValueError):
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
 
