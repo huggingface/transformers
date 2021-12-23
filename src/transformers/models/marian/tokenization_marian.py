@@ -310,7 +310,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.current_spm = self.spm_source
         self._setup_normalizer()
 
-    def num_special_tokens_to_add(self, **unused):
+    def num_special_tokens_to_add(self, *args, **kwargs):
         """Just EOS"""
         return 1
 

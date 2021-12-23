@@ -256,7 +256,7 @@ class TrainingArguments:
             `Trainer` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument `mems`.
         run_name (`str`, *optional*):
-            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) logging.
+            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and [mlflow](https://www.mlflow.org/) logging.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True`
