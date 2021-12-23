@@ -361,56 +361,63 @@ class GenerationMixin:
         inputs: Optional[torch.Tensor] = None,
         bos_token_id: Optional[int] = None,
         model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Optional[str]]:
+    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
         """
         This function extracts the model-specific `inputs` for generation.
         """
         # 1. retrieve all kwargs that are non-None or non-model input related.
-        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != self.main_input_name}
+        input_name = self.main_input_name
+        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
 
         # 2. check whether model_input_name is passed as kwarg
-        inputs_kwarg = model_kwargs.pop(self.main_input_name, None)
-        input_name = self.main_input_name
-
+        # if yes and `inputs` is None use kwarg inputs
+        inputs_kwarg = model_kwargs.pop(input_name, None)
         if inputs_kwarg is not None and inputs is not None:
             raise ValueError(
                 f"`inputs`: {inputs}` were passed alongside "
                 f"{input_name} which is not allowed."
                 f"Make sure to either pass {inputs} or {input_name}=..."
             )
+        elif inputs_kwarg is not None:
+            inputs = inputs_kwarg
 
-        # 3. model with `input_ids` can also make use of `inputs_embeds`
-        # retrieve `inputs_embeds` if necessary
-        inputs_embeds_can_be_used = model_kwargs.get("inputs_embeds", None) is not None and "inputs_embeds" in set(
+        # 3. models with `input_ids` can also make use of `inputs_embeds`
+        if self._can_retrieve_inputs_from_name(inputs, "inputs_embeds", model_kwargs):
+            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+
+        # 4. Only encoder-decoder models can have non `input_ids` input format
+        if not self.config.is_encoder_decoder and input_name != "input_ids":
+            raise ValueError(
+                f"If {input_name} is passed as model-specific keyword "
+                "input then model has to be an encoder-decoder and not a "
+                f"{self.__class__.__name__}."
+            )
+
+        # 5. Some encoder-decoder models have different names for model and encoder
+        if self.config.is_encoder_decoder and self.encoder.main_input_name != input_name:
+            input_name = self.encoder.main_input_name
+
+        # 6. if `inputs` is still None, try to create `input_ids` from BOS token
+        if inputs is None:
+            inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
+
+        return inputs, input_name, model_kwargs
+
+    def _can_retrieve_inputs_from_name(
+        self, inputs: Optional[torch.Tensor], name: str, model_kwargs: Dict[str, torch.Tensor]
+    ) -> torch.Tensor:
+        """
+        If `inputs` is None and `name` is in both forward function and keyword
+        arguments, then inputs can be retrieved from name
+        """
+        can_retrieve_inputs = model_kwargs.get(name, None) is not None and name in set(
             inspect.signature(self.forward).parameters.keys()
         )
 
-        if inputs_kwarg is not None and inputs_embeds_can_be_used:
-            raise ValueError(f"Cannot only pass one of `inputs_embeds` and {input_name}")
-        elif inputs_embeds_can_be_used:
-            inputs_kwarg = model_kwargs.pop("inputs_embeds")
-            input_name = "inputs_embeds"
+        if can_retrieve_inputs and inputs is not None:
+            raise ValueError(f"Cannot only pass one of {name} and {self.main_input_name}")
 
-        # 4. Return correct model input names
-        if inputs is not None:
-            # 1. `inputs` are passed and no model-specific keyword inputs
-            # -> return input
-            return inputs, input_name, model_kwargs
-        elif inputs is None and inputs_kwarg is not None:
-            # 2. no `inputs` are passed, but model-specific keyword input tensor
-            # -> return that model-specific keyword input tensor
-            if not self.config.is_encoder_decoder and input_name != "input_ids":
-                raise ValueError(
-                    f"If {input_name} is passed as model-specific keyword "
-                    "input then model has to be an encoder-decoder and not a "
-                    f"{self.__class__.__name__}."
-                )
-            return inputs_kwarg, input_name, model_kwargs
-        else:
-            # 3. no `inputs` and no model-specific keyword inputs are passed
-            # -> try to create `input_ids` from BOS
-            input_tensor = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
-            return input_tensor, input_name, model_kwargs
+        return can_retrieve_inputs
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
         """

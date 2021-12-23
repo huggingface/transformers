@@ -176,7 +176,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     """
     config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
-    main_input_name = "input_values"
+    main_input_name = "inputs"
 
     def __init__(
         self,
@@ -417,8 +417,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_values=None,
-        input_features=None,
+        inputs=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -429,6 +428,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        input_values=None,
+        input_features=None,
         return_dict=None,
         **kwargs,
     ):
@@ -463,7 +464,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        if encoder_outputs is None:
+        if encoder_outputs is None and inputs is None:
             if input_values is not None and input_features is not None:
                 raise ValueError("You cannot specify both input_values and input_features at the same time")
             elif input_values is not None:
