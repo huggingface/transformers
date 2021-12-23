@@ -29,7 +29,7 @@ To make sure you can successfully run the latest versions of the example scripts
 ```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
-pip install .
+pip install '.[onnxruntime]'
 ```
 Then cd in this example folder and run
 ```bash
