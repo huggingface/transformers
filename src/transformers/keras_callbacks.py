@@ -57,8 +57,6 @@ class KerasMetricCallback(Callback):
             Validation data to be used to generate predictions for the `metric_fn`.
         metric_fn_kwargs (`dict`, *optional*):
             Additional keyword arguments to be passed to the metric_fn.
-        tokenizer ([`PretrainedTokenizerBase`], *optional*):
-            Tokenizer used to validate column names to be passed to the generate() function.
         output_cols (`List[str], *optional*):
             A list of columns to be retained from the model output as the predictions. Defaults to all.
         label_cols ('`List[str]`, *optional*'):
@@ -75,7 +73,6 @@ class KerasMetricCallback(Callback):
         self,
         metric_fn: Callable,
         eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
         metric_fn_kwargs: Optional[dict] = None,
         output_cols: Optional[List[str]] = None,
         label_cols: Optional[List[str]] = None,
