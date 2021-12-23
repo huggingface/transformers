@@ -333,8 +333,8 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
             ]
         return common_inputs
 
-    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_sequence_classification_and_question_answering
-    # We renamed the function because Marian models do not have a sequence classification or question answering head
+    # Copied from BartOnnxConfig._generate_dummy_inputs_for_sequence_classification_and_question_answering
+    # We renamed this function because Marian models do not have a sequence classification or question answering head
     def _generate_dummy_inputs_for_encoder_and_decoder(
         self,
         tokenizer: PreTrainedTokenizer,
