@@ -545,7 +545,15 @@ def main():
         return tokenized_inputs
 
     def filtering_out_labels(examples):
-        filtered_out_labels = [label_to_id[val] for val in args.filter_out_labels.split(",")]
+        filtered_out_labels = []
+
+        for val in args.filter_out_labels.split(","):
+            if "B-" + val in label_to_id:
+                filtered_out_labels.append(label_to_id["B-" + val])
+            if "I-" + val in label_to_id:
+                filtered_out_labels.append(label_to_id["I-" + val])
+            if val in label_to_id:
+                filtered_out_labels.append(label_to_id[val])
 
         for ex_id in range(len(examples["ner_tags"])):
             for tag_id in range(len(examples["ner_tags"][ex_id])):
