@@ -59,51 +59,51 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 
 LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
-            add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            add_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to encode the sequences with the special tokens relative to their model.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
                   maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
+            truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 Activates and controls truncation. Accepts the following values:
 
-                * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
-                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
+                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument
+                  `max_length` or to the maximum acceptable input length for the model if that argument is not
                   provided. This will truncate token by token, removing a token from the longest sequence in the pair
                   if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
                   the maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
                   to the maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with
                   sequence lengths greater than the model maximum admissible input size).
-            max_length (:obj:`int`, `optional`):
+            max_length (`int`, *optional*):
                 Controls the maximum length to use by one of the truncation/padding parameters. If left unset or set to
-                :obj:`None`, this will use the predefined model maximum length if a maximum length is required by one
+                `None`, this will use the predefined model maximum length if a maximum length is required by one
                 of the truncation/padding parameters. If the model has no specific maximum input length (like XLNet)
                 truncation/padding to a maximum length will be deactivated.
-            stride (:obj:`int`, `optional`, defaults to 0):
-                If set to a number along with :obj:`max_length`, the overflowing tokens returned when
-                :obj:`return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
+            stride (`int`, *optional*, defaults to 0):
+                If set to a number along with `max_length`, the overflowing tokens returned when
+                `return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
                 returned to provide some overlap between truncated and overflowing sequences. The value of this
                 argument defines the number of overlapping tokens.
-            pad_to_multiple_of (:obj:`int`, `optional`):
+            pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
 """
 
 
@@ -145,14 +145,14 @@ def subfinder(mylist, pattern):
 
 class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     r"""
-    Construct a LayoutLMv2 tokenizer. Based on WordPiece. :class:`~transformers.LayoutLMv2Tokenizer` can be used to
-    turn words, word-level bounding boxes and optional word labels to token-level :obj:`input_ids`,
-    :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`, and optional :obj:`labels` (for token classification).
+    Construct a LayoutLMv2 tokenizer. Based on WordPiece. [`LayoutLMv2Tokenizer`] can be used to
+    turn words, word-level bounding boxes and optional word labels to token-level `input_ids`,
+    `attention_mask`, `token_type_ids`, `bbox`, and optional `labels` (for token classification).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
 
-    :class:`~transformers.LayoutLMv2Tokenizer` runs end-to-end tokenization: punctuation splitting and wordpiece. It
+    [`LayoutLMv2Tokenizer`] runs end-to-end tokenization: punctuation splitting and wordpiece. It
     also turns the word-level bounding boxes into token-level bounding boxes.
 
     """
@@ -274,17 +274,17 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
 
-        - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -297,18 +297,18 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -326,16 +326,16 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
         pair mask has the following format: :: 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence | second
-        sequence | If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        sequence | If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
             sequence(s).
         """
         sep = [self.sep_token_id]
@@ -392,16 +392,16 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         sequences with word-level normalized bounding boxes and optional labels.
 
         Args:
-            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
                 (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
                 words).
-            text_pair (:obj:`List[str]`, :obj:`List[List[str]]`):
+            text_pair (`List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
-            boxes (:obj:`List[List[int]]`, :obj:`List[List[List[int]]]`):
+            boxes (`List[List[int]]`, `List[List[List[int]]]`):
                 Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
-            word_labels (:obj:`List[int]`, :obj:`List[List[int]]`, `optional`):
+            word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
         # Input type checking for clearer error
@@ -772,12 +772,12 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
-        ``__call__`` should be used instead.
+        `__call__` should be used instead.
 
         Args:
-            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
-            text_pair (:obj:`List[str]` or :obj:`List[int]`, `optional`):
+            text_pair (`List[str]` or `List[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
                 list of list of strings (words of a batch of examples).
         """
@@ -893,18 +893,18 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         """
         Prepares a sequence or a pair of sequences so that it can be used by the model. It adds special tokens,
         truncates sequences if overflowing while taking into account the special tokens and manages a moving window
-        (with user defined stride) for overflowing tokens. Please Note, for `text_pair` different than `None` and
-        `truncation_strategy = longest_first` or `True`, it is not possible to return overflowing tokens. Such a
+        (with user defined stride) for overflowing tokens. Please Note, for *text_pair* different than *None* and
+        *truncation_strategy = longest_first* or *True*, it is not possible to return overflowing tokens. Such a
         combination of arguments will raise an error.
 
-        Word-level :obj:`boxes` are turned into token-level :obj:`bbox`. If provided, word-level :obj:`word_labels` are
-        turned into token-level :obj:`labels`. The word label is used for the first token of the word, while remaining
+        Word-level `boxes` are turned into token-level `bbox`. If provided, word-level `word_labels` are
+        turned into token-level `labels`. The word label is used for the first token of the word, while remaining
         tokens are labeled with -100, such that they will be ignored by the loss function.
 
         Args:
-            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
-            text_pair (:obj:`List[str]` or :obj:`List[int]`, `optional`):
+            text_pair (`List[str]` or `List[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
                 list of list of strings (words of a batch of examples).
         """
@@ -1092,42 +1092,42 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         Truncates a sequence pair in-place following the strategy.
 
         Args:
-            ids (:obj:`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the ``tokenize``
-                and ``convert_tokens_to_ids`` methods.
-            token_boxes (:obj:`List[List[int]]`):
+            ids (`List[int]`):
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_tokens_to_ids` methods.
+            token_boxes (`List[List[int]]`):
                 Bounding boxes of the first sequence.
-            pair_ids (:obj:`List[int]`, `optional`):
-                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
-                and ``convert_tokens_to_ids`` methods.
-            pair_token_boxes (:obj:`List[List[int]]`, `optional`):
+            pair_ids (`List[int]`, *optional*):
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_tokens_to_ids` methods.
+            pair_token_boxes (`List[List[int]]`, *optional*):
                 Bounding boxes of the second sequence.
-            labels (:obj:`List[int]`, `optional`):
+            labels (`List[int]`, *optional*):
                 Labels of the first sequence (for token classification tasks).
-            num_tokens_to_remove (:obj:`int`, `optional`, defaults to 0):
+            num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation_strategy (:obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
+            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 The strategy to follow for truncation. Can be:
 
-                * :obj:`'longest_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
                   to the maximum acceptable input length for the model if that argument is not provided. This will
                   truncate token by token, removing a token from the longest sequence in the pair if a pair of
                   sequences (or a batch of pairs) is provided.
-                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
                   the maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
                   to the maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
                   greater than the model maximum admissible input size).
-            stride (:obj:`int`, `optional`, defaults to 0):
+            stride (`int`, *optional*, defaults to 0):
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
-            list of overflowing tokens. Note: The `longest_first` strategy returns empty list of overflowing tokens if
+            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the
+            list of overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if
             a pair of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
@@ -1291,19 +1291,18 @@ class BasicTokenizer(object):
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
     Args:
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        never_split (:obj:`Iterable`, `optional`):
+        never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
-            :obj:`do_basic_tokenize=True`
-        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            `do_basic_tokenize=True`
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this `issue
-            <https://github.com/huggingface/transformers/issues/328>`__).
-        strip_accents: (:obj:`bool`, `optional`):
+            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+        strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for :obj:`lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original BERT).
     """
 
     def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
@@ -1320,9 +1319,9 @@ class BasicTokenizer(object):
         WordPieceTokenizer.
 
         Args:
-            **never_split**: (`optional`) list of str
+            never_split (`LIst[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
-                :func:`PreTrainedTokenizer.tokenize`) List of token not to split.
+                [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
@@ -1449,14 +1448,14 @@ class WordpieceTokenizer(object):
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, :obj:`input = "unaffable"` wil return as output :obj:`["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
 
         Args:
-          text: A single token or whitespace separated tokens. This should have
-            already been passed through `BasicTokenizer`.
+            text: A single token or whitespace separated tokens. This should have
+                already been passed through *BasicTokenizer*.
 
         Returns:
-          A list of wordpiece tokens.
+            A list of wordpiece tokens.
         """
 
         output_tokens = []

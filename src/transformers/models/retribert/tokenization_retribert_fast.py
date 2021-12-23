@@ -44,12 +44,12 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class RetriBertTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" RetriBERT tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" RetriBERT tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.RetriBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    [`RetriBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
     end-to-end tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
     parameters.
     """
 
