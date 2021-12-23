@@ -23,10 +23,8 @@ import logging
 import math
 import os
 import random
-import unicodedata
 from pathlib import Path
 
-import numpy as np
 import torch
 from datasets import ClassLabel, DatasetDict, concatenate_datasets, load_dataset, load_metric
 from torch.utils.data import DataLoader
@@ -35,6 +33,7 @@ from tqdm.auto import tqdm
 import transformers
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from huggingface_hub import Repository
+from luke_utils import DataCollatorForLukeTokenClassification, is_punctuation, padding_tensor
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -49,7 +48,6 @@ from transformers import (
 )
 from transformers.file_utils import get_full_repo_name
 from transformers.utils.versions import require_version
-from luke_utils import is_punctuation, DataCollatorForLukeTokenClassification, padding_tensor
 
 
 logger = logging.getLogger(__name__)
@@ -428,7 +426,7 @@ def main():
     def compute_sentence_boundaries_for_luke(examples):
         sentence_boundaries = []
 
-        for tokens in examples["tokens"]:
+        for tokens in examples[text_column_name]:
             sentence_boundaries.append([0, len(tokens)])
 
         examples["sentence_boundaries"] = sentence_boundaries
@@ -442,7 +440,7 @@ def main():
         all_original_entity_spans = []
 
         for labels, tokens, sentence_boundaries in zip(
-            examples["ner_tags"], examples["tokens"], examples["sentence_boundaries"]
+            examples["ner_tags"], examples[text_column_name], examples["sentence_boundaries"]
         ):
             subword_lengths = [len(tokenizer.tokenize(token)) for token in tokens]
             total_subword_length = sum(subword_lengths)
@@ -526,28 +524,32 @@ def main():
         )
 
         if padding == "max_length":
-            tokenized_inputs["labels"] = padding_tensor(examples["labels_entity_spans"], -100, tokenizer.padding_side, tokenizer.max_entity_length)
-            tokenized_inputs["original_entity_spans"] = padding_tensor(examples["original_entity_spans"], (-1, -1), tokenizer.padding_side, tokenizer.max_entity_length)
-            tokenized_inputs["ner_tags"] = padding_tensor(examples["ner_tags"], -1, tokenizer.padding_side, tokenizer.max_entity_length)
+            tokenized_inputs["labels"] = padding_tensor(
+                examples["labels_entity_spans"], -100, tokenizer.padding_side, tokenizer.max_entity_length
+            )
+            tokenized_inputs["original_entity_spans"] = padding_tensor(
+                examples["original_entity_spans"], (-1, -1), tokenizer.padding_side, tokenizer.max_entity_length
+            )
+            tokenized_inputs["ner_tags"] = padding_tensor(
+                examples["ner_tags"], -1, tokenizer.padding_side, tokenizer.max_entity_length
+            )
         else:
-            tokenized_inputs["labels"] = [
-                ex[: tokenizer.max_entity_length] for ex in examples["labels_entity_spans"]
-            ]
+            tokenized_inputs["labels"] = [ex[: tokenizer.max_entity_length] for ex in examples["labels_entity_spans"]]
             tokenized_inputs["original_entity_spans"] = [
                 ex[: tokenizer.max_entity_length] for ex in examples["original_entity_spans"]
             ]
             tokenized_inputs["ner_tags"] = [ex[: tokenizer.max_entity_length] for ex in examples["ner_tags"]]
 
         return tokenized_inputs
-    
+
     def filtering_out_labels(examples):
         filtered_out_labels = args.filter_out_labels.split(",")
 
         for ex_id in range(len(examples["ner_tags"])):
             for tag_id in range(len(examples["ner_tags"][ex_id])):
                 if examples["ner_tags"][ex_id][tag_id] in filtered_out_labels:
-                    examples["ner_tags"][ex_id][tag_id] = raw_datasets.info.features["ner_tags"].feature.names.index("O")
-        
+                    examples["ner_tags"][ex_id][tag_id] = label_to_id["O"]
+
         return examples
 
     with accelerator.main_process_first():
@@ -730,7 +732,7 @@ def main():
                 outputs = model(**batch)
 
             preds, refs = get_luke_labels(outputs, batch["ner_tags"], batch["original_entity_spans"])
-            
+
             metric.add_batch(
                 predictions=preds,
                 references=refs,

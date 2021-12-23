@@ -1,7 +1,8 @@
-from typing import Optional, Union
-import numpy as np
-from dataclasses import dataclass
 import unicodedata
+from dataclasses import dataclass
+from typing import Optional, Union
+
+import numpy as np
 
 from transformers.data.data_collator import DataCollatorMixin
 from transformers.file_utils import PaddingStrategy
@@ -31,12 +32,7 @@ def padding_tensor(sequences, padding_value, padding_side, sequence_length):
 
 def is_punctuation(char):
     cp = ord(char)
-    if (
-        (cp >= 33 and cp <= 47)
-        or (cp >= 58 and cp <= 64)
-        or (cp >= 91 and cp <= 96)
-        or (cp >= 123 and cp <= 126)
-    ):
+    if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
         return True
     cat = unicodedata.category(char)
     if cat.startswith("P"):
@@ -115,5 +111,5 @@ class DataCollatorForLukeTokenClassification(DataCollatorMixin):
         original_entity_spans = [feature["original_entity_spans"] for feature in features]
         batch["original_entity_spans"] = padding_tensor(original_entity_spans, (-1, -1), padding_side, sequence_length)
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
-        
+
         return batch
