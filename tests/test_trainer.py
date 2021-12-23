@@ -180,6 +180,7 @@ if is_torch_available():
 
         def __iter__(self):
             while self.current_sample < len(self.dataset):
+                print(self.current_sample)
                 yield self.dataset[self.current_sample]
                 self.current_sample += 1
 
@@ -1093,17 +1094,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
     def test_training_finite_iterable_dataset(self):
-        num_gpus = max(1, get_gpu_count())
-        if num_gpus > 2:
-            return
-
         config = RegressionModelConfig()
         model = RegressionPreTrainedModel(config)
 
         batch_size = 1
         num_samples = 10
 
-        available_steps = num_samples // (batch_size * num_gpus)
+        available_steps = num_samples // batch_size
 
         data = FiniteIterableDataset(length=num_samples)
         train_args = TrainingArguments(
