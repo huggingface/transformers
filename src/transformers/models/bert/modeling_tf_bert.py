@@ -792,12 +792,17 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             past_key_values_length=past_key_values_length,
             training=inputs["training"],
         )
-
+        # If Input 2D tensor mask:
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+        #
+        # If Input 3D tensor mask:
+        # We create a 3D attention mask from a 3D tensor mask.
+        # Sizes are [batch_size, 1, from_seq_length, to_seq_length]
+        
         attention_mask_shape = shape_list(inputs["attention_mask"])
 
         mask_seq_length = seq_length + past_key_values_length
@@ -818,9 +823,17 @@ class TFBertMainLayer(tf.keras.layers.Layer):
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
         else:
-            extended_attention_mask = tf.reshape(
-                inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
-            )
+            if len(attention_mask_shape) == 2:
+                extended_attention_mask = tf.reshape(
+                    inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+                )
+            elif len(attention_mask_shape) == 3:
+                extended_attention_mask = tf.expand_dims(inputs["attention_mask"], 1)
+            else:
+                raise ValueError(
+                    f"Wrong shape for input_ids (shape {input_ids.shape}) or attention_mask (shape {attention_mask_shape})"
+                )
+                
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
