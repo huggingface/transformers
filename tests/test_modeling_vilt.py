@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
@@ -515,3 +516,34 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         # verify we have a positive loss
         self.assertTrue(outputs.loss > 0)
+
+    @slow
+    def test_inference_natural_language_visual_reasoning(self):
+        # TODO replace nielsr by dandelin
+        model = ViltForNaturalLanguageVisualReasoning.from_pretrained("nielsr/vilt-b32-finetuned-nlvr2").to(
+            torch_device
+        )
+
+        processor = self.default_processor
+
+        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test")
+        image1 = Image.open(dataset[0]["file"]).convert("RGB")
+        image2 = Image.open(dataset[1]["file"]).convert("RGB")
+
+        text = "The left image contains twice the number of dogs as the right image, and at least two dogs in total are standing."
+        encoding_1 = processor(image1, text, return_tensors="pt")
+        encoding_2 = processor(image2, text, return_tensors="pt")
+
+        # forward pass
+        outputs = model(
+            input_ids=encoding_1.input_ids,
+            pixel_values=encoding_1.pixel_values,
+            pixel_values_2=encoding_2.pixel_values,
+        )
+
+        # verify the logits
+        expected_shape = torch.Size([1, 2])
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-2.4013, 2.9342]).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
