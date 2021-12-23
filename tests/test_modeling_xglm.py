@@ -345,10 +345,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         tokenizer.padding_side = "left"
 
-        # Define PAD Token = EOS Token = 50256
-        tokenizer.pad_token = tokenizer.eos_token
-        model.config.pad_token_id = model.config.eos_token_id
-
         # use different length sentences to test batching
         sentences = [
             "Hello, my dog is a little",
@@ -363,11 +359,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             attention_mask=inputs["attention_mask"].to(torch_device),
         )
 
-        outputs_tt = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
-
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
@@ -376,16 +367,14 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
+            "Hello, my dog is a little bit of a shy one, but he is very friendly",
+            "Today, I am going to share with you a few of my favorite things",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
@@ -408,7 +397,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         else:
             model.gradient_checkpointing_disable()
         model.to(torch_device)
-        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
+        input_ids = torch.tensor([[2, 268, 9865]], dtype=torch.long, device=torch_device)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
         # fmt: off
         expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]
@@ -437,7 +426,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and the sun is shining. A nice day with warm rainy"
+        EXPECTED_OUTPUT_STR = "Today is a nice day and I am happy to show you all about a recent project for my"
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
 
     @slow
@@ -450,7 +439,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         tokenized = tokenizer("Today is a nice day and", return_tensors="pt")
         input_ids = tokenized.input_ids.to(torch_device)
 
-        MAX_TIME = 0.5
+        MAX_TIME = 0.15
 
         start = datetime.datetime.now()
         model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
@@ -479,4 +468,4 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         start = datetime.datetime.now()
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+        self.assertGreater(duration, datetime.timedelta(seconds=1.25 * MAX_TIME))
