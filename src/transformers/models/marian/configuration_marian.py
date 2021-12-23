@@ -228,7 +228,6 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
         return common_outputs
 
-    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_default_and_seq2seq_lm
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -297,7 +296,6 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
         return common_inputs
 
-    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_causal_lm
     def _generate_dummy_inputs_for_causal_lm(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -363,7 +361,6 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         common_inputs = dict(tokenizer(dummy_input, return_tensors=framework))
         return common_inputs
 
-    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.generate_dummy_inputs
     def generate_dummy_inputs(
         self,
         tokenizer: PreTrainedTokenizer,
