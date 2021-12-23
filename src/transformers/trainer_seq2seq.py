@@ -161,11 +161,17 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
-        model_input_names = self.tokenizer.model_input_names if self.tokenizer is not None else ["input_ids"]
-        generation_inputs = {k: v for k, v in inputs.items() if k in model_input_names}
+        # prepare generation inputs
+        # some encoder-decoder models can have varying encder's and thus
+        # varying model input names
+        if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
+            generation_inputs = inputs[self.model.encoder.main_input_name]
+        else:
+            generation_inputs = inputs[self.model.main_input_name]
 
         generated_tokens = self.model.generate(
-            **generation_inputs,
+            generation_inputs,
+            attention_mask=inputs.get("attention_mask", None),
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
