@@ -281,7 +281,7 @@ TOLERANCE = 1e-4
 @require_flax
 class FlaxXGLMModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = FlaxXGLMModel.from_pretrained("xglm-564M")
+        model = FlaxXGLMModel.from_pretrained("facebook/xglm-564M")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -296,7 +296,7 @@ class FlaxXGLMModelIntegrationTest(unittest.TestCase):
         _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_inference_with_head(self):
-        model = FlaxXGLMForConditionalGeneration.from_pretrained("xglm-564M")
+        model = FlaxXGLMForConditionalGeneration.from_pretrained("facebook/xglm-564M")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -311,8 +311,8 @@ class FlaxXGLMModelIntegrationTest(unittest.TestCase):
         _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
-        hf = FlaxXGLMForConditionalGeneration.from_pretrained("xglm-564M")
-        tok = XGLMTokenizer.from_pretrained("xglm-564M")
+        hf = FlaxXGLMForConditionalGeneration.from_pretrained("facebook/xglm-564M")
+        tok = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
 
         batch_input = [
             # string 1,

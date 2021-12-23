@@ -31,12 +31,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xglm-564M": "https://huggingface.co/xglm-564M/resolve/main/sentencepiece.bpe.model",
+        "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/sentencepiece.bpe.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xglm-564M": 1024,
+    "facebook/xglm-564M": 1024,
 }
 
 
@@ -162,7 +162,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
         # Mimic fairseq token-to-id alignment for the first 4 token
         self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
 
-        sp_size = 256000
+        sp_size = len(self.sp_model)
         madeup_words = {f"<madeupword{i}>": sp_size + i + self.fairseq_offset for i in range(self.num_madeup_words)}
         self.fairseq_tokens_to_ids.update(madeup_words)
 

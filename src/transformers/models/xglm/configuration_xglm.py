@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xglm-564M": "https://huggingface.co/xglm-564M/resolve/main/config.json",
+    "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/config.json",
     # See all XGLM models at https://huggingface.co/models?filter=xglm
 }
 
@@ -31,7 +31,7 @@ class XGLMConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`~XGLMModel`].
     It is used to instantiate an XGLM model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the XGLM [xglm-564M](https://huggingface.co/xglm-564M) architecture.
+    the XGLM [facebook/xglm-564M](https://huggingface.co/facebook/xglm-564M) architecture.
 
     Configuration objects inherit from  [`PretrainedConfig`] and can be used
     to control the model outputs. Read the documentation from  [`PretrainedConfig`]
@@ -86,10 +86,10 @@ class XGLMConfig(PretrainedConfig):
     ```python
     >>> from transformers import XGLMModel, XGLMConfig
 
-    >>> # Initializing a XGLM xglm-564M style configuration
+    >>> # Initializing a XGLM facebook/xglm-564M style configuration
     >>> configuration = XGLMConfig()
 
-    >>> # Initializing a model from the xglm-564M style configuration
+    >>> # Initializing a model from the facebook/xglm-564M style configuration
     >>> model = XGLMModel(configuration)
 
     >>> # Accessing the model configuration

@@ -33,13 +33,13 @@ from .configuration_xglm import XGLMConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xglm-564M"
+_CHECKPOINT_FOR_DOC = "facebook/xglm-564M"
 _CONFIG_FOR_DOC = "XGLMConfig"
 _TOKENIZER_FOR_DOC = "XGLMTokenizer"
 
 
 XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xglm-564M",
+    "facebook/xglm-564M",
     # See all XGLM models at https://huggingface.co/models?filter=xglm
 ]
 

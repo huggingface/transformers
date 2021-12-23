@@ -52,7 +52,7 @@ from .configuration_xglm import XGLMConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xglm-564M"
+_CHECKPOINT_FOR_DOC = "facebook/xglm-564M"
 _CONFIG_FOR_DOC = "XGLMConfig"
 _TOKENIZER_FOR_DOC = "XGLMTokenizer"
 
@@ -1016,8 +1016,8 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
 
             >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
 
-            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('xglm-564M')
-            >>> tokenizer = XGLMTokenizer.from_pretrained('xglm-564M')
+            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
+            >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
 
             >>> text = "My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
@@ -1081,8 +1081,8 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
 
             >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
 
-            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('xglm-564M')
-            >>> tokenizer = XGLMTokenizer.from_pretrained('xglm-564M')
+            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
+            >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
 
             >>> text = "My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
@@ -1347,8 +1347,8 @@ class FlaxXGLMForConditionalGeneration(FlaxXGLMPreTrainedModel):
 
             >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
 
-            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('xglm-564M')
-            >>> tokenizer = XGLMTokenizer.from_pretrained('xglm-564M')
+            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
+            >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
 
             >>> text = "My friends are cool but they eat too many carbs."
             >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
@@ -1502,8 +1502,8 @@ FLAX_XGLM_CONDITIONAL_GENERATION_DOCSTRING = """
 
         >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
 
-        >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('xglm-564M')
-        >>> tokenizer = XGLMTokenizer.from_pretrained('xglm-564M')
+        >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
+        >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
@@ -1515,10 +1515,10 @@ FLAX_XGLM_CONDITIONAL_GENERATION_DOCSTRING = """
     Mask filling example::
 
         >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
-        >>> tokenizer = XGLMTokenizer.from_pretrained('xglm-564M')
+        >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
         >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-        >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('xglm-564M')
+        >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
         >>> input_ids = tokenizer([TXT], return_tensors='np')['input_ids']
         >>> logits = model(input_ids).logits
 
