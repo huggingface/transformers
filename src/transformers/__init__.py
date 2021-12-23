@@ -1572,6 +1572,15 @@ if is_tf_available():
             "TFCamembertModel",
         ]
     )
+    _import_structure["models.clip"].extend(
+        [
+            "TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCLIPModel",
+            "TFCLIPPreTrainedModel",
+            "TFCLIPTextModel",
+            "TFCLIPVisionModel",
+        ]
+    )
     _import_structure["models.convbert"].extend(
         [
             "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3438,6 +3447,13 @@ if TYPE_CHECKING:
             TFCamembertForSequenceClassification,
             TFCamembertForTokenClassification,
             TFCamembertModel,
+        )
+        from .models.clip import (
+            TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCLIPModel,
+            TFCLIPPreTrainedModel,
+            TFCLIPTextModel,
+            TFCLIPVisionModel,
         )
         from .models.convbert import (
             TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
