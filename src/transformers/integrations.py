@@ -712,7 +712,7 @@ class MLflowCallback(TrainerCallback):
         if log_artifacts in {"TRUE", "1"}:
             self._log_artifacts = True
         if state.is_world_process_zero:
-            self._ml_flow.start_run()
+            self._ml_flow.start_run(run_name=args.run_name)
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
