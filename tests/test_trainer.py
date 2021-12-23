@@ -180,7 +180,6 @@ if is_torch_available():
 
         def __iter__(self):
             while self.current_sample < len(self.dataset):
-                print(self.current_sample)
                 yield self.dataset[self.current_sample]
                 self.current_sample += 1
 
@@ -1507,7 +1506,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             expected_commits = [f"Training in progress, epoch {i}" for i in range(3, 0, -1)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, get_gpu_count())
@@ -1531,7 +1529,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             expected_commits = [f"Training in progress, step {i}" for i in range(total_steps, 0, -5)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
 
 
 @require_torch
