@@ -340,7 +340,6 @@ def get_tokenizer_config(
         local_files_only=local_files_only,
     )
     if TOKENIZER_CONFIG_FILE not in [Path(f).name for f in repo_files]:
-        print("No TOKENIZER_CONFIG_FILE, aborting")
         return {}
 
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
