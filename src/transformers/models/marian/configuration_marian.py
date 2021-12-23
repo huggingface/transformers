@@ -170,6 +170,7 @@ class MarianConfig(PretrainedConfig):
 
 class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.inputs
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         if self.task in ["default", "seq2seq-lm"]:
             common_inputs = OrderedDict(
@@ -214,6 +215,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     @property
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.outputs
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         if self.task in ["default", "seq2seq-lm"]:
             common_outputs = super().outputs
@@ -226,6 +228,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
         return common_outputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_default_and_seq2seq_lm
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -294,6 +297,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_causal_lm
     def _generate_dummy_inputs_for_causal_lm(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -331,6 +335,8 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
             ]
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._generate_dummy_inputs_for_sequence_classification_and_question_answering
+    # We renamed the function because Marian models do not have a sequence classification or question answering head
     def _generate_dummy_inputs_for_encoder_and_decoder(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -357,6 +363,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         common_inputs = dict(tokenizer(dummy_input, return_tensors=framework))
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.generate_dummy_inputs
     def generate_dummy_inputs(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -377,6 +384,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         return common_inputs
 
+    # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._flatten_past_key_values_
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
         if self.task in ["default", "seq2seq-lm"]:
             flattened_output = super()._flatten_past_key_values_(flattened_output, name, idx, t)
