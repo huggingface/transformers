@@ -366,7 +366,16 @@ class GenerationMixin:
         This function extracts the model-specific `inputs` for generation.
         """
         # 1. retrieve all kwargs that are non-None or non-model input related.
-        input_name = self.main_input_name
+        # some encoder-decoder models have different names for model and encoder
+        if (
+            self.config.is_encoder_decoder
+            and hasattr(self, "encoder")
+            and self.encoder.main_input_name != self.main_input_name
+        ):
+            input_name = self.encoder.main_input_name
+        else:
+            input_name = self.main_input_name
+
         model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
 
         # 2. check whether model_input_name is passed as kwarg
@@ -393,11 +402,7 @@ class GenerationMixin:
                 f"{self.__class__.__name__}."
             )
 
-        # 5. Some encoder-decoder models have different names for model and encoder
-        if self.config.is_encoder_decoder and hasattr(self, "encoder") and self.encoder.main_input_name != input_name:
-            input_name = self.encoder.main_input_name
-
-        # 6. if `inputs` is still None, try to create `input_ids` from BOS token
+        # 5. if `inputs` is still None, try to create `input_ids` from BOS token
         if inputs is None:
             inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
