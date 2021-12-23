@@ -11,6 +11,7 @@ from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.longformer import LongformerOnnxConfig
+from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
@@ -151,6 +152,15 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=LongformerOnnxConfig,
+        ),
+        "marian": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            onnx_config_cls=MarianOnnxConfig,
         ),
         "roberta": supported_features_mapping(
             "default",
