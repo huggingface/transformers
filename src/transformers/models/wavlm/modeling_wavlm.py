@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "WavLMConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_CHECKPOINT_FOR_DOC = "microsoft/wavlm-base"
+_CHECKPOINT_FOR_DOC = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
 
 _SEQ_CLASS_CHECKPOINT = "microsoft/wavlm-base"
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
