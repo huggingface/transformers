@@ -366,11 +366,11 @@ class GenerationMixin:
         This function extracts the model-specific `inputs` for generation.
         """
         # 1. retrieve all kwargs that are non-None or non-model input related.
-        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != self.model_main_input_name}
+        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != self.main_input_name}
 
         # 2. check whether model_input_name is passed as kwarg
-        inputs_kwarg = model_kwargs.pop(self.model_main_input_name, None)
-        input_name = self.model_main_input_name
+        inputs_kwarg = model_kwargs.pop(self.main_input_name, None)
+        input_name = self.main_input_name
 
         if inputs_kwarg is not None and inputs is not None:
             raise ValueError(
@@ -410,7 +410,7 @@ class GenerationMixin:
             # 3. no `inputs` and no model-specific keyword inputs are passed
             # -> try to create `input_ids` from BOS
             input_tensor = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
-            return input_tensor, input, model_kwargs
+            return input_tensor, input_name, model_kwargs
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
         """
@@ -460,6 +460,7 @@ class GenerationMixin:
     ) -> Dict[str, Any]:
         # 1. get encoder
         encoder = self.get_encoder()
+
         # 2. prepare encoder args and encoder kwargs from model kwargs
         irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
         encoder_kwargs = {
@@ -467,11 +468,11 @@ class GenerationMixin:
             for argument, value in model_kwargs.items()
             if not any(argument.startswith(p) for p in irrelevant_prefix)
         }
+
         # 3. make sure that encoder returns `ModelOutput`
-        model_input_name = model_input_name if model_input_name is not None else self.model_main_input_name
+        model_input_name = model_input_name if model_input_name is not None else self.main_input_name
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = inputs_tensor
-
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
 
         return model_kwargs
