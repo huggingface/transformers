@@ -18,7 +18,7 @@
 from collections import OrderedDict
 from typing import Mapping
 
-from transformers.onnx import OnnxConfigWithPast
+from transformers.onnx import OnnxConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -128,7 +128,7 @@ class IBertConfig(PretrainedConfig):
         self.force_dequant = force_dequant
 
 
-class IBertOnnxConfig(OnnxConfigWithPast):
+class IBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
