@@ -188,6 +188,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("bart", "facebook/bart-base"),
     ("mbart", "sshleifer/tiny-mbart"),
     ("t5", "t5-small"),
+    ("marian", "Helsinki-NLP/opus-mt-en-de"),
 }
 
 
