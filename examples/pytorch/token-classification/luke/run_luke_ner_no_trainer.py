@@ -555,7 +555,7 @@ def main():
     with accelerator.main_process_first():
         if args.filter_out_labels:
             raw_datasets = raw_datasets.map(
-                compute_sentence_boundaries_for_luke,
+                filtering_out_labels,
                 batched=True,
                 desc="Filtering out unwanted labels",
             )
