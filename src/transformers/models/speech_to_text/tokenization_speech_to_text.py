@@ -56,46 +56,45 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     """
     Construct an Speech2Text tokenizer.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains some of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods.
     Users should refer to the superclass for more information regarding such methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             File containing the vocabulary.
-        spm_file (:obj:`str`):
-            Path to the `SentencePiece <https://github.com/google/sentencepiece>`__ model file
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        spm_file (`str`):
+            Path to the [SentencePiece](https://github.com/google/sentencepiece) model file
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sentence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sentence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        do_upper_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        do_upper_case (`bool`, *optional*, defaults to `False`):
            Whether or not to uppercase the output when decoding.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
-        tgt_lang (:obj:`str`, `optional`):
+        tgt_lang (`str`, *optional*):
             A string representing the target language.
-        sp_model_kwargs (:obj:`dict`, `optional`):
-            Will be passed to the ``SentencePieceProcessor.__init__()`` method. The `Python wrapper for SentencePiece
-            <https://github.com/google/sentencepiece/tree/master/python>`__ can be used, among other things, to set:
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
 
-            - ``enable_sampling``: Enable subword regularization.
-            - ``nbest_size``: Sampling parameters for unigram. Invalid for BPE-Dropout.
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
 
-              - ``nbest_size = {0,1}``: No sampling is performed.
-              - ``nbest_size > 1``: samples from the nbest_size results.
-              - ``nbest_size < 0``: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
                 using forward-filtering-and-backward-sampling algorithm.
 
-            - ``alpha``: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
 
         **kwargs
-            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
+            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -203,18 +202,18 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:

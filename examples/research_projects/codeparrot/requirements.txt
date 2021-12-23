@@ -1,4 +1,4 @@
-transformers==4.12.2
+transformers==4.15.0
 datasets==1.16.0
 accelerate==0.5.1
 wandb==0.12.0
