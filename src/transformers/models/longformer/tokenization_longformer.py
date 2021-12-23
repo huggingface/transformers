@@ -52,7 +52,7 @@ class LongformerTokenizer(RobertaTokenizer):
     r"""
     Construct a Longformer tokenizer.
 
-    :class:`~transformers.LongformerTokenizer` is identical to :class:`~transformers.RobertaTokenizer`. Refer to the
+    [`LongformerTokenizer`] is identical to [`RobertaTokenizer`]. Refer to the
     superclass for usage examples and documentation concerning parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES

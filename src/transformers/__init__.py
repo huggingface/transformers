@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.15.0.dev0"
+__version__ = "4.16.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -116,6 +116,7 @@ _import_structure = {
         "is_datasets_available",
         "is_faiss_available",
         "is_flax_available",
+        "is_phonemizer_available",
         "is_psutil_available",
         "is_py3nvml_available",
         "is_pyctcdecode_available",
@@ -313,6 +314,7 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "models.wavlm": [
         "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1380,8 +1382,10 @@ if is_torch_available():
     _import_structure["models.wavlm"].extend(
         [
             "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WavLMForAudioFrameClassification",
             "WavLMForCTC",
             "WavLMForSequenceClassification",
+            "WavLMForXVector",
             "WavLMModel",
             "WavLMPreTrainedModel",
         ]
@@ -2159,6 +2163,7 @@ if TYPE_CHECKING:
         is_datasets_available,
         is_faiss_available,
         is_flax_available,
+        is_phonemizer_available,
         is_psutil_available,
         is_py3nvml_available,
         is_pyctcdecode_available,
@@ -2340,6 +2345,7 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
+    from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
@@ -3228,8 +3234,10 @@ if TYPE_CHECKING:
         )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WavLMForAudioFrameClassification,
             WavLMForCTC,
             WavLMForSequenceClassification,
+            WavLMForXVector,
             WavLMModel,
             WavLMPreTrainedModel,
         )

@@ -65,36 +65,37 @@ class NotebookProgressBar:
 
     Class attributes (overridden by derived classes)
 
-        - **warmup** (:obj:`int`) -- The number of iterations to do at the beginning while ignoring
-          :obj:`update_every`.
-        - **update_every** (:obj:`float`) -- Since calling the time takes some time, we only do it every presumed
-          :obj:`update_every` seconds. The progress bar uses the average time passed up until now to guess the next
+        - **warmup** (`int`) -- The number of iterations to do at the beginning while ignoring
+          `update_every`.
+        - **update_every** (`float`) -- Since calling the time takes some time, we only do it every presumed
+          `update_every` seconds. The progress bar uses the average time passed up until now to guess the next
           value for which it will call the update.
 
     Args:
-        total (:obj:`int`):
+        total (`int`):
             The total number of iterations to reach.
-        prefix (:obj:`str`, `optional`):
+        prefix (`str`, *optional*):
             A prefix to add before the progress bar.
-        leave (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        leave (`bool`, *optional*, defaults to `True`):
             Whether or not to leave the progress bar once it's completed. You can always call the
-            :meth:`~transformers.utils.notebook.NotebookProgressBar.close` method to make the bar disappear.
-        parent (:class:`~transformers.notebook.NotebookTrainingTracker`, `optional`):
-            A parent object (like :class:`~transformers.utils.notebook.NotebookTrainingTracker`) that spawns progress
-            bars and handle their display. If set, the object passed must have a :obj:`display()` method.
-        width (:obj:`int`, `optional`, defaults to 300):
+            [`~utils.notebook.NotebookProgressBar.close`] method to make the bar disappear.
+        parent ([`~notebook.NotebookTrainingTracker`], *optional*):
+            A parent object (like [`~utils.notebook.NotebookTrainingTracker`]) that spawns progress
+            bars and handle their display. If set, the object passed must have a `display()` method.
+        width (`int`, *optional*, defaults to 300):
             The width (in pixels) that the bar will take.
 
-    Example::
+    Example:
 
-        import time
+    ```python
+    import time
 
-        pbar = NotebookProgressBar(100)
-        for val in range(100):
-            pbar.update(val)
-            time.sleep(0.07)
-        pbar.update(100)
-    """
+    pbar = NotebookProgressBar(100)
+    for val in range(100):
+        pbar.update(val)
+        time.sleep(0.07)
+    pbar.update(100)
+    ```"""
 
     warmup = 5
     update_every = 0.2
@@ -118,17 +119,17 @@ class NotebookProgressBar:
 
     def update(self, value: int, force_update: bool = False, comment: str = None):
         """
-        The main method to update the progress bar to :obj:`value`.
+        The main method to update the progress bar to `value`.
 
         Args:
 
-            value (:obj:`int`):
-                The value to use. Must be between 0 and :obj:`total`.
-            force_update (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            value (`int`):
+                The value to use. Must be between 0 and `total`.
+            force_update (`bool`, *optional*, defaults to `False`):
                 Whether or not to force and update of the internal state and display (by default, the bar will wait for
-                :obj:`value` to reach the value it predicted corresponds to a time of more than the :obj:`update_every`
+                `value` to reach the value it predicted corresponds to a time of more than the `update_every`
                 attribute since the last update to avoid adding boilerplate).
-            comment (:obj:`str`, `optional`):
+            comment (`str`, *optional*):
                 A comment to add on the left of the progress bar.
         """
         self.value = value
@@ -203,10 +204,10 @@ class NotebookTrainingTracker(NotebookProgressBar):
 
     Args:
 
-        num_steps (:obj:`int`): The number of steps during training.
-        column_names (:obj:`List[str]`, `optional`):
+        num_steps (`int`): The number of steps during training.
+        column_names (`List[str]`, *optional*):
             The list of column names for the metrics table (will be inferred from the first call to
-            :meth:`~transformers.utils.notebook.NotebookTrainingTracker.write_line` if not set).
+            [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
     """
 
     def __init__(self, num_steps, column_names=None):
@@ -230,7 +231,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
         Write the values in the inner table.
 
         Args:
-            values (:obj:`Dict[str, float]`): The values to display.
+            values (`Dict[str, float]`): The values to display.
         """
         if self.inner_table is None:
             self.inner_table = [list(values.keys()), list(values.values())]
@@ -250,9 +251,9 @@ class NotebookTrainingTracker(NotebookProgressBar):
         easily updated).
 
         Args:
-            total (:obj:`int`): The number of iterations for the child progress bar.
-            prefix (:obj:`str`, `optional`): A prefix to write on the left of the progress bar.
-            width (:obj:`int`, `optional`, defaults to 300): The width (in pixels) of the progress bar.
+            total (`int`): The number of iterations for the child progress bar.
+            prefix (`str`, *optional*): A prefix to write on the left of the progress bar.
+            width (`int`, *optional*, defaults to 300): The width (in pixels) of the progress bar.
         """
         self.child_bar = NotebookProgressBar(total, prefix=prefix, parent=self, width=width)
         return self.child_bar
@@ -267,7 +268,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
 
 class NotebookProgressCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that displays the progress of training or evaluation, optimized for
+    A [`TrainerCallback`] that displays the progress of training or evaluation, optimized for
     Jupyter Notebooks or Google colab.
     """
 
