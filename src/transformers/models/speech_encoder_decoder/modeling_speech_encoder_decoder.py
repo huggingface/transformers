@@ -69,19 +69,11 @@ SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
 
 SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+        inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
+            Float values of input raw speech waveform or speech features. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should
-            be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
-            [`Wav2Vec2Processor.__call__`] for details.
-        input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
-            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
-            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array
-            into `input_features`, the [`Speech2TextTokenizer`] should be used for extracting
-            the fbank features, padding and conversion into a tensor of type `torch.FloatTensor`. See
-            [`~Speech2TextTokenizer.__call__`]
+            soundfile*). To prepare the array into *inputs*, either the [`Wav2Vec2Processor`] or [`Speech2TextProcessor`] should
+            be used for padding and conversion into a tensor of type *torch.FloatTensor*.
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -137,6 +129,19 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should
+            be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
+            [`Wav2Vec2Processor.__call__`] for details.
+        input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
+            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array
+            into `input_features`, the [`Speech2TextTokenizer`] should be used for extracting
+            the fbank features, padding and conversion into a tensor of type `torch.FloatTensor`. See
+            [`~Speech2TextTokenizer.__call__`]
         return_dict (`bool`, *optional*):
             If set to `True`, the model will return a [`~file_utils.Seq2SeqLMOutput`] instead of a
             plain tuple.
