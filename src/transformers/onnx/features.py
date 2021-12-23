@@ -130,7 +130,7 @@ class FeaturesManager:
             "default",
             "masked-lm",
             "sequence-classification",
-            #"multiple-choice",
+            # "multiple-choice",
             "token-classification",
             "question-answering",
             onnx_config_cls=IBertOnnxConfig,
