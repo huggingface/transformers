@@ -29,14 +29,13 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageSegmentationPipeline(Pipeline):
     """
-    Image segmentation pipeline using any :obj:`AutoModelForImageSegmentation`. This pipeline predicts masks of objects
+    Image segmentation pipeline using any `AutoModelForImageSegmentation`. This pipeline predicts masks of objects
     and their classes.
 
-    This image segmntation pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"image-segmentation"`.
+    This image segmntation pipeline can currently be loaded from [`pipeline`] using the following
+    task identifier: `"image-segmentation"`.
 
-    See the list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=image-segmentation>`__.
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-segmentation).
     """
 
     def __init__(self, *args, **kwargs):
@@ -61,7 +60,7 @@ class ImageSegmentationPipeline(Pipeline):
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
         Args:
-            images (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image` or :obj:`List[PIL.Image]`):
+            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -70,9 +69,9 @@ class ImageSegmentationPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            threshold (:obj:`float`, `optional`, defaults to 0.9):
+            threshold (`float`, *optional*, defaults to 0.9):
                 The probability necessary to make a prediction.
-            mask_threshold (:obj:`float`, `optional`, defaults to 0.5):
+            mask_threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to use when turning the predicted masks into binary values.
 
         Return:
@@ -82,9 +81,9 @@ class ImageSegmentationPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The class label identified by the model.
-            - **score** (:obj:`float`) -- The score attributed by the model for that label.
-            - **mask** (:obj:`str`) -- base64 string of a grayscale (single-channel) PNG image that contain masks
+            - **label** (`str`) -- The class label identified by the model.
+            - **score** (`float`) -- The score attributed by the model for that label.
+            - **mask** (`str`) -- base64 string of a grayscale (single-channel) PNG image that contain masks
               information. The PNG image has size (heigth, width) of the original image. Pixel values in the image are
               either 0 or 255 (i.e. mask is absent VS mask is present).
         """
@@ -130,7 +129,8 @@ class ImageSegmentationPipeline(Pipeline):
         Turns mask numpy array into mask base64 str.
 
         Args:
-            mask (np.array): Numpy array (with shape (heigth, width) of the original image) containing masks information. Values in the array are either 0 or 255 (i.e. mask is absent VS mask is present).
+            mask (`np.array`): Numpy array (with shape (heigth, width) of the original image) containing masks
+                information. Values in the array are either 0 or 255 (i.e. mask is absent VS mask is present).
 
         Returns:
             A base64 string of a single-channel PNG image that contain masks information.

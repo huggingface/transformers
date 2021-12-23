@@ -64,12 +64,12 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class DistilBertTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" DistilBERT tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" DistilBERT tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    :class:`~transformers.DistilBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
+    [`DistilBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
     end-to-end tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
     parameters.
     """
 

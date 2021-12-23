@@ -59,10 +59,10 @@ class FunnelTokenizer(BertTokenizer):
     r"""
     Construct a Funnel Transformer tokenizer.
 
-    :class:`~transformers.FunnelTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    [`FunnelTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
     parameters.
     """
 
@@ -113,21 +113,21 @@ class FunnelTokenizer(BertTokenizer):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A Funnel
         Transformer sequence pair mask has the following format:
 
-        ::
+        ```
+        2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
 
-            2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
-
-        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
             sequence(s).
         """
         sep = [self.sep_token_id]

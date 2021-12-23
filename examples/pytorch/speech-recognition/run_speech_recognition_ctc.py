@@ -49,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.15.0.dev0")
+check_min_version("4.16.0.dev0")
 
 require_version("datasets>=1.13.3", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -467,7 +467,7 @@ def main():
     # We need to make sure that only first rank saves vocabulary
     # make sure all processes wait until vocab is created
     tokenizer_name_or_path = model_args.tokenizer_name_or_path
-    tokenizer_type_hints = {}
+    tokenizer_kwargs = {}
     if tokenizer_name_or_path is None:
         # save vocab in training output dir
         tokenizer_name_or_path = training_args.output_dir
@@ -494,9 +494,12 @@ def main():
 
         # if tokenizer has just been created
         # it is defined by `tokenizer_class` if present in config else by `model_type`
-        tokenizer_type_hints = {
+        tokenizer_kwargs = {
             "config": config if config.tokenizer_class is not None else None,
             "tokenizer_type": config.model_type if config.tokenizer_class is None else None,
+            "unk_token": unk_token,
+            "pad_token": pad_token,
+            "word_delimiter_token": word_delimiter_token,
         }
 
     # 5. Now we can instantiate the feature extractor, tokenizer and model
@@ -506,11 +509,8 @@ def main():
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
-        unk_token=unk_token,
-        pad_token=pad_token,
-        word_delimiter_token=word_delimiter_token,
         use_auth_token=data_args.use_auth_token,
-        **tokenizer_type_hints,
+        **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
