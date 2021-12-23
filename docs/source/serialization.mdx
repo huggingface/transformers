@@ -84,7 +84,7 @@ optional arguments:
 Exporting a checkpoint using a ready-made configuration can be done as follows:
 
 ```bash
-python -m transformers.onnx --model=distilbert-base-uncased onnx/distilbert-base-uncased/
+python -m transformers.onnx --model=distilbert-base-uncased onnx/
 ```
 
 which should show the following logs:
@@ -95,7 +95,7 @@ Validating ONNX model...
         - Validating ONNX Model output "last_hidden_state":
                 -[✓] (2, 8, 768) matches (2, 8, 768)
                 -[✓] all values close (atol: 1e-05)
-All good, model saved at: onnx/distilbert-base-uncased/model.onnx
+All good, model saved at: onnx/model.onnx
 ```
 
 This exports an ONNX graph of the checkpoint defined by the `--model` argument.
@@ -112,7 +112,7 @@ from transformers import AutoTokenizer
 from onnxruntime import InferenceSession
 
 tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-ort_session = InferenceSession("onnx/distilbert-base-uncased/model.onnx")
+ort_session = InferenceSession("onnx/model.onnx")
 # ONNX Runtime expects NumPy arrays as input
 inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
 outputs = ort_session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
@@ -127,12 +127,18 @@ from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfi
 
 config = DistilBertConfig()
 onnx_config = DistilBertOnnxConfig(config)
-output_names = list(onnx_config.outputs.keys())
+print(list(onnx_config.outputs.keys()))
+```
+
+which outputs:
+
+```python
+['last_hidden_state']
 ```
 
 ### Selecting features for different model topologies
 
-Each ready-made configuration comes with a set of _features_ that enable you to export models for different types of tasks. As shown in the table below, each feature is associated with a different auto class:
+Each ready-made configuration comes with a set of _features_ that enable you to export models for different types of topologies or tasks. As shown in the table below, each feature is associated with a different auto class:
 
 | Feature                              | Auto Class                           |
 | ------------------------------------ | ------------------------------------ |
@@ -163,8 +169,7 @@ You can then pass one of these features to the `--feature` argument in the `tran
 
 ```bash
 python -m transformers.onnx --model=distilbert-base-uncased-finetuned-sst-2-english \
-                            --feature=sequence-classification \
-                            onnx/distilbert-base-uncased-finetuned-sst-2-english/
+                            --feature=sequence-classification onnx/
 ```
 
 which will display the following logs:
@@ -175,11 +180,19 @@ Validating ONNX model...
         - Validating ONNX Model output "logits":
                 -[✓] (2, 2) matches (2, 2)
                 -[✓] all values close (atol: 1e-05)
-All good, model saved at: onnx/distilbert-finetuned/model.onnx
+All good, model saved at: onnx/model.onnx
 ```
 
 Notice that in this case, the output names from the model are `logits` instead
 of the `last_hidden_state` we saw with the pretrained checkpoint above.
+
+<Tip>
+
+The features that have a `with-past` suffix correspond to model topologies with
+pre-computed hidden-states (key and values in the attention blocks) that can be
+used for fast autoregressive decoding.
+
+</Tip>
 
 
 ### Implementing a custom configuration for an unsupported architecture
