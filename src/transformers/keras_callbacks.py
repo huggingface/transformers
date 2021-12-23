@@ -97,10 +97,11 @@ class KerasMetricCallback(Callback):
         self.predict_with_generate = predict_with_generate
         self.output_cols = output_cols
         self.metric_fn_kwargs = metric_fn_kwargs or dict()
-        if tokenizer is not None:
-            self.model_input_names = tokenizer.model_input_names
+
+        if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
+            self.main_input_name = self.model.encoder.main_input_name
         else:
-            self.model_input_names = ["input_ids"]
+            self.main_input_name = self.model.main_input_name
 
         # This next block attempts to parse out which elements of the dataset should be appended to the labels list
         # that is passed to the metric_fn
@@ -161,9 +162,13 @@ class KerasMetricCallback(Callback):
                 labels = None
             if self.predict_with_generate:
                 if isinstance(batch, dict):
-                    # generate() gets stressed out by any unexpected keys
-                    batch = {key: array for key, array in batch.items() if key in self.model_input_names}
-                predictions = self.model.generate(batch)
+                    generation_inputs = batch[self.model.main_input_name]
+                    attention_mask = batch.get("attention_mask", None)
+                else:
+                    generation_inputs = batch
+                    attention_mask = None
+
+                predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
             else:
                 predictions = self.model.predict(batch)
             predictions = dict(predictions)
