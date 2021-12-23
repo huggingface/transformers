@@ -180,7 +180,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         `tokenizers.decoders.Decoder`: The Rust decoder for this tokenizer.
         """
-        return self._tokenizer._tokenizer.decoder
+        return self._tokenizer.decoder
 
     def _convert_encoding(
         self,
