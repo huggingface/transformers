@@ -63,6 +63,12 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + tf.tanh(x * coeff2 * (1.0 + coeff1 * x * x)))
 
 
+def quick_gelu(x):
+    x = tf.convert_to_tensor(x)
+    coeff = tf.cast(1.702, x.dtype)
+    return x * tf.math.sigmoid(coeff * x)
+
+
 if version.parse(tf.version.VERSION) >= version.parse("2.4"):
 
     def approximate_gelu_wrap(x):
@@ -84,6 +90,7 @@ ACT2FN = {
     "mish": mish,
     "tanh": tf.keras.activations.tanh,
     "gelu_fast": gelu_fast,
+    "quick_gelu": quick_gelu,
 }
 
 

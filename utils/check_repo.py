@@ -111,6 +111,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
+    "TFCLIPTextModel",
+    "TFCLIPVisionModel",
     "FlaxCLIPTextModel",
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
