@@ -126,6 +126,15 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=BertOnnxConfig,
         ),
+        "ibert": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            #"multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=IBertOnnxConfig,
+        ),
         "camembert": supported_features_mapping(
             "default",
             "masked-lm",
