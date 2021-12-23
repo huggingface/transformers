@@ -216,7 +216,11 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # load state dict into HuggingFace model
     model.eval()
-    model.load_state_dict(state_dict)
+    if mlm_model:
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+        assert missing_keys == ["mlm_score.decoder.bias"]
+    else:
+        model.load_state_dict(state_dict)
 
     # Define processor
     feature_extractor = ViltFeatureExtractor(size=384)
@@ -247,7 +251,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # Verify outputs
     if mlm_model:
         expected_shape = torch.Size([1, 11, 30522])
-        expected_slice = torch.tensor([-6.6323, -6.6392, -6.6440])
+        expected_slice = torch.tensor([-12.5061, -12.5123, -12.5174])
         assert outputs.logits.shape == expected_shape
         assert torch.allclose(outputs.logits[0, 0, :3], expected_slice, atol=1e-4)
 

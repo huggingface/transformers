@@ -200,7 +200,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             ViltForVisualQuestionAnswering,
             ViltForImageRetrievalTextRetrieval,
             ViltForMaskedLM,
-            ViltForNaturalLanguageVisualReasoning,
+            # ViltForNaturalLanguageVisualReasoning,
         )
         if is_torch_available()
         else ()
@@ -456,6 +456,31 @@ class ViltModelIntegrationTest(unittest.TestCase):
         return ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa") if is_vision_available() else None
 
     @slow
+    def test_inference_masked_lm(self):
+        # TODO replace nielsr by dandelin
+        model = ViltForMaskedLM.from_pretrained("nielsr/vilt-b32-mlm").to(torch_device)
+
+        processor = self.default_processor
+        image = prepare_img()
+        text = "a bunch of [MASK] laying on a [MASK]."
+        inputs = processor(image, text, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size([1, 11, 30522])
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-12.5061, -12.5123, -12.5174]).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3], expected_slice, atol=1e-4))
+
+        # verify masked token prediction equals "cats"
+        predicted_id = outputs.logits[0, 4, :].argmax(-1).item()
+        assert processor.decode([predicted_id]) == "cats"
+
+    @slow
     def test_inference_visual_question_answering(self):
         model = ViltForVisualQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa").to(torch_device)
 
@@ -465,7 +490,8 @@ class ViltModelIntegrationTest(unittest.TestCase):
         inputs = processor(image, text, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 3129))
