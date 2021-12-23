@@ -367,6 +367,7 @@ def main():
         label_list = features[label_column_name].feature.names
         # No need to convert the labels since they are already ints.
         label_to_id = {i: i for i in range(len(label_list))}
+
     else:
         label_list = get_label_list(raw_datasets["train"][label_column_name])
         label_to_id = {l: i for i, l in enumerate(label_list)}
@@ -374,6 +375,7 @@ def main():
 
     # Map that sends B-Xxx label to its I-Xxx counterpart
     b_to_i_label = []
+
     for idx, label in enumerate(label_list):
         if label.startswith("B-") and label.replace("B-", "I-") in label_list:
             b_to_i_label.append(label_list.index(label.replace("B-", "I-")))
@@ -543,7 +545,7 @@ def main():
         return tokenized_inputs
 
     def filtering_out_labels(examples):
-        filtered_out_labels = args.filter_out_labels.split(",")
+        filtered_out_labels = [label_to_id[val] for val in args.filter_out_labels.split(",")]
 
         for ex_id in range(len(examples["ner_tags"])):
             for tag_id in range(len(examples["ner_tags"][ex_id])):
