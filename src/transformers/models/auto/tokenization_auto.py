@@ -32,7 +32,7 @@ from ...file_utils import (
 )
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from ...tokenization_utils_fast import TOKENIZER_FILE, PreTrainedTokenizerFast
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
