@@ -394,7 +394,7 @@ class GenerationMixin:
             )
 
         # 5. Some encoder-decoder models have different names for model and encoder
-        if self.config.is_encoder_decoder and self.encoder.main_input_name != input_name:
+        if self.config.is_encoder_decoder and hasattr(self, "encoder") and self.encoder.main_input_name != input_name:
             input_name = self.encoder.main_input_name
 
         # 6. if `inputs` is still None, try to create `input_ids` from BOS token
