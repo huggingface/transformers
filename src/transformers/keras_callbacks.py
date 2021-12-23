@@ -162,7 +162,7 @@ class KerasMetricCallback(Callback):
                 labels = None
             if self.predict_with_generate:
                 if isinstance(batch, dict):
-                    generation_inputs = batch[self.model.main_input_name]
+                    generation_inputs = batch[self.main_input_name]
                     attention_mask = batch.get("attention_mask", None)
                 else:
                     generation_inputs = batch
