@@ -18,11 +18,13 @@ import importlib
 import json
 import os
 from collections import OrderedDict
+from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import (
     cached_path,
+    get_list_of_files,
     hf_bucket_url,
     is_offline_mode,
     is_sentencepiece_available,
@@ -30,7 +32,7 @@ from ...file_utils import (
 )
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_fast import TOKENIZER_FILE, PreTrainedTokenizerFast
 from ...utils import logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
@@ -330,6 +332,17 @@ def get_tokenizer_config(
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
 
+    # Will raise a ValueError if `pretrained_model_name_or_path` is not a valid path or model identifier
+    repo_files = get_list_of_files(
+        pretrained_model_name_or_path,
+        revision=revision,
+        use_auth_token=use_auth_token,
+        local_files_only=local_files_only,
+    )
+    if TOKENIZER_CONFIG_FILE not in [Path(f).name for f in repo_files]:
+        print("No TOKENIZER_CONFIG_FILE, aborting")
+        return {}
+
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     if os.path.isdir(pretrained_model_name_or_path):
         config_file = os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
@@ -350,7 +363,7 @@ def get_tokenizer_config(
             use_auth_token=use_auth_token,
         )
 
-    except (EnvironmentError, ValueError):
+    except EnvironmentError:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
 
