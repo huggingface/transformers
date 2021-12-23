@@ -704,6 +704,57 @@ class TFCamembertModel:
         requires_backends(self, ["tf"])
 
 
+TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFCLIPModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFCLIPPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFCLIPTextModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFCLIPVisionModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
