@@ -149,7 +149,9 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_tokenizers
     def test_tokenizer_identifier_non_existent(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast, AutoTokenizer]:
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(
+                ValueError, ".*is not a local path or a model identifier on the model Hub. Did you make a typo?"
+            ):
                 _ = tokenizer_class.from_pretrained("julien-c/herlolip-not-exists")
 
     def test_parents_and_children_in_mappings(self):
@@ -237,7 +239,6 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
         with tempfile.TemporaryDirectory() as tmp_dir:
             tokenizer.save_pretrained(tmp_dir)
-            print(os.listdir(tmp_dir))
             config = get_tokenizer_config(tmp_dir)
 
         # Check the class of the tokenizer was properly saved (note that it always saves the slow class).
