@@ -162,13 +162,16 @@ class Seq2SeqTrainer(Trainer):
         }
 
         # prepare generation inputs
-        input_name = self.main_input_name
-        generation_inputs = {input_name: inputs[input_name]}
-        if "attention_mask" in inputs:
-            generation_inputs["attention_mask"] = inputs["attention_mask"]
+        # some encoder-decoder models can have varying encder's and thus
+        # varying model input names
+        if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
+            generation_inputs = inputs[self.model.encoder.main_input_name]
+        else:
+            generation_inputs = inputs[self.model.main_input_name]
 
         generated_tokens = self.model.generate(
-            **generation_inputs,
+            generation_inputs,
+            attention_mask=inputs.get("attention_mask", None),
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
