@@ -50,6 +50,7 @@ from tqdm.auto import tqdm
 import requests
 from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
+from requests.exceptions import HTTPError
 from transformers.utils.versions import importlib_metadata
 
 from . import __version__
@@ -2100,7 +2101,13 @@ def get_list_of_files(
         token = HfFolder.get_token()
     else:
         token = None
-    return list_repo_files(path_or_repo, revision=revision, token=token)
+
+    try:
+        return list_repo_files(path_or_repo, revision=revision, token=token)
+    except HTTPError as e:
+        raise ValueError(
+            f"{path_or_repo} is not a local path or a model identifier on the model Hub. Did you make a typo?"
+        ) from e
 
 
 class cached_property(property):
