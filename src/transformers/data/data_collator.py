@@ -17,8 +17,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
-import numpy as np
-
 from ..file_utils import PaddingStrategy
 from ..models.bert import BertTokenizer, BertTokenizerFast
 from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
@@ -317,8 +315,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         if labels is None:
             return batch
 
-        prop = "entity_ids" if "entity_ids" in batch.keys() else "input_ids"
-        sequence_length = torch.tensor(batch[prop]).shape[1]
+        sequence_length = torch.tensor(batch["input_ids"]).shape[1]
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
             batch[label_name] = [
@@ -328,32 +325,6 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             batch[label_name] = [
                 [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
             ]
-
-        def padding_tensor(sequences, padding_value):
-            if isinstance(padding_value, tuple):
-                out_tensor = np.full((len(sequences), sequence_length, 2), padding_value)
-            else:
-                out_tensor = np.full((len(sequences), sequence_length), padding_value)
-
-            for i, tensor in enumerate(sequences):
-                if padding_side == "right":
-                    if isinstance(padding_value, tuple):
-                        out_tensor[i, : len(tensor[:sequence_length]), :2] = tensor[:sequence_length]
-                    else:
-                        out_tensor[i, : len(tensor[:sequence_length])] = tensor[:sequence_length]
-                else:
-                    if isinstance(padding_value, tuple):
-                        out_tensor[i, len(tensor[:sequence_length]) - 1 :, :2] = tensor[:sequence_length]
-                    else:
-                        out_tensor[i, len(tensor[:sequence_length]) - 1 :] = tensor[:sequence_length]
-
-            return out_tensor.tolist()
-
-        if prop == "entity_ids":
-            ner_tags = [feature["ner_tags"] for feature in features]
-            batch["ner_tags"] = padding_tensor(ner_tags, -1)
-            original_entity_spans = [feature["original_entity_spans"] for feature in features]
-            batch["original_entity_spans"] = padding_tensor(original_entity_spans, (-1, -1))
 
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
         return batch
