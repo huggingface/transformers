@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("clip", "TFCLIPModel"),
         ("deberta-v2", "TFDebertaV2Model"),
         ("deberta", "TFDebertaModel"),
         ("rembert", "TFRemBertModel"),
