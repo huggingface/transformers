@@ -15,7 +15,6 @@
 """ AutoProcessor class. """
 import importlib
 import json
-import os
 from collections import OrderedDict
 
 # Build the list of all feature extractors
@@ -160,7 +159,9 @@ class AutoProcessor:
                 return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         if TOKENIZER_CONFIG_FILE in model_file_names:
-            with open(os.path.join(model_files[0], TOKENIZER_CONFIG_FILE), encoding="utf-8") as f:
+            tokenizer_file = next(filter(lambda f: f.endswith(TOKENIZER_CONFIG_FILE), model_files))
+            import ipdb; ipdb.set_trace()
+            with open(tokenizer_file, encoding="utf-8") as f:
                 config_dict = json.load(f)
             if "processor_class" in config_dict:
                 processor_class = processor_class_from_name(config_dict["processor_class"])
