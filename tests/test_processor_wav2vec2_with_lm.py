@@ -94,11 +94,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         # feature extractor
-        processor_class_str = processor.__class__.__name__
-        self.assertEqual(
-            processor.feature_extractor.to_json_string(),
-            feature_extractor.to_json_string(processor_class_str=processor_class_str),
-        )
+        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, Wav2Vec2FeatureExtractor)
 
         # decoder
