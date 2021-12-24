@@ -395,24 +395,24 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import FlaxVisionEncoderDecoderModel
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import FlaxVisionEncoderDecoderModel
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
 
-            >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
+        >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
 
-            >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
-            >>> encoder_outputs = model.encode(pixel_values)
-
-        """
+        >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
+        >>> encoder_outputs = model.encode(pixel_values)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -471,31 +471,31 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import FlaxVisionEncoderDecoderModel
-            >>> import jax.numpy as jnp
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import FlaxVisionEncoderDecoderModel
+        >>> import jax.numpy as jnp
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
 
-            >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
+        >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
 
-            >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
-            >>> encoder_outputs = model.encode(pixel_values)
+        >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
+        >>> encoder_outputs = model.encode(pixel_values)
 
-            >>> decoder_start_token_id = model.config.decoder.bos_token_id
-            >>> decoder_input_ids = jnp.ones((pixel_values.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder.bos_token_id
+        >>> decoder_input_ids = jnp.ones((pixel_values.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -599,34 +599,35 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import FlaxVisionEncoderDecoderModel, ViTFeatureExtractor, GPT2Tokenizer
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import FlaxVisionEncoderDecoderModel, ViTFeatureExtractor, GPT2Tokenizer
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
 
-            >>> # load output tokenizer
-            >>> tokenizer_output = GPT2Tokenizer.from_pretrained('gpt2')
+        >>> # load output tokenizer
+        >>> tokenizer_output = GPT2Tokenizer.from_pretrained('gpt2')
 
-            >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
+        >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
 
-            >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
+        >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
 
-            >>> # use GPT2's eos_token as the pad as well as eos token
-            >>> model.config.eos_token_id = model.config.decoder.eos_token_id
-            >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> # use GPT2's eos_token as the pad as well as eos token
+        >>> model.config.eos_token_id = model.config.decoder.eos_token_id
+        >>> model.config.pad_token_id = model.config.eos_token_id
 
-            >>> # generation
-            >>> sequences = model.generate(pixel_values, num_beams=4, max_length=12).sequences
+        >>> # generation
+        >>> sequences = model.generate(pixel_values, num_beams=4, max_length=12).sequences
 
-            >>> captions = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)
-        """
+        >>> captions = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

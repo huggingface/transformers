@@ -263,26 +263,28 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
-        Initializing `TFEncoderDecoderModel` from a pytorch checkpoint is not supported currently.
+        Initializing *TFEncoderDecoderModel* from a pytorch checkpoint is not supported currently.
 
-        If there are only pytorch checkpoints for a particular encoder-decoder model, a workaround is::
+        If there are only pytorch checkpoints for a particular encoder-decoder model, a workaround is:
 
-            >>> # a workaround to load from pytorch checkpoint
-            >>> _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-            >>> _model.encoder.save_pretrained("./encoder")
-            >>> _model.decoder.save_pretrained("./decoder")
-            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-            ... )
-            >>> # This is only for copying some specific attributes of this particular model.
-            >>> model.config = _model.config
+        ```python
+        >>> # a workaround to load from pytorch checkpoint
+        >>> _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+        >>> _model.encoder.save_pretrained("./encoder")
+        >>> _model.decoder.save_pretrained("./decoder")
+        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
+        ... )
+        >>> # This is only for copying some specific attributes of this particular model.
+        >>> model.config = _model.config
+        ```
 
-        Example::
+        Example:
 
-            >>> from transformers import TFEncoderDecoderModel
-            >>> model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
-
-        """
+        ```python
+        >>> from transformers import TFEncoderDecoderModel
+        >>> model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
+        ```"""
 
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
@@ -481,31 +483,31 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import TFEncoderDecoderModel, BertTokenizer
+        ```python
+        >>> from transformers import TFEncoderDecoderModel, BertTokenizer
 
-            >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
+        >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
+        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 
-            >>> # forward
-            >>> input_ids = tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='tf')  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+        >>> # forward
+        >>> input_ids = tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='tf')  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
-            >>> # training
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
-            >>> loss, logits = outputs.loss, outputs.logits
+        >>> # training
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+        >>> loss, logits = outputs.loss, outputs.logits
 
-            >>> # save and load from pretrained
-            >>> model.save_pretrained("bert2gpt2")
-            >>> model = TFEncoderDecoderModel.from_pretrained("bert2gpt2")
+        >>> # save and load from pretrained
+        >>> model.save_pretrained("bert2gpt2")
+        >>> model = TFEncoderDecoderModel.from_pretrained("bert2gpt2")
 
-            >>> # generation
-            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
-
-        """
+        >>> # generation
+        >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}

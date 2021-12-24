@@ -820,21 +820,22 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model
-            >>> from PIL import Image
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model
+        >>> from PIL import Image
 
-            >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
-            >>> model = LayoutLMv2Model.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> model = LayoutLMv2Model.from_pretrained('microsoft/layoutlmv2-base-uncased')
 
-            >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
-            >>> encoding = processor(image, return_tensors="pt")
+        >>> encoding = processor(image, return_tensors="pt")
 
-            >>> outputs = model(**encoding)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -942,8 +943,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     """
     LayoutLMv2 Model with a sequence classification head on top (a linear layer on top of the concatenation of the
     final hidden state of the [CLS] token, average-pooled initial visual embeddings and average-pooled final visual
-    embeddings, e.g. for document image classification tasks such as the `RVL-CDIP
-    <https://www.cs.cmu.edu/~aharley/rvl-cdip/>`__ dataset.
+    embeddings, e.g. for document image classification tasks such as the
+    [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset.
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -1109,9 +1110,9 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 @add_start_docstrings(
     """
     LayoutLMv2 Model with a token classification head on top (a linear layer on top of the text part of the hidden
-    states) e.g. for sequence labeling (information extraction) tasks such as `FUNSD
-    <https://guillaumejaume.github.io/FUNSD/>`__, `SROIE <https://rrc.cvc.uab.es/?ch=13>`__, `CORD
-    <https://github.com/clovaai/cord>`__ and `Kleister-NDA <https://github.com/applicaai/kleister-nda>`__.
+    states) e.g. for sequence labeling (information extraction) tasks such as
+    [FUNSD](https://guillaumejaume.github.io/FUNSD/), [SROIE](https://rrc.cvc.uab.es/?ch=13),
+    [CORD](https://github.com/clovaai/cord) and [Kleister-NDA](https://github.com/applicaai/kleister-nda).
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
@@ -1225,8 +1226,8 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    LayoutLMv2 Model with a span classification head on top for extractive question-answering tasks such as `DocVQA
-    <https://rrc.cvc.uab.es/?ch=17>`__ (a linear layer on top of the text part of the hidden-states output to compute
+    LayoutLMv2 Model with a span classification head on top for extractive question-answering tasks such as
+    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the text part of the hidden-states output to compute
     `span start logits` and `span end logits`).
     """,
     LAYOUTLMV2_START_DOCSTRING,

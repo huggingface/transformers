@@ -216,17 +216,19 @@ PARALLELIZE_DOCSTRING = r"""
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
 
-    Example::
+    Example:
 
-        # On a 4 GPU machine with t5-3b:
-        model = T5ForConditionalGeneration.from_pretrained('t5-3b')
-        device_map = {0: [0, 1, 2],
+    ```python
+    # On a 4 GPU machine with t5-3b:
+    model = T5ForConditionalGeneration.from_pretrained('t5-3b')
+    device_map = {0: [0, 1, 2],
 
-                     1: [3, 4, 5, 6, 7, 8, 9],
-                     2: [10, 11, 12, 13, 14, 15, 16],
-                     3: [17, 18, 19, 20, 21, 22, 23]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+                 1: [3, 4, 5, 6, 7, 8, 9],
+                 2: [10, 11, 12, 13, 14, 15, 16],
+                 3: [17, 18, 19, 20, 21, 22, 23]}
+    model.parallelize(device_map) # Splits the model across several devices
+    model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    ```
 """
 
 
@@ -1339,20 +1341,21 @@ class T5Model(T5PreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import T5Tokenizer, T5Model
+        ```python
+        >>> from transformers import T5Tokenizer, T5Model
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5Model.from_pretrained('t5-small')
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5Model.from_pretrained('t5-small')
 
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
-            >>> # forward pass
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> # forward pass
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1790,15 +1793,16 @@ class T5EncoderModel(T5PreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import T5Tokenizer, T5EncoderModel
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5EncoderModel.from_pretrained('t5-small')
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        ```python
+        >>> from transformers import T5Tokenizer, T5EncoderModel
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5EncoderModel.from_pretrained('t5-small')
+        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+        >>> outputs = model(input_ids=input_ids)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(

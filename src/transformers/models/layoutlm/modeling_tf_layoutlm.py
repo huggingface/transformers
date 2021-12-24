@@ -947,34 +947,35 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
-            >>> import tensorflow as tf
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
+        >>> import tensorflow as tf
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMModel.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> model = TFLayoutLMModel.from_pretrained('microsoft/layoutlm-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "world"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

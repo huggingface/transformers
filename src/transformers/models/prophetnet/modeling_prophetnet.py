@@ -55,7 +55,7 @@ PROPHETNET_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    Original ProphetNet code can be found at <https://github.com/microsoft/ProphetNet> . Checkpoints were converted
+    Original ProphetNet code can be found [here](https://github.com/microsoft/ProphetNet). Checkpoints were converted
     from original Fairseq checkpoints. For more information on the checkpoint conversion, please take a look at the
     file `convert_prophetnet_original_pytorch_checkpoint_to_pytorch.py`.
 
@@ -1271,18 +1271,19 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import ProphetNetTokenizer, ProphetNetEncoder
-            >>> import torch
+        ```python
+        >>> from transformers import ProphetNetTokenizer, ProphetNetEncoder
+        >>> import torch
 
-            >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone')
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
+        >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
+        >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone')
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
 
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1788,20 +1789,21 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import ProphetNetTokenizer, ProphetNetModel
+        ```python
+        >>> from transformers import ProphetNetTokenizer, ProphetNetModel
 
-            >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetModel.from_pretrained('microsoft/prophetnet-large-uncased')
+        >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
+        >>> model = ProphetNetModel.from_pretrained('microsoft/prophetnet-large-uncased')
 
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
-            >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
-            >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
-        """
+        >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
+        >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
+        ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

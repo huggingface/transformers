@@ -214,8 +214,8 @@ def _compute_mask_indices(
         mask_length: size of the mask
         min_masks: minimum number of masked spans
 
-    Adapted from `fairseq's data_utils.py
-    <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
+    Adapted from [fairseq's
+    data_utils.py](https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376).
     """
     batch_size, sequence_length = shape
 
@@ -1137,8 +1137,8 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
     def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: Optional[tf.Tensor] = None):
         """
-        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
-        <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
         batch_size, sequence_length, hidden_size = shape_list(hidden_states)
 
@@ -1396,26 +1396,27 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import Wav2Vec2Processor, TFWav2Vec2Model
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
+        ```python
+        >>> from transformers import Wav2Vec2Processor, TFWav2Vec2Model
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
-            >>> def map_to_array(batch):
-            >>>     speech, _ = sf.read(batch["file"])
-            >>>     batch["speech"] = speech
-            >>>     return batch
+        >>> def map_to_array(batch):
+        >>>     speech, _ = sf.read(batch["file"])
+        >>>     batch["speech"] = speech
+        >>>     return batch
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-        """
+        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
+        >>> hidden_states = model(input_values).last_hidden_state
+        ```"""
 
         inputs = input_values_processing(
             func=self.call,
