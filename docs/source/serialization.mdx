@@ -252,7 +252,7 @@ Since DistilBERT is an encoder-based model, its configuration inherits from
 `OnnxConfig`:
 
 ```python
-from typing import Mapping
+from typing import Mapping, OrderedDict
 from transformers.onnx import OnnxConfig
 
 class DistilBertOnnxConfig(OnnxConfig):
