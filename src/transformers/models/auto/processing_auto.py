@@ -14,7 +14,6 @@
 # limitations under the License.
 """ AutoProcessor class. """
 import importlib
-import json
 from collections import OrderedDict
 
 # Build the list of all feature extractors
@@ -30,6 +29,7 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .tokenization_auto import get_tokenizer_config
 
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
@@ -152,17 +152,16 @@ class AutoProcessor:
         # strip to file name
         model_file_names = [f.split("/")[-1] for f in model_files]
 
+        # Let's start by checking whether the processor class is saved in a feature extractor
         if FEATURE_EXTRACTOR_NAME in model_file_names:
             config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
             if "processor_class" in config_dict:
                 processor_class = processor_class_from_name(config_dict["processor_class"])
                 return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
+        # Next, let's whether the processor class is saved in a tokenizer
         if TOKENIZER_CONFIG_FILE in model_file_names:
-            tokenizer_file = next(filter(lambda f: f.endswith(TOKENIZER_CONFIG_FILE), model_files))
-            import ipdb; ipdb.set_trace()
-            with open(tokenizer_file, encoding="utf-8") as f:
-                config_dict = json.load(f)
+            config_dict = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
             if "processor_class" in config_dict:
                 processor_class = processor_class_from_name(config_dict["processor_class"])
                 return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
