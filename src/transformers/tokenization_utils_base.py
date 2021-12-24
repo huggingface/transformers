@@ -1371,39 +1371,35 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
-
-        - **vocab_files_names** (*Dict[str, str]*) -- A dictionary with, as keys, the *__init__* keyword name of
+        - **vocab_files_names** (`Dict[str, str]`) -- A dictionary with, as keys, the `__init__` keyword name of
           each vocabulary file required by the model, and as associated values, the filename for saving the associated
           file (string).
-        - **pretrained_vocab_files_map** (*Dict[str, Dict[str, str]]*) -- A dictionary of dictionaries, with the
-          high-level keys being the *__init__* keyword name of each vocabulary file required by the model, the
-          low-level being the *short-cut-names* of the pretrained models with, as associated values, the
-          *url* to the associated pretrained vocabulary file.
-        - **max_model_input_sizes** (*Dict[str, Optional[int]]*) -- A dictionary with, as keys, the
-          *short-cut-names* of the pretrained models, and as associated values, the maximum length of the sequence
-          inputs of this model, or *None* if the model has no maximum input size.
-        - **pretrained_init_configuration** (*Dict[str, Dict[str, Any]]*) -- A dictionary with, as keys, the
-          *short-cut-names* of the pretrained models, and as associated values, a dictionary of specific arguments
-          to pass to the *__init__* method of the tokenizer class for this pretrained model when loading the
-          tokenizer with the [*~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained*]
+        - **pretrained_vocab_files_map** (`Dict[str, Dict[str, str]]`) -- A dictionary of dictionaries, with the
+          high-level keys being the `__init__` keyword name of each vocabulary file required by the model, the
+          low-level being the `short-cut-names` of the pretrained models with, as associated values, the
+          `url` to the associated pretrained vocabulary file.
+        - **max_model_input_sizes** (`Dict[str, Optional[int]]`) -- A dictionary with, as keys, the
+          `short-cut-names` of the pretrained models, and as associated values, the maximum length of the sequence
+          inputs of this model, or `None` if the model has no maximum input size.
+        - **pretrained_init_configuration** (`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
+          `short-cut-names` of the pretrained models, and as associated values, a dictionary of specific arguments
+          to pass to the `__init__` method of the tokenizer class for this pretrained model when loading the
+          tokenizer with the [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`]
           method.
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding
           applied. Should be `'right'` or `'left'`.
-        - **truncation_side** (`str`) -- The default value for the side on which the model should truncate
-          sequences. Should be `'right'` or `'left'`.
-
     Args:
-        model_max_length (*int*, *optional*):
+        model_max_length (`int`, *optional*):
             The maximum length (in number of tokens) for the inputs to the transformer model. When the tokenizer is
-            loaded with [*~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained*], this
-            will be set to the value stored for the associated model in *max_model_input_sizes* (see above). If no
-            value is provided, will default to VERY_LARGE_INTEGER (*int(1e30)*).
-        padding_side: (*str*, *optional*):
+            loaded with [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], this
+            will be set to the value stored for the associated model in `max_model_input_sizes` (see above). If no
+            value is provided, will default to VERY_LARGE_INTEGER (`int(1e30)`).
+        padding_side: (`str`, *optional*):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         truncation_side: (`str`, *optional*):
-            The side on which the model should truncate sequences. Should be selected between ['right', 'left'].
+            The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
@@ -1419,21 +1415,21 @@ INIT_TOKENIZER_DOCSTRING = r"""
             `self.unk_token_id`.
         sep_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token separating two different sentences in the same input (used by BERT for instance). Will be
-            associated to *self.sep_token* and *self.sep_token_id*.
-        pad_token (*str* or *tokenizers.AddedToken*, *optional*):
+            associated to `self.sep_token` and `self.sep_token_id`.
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
-            attention mechanisms or loss computation. Will be associated to *self.pad_token* and
-            *self.pad_token_id*.
-        cls_token (*str* or *tokenizers.AddedToken*, *optional*):
+            attention mechanisms or loss computation. Will be associated to `self.pad_token` and
+            `self.pad_token_id`.
+        cls_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token representing the class of the input (used by BERT for instance). Will be associated to
-            *self.cls_token* and *self.cls_token_id*.
-        mask_token (*str* or *tokenizers.AddedToken*, *optional*):
+            `self.cls_token` and `self.cls_token_id`.
+        mask_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token representing a masked token (used by masked-language modeling pretraining objectives, like
-            BERT). Will be associated to *self.mask_token* and *self.mask_token_id*.
-        additional_special_tokens (tuple or list of *str* or *tokenizers.AddedToken*, *optional*):
+            BERT). Will be associated to `self.mask_token` and `self.mask_token_id`.
+        additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional special tokens. Add them here to ensure they won't be split by the
-            tokenization process. Will be associated to *self.additional_special_tokens* and
-            *self.additional_special_tokens_ids*.
+            tokenization process. Will be associated to `self.additional_special_tokens` and
+            `self.additional_special_tokens_ids`.
 """
 
 
@@ -3012,50 +3008,37 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         stride: int = 0,
     ) -> Tuple[List[int], List[int], List[int]]:
         """
-                Truncates a sequence pair in-place following the strategy.
-
-                Args:
-                    ids (*List[int]*):
-                        Tokenized input ids of the first sequence. Can be obtained from a string by chaining the *tokenize*
-                        and *convert_tokens_to_ids* methods.
-                    pair_ids (*List[int]*, *optional*):
-                        Tokenized input ids of the second sequence. Can be obtained from a string by chaining the *tokenize*
-                        and *convert_tokens_to_ids* methods.
-                    num_tokens_to_remove (*int*, *optional*, defaults to 0):
-                        Number of tokens to remove using the truncation strategy.
-                    truncation_strategy (*str* or [*~tokenization_utils_base.TruncationStrategy*], *optional*, defaults to *False*):
-                        The strategy to follow for truncation. Can be:
-
-                        - *'longest_first'*: Truncate to a maximum length specified with the argument *max_length* or
-                          to the maximum acceptable input length for the model if that argument is not provided. This will
-                          truncate token by token, removing a token from the longest sequence in the pair if a pair of
-                          sequences (or a batch of pairs) is provided.
-                        - *'only_first'*: Truncate to a maximum length specified with the argument *max_length* or to
-                          the maximum acceptable input length for the model if that argument is not provided. This will only
-                          truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                        - *'only_second'*: Truncate to a maximum length specified with the argument *max_length* or
-                          to the maximum acceptable input length for the model if that argument is not provided. This will only
-                          truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                        - *'do_not_truncate'* (default): No truncation (i.e., can output batch with sequence lengths
-                          greater than the model maximum admissible input size).
-                <<<<<<< HEAD
-                            stride (*int*, *optional*, defaults to 0):
-                =======
-
-                                The tokenizer truncation sides are defined in self.truncation_side:
-
-                                    - 'left': truncates sequences from the left
-                                    - 'right': truncates sequences from the right
-
-                            stride (`int`, *optional*, defaults to 0):
-                >>>>>>> First pass
-                                If set to a positive number, the overflowing tokens returned will contain some tokens from the main
-                                sequence returned. The value of this argument defines the number of additional tokens.
-
-                        Returns:
-                            *Tuple[List[int], List[int], List[int]]*: The truncated *ids*, the truncated *pair_ids* and the
-                            list of overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if
-                            a pair of sequences (or a batch of pairs) is provided.
+        Truncates a sequence pair in-place following the strategy.
+        Args:
+            ids (`List[int]`):
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_tokens_to_ids` methods.
+            pair_ids (`List[int]`, *optional*):
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_tokens_to_ids` methods.
+            num_tokens_to_remove (`int`, *optional*, defaults to 0):
+                Number of tokens to remove using the truncation strategy.
+            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+                The strategy to follow for truncation. Can be:
+                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
+                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
+            stride (`int`, *optional*, defaults to 0):
+                If set to a positive number, the overflowing tokens returned will contain some tokens from the main
+                sequence returned. The value of this argument defines the number of additional tokens.
+        Returns:
+            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the
+            list of overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if
+            a pair of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
             return ids, pair_ids, []
@@ -3064,36 +3047,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
-        if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
-            for _ in range(num_tokens_to_remove):
-                if pair_ids is None or len(ids) > len(pair_ids):
-                    if not overflowing_tokens:
-                        window_len = min(len(ids), stride + 1)
-                    else:
-                        window_len = 1
-                    if self.truncation_side == "right":
-                        overflowing_tokens.extend(ids[-window_len:])
-                        ids = ids[:-1]
-                    elif self.truncation_side == "left":
-                        overflowing_tokens.extend(ids[:window_len])
-                        ids = ids[1:]
-                    else:
-                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
-                else:
-                    if not overflowing_tokens:
-                        window_len = min(len(pair_ids), stride + 1)
-                    else:
-                        window_len = 1
-                    if self.truncation_side == "right":
-                        overflowing_tokens.extend(pair_ids[-window_len:])
-                        pair_ids = pair_ids[:-1]
-                    elif self.truncation_side == "left":
-                        overflowing_tokens.extend(pair_ids[:window_len])
-                        pair_ids = pair_ids[1:]
-                    else:
-                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
-
-        elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
+        if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
+            truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
+        ):
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
                 if self.truncation_side == "right":
@@ -3124,9 +3080,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
-                    ids = ids[:-1]
+                    if self.truncation_side == "right":
+                        ids = ids[:-1]
+                    elif self.truncation_side == "left":
+                        ids = ids[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
                 else:
-                    pair_ids = pair_ids[:-1]
+                    if self.truncation_side == "right":
+                        pair_ids = pair_ids[:-1]
+                    elif self.truncation_side == "left":
+                        pair_ids = pair_ids[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
