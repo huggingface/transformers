@@ -12,6 +12,16 @@ specific language governing permissions and limitations under the License.
 
 # Exporting 🤗 Transformers Models
 
+If you need to deploy 🤗 Transformers models in production environments, we
+recommend exporting them to a serialized format that can be loaded and executed
+on specialized runtimes and hardware. In this guide, we'll show you how to
+export 🤗 Transformers models in two widely used formats: ONNX and TorchScript.
+
+Once exported, a model can optimized for inference via techniques such as
+quantization and pruning. If you are interested in optimizing your models to run
+with maximum efficiency, check out the [🤗 Optimum
+library](https://github.com/huggingface/optimum).
+
 ## ONNX
 
 The [ONNX (Open Neural Network eXchange)](http://onnx.ai) project is an open
@@ -29,7 +39,7 @@ be exported to ONNX format and then imported in TensorFlow (and vice versa).
 🤗 Transformers provides a `transformers.onnx` package that enables you to
 convert model checkpoints to an ONNX graph by leveraging configuration objects.
 These configuration objects come ready made for a number of model architectures,
-and are made to be easily extendable to other architectures.
+and are designed to be easily extendable to other architectures.
 
 Ready-made configurations include the following architectures:
 
@@ -54,9 +64,15 @@ The ONNX conversion is supported for the PyTorch versions of the models. If you
 would like to be able to convert a TensorFlow model, please let us know by
 opening an issue.
 
+In the next two sections, we'll show you how to:
+
+* Export a supported model using the `transformers.onnx` package.
+* Export a custom model for an unsupported architecture.
+
 ### Exporting a model to ONNX
 
-To export your models to ONNX, you'll first need to install some extra dependencies:
+To export a 🤗 Transformers model to ONNX, you'll first need to install some
+extra dependencies:
 
 ```bash
 pip install transformers[onnx]
@@ -189,9 +205,10 @@ Validating ONNX model...
 All good, model saved at: onnx/model.onnx
 ```
 
-Notice that in this case, the output names from the model are `logits` instead
-of the `last_hidden_state` we saw with the `distilbert-base-uncased` checkpoint
-earlier.
+Notice that in this case, the output names from the fine-tuned model are
+`logits` instead of the `last_hidden_state` we saw with the
+`distilbert-base-uncased` checkpoint earlier. This is expected since the
+fine-tuned model has a sequence classification head.
 
 <Tip>
 
@@ -208,7 +225,7 @@ If you wish to export a model whose architecture is not natively supported by
 the library, there are three main steps to follow:
 
 1. Implement a custom ONNX configuration.
-2. Export the model to ONNX format.
+2. Export the model to ONNX.
 3. Validate the outputs of the PyTorch and exported models.
 
 In this section, we'll look at how DistilBERT was implemented to show what's
@@ -290,7 +307,7 @@ OrderedDict([('last_hidden_state', {0: 'batch', 1: 'sequence'})])
 ```
 
 Notice that the outputs property follows the same structure as the inputs; it
-returns an `OrderedDict` of named outputs and their shapes. The type of output
+returns an `OrderedDict` of named outputs and their shapes. The output structure
 is linked to the choice of feature that the configuration is initialised with.
 By default, the ONNX configuration is initialized with the `default` feature
 that corresponds to exporting a model loaded with the `AutoModel` class. If you
@@ -310,9 +327,9 @@ print(onnx_config_for_seq_clf.outputs)
 
 <Tip>
 
-All of the base properties and methods associated with `OnnxConfig` and the
+All of the base properties and methods associated with [`OnnxConfig`] and the
 other configuration classes can be overriden if needed. Check out
-`BartOnnxConfig` for an advanced example.
+[`BartOnnxConfig`] for an advanced example.
 
 </Tip>
 
@@ -352,9 +369,10 @@ onnx.checker.check_model(onnx_model)
 
 <Tip>
 
-If your model is larger than 2GB, you will see many additional files are created
-during the export. This is _expected_ because ONNX uses Protocol Buffers to
-store the model and these have a size limit of 2GB. See the [ONNX
+If your model is larger than 2GB, you will see that many additional files are
+created during the export. This is _expected_ because ONNX uses [Protocol
+Buffers](https://developers.google.com/protocol-buffers/) to store the model and
+these have a size limit of 2GB. See the [ONNX
 documentation](https://github.com/onnx/onnx/blob/master/docs/ExternalData.md)
 for instructions on how to load models with external data.
 
@@ -391,9 +409,16 @@ We are looking to expand the set of ready-made configurations and welcome
 contributions from the community! If you would like to contribute your addition
 to the library, you will need to:
 
-* Implement the ONNX configuration in the corresponding `configuration_x.py` file
-* Include the model architecture and corresponding features in `features.FeatureManager`
-* Add your model architecture to the tests in `test_onnx_v2.py`
+* Implement the ONNX configuration in the corresponding `configuration_x.py`
+file
+* Include the model architecture and corresponding features in
+[`~onnx.features.FeatureManager`]
+* Add your model architecture to the tests in
+`test_onnx_v2.py`
+
+Check out how the configuration for [IBERT was
+contributed](https://github.com/huggingface/transformers/pull/14868/files) to
+get an idea of what's involved.
 
 ## TorchScript
 
