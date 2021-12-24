@@ -26,7 +26,14 @@ from transformers import (
     Wav2Vec2ForCTC,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_torchaudio, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    require_datasets,
+    require_tf,
+    require_torch,
+    require_torchaudio,
+    slow,
+)
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
