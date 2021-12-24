@@ -805,7 +805,8 @@ class SEWModel(SEWPreTrainedModel):
             self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         self.encoder = SEWEncoder(config)
 
