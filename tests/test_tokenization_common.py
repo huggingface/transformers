@@ -1589,24 +1589,44 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                sequence = "I wanted to go running"
+                sequence = "I wanted to go running, swimming and singing."
                 max_length = 5
+
+                tokenize_sequence = tokenizer(sequence, add_special_tokens=False)
 
                 # LEFT TRUNCATION
                 tokenizer.truncation_side = "left"
-                truncated_sequence_left = tokenizer.encode(
+                truncated_sequence_left_without_special_tokens = tokenizer(
+                    sequence, max_length=max_length, truncation=True, add_special_tokens=False
+                )
+                truncated_sequence_left_with_special_tokens = tokenizer(
                     sequence,
                     max_length=max_length,
                     truncation=True,
                 )
-                truncated_sequence_left_length = len(truncated_sequence_left)
-                self.assertEqual(max_length, truncated_sequence_left_length)
+
+                for key in tokenize_sequence.keys():
+                    self.assertEqual(max_length, len(truncated_sequence_left_with_special_tokens[key]))
+                    self.assertListEqual(
+                        tokenize_sequence[key][-max_length:], truncated_sequence_left_without_special_tokens[key]
+                    )
 
                 # RIGHT TRUNCATION
                 tokenizer.truncation_side = "right"
-                truncated_sequence_right = tokenizer.encode(sequence, max_length=max_length, truncation=True)
-                truncated_sequence_right_length = len(truncated_sequence_right)
-                self.assertEqual(max_length, truncated_sequence_right_length)
+                truncated_sequence_right_without_special_tokens = tokenizer(
+                    sequence, max_length=max_length, truncation=True, add_special_tokens=False
+                )
+                truncated_sequence_right_with_special_tokens = tokenizer(
+                    sequence,
+                    max_length=max_length,
+                    truncation=True,
+                )
+
+                for key in tokenize_sequence.keys():
+                    self.assertEqual(max_length, len(truncated_sequence_right_with_special_tokens[key]))
+                    self.assertListEqual(
+                        tokenize_sequence[key][:max_length], truncated_sequence_right_without_special_tokens[key]
+                    )
 
     def test_separate_tokenizers(self):
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when
