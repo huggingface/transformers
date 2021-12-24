@@ -1371,6 +1371,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
+
         - **vocab_files_names** (`Dict[str, str]`) -- A dictionary with, as keys, the `__init__` keyword name of
           each vocabulary file required by the model, and as associated values, the filename for saving the associated
           file (string).
@@ -1389,6 +1390,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding
           applied. Should be `'right'` or `'left'`.
+
     Args:
         model_max_length (`int`, *optional*):
             The maximum length (in number of tokens) for the inputs to the transformer model. When the tokenizer is
@@ -3009,6 +3011,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     ) -> Tuple[List[int], List[int], List[int]]:
         """
         Truncates a sequence pair in-place following the strategy.
+
         Args:
             ids (`List[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize`
@@ -3020,6 +3023,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Number of tokens to remove using the truncation strategy.
             truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 The strategy to follow for truncation. Can be:
+
                 - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
                   to the maximum acceptable input length for the model if that argument is not provided. This will
                   truncate token by token, removing a token from the longest sequence in the pair if a pair of
@@ -3035,6 +3039,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             stride (`int`, *optional*, defaults to 0):
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
+
         Returns:
             `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the
             list of overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if

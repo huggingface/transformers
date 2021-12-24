@@ -342,7 +342,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     -max_length:
                 ]
                 if "attention_mask" in processed_features:
-                    processed_features["attention_mask"] = processed_features["attention_mask"][max_length:]
+                    processed_features["attention_mask"] = processed_features["attention_mask"][-max_length:]
             else:
                 raise ValueError(f"invalid truncation strategy: {self.truncation_side}")
 

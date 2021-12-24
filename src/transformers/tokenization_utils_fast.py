@@ -352,7 +352,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if _truncation is not None:
                 self._tokenizer.no_truncation()
         else:
-            target = {"max_length": max_length, "stride": stride, "strategy": truncation_strategy.value}
+            target = {
+                "max_length": max_length,
+                "stride": stride,
+                "strategy": truncation_strategy.value,
+                "direction": self.truncation_side,
+            }
             if _truncation != target:
                 self._tokenizer.enable_truncation(**target)
 

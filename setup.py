@@ -148,7 +148,7 @@ _deps = [
     "tensorflow>=2.3",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.10.1,<0.11",
+    "tokenizers>=0.10.1,<0.12",
     "torch>=1.0",
     "torchaudio",
     "pyctcdecode>=0.2.0",
