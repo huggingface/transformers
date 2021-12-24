@@ -789,17 +789,16 @@ class RealmEmbedderOutput(ModelOutput):
     Outputs of RealmEmbedder models.
 
     Args:
-        projected_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
+        projected_score (`torch.FloatTensor` of shape `(batch_size, config.retriever_proj_size)`):
 
             Projected score.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -816,11 +815,11 @@ class RealmRetrieverOutput(ModelOutput):
     Outputs of RealmRetriever models.
 
     Args:
-        relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_candidates)`):
+        relevance_score (`torch.FloatTensor` of shape `(batch_size, config.num_candidates)`):
             The relevance score of document candidates (before softmax).
-        query_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.retriever_proj_size)`):
+        query_score (`torch.FloatTensor` of shape `(batch_size, config.retriever_proj_size)`):
             Query score derived from the query embedder.
-        candidate_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_candidates, config.retriever_proj_size)`):
+        candidate_score (`torch.FloatTensor` of shape `(batch_size, config.num_candidates, config.retriever_proj_size)`):
             Candidate score derived from the embedder.
     """
 
@@ -835,11 +834,11 @@ class RealmSearcherOutput(ModelOutput):
     Outputs of RealmSearcher models.
 
     Args:
-        retrieved_logits (:obj:`torch.FloatTensor` of shape :obj:`(config.searcher_beam_size,)`):
+        retrieved_logits (`torch.FloatTensor` of shape `(config.searcher_beam_size,)`):
             The relevance score of document candidates (before softmax).
-        retrieved_blocks (:obj:`np.ndarray` of shape :obj:`(config.searcher_beam_size,)`):
+        retrieved_blocks (`np.ndarray` of shape `(config.searcher_beam_size,)`):
             Retrieved document blocks.
-        retrieved_block_ids (:obj:`torch.LongTensor` of shape :obj:`(config.searcher_beam_size,)`):
+        retrieved_block_ids (`torch.LongTensor` of shape `(config.searcher_beam_size,)`):
             IDs of retrieved blocks.
     """
 
@@ -854,32 +853,31 @@ class RealmReaderOutput(ModelOutput):
     Outputs of RealmReader models.
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
             Total loss.
-        retriever_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+        retriever_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
             Retriever loss.
-        reader_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`start_positions`, :obj:`end_positions`, :obj:`has_answers` are provided):
+        reader_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
             Reader loss.
-        retriever_correct (:obj:`torch.BoolTensor` of shape :obj:`(config.searcher_beam_size,)`, `optional`):
-            Whether or not a evidence block derived from `RealmSearcher` contains answer.
-        reader_correct (:obj:`torch.BoolTensor` of shape :obj:`(config.reader_beam_size, num_candidates)`, `optional`):
+        retriever_correct (`torch.BoolTensor` of shape `(config.searcher_beam_size,)`, *optional*):
+            Whether or not a evidence block derived from *RealmSearcher* contains answer.
+        reader_correct (`torch.BoolTensor` of shape `(config.reader_beam_size, num_candidates)`, *optional*):
             Whether or not a span candidate contains answer.
-        block_idx (:obj:`torch.LongTensor` of shape :obj:`()`):
+        block_idx (`torch.LongTensor` of shape `()`):
             The index of retrieved evidence blocks in which the predicted answer in most likely
-        candidate (:obj:`torch.LongTensor` of shape :obj:`()`):
+        candidate (`torch.LongTensor` of shape `()`):
             .
-        start_pos (:obj:`torch.IntTensor` of shape :obj:`()`):
-            Predicted answer starting position in `RealmReader`'s inputs.
-        end_pos: (:obj:`torch.IntTensor` of shape :obj:`()`):
-            Predicted answer ending position in `RealmReader`'s inputs.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        start_pos (`torch.IntTensor` of shape `()`):
+            Predicted answer starting position in *RealmReader*'s inputs.
+        end_pos: (`torch.IntTensor` of shape `()`):
+            Predicted answer ending position in *RealmReader*'s inputs.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -905,11 +903,11 @@ class RealmForOpenQAOutput(ModelOutput):
     Outputs of RealmReader models.
 
     Args:
-        searcher_output (:obj:`dict`):
+        searcher_output (`dict`):
             Searcher output.
-        reader_output (:obj:`dict`):
+        reader_output (`dict`):
             Reader output.
-        predicted_answer (:obj:`str`):
+        predicted_answer (`str`):
             Predicted answer.
     """
 
@@ -1088,65 +1086,63 @@ class RealmPreTrainedModel(PreTrainedModel):
 
 
 REALM_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
     and behavior.
 
     Parameters:
-        config (:class:`~transformers.RealmConfig`): Model configuration class with all the parameters of the model.
+        config ([`RealmConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 REALM_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.RealmTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`RealmTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
             than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1222,7 +1218,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 class RealmRetriever(RealmPreTrainedModel):
     r"""
     Args:
-        query_embedder (:class:`~transformers.RealmEmbedder`):
+        query_embedder ([`RealmEmbedder`]):
             Embedder for input sequences. If not specified, it will use the same embedder as candidate sequences.
     """
 
@@ -1254,32 +1250,31 @@ class RealmRetriever(RealmPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        candidate_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`):
+        candidate_input_ids (`torch.LongTensor` of shape `(batch_size, num_candidates, sequence_length)`):
             Indices of candidate input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.RealmTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`RealmTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        candidate_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        candidate_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_candidates, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        candidate_token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_candidates, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        candidate_token_type_ids (`torch.LongTensor` of shape `(batch_size, num_candidates, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        candidate_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_candidates, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`candidate_input_ids` you can choose to directly pass an embedded
-            representation. This is useful if you want more control over how to convert `candidate_input_ids` indices
+            [What are token type IDs?](../glossary#token-type-ids)
+        candidate_inputs_embeds (`torch.FloatTensor` of shape `(batch_size * num_candidates, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `candidate_input_ids` you can choose to directly pass an embedded
+            representation. This is useful if you want more control over how to convert *candidate_input_ids* indices
             into associated vectors than the model's internal embedding lookup matrix.
 
         Returns:
@@ -1382,42 +1377,43 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_candidates)`, `optional`):
+        relevance_score (`torch.FloatTensor` of shape `(batch_size, num_candidates)`, *optional*):
             Relevance score derived from RealmRetriever, must be specified if you want to compute the masked language
             modeling loss.
 
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
-        mlm_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        mlm_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid calculating joint loss on certain positions. If not specified, the loss will not be masked.
-            Mask values selected in ``[0, 1]``:
+            Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
         Returns:
 
-        Example::
+        Example:
 
-            >>> import torch
-            >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
+        ```python
+        >>> import torch
+        >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
 
-            >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
-            >>> model = RealmKnowledgeAugEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
+        >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
+        >>> model = RealmKnowledgeAugEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
 
-            >>> # batch_size = 2, num_candidates = 2
-            >>> text = [
-            >>>     ["Hello world!", "Nice to meet you!"],
-            >>>     ["The cute cat.", "The adorable dog."]
-            >>> ]
+        >>> # batch_size = 2, num_candidates = 2
+        >>> text = [
+        >>>     ["Hello world!", "Nice to meet you!"],
+        >>>     ["The cute cat.", "The adorable dog."]
+        >>> ]
 
-            >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-        """
+        >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        ```
+"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1497,7 +1493,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 class RealmSearcher(RealmPreTrainedModel):
     r"""
     Args:
-        block_records_path (:obj:`str`):
+        block_records_path (`str`):
             Block records path.
     """
 
@@ -1650,19 +1646,19 @@ class RealmReader(RealmPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        relevance_score (:obj:`torch.FloatTensor` of shape :obj:`(searcher_beam_size,)`, `optional`):
-            Relevance score derived from `RealmSearcher`, must be specified if you want to compute the marginal log
+        relevance_score (`torch.FloatTensor` of shape `(searcher_beam_size,)`, *optional*):
+            Relevance score derived from *RealmSearcher*, must be specified if you want to compute the marginal log
             loss.
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
-        has_answers (:obj:`torch.BoolTensor` of shape :obj:`(searcher_beam_size,)`, `optional`):
-            Whether or not the evidence blocks derived from `RealmSearcher` have answer(s).
+        has_answers (`torch.BoolTensor` of shape `(searcher_beam_size,)`, *optional*):
+            Whether or not the evidence blocks derived from *RealmSearcher* have answer(s).
 
         Returns:
         """
@@ -1784,14 +1780,13 @@ class RealmReader(RealmPreTrainedModel):
 
 REALM_FOR_OPEN_QA_DOCSTRING = r"""
     Args:
-        question (:obj:`str`):
+        question (`str`):
             OpenQA Question.
-        answer_ids (:obj:`torch.LongTensor` of shape :obj:`(num_answers, answer_length)`, `optional`):
-            Answer ids for computing the marginal log-likelihood loss. Indices should be in ``[-1, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-1`` are ignored (masked),
-            the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        answer_ids (`torch.LongTensor` of shape `(num_answers, answer_length)`, *optional*):
+            Answer ids for computing the marginal log-likelihood loss. Indices should be in `[-1, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-1` are ignored (masked),
+            the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1812,11 +1807,11 @@ class RealmForOpenQA(RealmPreTrainedModel):
     ):
         """
         Args:
-            searcher_pretrained_name_or_path (:obj:`str`):
+            searcher_pretrained_name_or_path (`str`):
                 Searcher pretrained name or path.
-            reader_pretrained_name_or_path (:obj:`str`):
+            reader_pretrained_name_or_path (`str`):
                 Reader pretrained name or path.
-            block_records_path (:obj:`str`):
+            block_records_path (`str`):
                 Block records path.
 
         """
@@ -1933,19 +1928,21 @@ class RealmForOpenQA(RealmPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> import torch
-            >>> from transformers import RealmForOpenQA, RealmTokenizer
+        ```python
+        >>> import torch
+        >>> from transformers import RealmForOpenQA, RealmTokenizer
 
-            >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", blocks.tfr)
+        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", blocks.tfr)
 
-            >>> question = "Who is the pioneer in modern computer science?"
-            >>> answer_ids = tokenizer(["alan mathison turing"], add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False).input_ids
+        >>> question = "Who is the pioneer in modern computer science?"
+        >>> answer_ids = tokenizer(["alan mathison turing"], add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False).input_ids
 
-            >>> searcher_output, reader_output, predicted_answer = model(question, answer_ids)
-            >>> loss = reader_output.loss
-        """
+        >>> searcher_output, reader_output, predicted_answer = model(question, answer_ids)
+        >>> loss = reader_output.loss
+        ```
+"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
