@@ -282,6 +282,8 @@ class TFModelTesterMixin:
             for module in (import_module(model_class.__module__),)
             for module_member_name in dir(module)
             if module_member_name.endswith("MainLayer")
+            # This condition is required, since `modeling_tf_clip.py` has 3 classes whose names end with `MainLayer`.
+            and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
             and tf.keras.layers.Layer in module_member.__bases__
@@ -458,7 +460,7 @@ class TFModelTesterMixin:
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
             # TODO: A better way to handle vision models
-            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification"]:
+            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification", "TFCLIPVisionModel"]:
                 inputs = tf.keras.Input(
                     batch_shape=(
                         3,
@@ -469,6 +471,20 @@ class TFModelTesterMixin:
                     name="pixel_values",
                     dtype="float32",
                 )
+            elif model_class.__name__ in ["TFCLIPModel"]:
+                inputs = {
+                    "input_ids": tf.keras.Input(batch_shape=(3, max_input), name="input_ids", dtype="int32"),
+                    "pixel_values": tf.keras.Input(
+                        batch_shape=(
+                            3,
+                            self.model_tester.vision_model_tester.num_channels,
+                            self.model_tester.vision_model_tester.image_size,
+                            self.model_tester.vision_model_tester.image_size,
+                        ),
+                        name="pixel_values",
+                        dtype="float32",
+                    ),
+                }
             elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
@@ -1242,6 +1258,13 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
 
     return output
+
+
+def random_attention_mask(shape, rng=None, name=None, dtype=None):
+    attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None, dtype=dtype)
+    # make sure that at least one token is attended to for each batch
+    attn_mask = tf.concat([tf.constant(value=1, shape=(shape[0], 1), dtype=dtype), attn_mask[:, 1:]], axis=1)
+    return attn_mask
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None, dtype=None):

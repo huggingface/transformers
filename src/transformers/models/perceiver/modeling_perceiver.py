@@ -1114,7 +1114,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         >>> model = PerceiverForSequenceClassification.from_pretrained('deepmind/language-perceiver')
 
         >>> text = "hello world"
-        >>> inputs = tokenizer(images=image, return_tensors="pt").input_ids
+        >>> inputs = tokenizer(text, return_tensors="pt").input_ids
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
         ```"""

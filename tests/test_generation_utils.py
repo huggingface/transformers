@@ -1856,7 +1856,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
         with self.assertRaises(ValueError):
-            model.generate(input_ids=input_ids, input_values=input_ids)
+            model.generate(input_ids=input_ids, inputs_embeds=input_ids)
 
     def test_generate_input_values_as_encoder_kwarg(self):
         input_values = floats_tensor((2, 250))
