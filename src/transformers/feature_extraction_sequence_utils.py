@@ -307,15 +307,15 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """
         Truncate inputs (on left/right and up to predefined length or max length in the batch)
 
-        Truncation side (left/right) values are defined at the feature extractor level (with ``self.truncation_side``)
+        Truncation side (left/right) values are defined at the feature extractor level (with `self.truncation_side`)
 
         Args:
-            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features: Dictionary of input values (*np.ndarray[float]*) / input vectors (*List[np.ndarray[float]]*) or batch of inputs values (*List[np.ndarray[int]]*) / input vectors (*List[np.ndarray[int]]*)
             max_length: maximum length of the returned list and optionally padding length (see below)
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            truncation: (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            truncation: (optional) Activates truncation to cut input sequences longer than *max_length* to *max_length*.
         """
         if not truncation:
             return processed_features
