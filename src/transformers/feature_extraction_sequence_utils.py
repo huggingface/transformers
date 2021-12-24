@@ -339,7 +339,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     processed_features["attention_mask"] = processed_features["attention_mask"][:max_length]
             elif self.truncation_side == "left":
                 processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][
-                    max_length:
+                    -max_length:
                 ]
                 if "attention_mask" in processed_features:
                     processed_features["attention_mask"] = processed_features["attention_mask"][max_length:]
