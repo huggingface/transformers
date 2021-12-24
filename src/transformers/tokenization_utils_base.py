@@ -1456,6 +1456,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.init_inputs = ()
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
+        self._processor_class = kwargs.pop("processor_class", None)
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
