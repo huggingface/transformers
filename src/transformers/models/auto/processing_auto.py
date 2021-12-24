@@ -150,17 +150,17 @@ class AutoProcessor:
         }
         model_files = get_list_of_files(pretrained_model_name_or_path, **get_list_of_files_kwargs)
         # strip to file name
-        model_file_names = [f.split("/")[-1] for f in model_files]
+        model_files = [f.split("/")[-1] for f in model_files]
 
         # Let's start by checking whether the processor class is saved in a feature extractor
-        if FEATURE_EXTRACTOR_NAME in model_file_names:
+        if FEATURE_EXTRACTOR_NAME in model_files:
             config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
             if "processor_class" in config_dict:
                 processor_class = processor_class_from_name(config_dict["processor_class"])
                 return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         # Next, let's whether the processor class is saved in a tokenizer
-        if TOKENIZER_CONFIG_FILE in model_file_names:
+        if TOKENIZER_CONFIG_FILE in model_files:
             config_dict = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
             if "processor_class" in config_dict:
                 processor_class = processor_class_from_name(config_dict["processor_class"])
