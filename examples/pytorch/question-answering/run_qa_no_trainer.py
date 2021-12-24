@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on question answering.
+Fine-tuning a 🤗 Transformers model for question answering using 🤗 Accelerate.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -56,7 +56,7 @@ from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.16.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -737,7 +737,9 @@ def main():
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(commit_message=f"Training in progress epoch {epoch}", blocking=False)
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                )
 
     # Evaluation
     logger.info("***** Running Evaluation *****")
@@ -816,7 +818,7 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training")
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":

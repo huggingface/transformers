@@ -133,9 +133,8 @@ class HfArgumentParser(ArgumentParser):
             ):
                 kwargs["nargs"] = "+"
                 kwargs["type"] = field.type.__args__[0]
-                assert all(
-                    x == kwargs["type"] for x in field.type.__args__
-                ), f"{field.name} cannot be a List of mixed types"
+                if not all(x == kwargs["type"] for x in field.type.__args__):
+                    raise ValueError(f"{field.name} cannot be a List of mixed types")
                 if field.default_factory is not dataclasses.MISSING:
                     kwargs["default"] = field.default_factory()
                 elif field.default is dataclasses.MISSING:

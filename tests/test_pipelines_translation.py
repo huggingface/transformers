@@ -20,6 +20,7 @@ from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MBart50TokenizerFast,
+    MBartConfig,
     MBartForConditionalGeneration,
     TranslationPipeline,
     pipeline,
@@ -34,14 +35,16 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        translator = TranslationPipeline(model=model, tokenizer=tokenizer)
-        try:
-            outputs = translator("Some string")
-        except ValueError:
-            # Triggered by m2m langages
-            src_lang, tgt_lang = list(translator.tokenizer.lang_code_to_id.keys())[:2]
-            outputs = translator("Some string", src_lang=src_lang, tgt_lang=tgt_lang)
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if isinstance(model.config, MBartConfig):
+            src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
+            translator = TranslationPipeline(model=model, tokenizer=tokenizer, src_lang=src_lang, tgt_lang=tgt_lang)
+        else:
+            translator = TranslationPipeline(model=model, tokenizer=tokenizer)
+        return translator, ["Some string", "Some other text"]
+
+    def run_pipeline_test(self, translator, _):
+        outputs = translator("Some string")
         self.assertEqual(outputs, [{"translation_text": ANY(str)}])
 
     @require_torch

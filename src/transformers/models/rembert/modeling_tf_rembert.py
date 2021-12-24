@@ -23,15 +23,16 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
+    DUMMY_INPUTS,
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
 from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
-    TFCausalLMOutput,
+    TFBaseModelOutputWithPastAndCrossAttentions,
+    TFBaseModelOutputWithPoolingAndCrossAttentions,
+    TFCausalLMOutputWithCrossAttentions,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
     TFQuestionAnsweringModelOutput,
@@ -78,7 +79,6 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
         self.input_embedding_size = config.input_embedding_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
@@ -112,13 +112,14 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
         position_ids: tf.Tensor = None,
         token_type_ids: tf.Tensor = None,
         inputs_embeds: tf.Tensor = None,
+        past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
+            final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -131,12 +132,13 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
+            position_ids = tf.expand_dims(
+                tf.range(start=past_key_values_length, limit=input_shape[1] + past_key_values_length), axis=0
+            )
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
-        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
+        final_embeddings = inputs_embeds + position_embeds + token_type_embeds
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
@@ -170,6 +172,8 @@ class TFRemBertSelfAttention(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
+        self.is_decoder = config.is_decoder
+
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
@@ -182,16 +186,49 @@ class TFRemBertSelfAttention(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_value: Tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
-        mixed_key_layer = self.key(inputs=hidden_states)
-        mixed_value_layer = self.value(inputs=hidden_states)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key_layer = self.transpose_for_scores(self.key(inputs=encoder_hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=encoder_hidden_states), batch_size)
+            attention_mask = encoder_attention_mask
+        elif past_key_value is not None:
+            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+            key_layer = tf.concatenate([past_key_value[0], key_layer], dim=2)
+            value_layer = tf.concatenate([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
-        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
@@ -221,6 +258,8 @@ class TFRemBertSelfAttention(tf.keras.layers.Layer):
         attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -259,6 +298,9 @@ class TFRemBertAttention(tf.keras.layers.Layer):
         input_tensor: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_value: Tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -266,13 +308,17 @@ class TFRemBertAttention(tf.keras.layers.Layer):
             hidden_states=input_tensor,
             attention_mask=attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_value=past_key_value,
             output_attentions=output_attentions,
             training=training,
         )
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        # add attentions (possibly with past_key_value) if we output them
+        outputs = (attention_output,) + self_outputs[1:]
 
         return outputs
 
@@ -323,6 +369,12 @@ class TFRemBertLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.attention = TFRemBertAttention(config, name="attention")
+        self.is_decoder = config.is_decoder
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            self.crossattention = TFRemBertAttention(config, name="crossattention")
         self.intermediate = TFRemBertIntermediate(config, name="intermediate")
         self.bert_output = TFRemBertOutput(config, name="output")
 
@@ -331,22 +383,69 @@ class TFRemBertLayer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: Optional[tf.Tensor],
+        encoder_attention_mask: Optional[tf.Tensor],
+        past_key_value: Optional[Tuple[tf.Tensor]],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        attention_outputs = self.attention(
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attention_outputs = self.attention(
             input_tensor=hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            past_key_value=self_attn_past_key_value,
             output_attentions=output_attentions,
             training=training,
         )
-        attention_output = attention_outputs[0]
+        attention_output = self_attention_outputs[0]
+
+        # if decoder, the last output is tuple of self-attn cache
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            present_key_value = self_attention_outputs[-1]
+        else:
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        cross_attn_present_key_value = None
+        if self.is_decoder and encoder_hidden_states is not None:
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers "
+                    "by setting `config.add_cross_attention=True`"
+                )
+
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attention_outputs = self.crossattention(
+                input_tensor=attention_output,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=cross_attn_past_key_value,
+                output_attentions=output_attentions,
+                training=training,
+            )
+            attention_output = cross_attention_outputs[0]
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
+
         intermediate_output = self.intermediate(hidden_states=attention_output)
         layer_output = self.bert_output(
             hidden_states=intermediate_output, input_tensor=attention_output, training=training
         )
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
+        outputs = (layer_output,) + outputs  # add attentions if we output them
+
+        # if decoder, return the attn key/values as the last output
+        if self.is_decoder:
+            outputs = outputs + (present_key_value,)
 
         return outputs
 
@@ -354,6 +453,7 @@ class TFRemBertLayer(tf.keras.layers.Layer):
 class TFRemBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
+        self.config = config
 
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             units=config.hidden_size,
@@ -367,40 +467,62 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_values: Tuple[Tuple[tf.Tensor]],
+        use_cache: bool,
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         hidden_states = self.embedding_hidden_mapping_in(inputs=hidden_states)
         all_hidden_states = (hidden_states,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 training=training,
             )
             hidden_states = layer_outputs[0]
 
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
+                if self.config.add_cross_attention and encoder_hidden_states is not None:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, all_hidden_states, all_attentions, all_cross_attentions] if v is not None
+            )
 
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        return TFBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -500,6 +622,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
+        self.is_decoder = config.is_decoder
 
         self.embeddings = TFRemBertEmbeddings(config, name="embeddings")
         self.encoder = TFRemBertEncoder(config, name="encoder")
@@ -519,6 +642,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -527,12 +651,16 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -542,12 +670,19 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
+
+        if not self.config.is_decoder:
+            inputs["use_cache"] = False
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -558,8 +693,16 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
+
+        if inputs["past_key_values"] is None:
+            past_key_values_length = 0
+            inputs["past_key_values"] = [None] * len(self.encoder.layer)
+        else:
+            past_key_values_length = shape_list(inputs["past_key_values"][0][0])[-2]
+
         if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.fill(dims=input_shape, value=1)
+            inputs["attention_mask"] = tf.fill(dims=(batch_size, seq_length + past_key_values_length), value=1)
 
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
@@ -569,6 +712,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             position_ids=inputs["position_ids"],
             token_type_ids=inputs["token_type_ids"],
             inputs_embeds=inputs["inputs_embeds"],
+            past_key_values_length=past_key_values_length,
             training=inputs["training"],
         )
 
@@ -577,7 +721,29 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
+        attention_mask_shape = shape_list(inputs["attention_mask"])
+
+        mask_seq_length = seq_length + past_key_values_length
+        # Copied from `modeling_tf_t5.py`
+        # Provided a padding mask of dimensions [batch_size, mask_seq_length]
+        # - if the model is a decoder, apply a causal mask in addition to the padding mask
+        # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
+        if self.is_decoder:
+            seq_ids = tf.range(mask_seq_length)
+            causal_mask = tf.less_equal(
+                tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
+                seq_ids[None, :, None],
+            )
+            causal_mask = tf.cast(causal_mask, dtype=inputs["attention_mask"].dtype)
+            extended_attention_mask = causal_mask * inputs["attention_mask"][:, None, :]
+            attention_mask_shape = shape_list(extended_attention_mask)
+            extended_attention_mask = tf.reshape(
+                extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
+            )
+        else:
+            extended_attention_mask = tf.reshape(
+                inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+            )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -588,6 +754,29 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
         ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
         extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
+
+        # Copied from `modeling_tf_t5.py` with -1e9 -> -10000
+        if self.is_decoder and inputs["encoder_attention_mask"] is not None:
+            # If a 2D ou 3D attention mask is provided for the cross-attention
+            # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
+            # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+            inputs["encoder_attention_mask"] = tf.cast(
+                inputs["encoder_attention_mask"], dtype=extended_attention_mask.dtype
+            )
+            num_dims_encoder_attention_mask = len(shape_list(inputs["encoder_attention_mask"]))
+            if num_dims_encoder_attention_mask == 3:
+                encoder_extended_attention_mask = inputs["encoder_attention_mask"][:, None, :, :]
+            if num_dims_encoder_attention_mask == 2:
+                encoder_extended_attention_mask = inputs["encoder_attention_mask"][:, None, None, :]
+
+            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
+            # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
+            # encoder_extended_attention_mask = tf.math.equal(encoder_extended_attention_mask,
+            #                                         tf.transpose(encoder_extended_attention_mask, perm=(-1, -2)))
+
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+        else:
+            encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -603,6 +792,10 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=inputs["head_mask"],
+            encoder_hidden_states=inputs["encoder_hidden_states"],
+            encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=inputs["past_key_values"],
+            use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
@@ -613,13 +806,18 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
-        return TFBaseModelOutputWithPooling(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
+            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -632,95 +830,113 @@ class TFRemBertPreTrainedModel(TFPreTrainedModel):
     config_class = RemBertConfig
     base_model_prefix = "rembert"
 
+    @property
+    def dummy_inputs(self):
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
+        # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
+        if self.config.add_cross_attention:
+            batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
+            shape = (batch_size, seq_len) + (self.config.hidden_size,)
+            h = tf.random.uniform(shape=shape)
+            dummy["encoder_hidden_states"] = h
+
+        return dummy
+
 
 REMBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
     and behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
+    the tensors in the first argument of the model call function: `model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+    the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.RemBertConfig`): Model configuration class with all the parameters of the model.
+        config ([`RemBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 REMBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+        inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
             argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -738,9 +954,9 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
-        output_type=TFBaseModelOutputWithPooling,
+        output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -751,12 +967,36 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+        r"""
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
+            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
+            decoding (see `past_key_values`). Set to `False` during training, `True` during generation
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -766,6 +1006,10 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -779,6 +1023,10 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
+            encoder_hidden_states=inputs["encoder_hidden_states"],
+            encoder_attention_mask=inputs["encoder_attention_mask"],
+            past_key_values=inputs["past_key_values"],
+            use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
@@ -787,15 +1035,25 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
+        output_cache = self.config.use_cache and self.config.is_decoder
+        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
+        if not (self.config.output_attentions and self.config.add_cross_attention):
+            cross_attns = None
 
-        return TFBaseModelOutputWithPooling(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
+            past_key_values=pkv,
             hidden_states=hs,
             attentions=attns,
+            cross_attentions=cross_attns,
         )
 
 
@@ -818,7 +1076,7 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -839,10 +1097,9 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
         **kwargs,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         inputs = input_processing(
             func=self.call,
@@ -912,10 +1169,23 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.prepare_inputs_for_generation
+    def prepare_inputs_for_generation(self, inputs, past=None, attention_mask=None, **model_kwargs):
+        # cut decoder_input_ids if past is used
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {
+            "input_ids": inputs,
+            "attention_mask": attention_mask,
+            "past_key_values": past,
+            "use_cache": model_kwargs["use_cache"],
+        }
+
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
-        output_type=TFCausalLMOutput,
+        output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -926,17 +1196,38 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
-            config.vocab_size - 1]``.
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
+            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
+            decoding (see `past_key_values`). Set to `False` during training, `True` during generation
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the cross entropy classification loss. Indices should be in `[0, ..., config.vocab_size - 1]`.
         """
         inputs = input_processing(
             func=self.call,
@@ -947,6 +1238,10 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -961,6 +1256,10 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
+            encoder_hidden_states=inputs["encoder_hidden_states"],
+            encoder_attention_mask=inputs["encoder_attention_mask"],
+            past_key_values=inputs["past_key_values"],
+            use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
@@ -980,18 +1279,28 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFCausalLMOutput(
+        return TFCausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
-    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
+    def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
+        output_cache = self.config.use_cache and self.config.is_decoder
+        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
+        if not (self.config.output_attentions and self.config.add_cross_attention):
+            cross_attns = None
 
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        return TFCausalLMOutputWithCrossAttentions(
+            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
+        )
 
 
 @add_start_docstrings(
@@ -1016,7 +1325,7 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1037,10 +1346,9 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
         **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         inputs = input_processing(
             func=self.call,
@@ -1122,7 +1430,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1143,10 +1451,9 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
         **kwargs,
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
-            :obj:`input_ids` above)
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            `input_ids` above)
         """
         inputs = input_processing(
             func=self.call,
@@ -1266,7 +1573,7 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1287,9 +1594,8 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
         **kwargs,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         inputs = input_processing(
             func=self.call,
@@ -1362,7 +1668,7 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
+        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="rembert",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1384,13 +1690,13 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
         **kwargs,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
-        start_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
-        end_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
+        end_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
         inputs = input_processing(

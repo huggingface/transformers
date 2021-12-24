@@ -165,6 +165,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
+    test_mismatched_shapes = False
 
     def setUp(self):
         self.model_tester = TFTransfoXLModelTester(self)

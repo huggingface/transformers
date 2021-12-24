@@ -104,6 +104,32 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             ],
         )
 
+        outputs = unmasker("My name is <mask> <mask>", top_k=2)
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                [
+                    {
+                        "score": 2.2e-05,
+                        "token": 35676,
+                        "token_str": " Maul",
+                        "sequence": "<s>My name is Maul<mask></s>",
+                    },
+                    {"score": 2.2e-05, "token": 16416, "token_str": "ELS", "sequence": "<s>My name isELS<mask></s>"},
+                ],
+                [
+                    {
+                        "score": 2.2e-05,
+                        "token": 35676,
+                        "token_str": " Maul",
+                        "sequence": "<s>My name is<mask> Maul</s>",
+                    },
+                    {"score": 2.2e-05, "token": 16416, "token_str": "ELS", "sequence": "<s>My name is<mask>ELS</s>"},
+                ],
+            ],
+        )
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -159,22 +185,32 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="pt")
         unmasker.tokenizer.pad_token_id = None
         unmasker.tokenizer.pad_token = None
-        self.run_pipeline_test(unmasker.model, unmasker.tokenizer, None)
+        self.run_pipeline_test(unmasker, [])
 
     @require_tf
     def test_model_no_pad_tf(self):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="tf")
         unmasker.tokenizer.pad_token_id = None
         unmasker.tokenizer.pad_token = None
-        self.run_pipeline_test(unmasker.model, unmasker.tokenizer, None)
+        self.run_pipeline_test(unmasker, [])
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         if tokenizer is None or tokenizer.mask_token_id is None:
             self.skipTest("The provided tokenizer has no mask token, (probably reformer or wav2vec2)")
 
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
+        examples = [
+            f"This is another {tokenizer.mask_token} test",
+        ]
+        return fill_masker, examples
 
-        outputs = fill_masker(f"This is a {tokenizer.mask_token}")
+    def run_pipeline_test(self, fill_masker, examples):
+        tokenizer = fill_masker.tokenizer
+        model = fill_masker.model
+
+        outputs = fill_masker(
+            f"This is a {tokenizer.mask_token}",
+        )
         self.assertEqual(
             outputs,
             [
@@ -221,9 +257,6 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
         with self.assertRaises(ValueError):
             fill_masker([None])
-        # Multiple masks
-        with self.assertRaises(PipelineException):
-            fill_masker(f"This is {tokenizer.mask_token} {tokenizer.mask_token}")
         # No mask_token is not supported
         with self.assertRaises(PipelineException):
             fill_masker("This is")
@@ -232,6 +265,7 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.run_test_targets(model, tokenizer)
         self.run_test_top_k_targets(model, tokenizer)
         self.fill_mask_with_duplicate_targets_and_top_k(model, tokenizer)
+        self.fill_mask_with_multiple_masks(model, tokenizer)
 
     def run_test_targets(self, model, tokenizer):
         vocab = tokenizer.get_vocab()
@@ -330,3 +364,27 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         # The target list contains duplicates, so we can't output more
         # than them
         self.assertEqual(len(outputs), 3)
+
+    def fill_mask_with_multiple_masks(self, model, tokenizer):
+        fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
+
+        outputs = fill_masker(
+            f"This is a {tokenizer.mask_token} {tokenizer.mask_token} {tokenizer.mask_token}", top_k=2
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                ],
+                [
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                ],
+                [
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                ],
+            ],
+        )

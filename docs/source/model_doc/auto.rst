@@ -27,7 +27,32 @@ Instantiating one of :class:`~transformers.AutoConfig`, :class:`~transformers.Au
 
 will create a model that is an instance of :class:`~transformers.BertModel`.
 
-There is one class of :obj:`AutoModel` for each task, and for each backend (PyTorch or TensorFlow).
+There is one class of :obj:`AutoModel` for each task, and for each backend (PyTorch, TensorFlow, or Flax).
+
+Extending the Auto Classes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a
+custom class of model :obj:`NewModel`, make sure you have a :obj:`NewModelConfig` then you can add those to the auto
+classes like this:
+
+.. code-block::
+
+    from transformers import AutoConfig, AutoModel
+
+    AutoConfig.register("new-model", NewModelConfig)
+    AutoModel.register(NewModelConfig, NewModel)
+
+You will then be able to use the auto classes like you would usually do!
+
+.. warning::
+
+    If your :obj:`NewModelConfig` is a subclass of :class:`~transformer.PretrainedConfig`, make sure its
+    :obj:`model_type` attribute is set to the same key you use when registering the config (here :obj:`"new-model"`).
+
+    Likewise, if your :obj:`NewModel` is a subclass of :class:`~transformers.PreTrainedModel`, make sure its
+    :obj:`config_class` attribute is set to the same class you use when registering the model (here
+    :obj:`NewModelConfig`).
 
 
 AutoConfig
@@ -48,6 +73,13 @@ AutoFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoFeatureExtractor
+    :members:
+
+
+AutoProcessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoProcessor
     :members:
 
 
@@ -135,10 +167,24 @@ AutoModelForImageClassification
     :members:
 
 
+AutoModelForVision2Seq
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForVision2Seq
+    :members:
+
+
 AutoModelForAudioClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoModelForAudioClassification
+    :members:
+
+
+AutoModelForAudioFrameClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForAudioFrameClassification
     :members:
 
 
@@ -153,6 +199,13 @@ AutoModelForSpeechSeq2Seq
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoModelForSpeechSeq2Seq
+    :members:
+
+
+AutoModelForAudioXVector
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForAudioXVector
     :members:
 
 
@@ -191,6 +244,13 @@ TFAutoModelForCausalLM
     :members:
 
 
+TFAutoModelForImageClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAutoModelForImageClassification
+    :members:
+
+
 TFAutoModelForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -216,6 +276,13 @@ TFAutoModelForMultipleChoice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFAutoModelForMultipleChoice
+    :members:
+
+
+TFAutoModelForTableQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAutoModelForTableQuestionAnswering
     :members:
 
 
@@ -307,4 +374,11 @@ FlaxAutoModelForImageClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.FlaxAutoModelForImageClassification
+    :members:
+
+
+FlaxAutoModelForVision2Seq
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxAutoModelForVision2Seq
     :members:

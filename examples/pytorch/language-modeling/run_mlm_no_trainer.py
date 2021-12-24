@@ -18,7 +18,7 @@ Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBER
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
+https://huggingface.co/models?filter=fill-mask
 """
 # You can also adapt this script on your own mlm task. Pointers for this are left as comments.
 
@@ -27,6 +27,7 @@ import logging
 import math
 import os
 import random
+from itertools import chain
 from pathlib import Path
 
 import datasets
@@ -201,10 +202,12 @@ def parse_args():
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`train_file` should be a csv, json or txt file.")
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`validation_file` should be a csv, json or txt file.")
 
     if args.push_to_hub:
         assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
@@ -404,7 +407,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.
@@ -546,7 +549,9 @@ def main():
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(commit_message=f"Training in progress epoch {epoch}", blocking=False)
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                )
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -555,7 +560,7 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training")
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":

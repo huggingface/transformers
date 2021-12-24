@@ -331,6 +331,7 @@ def prepare_img():
     return image
 
 
+@require_torch
 @require_vision
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property

@@ -234,8 +234,6 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
     fx_ready_model_classes = all_model_classes
     fx_dynamic_ready_model_classes = all_model_classes
 
-    test_sequence_classification_problem_types = True
-
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -301,7 +299,8 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         model = AlbertModel.from_pretrained("albert-base-v2")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(

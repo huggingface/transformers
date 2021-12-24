@@ -8,8 +8,11 @@ from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_featur
 from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
+
+logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -29,9 +32,9 @@ if is_torch_available():
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
     """
     QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped to
-    internal :class:`~transformers.SquadExample`.
+    internal [`SquadExample`].
 
-    QuestionAnsweringArgumentHandler manages all the possible to create a :class:`~transformers.SquadExample` from the
+    QuestionAnsweringArgumentHandler manages all the possible to create a [`SquadExample`] from the
     command-line supplied arguments.
     """
 
@@ -98,15 +101,13 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class QuestionAnsweringPipeline(Pipeline):
     """
-    Question Answering pipeline using any :obj:`ModelForQuestionAnswering`. See the `question answering examples
-    <../task_summary.html#question-answering>`__ for more information.
+    Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering examples](../task_summary#question-answering) for more information.
 
-    This question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"question-answering"`.
+    This question answering pipeline can currently be loaded from [`pipeline`] using the following
+    task identifier: `"question-answering"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a question answering task. See the
-    up-to-date list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=question-answering>`__.
+    up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=question-answering).
     """
 
     default_input_names = "question,context"
@@ -142,17 +143,17 @@ class QuestionAnsweringPipeline(Pipeline):
         question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
-        QuestionAnsweringPipeline leverages the :class:`~transformers.SquadExample` internally. This helper method
-        encapsulate all the logic for converting question(s) and context(s) to :class:`~transformers.SquadExample`.
+        QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method
+        encapsulate all the logic for converting question(s) and context(s) to [`SquadExample`].
 
         We currently support extractive question answering.
 
         Arguments:
-            question (:obj:`str` or :obj:`List[str]`): The question(s) asked.
-            context (:obj:`str` or :obj:`List[str]`): The context(s) in which we will look for the answer.
+            question (`str` or `List[str]`): The question(s) asked.
+            context (`str` or `List[str]`): The context(s) in which we will look for the answer.
 
         Returns:
-            One or a list of :class:`~transformers.SquadExample`: The corresponding :class:`~transformers.SquadExample`
+            One or a list of [`SquadExample`]: The corresponding [`SquadExample`]
             grouping question and context.
         """
         if isinstance(question, list):
@@ -203,44 +204,47 @@ class QuestionAnsweringPipeline(Pipeline):
         Answer the question(s) given as inputs by using the context(s).
 
         Args:
-            args (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`):
-                One or several :class:`~transformers.SquadExample` containing the question and context.
-            X (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
+            args ([`SquadExample`] or a list of [`SquadExample`]):
+                One or several [`SquadExample`] containing the question and context.
+            X ([`SquadExample`] or a list of [`SquadExample`], *optional*):
+                One or several [`SquadExample`] containing the question and context (will be treated
                 the same way as if passed as the first positional argument).
-            data (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
+            data ([`SquadExample`] or a list of [`SquadExample`], *optional*):
+                One or several [`SquadExample`] containing the question and context (will be treated
                 the same way as if passed as the first positional argument).
-            question (:obj:`str` or :obj:`List[str]`):
-                One or several question(s) (must be used in conjunction with the :obj:`context` argument).
-            context (:obj:`str` or :obj:`List[str]`):
+            question (`str` or `List[str]`):
+                One or several question(s) (must be used in conjunction with the `context` argument).
+            context (`str` or `List[str]`):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
-                :obj:`question` argument).
-            topk (:obj:`int`, `optional`, defaults to 1):
+                `question` argument).
+            topk (`int`, *optional*, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood). Note that we return less than
                 topk answers if there are not enough options available within the context.
-            doc_stride (:obj:`int`, `optional`, defaults to 128):
+            doc_stride (`int`, *optional*, defaults to 128):
                 If the context is too long to fit with the question for the model, it will be split in several chunks
                 with some overlap. This argument controls the size of that overlap.
-            max_answer_len (:obj:`int`, `optional`, defaults to 15):
+            max_answer_len (`int`, *optional*, defaults to 15):
                 The maximum length of predicted answers (e.g., only answers with a shorter length are considered).
-            max_seq_len (:obj:`int`, `optional`, defaults to 384):
+            max_seq_len (`int`, *optional*, defaults to 384):
                 The maximum length of the total sentence (context + question) after tokenization. The context will be
-                split in several chunks (using :obj:`doc_stride`) if needed.
-            max_question_len (:obj:`int`, `optional`, defaults to 64):
+                split in several chunks (using `doc_stride`) if needed.
+            max_question_len (`int`, *optional*, defaults to 64):
                 The maximum length of the question after tokenization. It will be truncated if needed.
-            handle_impossible_answer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            handle_impossible_answer (`bool`, *optional*, defaults to `False`):
                 Whether or not we accept impossible as an answer.
 
         Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
+            A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **score** (:obj:`float`) -- The probability associated to the answer.
-            - **start** (:obj:`int`) -- The character start index of the answer (in the tokenized version of the
+            - **score** (`float`) -- The probability associated to the answer.
+            - **start** (`int`) -- The character start index of the answer (in the tokenized version of the
               input).
-            - **end** (:obj:`int`) -- The character end index of the answer (in the tokenized version of the input).
-            - **answer** (:obj:`str`) -- The answer to the question.
+            - **end** (`int`) -- The character end index of the answer (in the tokenized version of the input).
+            - **answer** (`str`) -- The answer to the question.
         """
+        if kwargs.get("batch_size", 1) > 1:
+            logger.error("Batch_size > 1 is not supported for question answering pipeline, setting it to 1.")
+            kwargs["batch_size"] = 1
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
@@ -253,7 +257,7 @@ class QuestionAnsweringPipeline(Pipeline):
         if max_seq_len is None:
             max_seq_len = min(self.tokenizer.model_max_length, 384)
         if doc_stride is None:
-            doc_stride = min(max_seq_len // 4, 128)
+            doc_stride = min(max_seq_len // 2, 128)
 
         if not self.tokenizer.is_fast:
             features = squad_convert_examples_to_features(
@@ -406,7 +410,7 @@ class QuestionAnsweringPipeline(Pipeline):
             end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
 
             if handle_impossible_answer:
-                min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+                min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())
 
             # Mask CLS
             start_[0, 0] = end_[0, 0] = 0.0
@@ -474,7 +478,7 @@ class QuestionAnsweringPipeline(Pipeline):
         self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
     ) -> Tuple:
         """
-        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be the
+        Take the output of any `ModelForQuestionAnswering` and will generate probabilities for each span to be the
         actual answer.
 
         In addition, it filters out some unwanted/impossible cases like answer len being greater than max_answer_len or
@@ -482,11 +486,11 @@ class QuestionAnsweringPipeline(Pipeline):
         the topk argument.
 
         Args:
-            start (:obj:`np.ndarray`): Individual start probabilities for each token.
-            end (:obj:`np.ndarray`): Individual end probabilities for each token.
-            topk (:obj:`int`): Indicates how many possible answer span(s) to extract from the model output.
-            max_answer_len (:obj:`int`): Maximum size of the answer to extract from the model's output.
-            undesired_tokens (:obj:`np.ndarray`): Mask determining tokens that can be part of the answer
+            start (`np.ndarray`): Individual start probabilities for each token.
+            end (`np.ndarray`): Individual end probabilities for each token.
+            topk (`int`): Indicates how many possible answer span(s) to extract from the model output.
+            max_answer_len (`int`): Maximum size of the answer to extract from the model's output.
+            undesired_tokens (`np.ndarray`): Mask determining tokens that can be part of the answer
         """
         # Ensure we have batch axis
         if start.ndim == 1:
@@ -524,12 +528,12 @@ class QuestionAnsweringPipeline(Pipeline):
         When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 
         Args:
-            text (:obj:`str`): The actual context to extract the answer from.
-            start (:obj:`int`): The answer starting token index.
-            end (:obj:`int`): The answer end token index.
+            text (`str`): The actual context to extract the answer from.
+            start (`int`): The answer starting token index.
+            end (`int`): The answer end token index.
 
         Returns:
-            Dictionary like :obj:`{'answer': str, 'start': int, 'end': int}`
+            Dictionary like `{'answer': str, 'start': int, 'end': int}`
         """
         words = []
         token_idx = char_start_idx = char_end_idx = chars_idx = 0

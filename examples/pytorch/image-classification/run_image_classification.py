@@ -54,7 +54,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.16.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -279,12 +279,14 @@ def main():
 
     def train_transforms(example_batch):
         """Apply _train_transforms across a batch."""
-        example_batch["pixel_values"] = [_train_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
+        example_batch["pixel_values"] = [
+            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]
+        ]
         return example_batch
 
     def val_transforms(example_batch):
         """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [_val_transforms(pil_loader(f)) for f in example_batch["image_file_path"]]
+        example_batch["pixel_values"] = [_val_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]]
         return example_batch
 
     if training_args.do_train:

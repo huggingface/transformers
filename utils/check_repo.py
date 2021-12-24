@@ -43,6 +43,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "SegformerDecodeHead",  # Building part of bigger (tested) model.
     "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoderWrapper",  # Building part of bigger (tested) model.
@@ -78,9 +79,11 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "RealmSearcher",  # Not regular model.
     "RealmForOpenQA",  # Not regular model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
+    "Speech2Text2DecoderWrapper",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
 ]
 
@@ -97,16 +100,25 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_tf_xlm_roberta.py",
     "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
+    "test_modeling_vision_text_dual_encoder.py",
+    "test_modeling_flax_vision_text_dual_encoder.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "PerceiverForMultimodalAutoencoding",
+    "PerceiverForOpticalFlow",
+    "SegformerDecodeHead",
+    "SegformerForSemanticSegmentation",
+    "BeitForSemanticSegmentation",
     "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
+    "TFCLIPTextModel",
+    "TFCLIPVisionModel",
     "FlaxCLIPTextModel",
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
@@ -114,6 +126,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DPRReader",
     "FlaubertForQuestionAnswering",
     "GPT2DoubleHeadsModel",
+    "LukeForMaskedLM",
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",
@@ -134,6 +147,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
     "HubertForCTC",
+    "SEWForCTC",
+    "SEWDForCTC",
     "XLMForQuestionAnswering",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
@@ -154,6 +169,26 @@ spec = importlib.util.spec_from_file_location(
 transformers = spec.loader.load_module()
 
 
+def check_model_list():
+    """Check the model list inside the transformers library."""
+    # Get the models from the directory structure of `src/transformers/models/`
+    models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
+    _models = []
+    for model in os.listdir(models_dir):
+        model_dir = os.path.join(models_dir, model)
+        if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
+            _models.append(model)
+
+    # Get the models from the directory structure of `src/transformers/models/`
+    models = [model for model in dir(transformers.models) if not model.startswith("__")]
+
+    missing_models = sorted(list(set(_models).difference(models)))
+    if missing_models:
+        raise Exception(
+            f"The following models should be included in {models_dir}/__init__.py: {','.join(missing_models)}."
+        )
+
+
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
 def get_model_modules():
@@ -169,12 +204,16 @@ def get_model_modules():
         "modeling_flax_auto",
         "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
+        "modeling_speech_encoder_decoder",
+        "modeling_flax_vision_encoder_decoder",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
+        "modeling_tf_encoder_decoder",
         "modeling_tf_outputs",
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
         "modeling_tf_transfo_xl_utilities",
+        "modeling_vision_encoder_decoder",
     ]
     modules = []
     for model in dir(transformers.models):
@@ -242,6 +281,7 @@ def get_model_test_files():
         "test_modeling_flax_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
+        "test_modeling_tf_encoder_decoder",
     ]
     test_files = []
     for filename in os.listdir(PATH_TO_TESTS):
@@ -436,6 +476,11 @@ def find_all_documented_objects():
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
+            content = f.read()
+        raw_doc_objs = re.findall("\[\[autodoc\]\]\s+(\S+)\s+", content)
+        documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
     return documented_obj
 
 
@@ -475,6 +520,8 @@ DEPRECATED_OBJECTS = [
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
+    "TFTrainer",
+    "TFTrainingArguments",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -559,10 +606,57 @@ def check_all_objects_are_documented():
             "The following objects are in the public init so should be documented:\n - "
             + "\n - ".join(undocumented_objs)
         )
+    check_docstrings_are_in_md()
+
+
+# Re pattern to catch :obj:`xx`, :class:`xx`, :func:`xx` or :meth:`xx`.
+_re_rst_special_words = re.compile(r":(?:obj|func|class|meth):`([^`]+)`")
+# Re pattern to catch things between double backquotes.
+_re_double_backquotes = re.compile(r"(^|[^`])``([^`]+)``([^`]|$)")
+# Re pattern to catch example introduction.
+_re_rst_example = re.compile(r"^\s*Example.*::\s*$", flags=re.MULTILINE)
+
+
+def is_rst_docstring(docstring):
+    """
+    Returns `True` if `docstring` is written in rst.
+    """
+    if _re_rst_special_words.search(docstring) is not None:
+        return True
+    if _re_double_backquotes.search(docstring) is not None:
+        return True
+    if _re_rst_example.search(docstring) is not None:
+        return True
+    return False
+
+
+def check_docstrings_are_in_md():
+    """Check all docstrings are in md"""
+    files_with_rst = []
+    for file in Path(PATH_TO_TRANSFORMERS).glob("**/*.py"):
+        with open(file, "r") as f:
+            code = f.read()
+        docstrings = code.split('"""')
+
+        for idx, docstring in enumerate(docstrings):
+            if idx % 2 == 0 or not is_rst_docstring(docstring):
+                continue
+            files_with_rst.append(file)
+            break
+
+    if len(files_with_rst) > 0:
+        raise ValueError(
+            "The following files have docstrings written in rst:\n"
+            + "\n".join([f"- {f}" for f in files_with_rst])
+            + "To fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
+            "(`pip install git+https://github.com/huggingface/doc-builder`)"
+        )
 
 
 def check_repo_quality():
     """Check all models are properly tested and documented."""
+    print("Checking all models are included.")
+    check_model_list()
     print("Checking all models are public.")
     check_models_are_in_init()
     print("Checking all models are properly tested.")

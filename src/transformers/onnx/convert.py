@@ -20,10 +20,10 @@ from typing import Iterable, List, Tuple, Union
 import numpy as np
 from packaging.version import Version, parse
 
-from .. import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
-from ..file_utils import is_torch_onnx_dict_inputs_support_available
-from ..utils import logging
-from .config import OnnxConfig
+from transformers import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
+from transformers.file_utils import is_torch_onnx_dict_inputs_support_available
+from transformers.onnx.config import OnnxConfig
+from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -191,7 +191,7 @@ def validate_model_outputs(
             f"{onnx_outputs_set.difference(ref_outputs_set)}"
         )
     else:
-        logger.info(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set}")
+        logger.info(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set})")
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):

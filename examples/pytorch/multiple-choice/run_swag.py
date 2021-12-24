@@ -22,6 +22,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import Optional, Union
 
 import datasets
@@ -47,7 +48,7 @@ from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.16.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +186,7 @@ class DataCollatorForMultipleChoice:
         flattened_features = [
             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
         ]
-        flattened_features = sum(flattened_features, [])
+        flattened_features = list(chain(*flattened_features))
 
         batch = self.tokenizer.pad(
             flattened_features,
@@ -333,8 +334,8 @@ def main():
         ]
 
         # Flatten out
-        first_sentences = sum(first_sentences, [])
-        second_sentences = sum(second_sentences, [])
+        first_sentences = list(chain(*first_sentences))
+        second_sentences = list(chain(*second_sentences))
 
         # Tokenize
         tokenized_examples = tokenizer(
