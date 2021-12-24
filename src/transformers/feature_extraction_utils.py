@@ -211,6 +211,10 @@ class FeatureExtractionMixin:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
+    def _set_processor_class(self, processor_class: str):
+        """Sets processor class as an attribute."""
+        self.processor_class = processor_class
+
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
@@ -287,7 +291,7 @@ class FeatureExtractionMixin:
 
         return cls.from_dict(feature_extractor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], processor_class_str: Optional[str] = None):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
         Save a feature_extractor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] class method.
@@ -295,8 +299,6 @@ class FeatureExtractionMixin:
         Args:
             save_directory (`str` or `os.PathLike`):
                 Directory where the feature extractor JSON file will be saved (will be created if it does not exist).
-            processor_class_str (:obj:`str`, `optional`):
-                Processor class to be saved in config.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -304,7 +306,7 @@ class FeatureExtractionMixin:
         # If we save using the predefined names, we can load using `from_pretrained`
         output_feature_extractor_file = os.path.join(save_directory, FEATURE_EXTRACTOR_NAME)
 
-        self.to_json_file(output_feature_extractor_file, processor_class_str=processor_class_str)
+        self.to_json_file(output_feature_extractor_file)
         logger.info(f"Configuration saved in {output_feature_extractor_file}")
 
     @classmethod
@@ -434,22 +436,15 @@ class FeatureExtractionMixin:
         else:
             return feature_extractor
 
-    def to_dict(self, processor_class_str: Optional[str] = None) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
-
-        Args:
-            processor_class_str (:obj:`str`, `optional`):
-                Processor class to be saved in config.
 
         Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this feature extractor instance.
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
-
-        if processor_class_str is not None:
-            output["processor_class"] = processor_class_str
 
         return output
 
@@ -472,19 +467,15 @@ class FeatureExtractionMixin:
         feature_extractor_dict = json.loads(text)
         return cls(**feature_extractor_dict)
 
-    def to_json_string(self, processor_class_str: Optional[str] = None) -> str:
+    def to_json_string(self) -> str:
         """
         Serializes this instance to a JSON string.
-
-        Args:
-            processor_class_str (:obj:`str`, `optional`):
-                Processor class to be saved in config.
 
         Returns:
             `str`: String containing all the attributes that make up this feature_extractor instance in JSON
             format.
         """
-        dictionary = self.to_dict(processor_class_str)
+        dictionary = self.to_dict()
 
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
@@ -492,18 +483,16 @@ class FeatureExtractionMixin:
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], processor_class_str: Optional[str] = None):
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
         """
         Save this instance to a JSON file.
 
         Args:
             json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this feature_extractor instance's parameters will be saved.
-            processor_class_str (:obj:`str`, `optional`):
-                Processor class to be saved in config.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string(processor_class_str=processor_class_str))
+            writer.write(self.to_json_string())
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"

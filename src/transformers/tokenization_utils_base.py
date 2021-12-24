@@ -1517,6 +1517,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
             )
 
+    def _set_processor_class(self, processor_class: str):
+        """Sets processor class as an attribute."""
+        self._processor_class = processor_class
+
     def __repr__(self) -> str:
         return (
             f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path='{self.name_or_path}', "
@@ -2042,6 +2046,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config["tokenizer_class"] = tokenizer_class
         if getattr(self, "_auto_map", None) is not None:
             tokenizer_config["auto_map"] = self._auto_map
+        if getattr(self, "_processor_class", None) is not None:
+            tokenizer_config["processor_class"] = self._processor_class
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))

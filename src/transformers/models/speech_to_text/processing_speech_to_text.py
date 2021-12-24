@@ -72,8 +72,10 @@ class Speech2TextProcessor:
                 Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
                 be created if it does not exist).
         """
+        self.feature_extractor._set_processor_class(self.__class__.__name__)
+        self.feature_extractor.save_pretrained(save_directory)
 
-        self.feature_extractor.save_pretrained(save_directory, processor_class_str=self.__class__.__name__)
+        self.tokenizer._set_processor_class(self.__class__.__name__)
         self.tokenizer.save_pretrained(save_directory)
 
     @classmethod
