@@ -571,6 +571,18 @@ class CamembertConverter(SpmConverter):
         )
 
 
+class DebertaV2Converter(SpmConverter):
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="[CLS]:0 $A:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:0 [SEP]:0",
+            special_tokens=[
+                ("[CLS]", self.original_tokenizer.get_vocab()['[CLS]']),
+                ("[SEP]", self.original_tokenizer.get_vocab()['[SEP]']),
+            ],
+        )
+
+
 class MBartConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -921,6 +933,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "CLIPTokenizer": CLIPConverter,
     "ConvBertTokenizer": BertConverter,
     "DebertaTokenizer": DebertaConverter,
+    "DebertaV2Tokenizer": DebertaV2Converter,
     "DistilBertTokenizer": BertConverter,
     "DPRReaderTokenizer": BertConverter,
     "DPRQuestionEncoderTokenizer": BertConverter,
