@@ -16,7 +16,7 @@
 import os
 import unittest
 
-from transformers import DebertaV2Tokenizer
+from transformers import DebertaV2Tokenizer, DebertaV2TokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -30,8 +30,8 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = DebertaV2Tokenizer
-    rust_tokenizer_class = None
-    test_rust_tokenizer = False
+    rust_tokenizer_class = DebertaV2TokenizerFast
+    test_rust_tokenizer = True
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 

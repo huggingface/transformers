@@ -104,7 +104,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
         do_lower_case=False,
         split_by_punct=False,
         bos_token="[CLS]",
@@ -140,6 +140,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
+        self.vocab_file = vocab_file
         self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
 
     @property
