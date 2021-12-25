@@ -827,7 +827,7 @@ class DebertaV2Converter(SpmConverter):
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         if precompiled_charsmap:
-                list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
 
         return normalizers.Sequence(list_normalizers)

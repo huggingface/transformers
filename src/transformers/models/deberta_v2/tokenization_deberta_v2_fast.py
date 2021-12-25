@@ -16,16 +16,19 @@
 
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import logging
+
 
 if is_sentencepiece_available():
     from .tokenization_deberta_v2 import DebertaV2Tokenizer
 else:
     DebertaV2Tokenizer = None
 
+logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -238,5 +241,3 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-

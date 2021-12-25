@@ -104,7 +104,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file=None,
+        vocab_file,
         do_lower_case=False,
         split_by_punct=False,
         bos_token="[CLS]",
