@@ -155,6 +155,10 @@ class DetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
+        in_chans=3,
+        pretrained=True,
+        freeze_layers=True,
+        replace_batch_norm=True,
         **kwargs
     ):
         self.num_queries = num_queries
@@ -190,6 +194,10 @@ class DetrConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
+        self.in_chans = in_chans
+        self.pretrained = pretrained
+        self.freeze_layers = freeze_layers
+        self.replace_batch_norm = replace_batch_norm
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

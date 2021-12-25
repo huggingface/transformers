@@ -315,23 +315,27 @@ class DetrTimmConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, name: str, dilation: bool):
+    def __init__(self, name: str, dilation: bool, in_chans: int,
+                 pretrained=True, freeze_layers=True, replace_batch_norm=True):
         super().__init__()
 
-        kwargs = {}
+        kwargs = {
+            'in_chans': in_chans
+        }
         if dilation:
             kwargs["output_stride"] = 16
 
         requires_backends(self, ["timm"])
 
-        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
+        backbone = create_model(name, pretrained=pretrained, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
         # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
+        if replace_batch_norm:
+            with torch.no_grad():
+                replace_batch_norm(backbone)
         self.model = backbone
         self.intermediate_channel_sizes = self.model.feature_info.channels()
 
-        if "resnet" in name:
+        if "resnet" in name and freeze_layers:
             for name, parameter in self.model.named_parameters():
                 if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                     parameter.requires_grad_(False)
@@ -1159,7 +1163,9 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(config.backbone, config.dilation)
+        backbone = DetrTimmConvEncoder(config.backbone, config.dilation, config.in_chans,
+                                       pretrained=config.pretrained, freeze_layers=config.freeze_layers,
+                                       replace_batch_norm=config.replace_batch_norm)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
