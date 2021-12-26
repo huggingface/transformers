@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Flax Wav2Vec2 model. """
 
+import math
 from functools import partial
 from typing import Optional, Tuple, Union
 
@@ -119,14 +120,16 @@ def _compute_mask_indices(
     on CPU as part of the preprocessing during training.
 
     Args:
-        shape: the the shape for which to compute masks.
-            should be of size 2 where first element is batch size and 2nd is timesteps
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
-            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
-            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
+        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
+               the first element is the batch size and the second element is the length of the axis to span.
+        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
+                    independently generated mask spans of length `mask_length` is computed by
+                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
+                    actual percentage will be smaller.
         mask_length: size of the mask
         min_masks: minimum number of masked spans
-
+        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
+                        each batch dimension.
     """
     batch_size, sequence_length = shape
 
@@ -135,76 +138,111 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
+            f" and `sequence_length`: {sequence_length}`"
         )
 
-    # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + np.random.rand(1).item())
-    num_masked_spans = max(num_masked_spans, min_masks)
+    # epsilon is used for probabilistic rounding
+    epsilon = np.random.rand(1).item()
 
-    # make sure num masked indices <= sequence_length
-    if num_masked_spans * mask_length > sequence_length:
-        num_masked_spans = sequence_length // mask_length
+    def compute_num_masked_span(input_length):
+        """Given input length, compute how many spans should be masked"""
+        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
+        num_masked_span = max(num_masked_span, min_masks)
+
+        # make sure num masked indices <= sequence_length
+        if num_masked_span * mask_length > sequence_length:
+            num_masked_span = sequence_length // mask_length
+
+        return num_masked_span
+
+    # compute number of masked spans in batch
+    input_lengths = (
+        np.sum(attention_mask, axis=-1).tolist()
+        if attention_mask is not None
+        else [sequence_length for _ in range(batch_size)]
+    )
 
     # SpecAugment mask to fill
     spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask_idxs = []
 
-    # get random indices to mask
-    spec_aug_mask_idxs = np.array(
-        [
-            np.random.choice(np.arange(sequence_length - (mask_length - 1)), num_masked_spans, replace=False)
-            for _ in range(batch_size)
-        ]
-    )
+    max_num_masked_span = compute_num_masked_span(sequence_length)
+
+    if max_num_masked_span == 0:
+        return spec_aug_mask
+
+    for input_length in input_lengths:
+        # compute num of masked spans for this input
+        num_masked_span = compute_num_masked_span(input_length)
+
+        # get random indices to mask
+        spec_aug_mask_idx = np.random.choice(
+            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
+        )
+
+        # pick first sampled index that will serve as a dummy index to pad vector
+        # to ensure same dimension for all batches due to probabilistic rounding
+        # Picking first sample just pads those vectors twice.
+        dummy_mask_idx = spec_aug_mask_idx[0]
+
+        spec_aug_mask_idx = np.concatenate(
+            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+        )
+        spec_aug_mask_idxs.append(spec_aug_mask_idx)
+
+    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
 
     # expand masked indices to masked spans
-    spec_aug_mask_idxs = np.broadcast_to(spec_aug_mask_idxs[:, :, None], (batch_size, num_masked_spans, mask_length))
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, num_masked_spans * mask_length)
+    spec_aug_mask_idxs = np.broadcast_to(
+        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
+    )
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
 
+    # add offset to the starting indexes so that that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, num_masked_spans, mask_length)).reshape(
-        batch_size, num_masked_spans * mask_length
+    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
+        batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
 
-    if attention_mask is not None:
-        # make sure padded input ids cannot be masked
-        spec_aug_mask = np.where(attention_mask, spec_aug_mask, False)
-
     return spec_aug_mask
 
 
-def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attention_mask: Optional[np.ndarray] = None):
+def _sample_negative_indices(
+    features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
+):
     """
     Sample `num_negatives` vectors from feature vectors.
     """
-    batch_size, sequence_length, hidden_size = features_shape
-    if sequence_length <= 1:
-        raise ValueError(
-            f"`features should have `sequence_length` > 1, but are of shape "
-            f"(batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
-        )
-
-    # get `num_negatives` random vector indices from the same utterance
-    sampled_negative_indices = []
-    for batch_idx in range(batch_size):
-        high = attention_mask[batch_idx].sum() - 1 if attention_mask is not None else sequence_length - 1
-        sampled_indices_slice = np.random.randint(0, high, size=(num_negatives * sequence_length,))
-        sampled_negative_indices.append(sampled_indices_slice)
-
-    sampled_negative_indices = np.asarray(sampled_negative_indices, dtype=np.int32)
+    batch_size, sequence_length = features_shape
 
     # generate indices of the positive vectors themselves, repeat them `num_negatives` times
-    feature_indices = np.broadcast_to(np.arange(sequence_length)[:, None], (sequence_length, num_negatives)).flatten()
+    sequence_length_range = np.arange(sequence_length)
 
-    # avoid sampling the same positive vector, but keep the distribution uniform
-    sampled_negative_indices[sampled_negative_indices >= feature_indices] += 1
+    # get `num_negatives` random vector indices from the same utterance
+    sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
 
-    # correct for batch size
-    for batch_idx in range(1, batch_size):
+    mask_time_indices = (
+        mask_time_indices.astype(np.bool) if mask_time_indices is not None else np.ones(features_shape, dtype=np.bool)
+    )
+
+    for batch_idx in range(batch_size):
+        high = mask_time_indices[batch_idx].sum() - 1
+        mapped_masked_indices = sequence_length_range[mask_time_indices[batch_idx]]
+
+        feature_indices = np.broadcast_to(np.arange(high + 1)[:, None], (high + 1, num_negatives))
+        sampled_indices = np.random.randint(0, high, size=(high + 1, num_negatives))
+        # avoid sampling the same positive vector, but keep the distribution uniform
+        sampled_indices[sampled_indices >= feature_indices] += 1
+
+        # remap to actual indices
+        sampled_negative_indices[batch_idx][mask_time_indices[batch_idx]] = mapped_masked_indices[sampled_indices]
+
+        # correct for batch size
         sampled_negative_indices[batch_idx] += batch_idx * sequence_length
 
     return sampled_negative_indices
@@ -287,15 +325,27 @@ class FlaxWav2Vec2LayerNormConvLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.in_conv_dim = self.config.conv_dim[self.layer_id] if self.layer_id > 0 else 1
+        self.in_conv_dim = self.config.conv_dim[self.layer_id - 1] if self.layer_id > 0 else 1
         self.out_conv_dim = self.config.conv_dim[self.layer_id]
 
+        self.kernel_size = self.config.conv_kernel[self.layer_id]
+        self.stride = (self.config.conv_stride[self.layer_id],)
+
+        kernel_init_fn = jax.nn.initializers.he_normal(dtype=self.dtype)
+        bias_init_scale = 1 / (self.in_conv_dim * self.kernel_size)
+
+        def bias_init_fn(key, shape):
+            return (
+                jax.nn.initializers.uniform(scale=2 * bias_init_scale, dtype=self.dtype)(key, shape) - bias_init_scale
+            )
+
         self.conv = nn.Conv(
-            features=self.config.conv_dim[self.layer_id],
-            kernel_size=(self.config.conv_kernel[self.layer_id],),
-            strides=(self.config.conv_stride[self.layer_id],),
+            features=self.out_conv_dim,
+            kernel_size=self.kernel_size,
+            strides=self.stride,
             use_bias=self.config.conv_bias,
-            kernel_init=jax.nn.initializers.he_normal(),
+            kernel_init=kernel_init_fn,
+            bias_init=bias_init_fn,
             padding="VALID",
             dtype=self.dtype,
         )
@@ -327,7 +377,12 @@ class FlaxConvWithWeightNorm(nn.Module):
             self.conv.features // self.conv.feature_group_count,
             self.conv.kernel_size[0],
         )
-        self.weight_v = self.param("weight_v", jax.nn.initializers.he_normal(), weight_shape)
+        weight_v_scale = 2 * math.sqrt(1 / (self.config.num_conv_pos_embeddings * self.config.hidden_size))
+
+        self.weight_v = self.param(
+            "weight_v", jax.nn.initializers.normal(stddev=weight_v_scale, dtype=self.dtype), weight_shape
+        )
+
         self.weight_g = self.param("weight_g", lambda _: jnp.linalg.norm(self.weight_v, axis=(0, 1))[None, None, :])
         self.bias = self.param("bias", jax.nn.initializers.zeros, (self.conv.features,))
         self.prev_padding = self.conv.kernel_size[0] // 2
@@ -705,7 +760,7 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         # storage for codebook variables (codewords)
         self.codevectors = self.param(
             "codevectors",
-            jax.nn.initializers.uniform(),
+            jax.nn.initializers.uniform(scale=1.0),
             (1, self.num_groups * self.num_vars, self.config.codevector_dim // self.num_groups),
         )
         self.weight_proj = nn.Dense(
@@ -734,21 +789,30 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
         hidden_states = hidden_states.reshape(batch_size * sequence_length * self.num_groups, -1)
 
         if not deterministic:
-            # sample code vector probs via gumbel in differentiateable way
-            gumbel_rng = self.make_rng("gumbel")
-            gumbels = jax.random.gumbel(gumbel_rng, hidden_states.shape)
-            codevector_probs = nn.softmax((hidden_states + gumbels) / temperature)
-
             # compute perplexity
             codevector_soft_dist = nn.softmax(
                 hidden_states.reshape(batch_size * sequence_length, self.num_groups, -1), axis=-1
             )
             perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
+
+            # sample code vector probs via gumbel in differentiateable way
+            gumbel_rng = self.make_rng("gumbel")
+            # sample x~Gumbel[0, 1]
+            gumbels = jax.random.gumbel(gumbel_rng, hidden_states.shape)
+            # approximate argmax
+            codevector_probs = nn.softmax((hidden_states + gumbels) / temperature)
+
+            # straight-through estimator trick
+            codevector_idx = codevector_probs.argmax(axis=-1)
+            codevector_probs_hard = jax.nn.one_hot(codevector_idx, codevector_probs.shape[-1]) * 1.0
+            codevector_probs = codevector_probs + jax.lax.stop_gradient(codevector_probs_hard - codevector_probs)
         else:
             # take argmax in non-differentiable way
             # comptute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(axis=-1)
             codevector_probs = jax.nn.one_hot(codevector_idx, hidden_states.shape[-1]) * 1.0
+
+            # compute perplexity
             codevector_probs = codevector_probs.reshape(batch_size * sequence_length, self.num_groups, -1)
             perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
 
@@ -847,7 +911,7 @@ class FlaxWav2Vec2Module(nn.Module):
         self.feature_extractor = FlaxWav2Vec2FeatureExtractor(self.config, dtype=self.dtype)
         self.feature_projection = FlaxWav2Vec2FeatureProjection(self.config, dtype=self.dtype)
         self.masked_spec_embed = self.param(
-            "masked_spec_embed", jax.nn.initializers.uniform(), (self.config.hidden_size,)
+            "masked_spec_embed", jax.nn.initializers.uniform(scale=1.0), (self.config.hidden_size,)
         )
 
         if self.config.do_stable_layer_norm:
@@ -1103,7 +1167,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         input_values,
         attention_mask=None,
         mask_time_indices=None,
-        gumbel_temperature: int = 1,
+        gumbel_temperature: int = 2,
         deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
@@ -1130,13 +1194,25 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             return_dict=return_dict,
         )
 
+        if attention_mask is not None:
+            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1).astype("i4"))
+
+            attention_mask = jnp.zeros(outputs[0].shape[:2], dtype=self.dtype)
+
+            # these two operations makes sure that all values
+            # before the output lengths indices are attended to
+            attention_mask = jax.ops.index_update(
+                attention_mask, jax.ops.index[jnp.arange(attention_mask.shape[0]), output_lengths - 1], 1
+            )
+            attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
+
         # project all transformed features (including masked) to final vq dim
         transformer_features = self.project_hid(outputs[0])
 
         # quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1], deterministic=deterministic)
         quantized_features, codevector_perplexity = self.quantizer(
-            extract_features, mask_time_indices, deterministic=deterministic, temperature=gumbel_temperature
+            extract_features, attention_mask, deterministic=deterministic, temperature=gumbel_temperature
         )
         quantized_features = self.project_q(quantized_features)
 
