@@ -112,6 +112,7 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file=None,
+        tokenizer_file=None,
         do_lower_case=False,
         split_by_punct=False,
         bos_token="[CLS]",
@@ -125,6 +126,7 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
     ) -> None:
         super().__init__(
             vocab_file,
+            tokenizer_file=tokenizer_file,
             do_lower_case=do_lower_case,
             bos_token=bos_token,
             eos_token=eos_token,
