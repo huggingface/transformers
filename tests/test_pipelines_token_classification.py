@@ -16,57 +16,183 @@ import unittest
 
 import numpy as np
 
-from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
-from transformers.pipelines import AggregationStrategy, Pipeline, TokenClassificationArgumentHandler
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers import (
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    AutoModelForTokenClassification,
+    AutoTokenizer,
+    TokenClassificationPipeline,
+    pipeline,
+)
+from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_torch_gpu,
+    slow,
+)
 
-from .test_pipelines_common import CustomInputPipelineCommonMixin
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
 
-class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
-    pipeline_task = "ner"
-    small_models = [
-        "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
-    ]  # Default model - Models tested without the @slow decorator
-    large_models = []  # Models tested with the @slow decorator
+@is_pipeline_test
+class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    def _test_pipeline(self, token_classifier: Pipeline):
-        output_keys = {"entity", "word", "score", "start", "end", "index"}
-        if token_classifier.aggregation_strategy != AggregationStrategy.NONE:
-            output_keys = {"entity_group", "word", "score", "start", "end"}
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
+        return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
-        self.assertIsNotNone(token_classifier)
+    def run_pipeline_test(self, token_classifier, _):
+        model = token_classifier.model
+        tokenizer = token_classifier.tokenizer
 
-        mono_result = token_classifier(VALID_INPUTS[0])
-        self.assertIsInstance(mono_result, list)
-        self.assertIsInstance(mono_result[0], (dict, list))
+        outputs = token_classifier("A simple string")
+        self.assertIsInstance(outputs, list)
+        n = len(outputs)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {
+                    "entity": ANY(str),
+                    "score": ANY(float),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "index": ANY(int),
+                    "word": ANY(str),
+                }
+                for i in range(n)
+            ],
+        )
+        outputs = token_classifier(["list of strings", "A simple string that is quite a bit longer"])
+        self.assertIsInstance(outputs, list)
+        self.assertEqual(len(outputs), 2)
+        n = len(outputs[0])
+        m = len(outputs[1])
 
-        if isinstance(mono_result[0], list):
-            mono_result = mono_result[0]
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                [
+                    {
+                        "entity": ANY(str),
+                        "score": ANY(float),
+                        "start": ANY(int),
+                        "end": ANY(int),
+                        "index": ANY(int),
+                        "word": ANY(str),
+                    }
+                    for i in range(n)
+                ],
+                [
+                    {
+                        "entity": ANY(str),
+                        "score": ANY(float),
+                        "start": ANY(int),
+                        "end": ANY(int),
+                        "index": ANY(int),
+                        "word": ANY(str),
+                    }
+                    for i in range(m)
+                ],
+            ],
+        )
 
-        for key in output_keys:
-            self.assertIn(key, mono_result[0])
+        self.run_aggregation_strategy(model, tokenizer)
 
-        multi_result = [token_classifier(input) for input in VALID_INPUTS]
-        self.assertIsInstance(multi_result, list)
-        self.assertIsInstance(multi_result[0], (dict, list))
+    def run_aggregation_strategy(self, model, tokenizer):
+        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer, aggregation_strategy="simple")
+        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.SIMPLE)
+        outputs = token_classifier("A simple string")
+        self.assertIsInstance(outputs, list)
+        n = len(outputs)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {
+                    "entity_group": ANY(str),
+                    "score": ANY(float),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "word": ANY(str),
+                }
+                for i in range(n)
+            ],
+        )
 
-        if isinstance(multi_result[0], list):
-            multi_result = multi_result[0]
+        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer, aggregation_strategy="first")
+        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.FIRST)
+        outputs = token_classifier("A simple string")
+        self.assertIsInstance(outputs, list)
+        n = len(outputs)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {
+                    "entity_group": ANY(str),
+                    "score": ANY(float),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "word": ANY(str),
+                }
+                for i in range(n)
+            ],
+        )
 
-        for result in multi_result:
-            for key in output_keys:
-                self.assertIn(key, result)
+        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer, aggregation_strategy="max")
+        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.MAX)
+        outputs = token_classifier("A simple string")
+        self.assertIsInstance(outputs, list)
+        n = len(outputs)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {
+                    "entity_group": ANY(str),
+                    "score": ANY(float),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "word": ANY(str),
+                }
+                for i in range(n)
+            ],
+        )
 
-    @require_torch
-    def test_model_kwargs_passed_to_model_load(self):
-        ner_pipeline = pipeline(task="ner", model=self.small_models[0])
-        self.assertFalse(ner_pipeline.model.config.output_attentions)
-        ner_pipeline = pipeline(task="ner", model=self.small_models[0], model_kwargs={"output_attentions": True})
-        self.assertTrue(ner_pipeline.model.config.output_attentions)
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="average"
+        )
+        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.AVERAGE)
+        outputs = token_classifier("A simple string")
+        self.assertIsInstance(outputs, list)
+        n = len(outputs)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {
+                    "entity_group": ANY(str),
+                    "score": ANY(float),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "word": ANY(str),
+                }
+                for i in range(n)
+            ],
+        )
+
+        with self.assertWarns(UserWarning):
+            token_classifier = pipeline(task="ner", model=model, tokenizer=tokenizer, grouped_entities=True)
+        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.SIMPLE)
+        with self.assertWarns(UserWarning):
+            token_classifier = pipeline(
+                task="ner", model=model, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=True
+            )
+        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.FIRST)
 
     @require_torch
     @slow
@@ -131,6 +257,19 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
                 {"entity_group": "ORG", "score": 0.542, "word": "Farc", "start": 110, "end": 114},
             ],
         )
+
+    @require_torch_gpu
+    @slow
+    def test_gpu(self):
+        sentence = "This is dummy sentence"
+        ner = pipeline(
+            "token-classification",
+            device=0,
+            aggregation_strategy=AggregationStrategy.SIMPLE,
+        )
+
+        output = ner(sentence)
+        self.assertEqual(nested_simplify(output), [])
 
     @require_torch
     @slow
@@ -205,8 +344,61 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         )
 
     @require_torch
+    def test_aggregation_strategy_no_b_i_prefix(self):
+        model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        # Just to understand scores indexes in this test
+        token_classifier.model.config.id2label = {0: "O", 1: "MISC", 2: "PER", 3: "ORG", 4: "LOC"}
+        example = [
+            {
+                # fmt : off
+                "scores": np.array([0, 0, 0, 0, 0.9968166351318359]),
+                "index": 1,
+                "is_subword": False,
+                "word": "En",
+                "start": 0,
+                "end": 2,
+            },
+            {
+                # fmt : off
+                "scores": np.array([0, 0, 0, 0, 0.9957635998725891]),
+                "index": 2,
+                "is_subword": True,
+                "word": "##zo",
+                "start": 2,
+                "end": 4,
+            },
+            {
+                # fmt: off
+                "scores": np.array([0, 0, 0, 0.9986497163772583, 0]),
+                # fmt: on
+                "index": 7,
+                "word": "UN",
+                "is_subword": False,
+                "start": 11,
+                "end": 13,
+            },
+        ]
+        self.assertEqual(
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.NONE)),
+            [
+                {"end": 2, "entity": "LOC", "score": 0.997, "start": 0, "word": "En", "index": 1},
+                {"end": 4, "entity": "LOC", "score": 0.996, "start": 2, "word": "##zo", "index": 2},
+                {"end": 13, "entity": "ORG", "score": 0.999, "start": 11, "word": "UN", "index": 7},
+            ],
+        )
+        self.assertEqual(
+            nested_simplify(token_classifier.aggregate(example, AggregationStrategy.SIMPLE)),
+            [
+                {"entity_group": "LOC", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 11, "end": 13},
+            ],
+        )
+
+    @require_torch
     def test_aggregation_strategy(self):
-        model_name = self.small_models[0]
+        model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         # Just to understand scores indexes in this test
@@ -283,7 +475,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
 
     @require_torch
     def test_aggregation_strategy_example2(self):
-        model_name = self.small_models[0]
+        model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         # Just to understand scores indexes in this test
@@ -345,8 +537,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
 
     @require_torch
     def test_gather_pre_entities(self):
-
-        model_name = self.small_models[0]
+        model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
 
@@ -367,7 +558,12 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
         scores = np.array([[1, 0, 0], [0.1, 0.3, 0.6], [0.8, 0.1, 0.1]])
 
         pre_entities = token_classifier.gather_pre_entities(
-            sentence, input_ids, scores, offset_mapping, special_tokens_mask
+            sentence,
+            input_ids,
+            scores,
+            offset_mapping,
+            special_tokens_mask,
+            aggregation_strategy=AggregationStrategy.NONE,
         )
         self.assertEqual(
             nested_simplify(pre_entities),
@@ -386,45 +582,76 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
 
     @require_tf
     def test_tf_only(self):
-        model_name = "Narsil/small"  # This model only has a TensorFlow version
+        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
         # We test that if we don't specificy framework='tf', it gets detected automatically
         token_classifier = pipeline(task="ner", model=model_name)
-        self._test_pipeline(token_classifier)
+        self.assertEqual(token_classifier.framework, "tf")
 
     @require_tf
-    def test_tf_defaults(self):
-        for model_name in self.small_models:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
-        self._test_pipeline(token_classifier)
+    def test_small_model_tf(self):
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
 
-    @require_tf
-    def test_tf_small_ignore_subwords_available_for_fast_tokenizers(self):
-        for model_name in self.small_models:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            token_classifier = pipeline(
-                task="ner",
-                model=model_name,
-                tokenizer=tokenizer,
-                framework="tf",
-                aggregation_strategy=AggregationStrategy.FIRST,
-            )
-            self._test_pipeline(token_classifier)
+    @require_torch
+    def test_no_offset_tokenizer(self):
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": None, "end": None},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": None, "end": None},
+            ],
+        )
 
-        for model_name in self.small_models:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            token_classifier = pipeline(
-                task="ner",
-                model=model_name,
-                tokenizer=tokenizer,
-                framework="tf",
-                aggregation_strategy=AggregationStrategy.SIMPLE,
-            )
-            self._test_pipeline(token_classifier)
+    @require_torch
+    def test_small_model_pt(self):
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", ignore_labels=["O", "I-MISC"]
+        )
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [],
+        )
+
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        # Overload offset_mapping
+        outputs = token_classifier(
+            "This is a test !", offset_mapping=[(0, 0), (0, 1), (0, 2), (0, 0), (0, 0), (0, 0), (0, 0)]
+        )
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 1},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
+            ],
+        )
 
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
-        model_name = self.small_models[0]
+        model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
 
         with self.assertRaises(ValueError):
@@ -435,31 +662,6 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             )
         with self.assertRaises(ValueError):
             pipeline(task="ner", model=model_name, tokenizer=tokenizer, aggregation_strategy=AggregationStrategy.MAX)
-
-    @require_torch
-    def test_pt_defaults_slow_tokenizer(self):
-        for model_name in self.small_models:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
-            self._test_pipeline(token_classifier)
-
-    @require_torch
-    def test_pt_defaults(self):
-        for model_name in self.small_models:
-            token_classifier = pipeline(task="ner", model=model_name)
-            self._test_pipeline(token_classifier)
-
-    @slow
-    @require_torch
-    def test_warnings(self):
-        with self.assertWarns(UserWarning):
-            token_classifier = pipeline(task="ner", model=self.small_models[0], grouped_entities=True)
-        self.assertEqual(token_classifier.aggregation_strategy, AggregationStrategy.SIMPLE)
-        with self.assertWarns(UserWarning):
-            token_classifier = pipeline(
-                task="ner", model=self.small_models[0], grouped_entities=True, ignore_subwords=True
-            )
-        self.assertEqual(token_classifier.aggregation_strategy, AggregationStrategy.FIRST)
 
     @slow
     @require_torch
@@ -501,23 +703,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-    @require_torch
-    def test_pt_small_ignore_subwords_available_for_fast_tokenizers(self):
-        for model_name in self.small_models:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            token_classifier = pipeline(
-                task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=True
-            )
-            self._test_pipeline(token_classifier)
 
-        for model_name in self.small_models:
-            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            token_classifier = pipeline(
-                task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=False
-            )
-            self._test_pipeline(token_classifier)
-
-
+@is_pipeline_test
 class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def setUp(self):
         self.args_parser = TokenClassificationArgumentHandler()

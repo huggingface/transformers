@@ -83,6 +83,10 @@ def is_ray_tune_available():
     return importlib.util.find_spec("ray.tune") is not None
 
 
+def is_sigopt_available():
+    return importlib.util.find_spec("sigopt") is not None
+
+
 def is_azureml_available():
     if importlib.util.find_spec("azureml") is None:
         return False
@@ -117,6 +121,10 @@ def hp_params(trial):
         if isinstance(trial, dict):
             return trial
 
+    if is_sigopt_available():
+        if isinstance(trial, dict):
+            return trial
+
     raise RuntimeError(f"Unknown type for trial {trial.__class__}")
 
 
@@ -125,6 +133,8 @@ def default_hp_search_backend():
         return "optuna"
     elif is_ray_tune_available():
         return "ray"
+    elif is_sigopt_available():
+        return "sigopt"
 
 
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
@@ -254,11 +264,11 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     @functools.wraps(trainable)
     def dynamic_modules_import_trainable(*args, **kwargs):
         """
-        Wrapper around ``tune.with_parameters`` to ensure datasets_modules are loaded on each Actor.
+        Wrapper around `tune.with_parameters` to ensure datasets_modules are loaded on each Actor.
 
         Without this, an ImportError will be thrown. See https://github.com/huggingface/transformers/issues/11565.
 
-        Assumes that ``_objective``, defined above, is a function.
+        Assumes that `_objective`, defined above, is a function.
         """
         if is_datasets_available():
             import datasets.load
@@ -288,6 +298,45 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     return best_run
 
 
+def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+
+    from sigopt import Connection
+
+    conn = Connection()
+    proxies = kwargs.pop("proxies", None)
+    if proxies is not None:
+        conn.set_proxies(proxies)
+
+    experiment = conn.experiments().create(
+        name="huggingface-tune",
+        parameters=trainer.hp_space(None),
+        metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+        parallel_bandwidth=1,
+        observation_budget=n_trials,
+        project="huggingface",
+    )
+    logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+
+    while experiment.progress.observation_count < experiment.observation_budget:
+        suggestion = conn.experiments(experiment.id).suggestions().create()
+        trainer.objective = None
+        trainer.train(resume_from_checkpoint=None, trial=suggestion)
+        # If there hasn't been any evaluation during the training loop.
+        if getattr(trainer, "objective", None) is None:
+            metrics = trainer.evaluate()
+            trainer.objective = trainer.compute_objective(metrics)
+
+        values = [dict(name="objective", value=trainer.objective)]
+        obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
+        logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
+        experiment = conn.experiments(experiment.id).fetch()
+
+    best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
+    best_run = BestRun(best.id, best.value, best.assignments)
+
+    return best_run
+
+
 def get_available_reporting_integrations():
     integrations = []
     if is_azureml_available():
@@ -309,9 +358,13 @@ def rewrite_logs(d):
     new_d = {}
     eval_prefix = "eval_"
     eval_prefix_len = len(eval_prefix)
+    test_prefix = "test_"
+    test_prefix_len = len(test_prefix)
     for k, v in d.items():
         if k.startswith(eval_prefix):
             new_d["eval/" + k[eval_prefix_len:]] = v
+        elif k.startswith(test_prefix):
+            new_d["test/" + k[test_prefix_len:]] = v
         else:
             new_d["train/" + k] = v
     return new_d
@@ -319,19 +372,19 @@ def rewrite_logs(d):
 
 class TensorBoardCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `TensorBoard
-    <https://www.tensorflow.org/tensorboard>`__.
+    A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
 
     Args:
-        tb_writer (:obj:`SummaryWriter`, `optional`):
+        tb_writer (`SummaryWriter`, *optional*):
             The writer to use. Will instantiate one if not set.
     """
 
     def __init__(self, tb_writer=None):
         has_tensorboard = is_tensorboard_available()
-        assert (
-            has_tensorboard
-        ), "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+        if not has_tensorboard:
+            raise RuntimeError(
+                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+            )
         if has_tensorboard:
             try:
                 from torch.utils.tensorboard import SummaryWriter  # noqa: F401
@@ -364,7 +417,8 @@ class TensorBoardCallback(TrainerCallback):
             if trial_name is not None:
                 log_dir = os.path.join(args.logging_dir, trial_name)
 
-        self._init_summary_writer(args, log_dir)
+        if self.tb_writer is None:
+            self._init_summary_writer(args, log_dir)
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
@@ -406,12 +460,13 @@ class TensorBoardCallback(TrainerCallback):
 
 class WandbCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases <https://www.wandb.com/>`__.
+    A [`TrainerCallback`] that sends the logs to [Weight and Biases](https://www.wandb.com/).
     """
 
     def __init__(self):
         has_wandb = is_wandb_available()
-        assert has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
+        if not has_wandb:
+            raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
 
@@ -422,22 +477,21 @@ class WandbCallback(TrainerCallback):
 
     def setup(self, args, state, model, **kwargs):
         """
-        Setup the optional Weights & Biases (`wandb`) integration.
+        Setup the optional Weights & Biases (*wandb*) integration.
 
-        One can subclass and override this method to customize the setup if needed. Find more information `here
-        <https://docs.wandb.ai/integrations/huggingface>`__. You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment variables:
 
         Environment:
-            WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            WANDB_LOG_MODEL (`bool`, *optional*, defaults to `False`):
                 Whether or not to log model as artifact at the end of training. Use along with
-                `TrainingArguments.load_best_model_at_end` to upload best model.
-            WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
-                Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
-                logging or :obj:`"all"` to log gradients and parameters.
-            WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
+                *TrainingArguments.load_best_model_at_end* to upload best model.
+            WANDB_WATCH (`str`, *optional* defaults to `"gradients"`):
+                Can be `"gradients"`, `"all"` or `"false"`. Set to `"false"` to disable gradient
+                logging or `"all"` to log gradients and parameters.
+            WANDB_PROJECT (`str`, *optional*, defaults to `"huggingface"`):
                 Set this to a custom string to store results in a different project.
-            WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
+            WANDB_DISABLED (`bool`, *optional*, defaults to `False`):
+                Whether or not to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
         """
         if self._wandb is None:
             return
@@ -529,39 +583,49 @@ class WandbCallback(TrainerCallback):
 
 class CometCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML <https://www.comet.ml/site/>`__.
+    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.ml/site/).
     """
 
     def __init__(self):
-        assert _has_comet, "CometCallback requires comet-ml to be installed. Run `pip install comet-ml`."
+        if not _has_comet:
+            raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
         self._initialized = False
+        self._log_assets = False
 
     def setup(self, args, state, model):
         """
         Setup the optional Comet.ml integration.
 
         Environment:
-            COMET_MODE (:obj:`str`, `optional`):
-                "OFFLINE", "ONLINE", or "DISABLED"
-            COMET_PROJECT_NAME (:obj:`str`, `optional`):
-                Comet.ml project name for experiments
-            COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
-                Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
+            COMET_MODE (`str`, *optional*):
+                Whether to create an online, offline experiment or disable Comet logging. Can be "OFFLINE", "ONLINE",
+                or "DISABLED". Defaults to "ONLINE".
+            COMET_PROJECT_NAME (`str`, *optional*):
+                Comet project name for experiments
+            COMET_OFFLINE_DIRECTORY (`str`, *optional*):
+                Folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+            COMET_LOG_ASSETS (`str`, *optional*):
+                Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be "TRUE", or
+                "FALSE". Defaults to "TRUE".
 
-        For a number of configurable items in the environment, see `here
-        <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
+        For a number of configurable items in the environment, see [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
         """
         self._initialized = True
+        log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
+        if log_assets in {"TRUE", "1"}:
+            self._log_assets = True
         if state.is_world_process_zero:
             comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
-            args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
             experiment = None
+            experiment_kwargs = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
             if comet_mode == "ONLINE":
-                experiment = comet_ml.Experiment(**args)
+                experiment = comet_ml.Experiment(**experiment_kwargs)
+                experiment.log_other("Created from", "transformers")
                 logger.info("Automatic Comet.ml online logging enabled")
             elif comet_mode == "OFFLINE":
-                args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
-                experiment = comet_ml.OfflineExperiment(**args)
+                experiment_kwargs["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
+                experiment = comet_ml.OfflineExperiment(**experiment_kwargs)
+                experiment.log_other("Created from", "transformers")
                 logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
             if experiment is not None:
                 experiment._set_model_graph(model, framework="transformers")
@@ -581,17 +645,25 @@ class CometCallback(TrainerCallback):
             if experiment is not None:
                 experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
 
+    def on_train_end(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero:
+            experiment = comet_ml.config.get_global_experiment()
+            if (experiment is not None) and (self._log_assets is True):
+                logger.info("Logging checkpoints. This may take time.")
+                experiment.log_asset_folder(
+                    args.output_dir, recursive=True, log_file_name=True, step=state.global_step
+                )
+            experiment.end()
+
 
 class AzureMLCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML
-    <https://pypi.org/project/azureml-sdk/>`__.
+    A [`TrainerCallback`] that sends the logs to [AzureML](https://pypi.org/project/azureml-sdk/).
     """
 
     def __init__(self, azureml_run=None):
-        assert (
-            is_azureml_available()
-        ), "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
+        if not is_azureml_available():
+            raise RuntimeError("AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`.")
         self.azureml_run = azureml_run
 
     def on_init_end(self, args, state, control, **kwargs):
@@ -609,11 +681,12 @@ class AzureMLCallback(TrainerCallback):
 
 class MLflowCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
+    A [`TrainerCallback`] that sends the logs to [MLflow](https://www.mlflow.org/).
     """
 
     def __init__(self):
-        assert is_mlflow_available(), "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
+        if not is_mlflow_available():
+            raise RuntimeError("MLflowCallback requires mlflow to be installed. Run `pip install mlflow`.")
         import mlflow
 
         self._MAX_PARAM_VAL_LENGTH = mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
@@ -628,18 +701,18 @@ class MLflowCallback(TrainerCallback):
         Setup the optional MLflow integration.
 
         Environment:
-            HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`):
+            HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
                 Whether to use MLflow .log_artifact() facility to log artifacts.
 
-                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or `1`, will copy
-                whatever is in :class:`~transformers.TrainingArguments`'s ``output_dir`` to the local or remote
+                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to *True* or *1*, will copy
+                whatever is in [`TrainingArguments`]'s `output_dir` to the local or remote
                 artifact storage. Using it without a remote storage will just copy the files to your artifact location.
         """
         log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
         if log_artifacts in {"TRUE", "1"}:
             self._log_artifacts = True
         if state.is_world_process_zero:
-            self._ml_flow.start_run()
+            self._ml_flow.start_run(run_name=args.run_name)
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
@@ -669,9 +742,10 @@ class MLflowCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
+            metrics = {}
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
-                    self._ml_flow.log_metric(k, v, step=state.global_step)
+                    metrics[k] = v
                 else:
                     logger.warning(
                         f"Trainer is attempting to log a value of "
@@ -679,6 +753,7 @@ class MLflowCallback(TrainerCallback):
                         f"MLflow's log_metric() only accepts float and "
                         f"int types so we dropped this attribute."
                     )
+            self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
@@ -695,13 +770,14 @@ class MLflowCallback(TrainerCallback):
 
 class NeptuneCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Neptune <https://neptune.ai>`.
+    A [`TrainerCallback`] that sends the logs to [Neptune](https://neptune.ai).
     """
 
     def __init__(self):
-        assert (
-            is_neptune_available()
-        ), "NeptuneCallback requires neptune-client to be installed. Run `pip install neptune-client`."
+        if not is_neptune_available():
+            raise ValueError(
+                "NeptuneCallback requires neptune-client to be installed. Run `pip install neptune-client`."
+            )
         import neptune.new as neptune
 
         self._neptune = neptune
@@ -713,13 +789,13 @@ class NeptuneCallback(TrainerCallback):
         Setup the Neptune integration.
 
         Environment:
-            NEPTUNE_PROJECT (:obj:`str`, `required`):
-                The project ID for neptune.ai account. Should be in format `workspace_name/project_name`
-            NEPTUNE_API_TOKEN (:obj:`str`, `required`):
+            NEPTUNE_PROJECT (`str`, *required*):
+                The project ID for neptune.ai account. Should be in format *workspace_name/project_name*
+            NEPTUNE_API_TOKEN (`str`, *required*):
                 API-token for neptune.ai account
-            NEPTUNE_CONNECTION_MODE (:obj:`str`, `optional`):
-                Neptune connection mode. `async` by default
-            NEPTUNE_RUN_NAME (:obj:`str`, `optional`):
+            NEPTUNE_CONNECTION_MODE (`str`, *optional*):
+                Neptune connection mode. *async* by default
+            NEPTUNE_RUN_NAME (`str`, *optional*):
                 The name of run process on Neptune dashboard
         """
         if state.is_world_process_zero:
@@ -728,6 +804,7 @@ class NeptuneCallback(TrainerCallback):
                 api_token=os.getenv("NEPTUNE_API_TOKEN"),
                 mode=os.getenv("NEPTUNE_CONNECTION_MODE", "async"),
                 name=os.getenv("NEPTUNE_RUN_NAME", None),
+                run=os.getenv("NEPTUNE_RUN_ID", None),
             )
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
@@ -750,7 +827,7 @@ class NeptuneCallback(TrainerCallback):
     def __del__(self):
         """
         Environment:
-            NEPTUNE_STOP_TIMEOUT (:obj:`int`, `optional`):
+            NEPTUNE_STOP_TIMEOUT (`int`, *optional*):
                 Number of seconsds to wait for all Neptune.ai tracking calls to finish, before stopping the tracked
                 run. If not set it will wait for all tracking calls to finish.
         """
@@ -764,13 +841,14 @@ class NeptuneCallback(TrainerCallback):
 
 class CodeCarbonCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that tracks the CO2 emission of training.
+    A [`TrainerCallback`] that tracks the CO2 emission of training.
     """
 
     def __init__(self):
-        assert (
-            is_codecarbon_available()
-        ), "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+        if not is_codecarbon_available():
+            raise RuntimeError(
+                "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
+            )
         import codecarbon
 
         self._codecarbon = codecarbon

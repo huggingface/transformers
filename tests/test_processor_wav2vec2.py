@@ -53,8 +53,9 @@ class Wav2Vec2ProcessorTest(unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.add_kwargs_tokens_map)
+    def get_tokenizer(self, **kwargs_init):
+        kwargs = self.add_kwargs_tokens_map.copy()
+        kwargs.update(kwargs_init)
         return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):

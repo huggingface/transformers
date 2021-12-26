@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+import os
+import tempfile
 import unittest
 
 from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -445,7 +445,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
     fx_ready_model_classes = all_model_classes
-    test_sequence_classification_problem_types = True
+    fx_dynamic_ready_model_classes = all_model_classes
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -556,6 +556,29 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model = BertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    @require_torch_gpu
+    def test_torchscript_device_change(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+
+            # BertForMultipleChoice behaves incorrectly in JIT environments.
+            if model_class == BertForMultipleChoice:
+                return
+
+            config.torchscript = True
+            model = model_class(config=config)
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            traced_model = torch.jit.trace(
+                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
+            )
+
+            with tempfile.TemporaryDirectory() as tmp:
+                torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
+                loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
+                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+
 
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
@@ -564,7 +587,8 @@ class BertModelIntegrationTest(unittest.TestCase):
         model = BertModel.from_pretrained("bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
@@ -576,7 +600,8 @@ class BertModelIntegrationTest(unittest.TestCase):
         model = BertModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
@@ -590,7 +615,8 @@ class BertModelIntegrationTest(unittest.TestCase):
         model = BertModel.from_pretrained("zhiheng-huang/bert-base-uncased-embedding-relative-key-query")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(

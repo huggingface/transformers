@@ -181,7 +181,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # Put one bigger than the others to check it ends up in first position
         lengths[32] = 50
 
-        indices = list(LengthGroupedSampler(lengths, 4, lengths=lengths))
+        indices = list(LengthGroupedSampler(4, lengths=lengths))
         # The biggest element should be first
         self.assertEqual(lengths[indices[0]], 50)
         # The indices should be a permutation of range(100)
@@ -196,7 +196,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # Put one bigger than the others to check it ends up in first position
         data[3]["input_ids"] = torch.randint(0, 25, (105,)).tolist()
 
-        indices = list(LengthGroupedSampler(data, 4))
+        indices = list(LengthGroupedSampler(4, dataset=data))
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
@@ -211,7 +211,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # Put one bigger than the others to check it ends up in first position
         data[3]["input_ids"] = torch.randint(0, 25, (105,)).tolist()
 
-        indices = list(LengthGroupedSampler(data, 4))
+        indices = list(LengthGroupedSampler(4, dataset=data))
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
@@ -223,8 +223,8 @@ class TrainerUtilsTest(unittest.TestCase):
         # Put one bigger than the others to check it ends up in first position
         lengths[32] = 50
 
-        indices_process_0 = list(DistributedLengthGroupedSampler(lengths, 4, 2, 0, lengths=lengths))
-        indices_process_1 = list(DistributedLengthGroupedSampler(lengths, 4, 2, 1, lengths=lengths))
+        indices_process_0 = list(DistributedLengthGroupedSampler(4, num_replicas=2, rank=0, lengths=lengths))
+        indices_process_1 = list(DistributedLengthGroupedSampler(4, num_replicas=2, rank=1, lengths=lengths))
         # The biggest element should be first
         self.assertEqual(lengths[indices_process_0[0]], 50)
         # The indices should be a permutation of range(100)
@@ -354,6 +354,34 @@ class TrainerUtilsTest(unittest.TestCase):
 
         self.check_iterable_dataset_shard(dataset, 4, drop_last=True, num_processes=3, epoch=42)
         self.check_iterable_dataset_shard(dataset, 4, drop_last=False, num_processes=3, epoch=42)
+
+    def test_iterable_dataset_shard_with_length(self):
+        sampler_shards = [
+            IterableDatasetShard(list(range(100)), batch_size=4, drop_last=True, num_processes=2, process_index=i)
+            for i in range(2)
+        ]
+
+        # Build expected shards: each process will have batches of size 4 until there is not enough elements to
+        # form two full batches (so we stop at 96 = (100 // (4 * 2)) * 4)
+        expected_shards = [[], []]
+        current_shard = 0
+        for i in range(0, 96, 4):
+            expected_shards[current_shard].extend(list(range(i, i + 4)))
+            current_shard = 1 - current_shard
+
+        self.assertListEqual([list(shard) for shard in sampler_shards], expected_shards)
+        self.assertListEqual([len(shard) for shard in sampler_shards], [len(shard) for shard in expected_shards])
+
+        sampler_shards = [
+            IterableDatasetShard(list(range(100)), batch_size=4, drop_last=False, num_processes=2, process_index=i)
+            for i in range(2)
+        ]
+        # When drop_last=False, we get two last full batches by looping back to the beginning.
+        expected_shards[0].extend(list(range(96, 100)))
+        expected_shards[1].extend(list(range(0, 4)))
+
+        self.assertListEqual([list(shard) for shard in sampler_shards], expected_shards)
+        self.assertListEqual([len(shard) for shard in sampler_shards], [len(shard) for shard in expected_shards])
 
     def check_shard_sampler(self, dataset, batch_size, drop_last, num_processes=2):
         shards = [

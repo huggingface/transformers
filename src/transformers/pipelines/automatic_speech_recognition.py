@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
+from ..file_utils import is_torch_available
 from ..utils import logging
 from .base import Pipeline
 
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
     from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 logger = logging.get_logger(__name__)
+
+if is_torch_available():
+    from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
 def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
@@ -70,36 +74,39 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
     to support multiple audio formats
     """
 
-    def __init__(self, feature_extractor: "SequenceFeatureExtractor", *args, **kwargs):
+    def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
         """
         Arguments:
-            feature_extractor (:obj:`~transformers.SequenceFeatureExtractor`):
+            feature_extractor ([`SequenceFeatureExtractor`]):
                 The feature extractor that will be used by the pipeline to encode waveform for the model.
-            model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+            model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
                 The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
-                from :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel`
+                from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`]
                 for TensorFlow.
-            tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+            tokenizer ([`PreTrainedTokenizer`]):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-                :class:`~transformers.PreTrainedTokenizer`.
-            modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
+                [`PreTrainedTokenizer`].
+            modelcard (`str` or [`ModelCard`], *optional*):
                 Model card attributed to the model for this pipeline.
-            framework (:obj:`str`, `optional`):
-                The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified
+            framework (`str`, *optional*):
+                The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified
                 framework must be installed.
 
                 If no framework is specified, will default to the one currently installed. If no framework is specified
-                and both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if
+                and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
                 no model is provided.
-            device (:obj:`int`, `optional`, defaults to -1):
+            device (`int`, *optional*, defaults to -1):
                 Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the
                 model on the associated CUDA device id.
         """
         super().__init__(*args, **kwargs)
+
         self.feature_extractor = feature_extractor
 
         if self.framework == "tf":
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
+
+        self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
 
     def __call__(
         self,
@@ -107,22 +114,29 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :obj:`~transformers.AutomaticSpeechRecognitionPipeline`
+        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
 
         Args:
-            inputs (:obj:`np.ndarray` or :obj:`bytes` or :obj:`str`):
-                The inputs is either a raw waveform (:obj:`np.ndarray` of shape (n, ) of type :obj:`np.float32` or
-                :obj:`np.float64`) at the correct sampling rate (no further check will be done) or a :obj:`str` that is
+            inputs (`np.ndarray` or `bytes` or `str`):
+                The inputs is either a raw waveform (`np.ndarray` of shape (n, ) of type `np.float32` or
+                `np.float64`) at the correct sampling rate (no further check will be done) or a `str` that is
                 the filename of the audio file, the file will be read at the correct sampling rate to get the waveform
-                using `ffmpeg`. This requires `ffmpeg` to be installed on the system. If `inputs` is :obj:`bytes` it is
-                supposed to be the content of an audio file and is interpreted by `ffmpeg` in the same way.
+                using *ffmpeg*. This requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is
+                supposed to be the content of an audio file and is interpreted by *ffmpeg* in the same way.
 
         Return:
-            A :obj:`dict` with the following keys:
+            A `dict` with the following keys:
 
-            - **text** (:obj:`str`) -- The recognized text.
+            - **text** (`str`) -- The recognized text.
         """
+        return super().__call__(inputs, **kwargs)
+
+    def _sanitize_parameters(self, **kwargs):
+        # No parameters on this pipeline right now
+        return {}, {}, {}
+
+    def preprocess(self, inputs):
         if isinstance(inputs, str):
             with open(inputs, "rb") as f:
                 inputs = f.read()
@@ -130,23 +144,38 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
-        assert isinstance(inputs, np.ndarray), "We expect a numpy ndarray as input"
-        assert len(inputs.shape) == 1, "We expect a single channel audio input for AutomaticSpeechRecognitionPipeline"
+        if not isinstance(inputs, np.ndarray):
+            raise ValueError("We expect a numpy ndarray as input")
+        if len(inputs.shape) != 1:
+            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
-        processed = self.ensure_tensor_on_device(**processed)
+        return processed
 
-        name = self.model.__class__.__name__
-        if name.endswith("ForConditionalGeneration"):
-            input_ids = processed["input_features"]
-            tokens = self.model.generate(input_ids=input_ids)
+    def _forward(self, model_inputs):
+        model_class = self.model.__class__
+        if model_class in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+            encoder = self.model.get_encoder()
+            # we need to pass `processed.get("attention_mask")` here since audio encoder
+            # attention mask  length is different from expected text decoder `encoder_attention_mask` length
+            # `generate` magic to create the mask automatically won't work, we basically need to help
+            # it here.
+            tokens = self.model.generate(
+                encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
+            )
             tokens = tokens.squeeze(0)
-        elif name.endswith("ForCTC"):
-            outputs = self.model(**processed)
+        elif model_class in MODEL_FOR_CTC_MAPPING.values():
+            outputs = self.model(**model_inputs)
             tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+        else:
+            logger.warning("This is an unknown class, treating it as CTC.")
+            outputs = self.model(**model_inputs)
+            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+        return tokens
 
+    def postprocess(self, model_outputs):
         skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        recognized_string = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
+        recognized_string = self.tokenizer.decode(model_outputs, skip_special_tokens=skip_special_tokens)
         return {"text": recognized_string}

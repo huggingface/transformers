@@ -17,14 +17,13 @@
 ####################################################################################################
 
 import argparse
-import json
 import os
 import re
 import zipfile
 
 import torch
 
-from transformers import GPT2Config
+from transformers import AutoTokenizer, GPT2Config
 
 
 ####################################################################################################
@@ -80,6 +79,21 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     # The converted output model.
     output_state_dict = {}
 
+    # old versions did not store training args
+    ds_args = input_state_dict.get("args", None)
+    if ds_args is not None:
+        # do not make the user write a config file when the exact dimensions/sizes are already in the checkpoint
+        # from pprint import pprint
+        # pprint(vars(ds_args))
+
+        config.vocab_size = ds_args.padded_vocab_size
+        config.n_positions = ds_args.max_position_embeddings
+        config.n_embd = ds_args.hidden_size
+        config.n_layer = ds_args.num_layers
+        config.n_head = ds_args.num_attention_heads
+        config.n_inner = ds_args.ffn_hidden_size
+        # pprint(config)
+
     # The number of heads.
     heads = config.n_head
     # The hidden_size per head.
@@ -105,10 +119,11 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
 
     # The position embeddings.
     pos_embeddings = embeddings["position_embeddings"]["weight"]
-    # Read the hidden dimension.
-    n_embed = pos_embeddings.size(0)
-    # DEBUG.
-    assert n_embed == heads * hidden_size_per_head
+    # Read the causal mask dimension (seqlen). [max_sequence_length, hidden_size]
+    n_positions = pos_embeddings.size(0)
+    assert (
+        n_positions == config.n_positions
+    ), f"pos_embeddings.max_sequence_length={n_positions} and config.n_positions={config.n_positions} don't match"
     # Store the position embeddings.
     output_state_dict["transformer.wpe.weight"] = pos_embeddings
 
@@ -157,11 +172,13 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
         ) and weight_or_bias == "weight":
 
             # Insert a tensor of 1x1xDxD bias.
-            causal_mask = torch.tril(torch.ones((n_embed, n_embed), dtype=torch.uint8)).view(1, 1, n_embed, n_embed)
+            causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.float16)).view(
+                1, 1, n_positions, n_positions
+            )
             output_state_dict[layer_name + ".attn.bias"] = causal_mask
 
             # Insert a "dummy" tensor for masked_bias.
-            masked_bias = torch.tensor(-1e4)
+            masked_bias = torch.tensor(-1e4, dtype=torch.float16)
             output_state_dict[layer_name + ".attn.masked_bias"] = masked_bias
 
             out_val = fix_query_key_value_ordering(val, checkpoint_version, 3, heads, hidden_size_per_head)
@@ -215,7 +232,7 @@ def main():
     parser.add_argument(
         "path_to_checkpoint",
         type=str,
-        help="Path to the ZIP file containing the checkpoint",
+        help="Path to the checkpoint file (.zip archive or direct .pt file)",
     )
     parser.add_argument(
         "--config_file",
@@ -229,23 +246,40 @@ def main():
     basename = os.path.dirname(args.path_to_checkpoint)
 
     # Load the model.
+    # the .zip is very optional, let's keep it for backward compatibility
     print(f"Extracting PyTorch state dictionary from {args.path_to_checkpoint}")
-    with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
-        with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
-            input_state_dict = torch.load(pytorch_dict, map_location="cpu")
+    if args.path_to_checkpoint.endswith(".zip"):
+        with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
+            with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
+                input_state_dict = torch.load(pytorch_dict, map_location="cpu")
+    else:
+        input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")
+
+    ds_args = input_state_dict.get("args", None)
 
     # Read the config, or default to the model released by NVIDIA.
     if args.config_file == "":
+
+        if ds_args is not None:
+            if ds_args.bias_gelu_fusion:
+                activation_function = "gelu_fast"
+            elif ds_args.openai_gelu:
+                activation_function = "gelu_new"
+            else:
+                activation_function = "gelu"
+        else:
+            # in the very early days this used to be "gelu_new"
+            activation_function = "gelu_new"
+
         # Spell out all parameters in case the defaults change.
         config = GPT2Config(
             vocab_size=50257,
             n_positions=1024,
-            n_ctx=1024,
             n_embd=1024,
             n_layer=24,
             n_head=16,
             n_inner=4096,
-            activation_function="gelu_new",
+            activation_function=activation_function,
             resid_pdrop=0.1,
             embd_pdrop=0.1,
             attn_pdrop=0.1,
@@ -257,13 +291,14 @@ def main():
             summary_proj_to_labels=True,
             summary_first_dropout=0.1,
             scale_attn_weights=True,
-            gradient_checkpointing=False,
             use_cache=True,
             bos_token_id=50256,
             eos_token_id=50256,
         )
     else:
         config = GPT2Config.from_json_file(args.config_file)
+
+    config.architectures = ["GPT2LMHeadModel"]
 
     # Convert.
     print("Converting")
@@ -273,14 +308,30 @@ def main():
     if args.print_checkpoint_structure:
         recursive_print(None, output_state_dict)
 
+    # Add tokenizer class info to config
+    # see https://github.com/huggingface/transformers/issues/13906)
+    if ds_args is not None:
+        tokenizer_type = ds_args.tokenizer_type
+        if tokenizer_type == "GPT2BPETokenizer":
+            tokenizer_model_name = "gpt2"
+        elif tokenizer_type == "PretrainedFromHF":
+            tokenizer_model_name = ds_args.tokenizer_name_or_path
+        else:
+            raise ValueError(f"Unrecognized tokenizer_type {tokenizer_type}")
+    else:
+        tokenizer_model_name = "gpt2"
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_name)
+    tokenizer_class = type(tokenizer).__name__
+    config.tokenizer_class = tokenizer_class
+
     # Store the config to file.
-    output_config_file = os.path.join(basename, "config.json")
-    output_config = config.to_dict()
-    output_config["architectures"] = ["GPT2LMHeadModel"]
-    output_config["model_type"] = "gpt2"
-    print(f'Saving config to "{output_config_file}"')
-    with open(output_config_file, "w") as f:
-        json.dump(output_config, f)
+    print("Saving config")
+    config.save_pretrained(basename)
+
+    # Save tokenizer based on args
+    print(f"Adding {tokenizer_class} tokenizer files")
+    tokenizer.save_pretrained(basename)
 
     # Store the state_dict to file.
     output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")

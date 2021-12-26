@@ -34,34 +34,32 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     Constructs a Wav2Vec2 feature extractor.
 
     This feature extractor inherits from
-    :class:`~transformers.feature_extraction_sequence_utils.SequenceFeatureExtractor` which contains most of the main
+    [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_size (:obj:`int`, defaults to 1):
+        feature_size (`int`, defaults to 1):
             The feature dimension of the extracted features.
-        sampling_rate (:obj:`int`, defaults to 16000):
+        sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        padding_value (:obj:`float`, defaults to 0.0):
+        padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        do_normalize (`bool`, *optional*, defaults to `False`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-            improve the performance for some models, *e.g.*, `wav2vec2-lv60
-            <https://huggingface.co/models?search=lv60>`__.
-        return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` should return :obj:`attention_mask`.
+            improve the performance for some models, *e.g.*, [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
+        return_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether or not [`~Wav2Vec2FeatureExtractor.__call__`] should return `attention_mask`.
 
-            .. note::
+            <Tip>
 
-                Wav2Vec2 models that have set ``config.feat_extract_norm == "group"``, such as `wav2vec2-base
-                <https://huggingface.co/facebook/wav2vec2-base-960h>`__, have **not** been trained using
-                :obj:`attention_mask`. For such models, :obj:`input_values` should simply be padded with 0 and no
-                :obj:`attention_mask` should be passed.
+            Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+            `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
+            `attention_mask` should be passed.
 
-                For Wav2Vec2 models that have set ``config.feat_extract_norm == "layer"``, such as `wav2vec2-lv60
-                <https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self>`__, :obj:`attention_mask` should be
-                passed for batched inference.
-    """
+            For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
+            passed for batched inference.
+
+            </Tip>"""
 
     model_input_names = ["input_values", "attention_mask"]
 
@@ -79,16 +77,25 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
 
     @staticmethod
-    def zero_mean_unit_var_norm(input_values: List[np.ndarray], input_lengths: List[int]) -> List[np.ndarray]:
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+    ) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
-        if isinstance(input_values[0], np.ndarray):
-            input_values = [x.astype(np.float32) for x in input_values]
+        if attention_mask is not None:
+            attention_mask = np.array(attention_mask, np.int32)
+            normed_input_values = []
 
-        normed_input_values = [
-            (x - np.mean(x[:i])) / np.sqrt(np.var(x[:i]) + 1e-5) for x, i in zip(input_values, input_lengths)
-        ]
+            for vector, length in zip(input_values, attention_mask.sum(-1)):
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if length < normed_slice.shape[0]:
+                    normed_slice[length:] = padding_value
+
+                normed_input_values.append(normed_slice)
+        else:
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+
         return normed_input_values
 
     def __call__(
@@ -107,66 +114,66 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s). sequences.
 
         Args:
-            raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
+            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
                   maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            max_length (:obj:`int`, `optional`):
+            max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
-            truncation (:obj:`bool`):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            pad_to_multiple_of (:obj:`int`, `optional`):
+            truncation (`bool`):
+                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
+            pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask (:obj:`bool`, `optional`):
+            return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
+                [What are attention masks?](../glossary#attention-mask)
 
-                .. note::
+                <Tip>
 
-                    Wav2Vec2 models that have set ``config.feat_extract_norm == "group"``, such as `wav2vec2-base
-                    <https://huggingface.co/facebook/wav2vec2-base-960h>`__, have **not** been trained using
-                    :obj:`attention_mask`. For such models, :obj:`input_values` should simply be padded with 0 and no
-                    :obj:`attention_mask` should be passed.
+                Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+                `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
+                `attention_mask` should be passed.
 
-                    For Wav2Vec2 models that have set ``config.feat_extract_norm == "layer"``, such as `wav2vec2-lv60
-                    <https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self>`__, :obj:`attention_mask` should be
-                    passed for batched inference.
+                For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
+                passed for batched inference.
 
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+                </Tip>
+
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-            sampling_rate (:obj:`int`, `optional`):
-                The sampling rate at which the ``raw_speech`` input was sampled. It is strongly recommended to pass
-                ``sampling_rate`` at the forward call to prevent silent errors.
-            padding_value (:obj:`float`, defaults to 0.0):
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
+            padding_value (`float`, defaults to 0.0):
         """
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}. "
                     f"Please make sure that the provided `raw_speech` input was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the ``sampling_rate`` argument to this function."
+                "It is strongly recommended to pass the ``sampling_rate`` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -174,14 +181,6 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             isinstance(raw_speech, (list, tuple))
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
         )
-
-        # make sure input is in list format
-        if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.float64:
-            raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
         if not is_batched:
@@ -199,16 +198,33 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
         )
 
-        if "attention_mask" in padded_inputs:
-            input_lengths = padded_inputs["attention_mask"].sum(-1)
-        else:
-            padded_input_values = padded_inputs["input_values"]
-            input_lengths = [padded_input_values.shape[-1] for _ in range(padded_input_values.shape[0])]
+        # convert input values to correct format
+        input_values = padded_inputs["input_values"]
+        if not isinstance(input_values[0], np.ndarray):
+            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
+        elif (
+            not isinstance(input_values, np.ndarray)
+            and isinstance(input_values[0], np.ndarray)
+            and input_values[0].dtype is np.dtype(np.float64)
+        ):
+            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
+        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
+            padded_inputs["input_values"] = input_values.astype(np.float32)
+
+        # convert attention_mask to correct format
+        attention_mask = padded_inputs.get("attention_mask")
+        if attention_mask is not None:
+            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
         # zero-mean and unit-variance normalization
         if self.do_normalize:
+            attention_mask = (
+                attention_mask
+                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                else None
+            )
             padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_values"], input_lengths=input_lengths
+                padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
 
         if return_tensors is not None:

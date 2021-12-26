@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Utilities to convert slow tokenizers in their fast tokenizers counterparts.
+Utilities to convert slow tokenizers in their fast tokenizers counterparts.
 
-    All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
-    allow to make our dependency on SentencePiece optional.
+All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
+allow to make our dependency on SentencePiece optional.
 """
 
 from typing import Dict, List, Tuple
@@ -101,6 +101,56 @@ class BertConverter(Converter):
             special_tokens=[
                 (cls, cls_token_id),
                 (sep, sep_token_id),
+            ],
+        )
+        tokenizer.decoder = decoders.WordPiece(prefix="##")
+
+        return tokenizer
+
+
+class SplinterConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
+
+        tokenize_chinese_chars = False
+        strip_accents = False
+        do_lower_case = False
+        if hasattr(self.original_tokenizer, "basic_tokenizer"):
+            tokenize_chinese_chars = self.original_tokenizer.basic_tokenizer.tokenize_chinese_chars
+            strip_accents = self.original_tokenizer.basic_tokenizer.strip_accents
+            do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
+
+        tokenizer.normalizer = normalizers.BertNormalizer(
+            clean_text=True,
+            handle_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            lowercase=do_lower_case,
+        )
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        question = str(self.original_tokenizer.question_token)
+        dot = "."
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+        question_token_id = self.original_tokenizer.question_token_id
+        dot_token_id = self.original_tokenizer.convert_tokens_to_ids(".")
+
+        if self.original_tokenizer.padding_side == "right":
+            pair = f"{cls}:0 $A:0 {question} {dot} {sep}:0 $B:1 {sep}:1"
+        else:
+            pair = f"{cls}:0 $A:0 {sep}:0 $B:1 {question} {dot} {sep}:1"
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:0 $A:0 {sep}:0",
+            pair=pair,
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+                (question, question_token_id),
+                (dot, dot_token_id),
             ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
@@ -792,12 +842,81 @@ class CLIPConverter(Converter):
         return tokenizer
 
 
+class LayoutLMv2Converter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
+
+        tokenize_chinese_chars = False
+        strip_accents = False
+        do_lower_case = True
+        if hasattr(self.original_tokenizer, "basic_tokenizer"):
+            tokenize_chinese_chars = self.original_tokenizer.basic_tokenizer.tokenize_chinese_chars
+            strip_accents = self.original_tokenizer.basic_tokenizer.strip_accents
+            do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
+
+        tokenizer.normalizer = normalizers.BertNormalizer(
+            clean_text=True,
+            handle_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            lowercase=do_lower_case,
+        )
+        tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:0 $A:0 {sep}:0",
+            pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
+        )
+        tokenizer.decoder = decoders.WordPiece(prefix="##")
+
+        return tokenizer
+
+
+class BlenderbotConverter(Converter):
+    def converted(self) -> Tokenizer:
+        ot = self.original_tokenizer
+        vocab = ot.encoder
+        merges = list(ot.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"$A:0 {ot.eos_token}:0",
+            special_tokens=[
+                (ot.eos_token, ot.eos_token_id),
+            ],
+        )
+
+        return tokenizer
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
     "BarthezTokenizer": BarthezConverter,
     "BertTokenizer": BertConverter,
     "BigBirdTokenizer": BigBirdConverter,
+    "BlenderbotTokenizer": BlenderbotConverter,
     "CamembertTokenizer": CamembertConverter,
     "CLIPTokenizer": CLIPConverter,
     "ConvBertTokenizer": BertConverter,
@@ -807,10 +926,13 @@ SLOW_TO_FAST_CONVERTERS = {
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
     "ElectraTokenizer": BertConverter,
+    "FNetTokenizer": AlbertConverter,
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
+    "LayoutLMv2Tokenizer": BertConverter,
+    "LayoutXLMTokenizer": XLMRobertaConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
@@ -829,6 +951,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "T5Tokenizer": T5Converter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
+    "SplinterTokenizer": SplinterConverter,
 }
 
 
@@ -837,13 +960,13 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
-        transformer_tokenizer (:class:`~transformers.tokenization_utils_base.PreTrainedTokenizer`):
+        transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
-            :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`.
+            [`~tokenization_utils_base.PreTrainedTokenizerFast`].
 
     Return:
-        A instance of :class:`~tokenizers.Tokenizer` to be used as the backend tokenizer of a
-        :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`
+        A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
+        [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__

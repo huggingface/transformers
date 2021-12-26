@@ -20,10 +20,21 @@ import os
 import tempfile
 import unittest
 
+import numpy as np
+
 import requests
+import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    is_flax_available,
+    is_pt_flax_cross_test,
+    is_pt_tf_cross_test,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, random_attention_mask
@@ -41,6 +52,14 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import CLIPProcessor
+
+
+if is_flax_available():
+    import jax.numpy as jnp
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
+    )
 
 
 class CLIPVisionModelTester:
@@ -100,7 +119,8 @@ class CLIPVisionModelTester:
         model = CLIPVisionModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
+        with torch.no_grad():
+            result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
@@ -327,6 +347,13 @@ class CLIPTextModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
+        if input_mask is not None:
+            batch_size, seq_length = input_mask.shape
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
+            for batch_idx, start_index in enumerate(rnd_start_indices):
+                input_mask[batch_idx, :start_index] = 1
+                input_mask[batch_idx, start_index:] = 0
+
         config = self.get_config()
 
         return config, input_ids, input_mask
@@ -348,8 +375,9 @@ class CLIPTextModelTester:
         model = CLIPTextModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+            result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
@@ -427,7 +455,8 @@ class CLIPModelTester:
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = CLIPModel(config).to(torch_device).eval()
-        result = model(input_ids, pixel_values, attention_mask)
+        with torch.no_grad():
+            result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
         )
@@ -477,6 +506,30 @@ class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
     # CLIPModel does not have input/output embeddings
     def test_model_common_attributes(self):
         pass
+
+    # override as the `logit_scale` parameter initilization is different for CLIP
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # check if `logit_scale` is initilized as per the original implementation
+                    if name == "logit_scale":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            np.log(1 / 0.07),
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -528,6 +581,267 @@ class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+    # overwrite from common since CLIPModel/TFCLIPModel return CLIPOutput/TFCLIPOutput
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self):
+        import numpy as np
+        import tensorflow as tf
+
+        import transformers
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
+
+            if not hasattr(transformers, tf_model_class_name):
+                # transformers does not have TF version yet
+                return
+
+            tf_model_class = getattr(transformers, tf_model_class_name)
+
+            config.output_hidden_states = True
+
+            tf_model = tf_model_class(config)
+            pt_model = model_class(config)
+
+            # make sure only tf inputs are forward that actually exist in function args
+            tf_input_keys = set(inspect.signature(tf_model.call).parameters.keys())
+
+            # remove all head masks
+            tf_input_keys.discard("head_mask")
+            tf_input_keys.discard("cross_attn_head_mask")
+            tf_input_keys.discard("decoder_head_mask")
+
+            pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+            pt_inputs = {k: v for k, v in pt_inputs.items() if k in tf_input_keys}
+
+            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            pt_model.eval()
+            tf_inputs_dict = {}
+            for key, tensor in pt_inputs.items():
+                # skip key that does not exist in tf
+                if type(tensor) == bool:
+                    tf_inputs_dict[key] = tensor
+                elif key == "input_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "pixel_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                else:
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
+
+            # Check we can load pt model in tf and vice-versa with model => model functions
+            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+
+            # need to rename encoder-decoder "inputs" for PyTorch
+            #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+            #                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
+            with torch.no_grad():
+                pto = pt_model(**pt_inputs)
+            tfo = tf_model(tf_inputs_dict, training=False)
+
+            self.assertEqual(len(tfo), len(pto), "Output lengths differ between TF and PyTorch")
+            for tf_output, pt_output in zip(tfo.to_tuple(), pto.to_tuple()):
+
+                if not (isinstance(tf_output, tf.Tensor) and isinstance(pt_output, torch.Tensor)):
+                    continue
+
+                tf_out = tf_output.numpy()
+                pt_out = pt_output.numpy()
+
+                self.assertEqual(tf_out.shape, pt_out.shape, "Output component shapes differ between TF and PyTorch")
+
+                if len(tf_out.shape) > 0:
+
+                    tf_nans = np.copy(np.isnan(tf_out))
+                    pt_nans = np.copy(np.isnan(pt_out))
+
+                    pt_out[tf_nans] = 0
+                    tf_out[tf_nans] = 0
+                    pt_out[pt_nans] = 0
+                    tf_out[pt_nans] = 0
+
+                max_diff = np.amax(np.abs(tf_out - pt_out))
+                self.assertLessEqual(max_diff, 4e-2)
+
+            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
+                torch.save(pt_model.state_dict(), pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+
+                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
+                tf_model.save_weights(tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+
+            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            pt_model.eval()
+            tf_inputs_dict = {}
+            for key, tensor in pt_inputs.items():
+                # skip key that does not exist in tf
+                if type(tensor) == bool:
+                    tensor = np.array(tensor, dtype=bool)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor, dtype=tf.int32)
+                elif key == "input_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "pixel_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                else:
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
+
+            # need to rename encoder-decoder "inputs" for PyTorch
+            #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+            #                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
+            with torch.no_grad():
+                pto = pt_model(**pt_inputs)
+
+            tfo = tf_model(tf_inputs_dict)
+
+            self.assertEqual(len(tfo), len(pto), "Output lengths differ between TF and PyTorch")
+            for tf_output, pt_output in zip(tfo.to_tuple(), pto.to_tuple()):
+
+                if not (isinstance(tf_output, tf.Tensor) and isinstance(pt_output, torch.Tensor)):
+                    continue
+
+                tf_out = tf_output.numpy()
+                pt_out = pt_output.numpy()
+
+                self.assertEqual(tf_out.shape, pt_out.shape, "Output component shapes differ between TF and PyTorch")
+
+                if len(tf_out.shape) > 0:
+                    tf_nans = np.copy(np.isnan(tf_out))
+                    pt_nans = np.copy(np.isnan(pt_out))
+
+                    pt_out[tf_nans] = 0
+                    tf_out[tf_nans] = 0
+                    pt_out[pt_nans] = 0
+                    tf_out[pt_nans] = 0
+
+                max_diff = np.amax(np.abs(tf_out - pt_out))
+                self.assertLessEqual(max_diff, 4e-2)
+
+    # overwrite from common since FlaxCLIPModel returns nested output
+    # which is not supported in the common test
+    @is_pt_flax_cross_test
+    def test_equivalence_pt_to_flax(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+
+                # load PyTorch class
+                pt_model = model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+
+                fx_model_class_name = "Flax" + model_class.__name__
+
+                if not hasattr(transformers, fx_model_class_name):
+                    return
+
+                fx_model_class = getattr(transformers, fx_model_class_name)
+
+                # load Flax class
+                fx_model = fx_model_class(config, dtype=jnp.float32)
+                # make sure only flax inputs are forward that actually exist in function args
+                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
+
+                # prepare inputs
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # remove function args that don't exist in Flax
+                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
+
+                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_model.params = fx_state
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+
+                # convert inputs to Flax
+                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+                fx_outputs = fx_model(**fx_inputs).to_tuple()
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pt_model.save_pretrained(tmpdirname)
+                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                fx_outputs_loaded = fx_model_loaded(**fx_inputs).to_tuple()
+                self.assertEqual(
+                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
+                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
+
+    # overwrite from common since FlaxCLIPModel returns nested output
+    # which is not supported in the common test
+    @is_pt_flax_cross_test
+    def test_equivalence_flax_to_pt(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # load corresponding PyTorch class
+                pt_model = model_class(config).eval()
+
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+
+                fx_model_class_name = "Flax" + model_class.__name__
+
+                if not hasattr(transformers, fx_model_class_name):
+                    # no flax model exists for this class
+                    return
+
+                fx_model_class = getattr(transformers, fx_model_class_name)
+
+                # load Flax class
+                fx_model = fx_model_class(config, dtype=jnp.float32)
+                # make sure only flax inputs are forward that actually exist in function args
+                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
+
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
+                # prepare inputs
+                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # remove function args that don't exist in Flax
+                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+
+                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
+
+                fx_outputs = fx_model(**fx_inputs).to_tuple()
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+
+                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
+
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
+
+                self.assertEqual(
+                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
     @slow
     def test_model_from_pretrained(self):

@@ -21,9 +21,11 @@ import unittest
 
 import numpy as np
 import pytest
+from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_tf_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_tf, slow
+from transformers.file_utils import is_librosa_available, is_pyctcdecode_available
+from transformers.testing_utils import require_librosa, require_pyctcdecode, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -34,6 +36,14 @@ if is_tf_available():
 
     from transformers import TFWav2Vec2ForCTC, TFWav2Vec2Model, Wav2Vec2Processor
     from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices
+
+
+if is_pyctcdecode_available():
+    from transformers import Wav2Vec2ProcessorWithLM
+
+
+if is_librosa_available():
+    import librosa
 
 
 @require_tf
@@ -473,27 +483,17 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
 
 @require_tf
 @slow
-@require_datasets
-@require_soundfile
 class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def test_inference_ctc_normal(self):
         model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
@@ -516,9 +516,7 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
 
-        input_values = processor(
-            input_speech, return_tensors="tf", padding=True, truncation=True, sampling_rate=16000
-        ).input_values
+        input_values = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000).input_values
 
         logits = model(input_values).logits
 
@@ -537,14 +535,14 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="tf", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000)
 
         input_values = inputs.input_values
         attention_mask = inputs.attention_mask
 
         logits = model(input_values, attention_mask=attention_mask).logits
 
-        predicted_ids = tf.argmax(logits, dim=-1)
+        predicted_ids = tf.argmax(logits, axis=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
@@ -554,3 +552,22 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
             "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    @require_pyctcdecode
+    @require_librosa
+    def test_wav2vec2_with_lm(self):
+        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        sample = next(iter(ds))
+
+        resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
+
+        model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(resampled_audio, return_tensors="tf").input_values
+
+        logits = model(input_values).logits
+
+        transcription = processor.batch_decode(logits.numpy()).text
+
+        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")

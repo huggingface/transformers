@@ -11,43 +11,12 @@ way which enables simple and efficient model parallelism.
 
 For custom datasets in `jsonlines` format please see: https://huggingface.co/docs/datasets/loading_datasets.html#json-files and you also will find examples of these below.
 
-Let's start by creating a model repository to save the trained model and logs.
-Here we call the model `"bart-base-xsum"`, but you can change the model name as you like.
-
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create bart-base-xsum
-```
-Next we clone the model repository to add the tokenizer and model files.
-```
-git clone https://huggingface.co/<your-username>/bart-base-xsum
-```
-To ensure that all tensorboard traces will be uploaded correctly, we need to 
-track them. You can run the following command inside your model repo to do so.
-
-```
-cd bart-base-xsum
-git lfs track "*tfevents*"
-```
-
-Great, we have set up our model repository. During training, we will automatically
-push the training logs and model weights to the repo.
-
-Next, let's add a symbolic link to the `run_summarization_flax.py`.
-
-```bash
-export MODEL_DIR="./bart-base-xsum"
-ln -s ~/transformers/examples/flax/summarization/run_summarization_flax.py run_summarization_flax.py
-```
-
 ### Train the model
 Next we can run the example script to train the model:
 
 ```bash
 python run_summarization_flax.py \
-	--output_dir ${MODEL_DIR} \
+	--output_dir ./bart-base-xsum \
 	--model_name_or_path facebook/bart-base \
 	--tokenizer_name facebook/bart-base \
 	--dataset_name="xsum" \

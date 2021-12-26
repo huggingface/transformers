@@ -24,8 +24,8 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
+    TFBaseModelOutputWithPastAndCrossAttentions,
+    TFBaseModelOutputWithPoolingAndCrossAttentions,
     TFMaskedLMOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
@@ -68,7 +68,6 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         self.max_position_embeddings = config.max_position_embeddings
         self.max_2d_position_embeddings = config.max_2d_position_embeddings
         self.initializer_range = config.initializer_range
-        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
@@ -137,7 +136,7 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
+            final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -168,20 +167,17 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         w_position_embeddings = tf.gather(self.w_position_embeddings, bbox[:, :, 2] - bbox[:, :, 0])
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
-        final_embeddings = self.embeddings_sum(
-            inputs=[
-                inputs_embeds,
-                position_embeds,
-                token_type_embeds,
-                left_position_embeddings,
-                upper_position_embeddings,
-                right_position_embeddings,
-                lower_position_embeddings,
-                h_position_embeddings,
-                w_position_embeddings,
-            ]
+        final_embeddings = (
+            inputs_embeds
+            + position_embeds
+            + token_type_embeds
+            + left_position_embeddings
+            + upper_position_embeddings
+            + right_position_embeddings
+            + lower_position_embeddings
+            + h_position_embeddings
+            + w_position_embeddings
         )
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -216,6 +212,8 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
+        self.is_decoder = config.is_decoder
+
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
@@ -228,16 +226,49 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_value: Tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
-        mixed_key_layer = self.key(inputs=hidden_states)
-        mixed_value_layer = self.value(inputs=hidden_states)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key_layer = self.transpose_for_scores(self.key(inputs=encoder_hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=encoder_hidden_states), batch_size)
+            attention_mask = encoder_attention_mask
+        elif past_key_value is not None:
+            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+            key_layer = tf.concatenate([past_key_value[0], key_layer], dim=2)
+            value_layer = tf.concatenate([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
+            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
-        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
@@ -267,6 +298,8 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -305,6 +338,9 @@ class TFLayoutLMAttention(tf.keras.layers.Layer):
         input_tensor: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_value: Tuple[tf.Tensor],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -312,13 +348,17 @@ class TFLayoutLMAttention(tf.keras.layers.Layer):
             hidden_states=input_tensor,
             attention_mask=attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_value=past_key_value,
             output_attentions=output_attentions,
             training=training,
         )
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        # add attentions (possibly with past_key_value) if we output them
+        outputs = (attention_output,) + self_outputs[1:]
 
         return outputs
 
@@ -369,6 +409,12 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.attention = TFLayoutLMAttention(config, name="attention")
+        self.is_decoder = config.is_decoder
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            self.crossattention = TFLayoutLMAttention(config, name="crossattention")
         self.intermediate = TFLayoutLMIntermediate(config, name="intermediate")
         self.bert_output = TFLayoutLMOutput(config, name="output")
 
@@ -377,22 +423,69 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: Optional[tf.Tensor],
+        encoder_attention_mask: Optional[tf.Tensor],
+        past_key_value: Optional[Tuple[tf.Tensor]],
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        attention_outputs = self.attention(
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attention_outputs = self.attention(
             input_tensor=hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            past_key_value=self_attn_past_key_value,
             output_attentions=output_attentions,
             training=training,
         )
-        attention_output = attention_outputs[0]
+        attention_output = self_attention_outputs[0]
+
+        # if decoder, the last output is tuple of self-attn cache
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            present_key_value = self_attention_outputs[-1]
+        else:
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        cross_attn_present_key_value = None
+        if self.is_decoder and encoder_hidden_states is not None:
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers "
+                    "by setting `config.add_cross_attention=True`"
+                )
+
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attention_outputs = self.crossattention(
+                input_tensor=attention_output,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=cross_attn_past_key_value,
+                output_attentions=output_attentions,
+                training=training,
+            )
+            attention_output = cross_attention_outputs[0]
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
+
         intermediate_output = self.intermediate(hidden_states=attention_output)
         layer_output = self.bert_output(
             hidden_states=intermediate_output, input_tensor=attention_output, training=training
         )
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
+        outputs = (layer_output,) + outputs  # add attentions if we output them
+
+        # if decoder, return the attn key/values as the last output
+        if self.is_decoder:
+            outputs = outputs + (present_key_value,)
 
         return outputs
 
@@ -401,7 +494,7 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
 class TFLayoutLMEncoder(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
-
+        self.config = config
         self.layer = [TFLayoutLMLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
@@ -409,39 +502,61 @@ class TFLayoutLMEncoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
+        encoder_hidden_states: Optional[tf.Tensor],
+        encoder_attention_mask: Optional[tf.Tensor],
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]],
+        use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 training=training,
             )
             hidden_states = layer_outputs[0]
 
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
+                if self.config.add_cross_attention and encoder_hidden_states is not None:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, all_hidden_states, all_attentions, all_cross_attentions] if v is not None
+            )
 
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        return TFBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -585,12 +700,14 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -665,6 +782,11 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=inputs["head_mask"],
+            # Need to pass these required positional arguments to `Encoder`
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=None,
+            past_key_values=None,
+            use_cache=False,
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
@@ -680,11 +802,12 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
                 pooled_output,
             ) + encoder_outputs[1:]
 
-        return TFBaseModelOutputWithPooling(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -700,92 +823,91 @@ class TFLayoutLMPreTrainedModel(TFPreTrainedModel):
 
 LAYOUTLM_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
     and behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
+    the tensors in the first argument of the model call function: `model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+    the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.LayoutLMConfig`): Model configuration class with all the parameters of the model.
+        config ([`LayoutLMConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the
             model weights.
 """
 
 LAYOUTLM_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
+        input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.LayoutLMTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            Indices can be obtained using [`LayoutLMTokenizer`]. See
+            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        bbox (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0}, 4)`, `optional`):
-            Bounding Boxes of each input sequence tokens. Selected in the range ``[0,
-            config.max_2d_position_embeddings- 1]``.
-        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        bbox (`Numpy array` or `tf.Tensor` of shape `({0}, 4)`, *optional*):
+            Bounding Boxes of each input sequence tokens. Selected in the range `[0, config.max_2d_position_embeddings- 1]`.
+        attention_mask (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`Numpy array` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+        inputs_embeds (`tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -802,7 +924,9 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         self.layoutlm = TFLayoutLMMainLayer(config, name="layoutlm")
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TFBaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -812,43 +936,46 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
-            >>> import tensorflow as tf
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
+        >>> import tensorflow as tf
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMModel.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> model = TFLayoutLMModel.from_pretrained('microsoft/layoutlm-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "world"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -859,6 +986,8 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -881,15 +1010,25 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
+        output_cache = self.config.use_cache and self.config.is_decoder
+        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
+        if not (self.config.output_attentions and self.config.add_cross_attention):
+            cross_attns = None
 
-        return TFBaseModelOutputWithPooling(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
+            past_key_values=pkv,
             hidden_states=hs,
             attentions=attns,
+            cross_attentions=cross_attns,
         )
 
 
@@ -941,44 +1080,44 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         **kwargs,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
-            >>> import tensorflow as tf
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
+        >>> import tensorflow as tf
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMForMaskedLM.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> model = TFLayoutLMForMaskedLM.from_pretrained('microsoft/layoutlm-base-uncased')
 
-            >>> words = ["Hello", "[MASK]"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "[MASK]"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
 
-            >>> labels = tokenizer("Hello world", return_tensors="tf")["input_ids"]
+        >>> labels = tokenizer("Hello world", return_tensors="tf")["input_ids"]
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=labels)
+        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+        ...                 labels=labels)
 
-            >>> loss = outputs.loss
-        """
+        >>> loss = outputs.loss
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1077,44 +1216,44 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
-            >>> import tensorflow as tf
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
+        >>> import tensorflow as tf
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMForSequenceClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> model = TFLayoutLMForSequenceClassification.from_pretrained('microsoft/layoutlm-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "world"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
-            >>> sequence_label = tf.convert_to_tensor([1])
+        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> sequence_label = tf.convert_to_tensor([1])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=sequence_label)
+        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+        ...                 labels=sequence_label)
 
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1218,43 +1357,43 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         **kwargs,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
-            >>> import torch
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
+        >>> import torch
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMForTokenClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> model = TFLayoutLMForTokenClassification.from_pretrained('microsoft/layoutlm-base-uncased')
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "world"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
-            >>> token_labels = tf.convert_to_tensor([1,1,0,0])
+        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> token_labels = tf.convert_to_tensor([1,1,0,0])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=token_labels)
+        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+        ...                 labels=token_labels)
 
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,

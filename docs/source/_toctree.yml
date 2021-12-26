@@ -1,0 +1,320 @@
+- sections: 
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Quick tour
+  - local: installation
+    title: Installation
+  - local: philosophy
+    title: Philosophy
+  - local: glossary
+    title: Glossary
+  title: Get started
+- sections:
+  - local: task_summary
+    title: Summary of the tasks
+  - local: model_summary
+    title: Summary of the models
+  - local: preprocessing
+    title: Preprocessing data
+  - local: training
+    title: Fine-tuning a pretrained model
+  - local: model_sharing
+    title: Model sharing and uploading
+  - local: tokenizer_summary
+    title: Summary of the tokenizers
+  - local: multilingual
+    title: Multi-lingual models
+  title: "Using 🤗 Transformers"
+- sections:
+  - local: examples
+    title: Examples
+  - local: troubleshooting
+    title: Troubleshooting
+  - local: custom_datasets
+    title: Fine-tuning with custom datasets
+  - local: notebooks
+    title: "🤗 Transformers Notebooks"
+  - local: sagemaker
+    title: Run training on Amazon SageMaker
+  - local: community
+    title: Community
+  - local: converting_tensorflow_models
+    title: Converting Tensorflow Checkpoints
+  - local: migration
+    title: Migrating from previous packages
+  - local: contributing
+    title: How to contribute to transformers?
+  - local: add_new_model
+    title: "How to add a model to 🤗 Transformers?"
+  - local: add_new_pipeline
+    title: "How to add a pipeline to 🤗 Transformers?"
+  - local: fast_tokenizers
+    title: "Using tokenizers from 🤗 Tokenizers"
+  - local: performance
+    title: 'Performance and Scalability: How To Fit a Bigger Model and Train It Faster'
+  - local: parallelism
+    title: Model Parallelism
+  - local: testing
+    title: Testing
+  - local: debugging
+    title: Debugging
+  - local: serialization
+    title: Exporting transformers models
+  - local: pr_checks
+    title: Checks on a Pull Request
+  title: Advanced guides
+- sections:
+  - local: bertology
+    title: BERTology
+  - local: perplexity
+    title: Perplexity of fixed-length models
+  - local: benchmarks
+    title: Benchmarks
+  title: Research
+- sections:
+  - sections:
+    - local: main_classes/callback
+      title: Callbacks
+    - local: main_classes/configuration
+      title: Configuration
+    - local: main_classes/data_collator
+      title: Data Collator
+    - local: main_classes/keras_callbacks
+      title: Keras callbacks
+    - local: main_classes/logging
+      title: Logging
+    - local: main_classes/model
+      title: Models
+    - local: main_classes/optimizer_schedules
+      title: Optimization
+    - local: main_classes/output
+      title: Model outputs
+    - local: main_classes/pipelines
+      title: Pipelines
+    - local: main_classes/processors
+      title: Processors
+    - local: main_classes/tokenizer
+      title: Tokenizer
+    - local: main_classes/trainer
+      title: Trainer
+    - local: main_classes/deepspeed
+      title: DeepSpeed Integration
+    - local: main_classes/feature_extractor
+      title: Feature Extractor
+    title: Main Classes
+  - sections:
+    - local: model_doc/albert
+      title: ALBERT
+    - local: model_doc/auto
+      title: Auto Classes
+    - local: model_doc/bart
+      title: BART
+    - local: model_doc/barthez
+      title: BARThez
+    - local: model_doc/bartpho
+      title: BARTpho
+    - local: model_doc/beit
+      title: BEiT
+    - local: model_doc/bert
+      title: BERT
+    - local: model_doc/bertweet
+      title: Bertweet
+    - local: model_doc/bertgeneration
+      title: BertGeneration
+    - local: model_doc/bert_japanese
+      title: BertJapanese
+    - local: model_doc/bigbird
+      title: BigBird
+    - local: model_doc/bigbird_pegasus
+      title: BigBirdPegasus
+    - local: model_doc/blenderbot
+      title: Blenderbot
+    - local: model_doc/blenderbot_small
+      title: Blenderbot Small
+    - local: model_doc/bort
+      title: BORT
+    - local: model_doc/byt5
+      title: ByT5
+    - local: model_doc/camembert
+      title: CamemBERT
+    - local: model_doc/canine
+      title: CANINE
+    - local: model_doc/clip
+      title: CLIP
+    - local: model_doc/convbert
+      title: ConvBERT
+    - local: model_doc/cpm
+      title: CPM
+    - local: model_doc/ctrl
+      title: CTRL
+    - local: model_doc/deberta
+      title: DeBERTa
+    - local: model_doc/deberta_v2
+      title: DeBERTa-v2
+    - local: model_doc/deit
+      title: DeiT
+    - local: model_doc/detr
+      title: DETR
+    - local: model_doc/dialogpt
+      title: DialoGPT
+    - local: model_doc/distilbert
+      title: DistilBERT
+    - local: model_doc/dpr
+      title: DPR
+    - local: model_doc/electra
+      title: ELECTRA
+    - local: model_doc/encoderdecoder
+      title: Encoder Decoder Models
+    - local: model_doc/flaubert
+      title: FlauBERT
+    - local: model_doc/fnet
+      title: FNet
+    - local: model_doc/fsmt
+      title: FSMT
+    - local: model_doc/funnel
+      title: Funnel Transformer
+    - local: model_doc/herbert
+      title: herBERT
+    - local: model_doc/ibert
+      title: I-BERT
+    - local: model_doc/imagegpt
+      title: ImageGPT
+    - local: model_doc/layoutlm
+      title: LayoutLM
+    - local: model_doc/layoutlmv2
+      title: LayoutLMV2
+    - local: model_doc/layoutxlm
+      title: LayoutXLM
+    - local: model_doc/led
+      title: LED
+    - local: model_doc/longformer
+      title: Longformer
+    - local: model_doc/luke
+      title: LUKE
+    - local: model_doc/lxmert
+      title: LXMERT
+    - local: model_doc/marian
+      title: MarianMT
+    - local: model_doc/m2m_100
+      title: M2M100
+    - local: model_doc/mbart
+      title: MBart and MBart-50
+    - local: model_doc/megatron_bert
+      title: MegatronBERT
+    - local: model_doc/megatron_gpt2
+      title: MegatronGPT2
+    - local: model_doc/mluke
+      title: MLUKE
+    - local: model_doc/mobilebert
+      title: MobileBERT
+    - local: model_doc/mluke
+      title: mLUKE
+    - local: model_doc/mpnet
+      title: MPNet
+    - local: model_doc/mt5
+      title: MT5
+    - local: model_doc/gpt
+      title: OpenAI GPT
+    - local: model_doc/gpt2
+      title: OpenAI GPT2
+    - local: model_doc/gptj
+      title: GPT-J
+    - local: model_doc/gpt_neo
+      title: GPT Neo
+    - local: model_doc/hubert
+      title: Hubert
+    - local: model_doc/perceiver
+      title: Perceiver
+    - local: model_doc/pegasus
+      title: Pegasus
+    - local: model_doc/phobert
+      title: PhoBERT
+    - local: model_doc/prophetnet
+      title: ProphetNet
+    - local: model_doc/qdqbert
+      title: QDQBert
+    - local: model_doc/rag
+      title: RAG
+    - local: model_doc/reformer
+      title: Reformer
+    - local: model_doc/rembert
+      title: RemBERT
+    - local: model_doc/retribert
+      title: RetriBERT
+    - local: model_doc/roberta
+      title: RoBERTa
+    - local: model_doc/roformer
+      title: RoFormer
+    - local: model_doc/segformer
+      title: SegFormer
+    - local: model_doc/sew
+      title: SEW
+    - local: model_doc/sew_d
+      title: SEW-D
+    - local: model_doc/speechencoderdecoder
+      title: Speech Encoder Decoder Models
+    - local: model_doc/speech_to_text
+      title: Speech2Text
+    - local: model_doc/speech_to_text_2
+      title: Speech2Text2
+    - local: model_doc/splinter
+      title: Splinter
+    - local: model_doc/squeezebert
+      title: SqueezeBERT
+    - local: model_doc/t5
+      title: T5
+    - local: model_doc/t5v1.1
+      title: T5v1.1
+    - local: model_doc/tapas
+      title: TAPAS
+    - local: model_doc/transformerxl
+      title: Transformer XL
+    - local: model_doc/trocr
+      title: TrOCR
+    - local: model_doc/unispeech
+      title: UniSpeech
+    - local: model_doc/unispeech_sat
+      title: UniSpeech-SAT
+    - local: model_doc/visionencoderdecoder
+      title: Vision Encoder Decoder Models
+    - local: model_doc/vision_text_dual_encoder
+      title: Vision Text Dual Encoder
+    - local: model_doc/vit
+      title: Vision Transformer (ViT)
+    - local: model_doc/visual_bert
+      title: VisualBERT
+    - local: model_doc/wav2vec2
+      title: Wav2Vec2
+    - local: model_doc/wav2vec2_phoneme
+      title: Wav2Vec2Phoneme
+    - local: model_doc/wavlm
+      title: WavLM
+    - local: model_doc/xlm
+      title: XLM
+    - local: model_doc/xlmprophetnet
+      title: XLM-ProphetNet
+    - local: model_doc/xlmroberta
+      title: XLM-RoBERTa
+    - local: model_doc/xlnet
+      title: XLNet
+    - local: model_doc/xlsr_wav2vec2
+      title: XLSR-Wav2Vec2
+    - local: model_doc/xls_r
+      title: XLS-R
+    title: Models
+  - sections:
+    - local: internal/modeling_utils
+      title: Custom Layers and Utilities
+    - local: internal/pipelines_utils
+      title: Utilities for pipelines
+    - local: internal/tokenization_utils
+      title: Utilities for Tokenizers
+    - local: internal/trainer_utils
+      title: Utilities for Trainer
+    - local: internal/generation_utils
+      title: Utilities for Generation
+    - local: internal/file_utils
+      title: General Utilities
+    title: Internal Helpers
+  title: API

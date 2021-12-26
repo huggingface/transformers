@@ -23,7 +23,7 @@ from transformers import GPT2Config, GPT2Tokenizer, is_flax_available, is_torch_
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
-from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
@@ -82,7 +82,7 @@ class FlaxGPT2ModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
@@ -95,12 +95,10 @@ class FlaxGPT2ModelTester:
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
             n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
             use_cache=False,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            gradient_checkpointing=gradient_checkpointing,
         )
 
         return (config, input_ids, input_mask)
@@ -110,6 +108,20 @@ class FlaxGPT2ModelTester:
         config, input_ids, attention_mask = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
+
+    def prepare_config_and_inputs_for_decoder(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
 
     def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
@@ -199,7 +211,7 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
     @slow
     def test_batch_generation(self):
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="</s>", padding_side="left")
-        inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="jax", padding=True, truncation=True)
+        inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
 
         model = FlaxGPT2LMHeadModel.from_pretrained("gpt2")
         model.do_sample = False

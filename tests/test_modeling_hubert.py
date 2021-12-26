@@ -22,7 +22,7 @@ import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import HubertConfig, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -31,7 +31,13 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init
 if is_torch_available():
     import torch
 
-    from transformers import HubertForCTC, HubertModel, Wav2Vec2Processor
+    from transformers import (
+        HubertForCTC,
+        HubertForSequenceClassification,
+        HubertModel,
+        Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
+    )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
 
@@ -187,7 +193,32 @@ class HubertModelTester:
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
 
-    def check_training(self, config, input_values, *args):
+    def check_seq_classifier_loss(self, config, input_values, *args):
+        model = HubertForSequenceClassification(config=config)
+        model.to(torch_device)
+
+        # make sure that dropout is disabled
+        model.eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        unmasked_loss = model(input_values, labels=labels).loss.item()
+
+        self.parent.assertTrue(isinstance(masked_loss, float))
+        self.parent.assertTrue(isinstance(unmasked_loss, float))
+        self.parent.assertTrue(masked_loss != unmasked_loss)
+
+    def check_ctc_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
         model = HubertForCTC(config=config)
         model.to(torch_device)
@@ -216,6 +247,29 @@ class HubertModelTester:
 
         loss.backward()
 
+    def check_seq_classifier_training(self, config, input_values, *args):
+        config.ctc_zero_infinity = True
+        model = HubertForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.train()
+
+        # freeze everything but the classification head
+        model.freeze_base_model()
+
+        input_values = input_values[:3]
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+
+        loss = model(input_values, labels=labels).loss
+        self.parent.assertFalse(torch.isinf(loss).item())
+
+        loss.backward()
+
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = HubertForCTC(config)
         model.to(torch_device)
@@ -238,7 +292,7 @@ class HubertModelTester:
 
 @require_torch
 class HubertModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (HubertForCTC, HubertModel) if is_torch_available() else ()
+    all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -258,9 +312,17 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
-    def test_train(self):
+    def test_seq_classifier_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_training(*config_and_inputs)
+        self.model_tester.check_seq_classifier_loss(*config_and_inputs)
+
+    def test_ctc_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_training(*config_and_inputs)
+
+    def test_seq_classifier_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -371,7 +433,7 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (HubertForCTC, HubertModel) if is_torch_available() else ()
+    all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -397,9 +459,17 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
-    def test_train(self):
+    def test_seq_classifier_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_training(*config_and_inputs)
+        self.model_tester.check_seq_classifier_loss(*config_and_inputs)
+
+    def test_ctc_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_training(*config_and_inputs)
+
+    def test_seq_classifier_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -516,7 +586,8 @@ class HubertUtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = torch.from_numpy(mask).to(torch_device)
 
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
 
@@ -526,7 +597,8 @@ class HubertUtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length, torch_device)
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = torch.from_numpy(mask).to(torch_device)
 
         # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in mask.sum(axis=-1):
@@ -534,38 +606,38 @@ class HubertUtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_datasets
 @require_soundfile
 @slow
 class HubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
+        return [x["array"] for x in speech_samples]
 
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
+    def _load_superb(self, task, num_samples):
+        from datasets import load_dataset
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return ds[:num_samples]
 
     def test_inference_ctc_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft").to(torch_device)
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", torch_dtype=torch.float16).to(
+            torch_device
+        )
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
 
-        input_values = inputs.input_values.to(torch_device)
+        input_values = inputs.input_values.half().to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
@@ -579,3 +651,154 @@ class HubertModelIntegrationTest(unittest.TestCase):
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_keyword_spotting(self):
+        model = HubertForSequenceClassification.from_pretrained(
+            "superb/hubert-base-superb-ks", torch_dtype=torch.float16
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
+        input_data = self._load_superb("ks", 4)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.half().to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_values, attention_mask=attention_mask)
+        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
+
+        expected_labels = [2, 6, 10, 9]
+        # s3prl logits for the same batch
+        expected_logits = torch.tensor([7.6692, 17.7795, 11.1562, 11.8232], dtype=torch.float16, device=torch_device)
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=2e-2))
+
+    def test_inference_intent_classification(self):
+        model = HubertForSequenceClassification.from_pretrained(
+            "superb/hubert-base-superb-ic", torch_dtype=torch.float16
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ic")
+        input_data = self._load_superb("ic", 4)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.half().to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_values, attention_mask=attention_mask)
+
+        predicted_logits_action, predicted_ids_action = torch.max(outputs.logits[:, :6], dim=-1)
+        predicted_logits_object, predicted_ids_object = torch.max(outputs.logits[:, 6:20], dim=-1)
+        predicted_logits_location, predicted_ids_location = torch.max(outputs.logits[:, 20:24], dim=-1)
+
+        expected_labels_action = [1, 0, 4, 3]
+        expected_logits_action = torch.tensor(
+            [5.9052, 12.5865, 4.4840, 10.0240], dtype=torch.float16, device=torch_device
+        )
+        expected_labels_object = [1, 10, 3, 4]
+        expected_logits_object = torch.tensor(
+            [5.5316, 11.7946, 8.1672, 23.2415], dtype=torch.float16, device=torch_device
+        )
+        expected_labels_location = [0, 0, 0, 1]
+        expected_logits_location = torch.tensor(
+            [5.2053, 8.9577, 10.0447, 8.1481], dtype=torch.float16, device=torch_device
+        )
+
+        self.assertListEqual(predicted_ids_action.tolist(), expected_labels_action)
+        self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
+        self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
+
+        # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
+        self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=3e-1))
+        self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=3e-1))
+        self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=3e-1))
+
+    def test_inference_speaker_identification(self):
+        model = HubertForSequenceClassification.from_pretrained(
+            "superb/hubert-base-superb-sid", torch_dtype=torch.float16
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-sid")
+        input_data = self._load_superb("si", 4)
+
+        output_logits = []
+        with torch.no_grad():
+            for example in input_data["speech"]:
+                input = processor(example, return_tensors="pt", padding=True)
+                output = model(input.input_values.half().to(torch_device), attention_mask=None)
+                output_logits.append(output.logits[0])
+        output_logits = torch.stack(output_logits)
+        predicted_logits, predicted_ids = torch.max(output_logits, dim=-1)
+
+        expected_labels = [5, 1, 1, 3]
+        # s3prl logits for the same batch
+        expected_logits = torch.tensor(
+            [78231.5547, 123166.6094, 122785.4141, 84851.2969], dtype=torch.float16, device=torch_device
+        )
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=10))
+
+    def test_inference_emotion_recognition(self):
+        model = HubertForSequenceClassification.from_pretrained(
+            "superb/hubert-base-superb-er", torch_dtype=torch.float16
+        ).to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-er")
+        input_data = self._load_superb("er", 4)
+        inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.half().to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_values, attention_mask=attention_mask)
+        predicted_logits, predicted_ids = torch.max(outputs.logits, dim=-1)
+
+        expected_labels = [1, 1, 2, 2]
+        # s3prl logits for the same batch
+        expected_logits = torch.tensor([2.8384, 2.3389, 3.8564, 4.5558], dtype=torch.float16, device=torch_device)
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-1))
+
+    def test_inference_distilhubert(self):
+        model = HubertModel.from_pretrained("ntu-spml/distilhubert").to(torch_device)
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("ntu-spml/distilhubert")
+
+        # TODO: can't test on batched inputs due to incompatible padding https://github.com/pytorch/fairseq/pull/3572
+        input_speech = self._load_datasamples(1)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_values).last_hidden_state
+
+        # expected outputs taken from the original SEW implementation
+        expected_outputs_first = torch.tensor(
+            [
+                [
+                    [-0.3505, 0.1167, 0.0608, 0.1294],
+                    [-0.3085, 0.0481, 0.1106, 0.0955],
+                    [-0.3107, -0.0391, 0.0739, 0.1360],
+                    [-0.2385, -0.1795, -0.0928, 0.2389],
+                ]
+            ],
+            device=torch_device,
+        )
+        expected_outputs_last = torch.tensor(
+            [
+                [
+                    [-0.0732, 0.0255, 0.0529, -0.1372],
+                    [-0.0812, 0.1259, 0.0564, -0.0438],
+                    [-0.0054, 0.0758, -0.0002, -0.1617],
+                    [0.0133, -0.0320, -0.0687, 0.0062],
+                ]
+            ],
+            device=torch_device,
+        )
+        expected_output_sum = -3776.0730
+
+        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
+        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
+        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 0.1)

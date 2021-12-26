@@ -14,15 +14,20 @@
 # limitations under the License.
 
 import os
+import tempfile
 import unittest
 
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.models.roberta.configuration_roberta import RobertaConfig
-from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 
 
 SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")
+
+
+class NewModelConfig(BertConfig):
+    model_type = "new-model"
 
 
 class AutoConfigTest(unittest.TestCase):
@@ -35,7 +40,7 @@ class AutoConfigTest(unittest.TestCase):
         self.assertIsInstance(config, RobertaConfig)
 
     def test_config_model_type_from_model_identifier(self):
-        config = AutoConfig.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
+        config = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
         self.assertIsInstance(config, RobertaConfig)
 
     def test_config_for_model_str(self):
@@ -51,3 +56,24 @@ class AutoConfigTest(unittest.TestCase):
         keys = list(CONFIG_MAPPING.keys())
         for i, key in enumerate(keys):
             self.assertFalse(any(key in later_key for later_key in keys[i + 1 :]))
+
+    def test_new_config_registration(self):
+        try:
+            AutoConfig.register("new-model", NewModelConfig)
+            # Wrong model type will raise an error
+            with self.assertRaises(ValueError):
+                AutoConfig.register("model", NewModelConfig)
+            # Trying to register something existing in the Transformers library will raise an error
+            with self.assertRaises(ValueError):
+                AutoConfig.register("bert", BertConfig)
+
+            # Now that the config is registered, it can be used as any other config with the auto-API
+            config = NewModelConfig()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+                new_config = AutoConfig.from_pretrained(tmp_dir)
+                self.assertIsInstance(new_config, NewModelConfig)
+
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]

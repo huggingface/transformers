@@ -82,23 +82,39 @@ def diff_is_docstring_only(repo, branching_point, filename):
     return old_content_clean == new_content_clean
 
 
-def get_modified_python_files():
+def get_modified_python_files(diff_with_last_commit=False):
     """
-    Return a list of python files that have been modified between the current head and the master branch.
+    Return a list of python files that have been modified between:
+
+    - the current head and the master branch if `diff_with_last_commit=False` (default)
+    - the current head and its parent commit otherwise.
     """
     repo = Repo(PATH_TO_TRANFORMERS)
 
-    print(f"Master is at {repo.refs.master.commit}")
-    print(f"Current head is at {repo.head.commit}")
+    if not diff_with_last_commit:
+        print(f"Master is at {repo.refs.master.commit}")
+        print(f"Current head is at {repo.head.commit}")
 
-    branching_commits = repo.merge_base(repo.refs.master, repo.head)
-    for commit in branching_commits:
-        print(f"Branching commit: {commit}")
+        branching_commits = repo.merge_base(repo.refs.master, repo.head)
+        for commit in branching_commits:
+            print(f"Branching commit: {commit}")
+        return get_diff(repo, repo.head.commit, branching_commits)
+    else:
+        print(f"Master is at {repo.head.commit}")
+        parent_commits = repo.head.commit.parents
+        for commit in parent_commits:
+            print(f"Parent commit: {commit}")
+        return get_diff(repo, repo.head.commit, parent_commits)
 
+
+def get_diff(repo, base_commit, commits):
+    """
+    Get's the diff between one or several commits and the head of the repository.
+    """
     print("\n### DIFF ###\n")
     code_diff = []
-    for commit in branching_commits:
-        for diff_obj in commit.diff(repo.head.commit):
+    for commit in commits:
+        for diff_obj in commit.diff(base_commit):
             # We always add new python files
             if diff_obj.change_type == "A" and diff_obj.b_path.endswith(".py"):
                 code_diff.append(diff_obj.b_path)
@@ -171,9 +187,23 @@ def get_module_dependencies(module_fname):
     return dependencies
 
 
+def get_test_dependencies(test_fname):
+    """
+    Get the dependencies of a test file.
+    """
+    with open(os.path.join(PATH_TO_TRANFORMERS, test_fname), "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Tests only have relative imports for other test files
+    relative_imports = re.findall(r"from\s+\.(\S+)\s+import\s+([^\n]+)\n", content)
+    relative_imports = [test for test, imp in relative_imports if "# tests_ignore" not in imp]
+    return [os.path.join("tests", f"{test}.py") for test in relative_imports]
+
+
 def create_reverse_dependency_map():
     """
-    Create the dependency map from module filename to the list of modules that depend on it (even recursively).
+    Create the dependency map from module/test filename to the list of modules/tests that depend on it (even
+    recursively).
     """
     modules = [
         str(f.relative_to(PATH_TO_TRANFORMERS))
@@ -182,11 +212,17 @@ def create_reverse_dependency_map():
     # We grab all the dependencies of each module.
     direct_deps = {m: get_module_dependencies(m) for m in modules}
 
+    # We add all the dependencies of each test file
+    tests = [str(f.relative_to(PATH_TO_TRANFORMERS)) for f in (Path(PATH_TO_TRANFORMERS) / "tests").glob("**/*.py")]
+    direct_deps.update({t: get_test_dependencies(t) for t in tests})
+
+    all_files = modules + tests
+
     # This recurses the dependencies
     something_changed = True
     while something_changed:
         something_changed = False
-        for m in modules:
+        for m in all_files:
             for d in direct_deps[m]:
                 for dep in direct_deps[d]:
                     if dep not in direct_deps[m]:
@@ -195,7 +231,7 @@ def create_reverse_dependency_map():
 
     # Finally we can build the reverse map.
     reverse_map = collections.defaultdict(list)
-    for m in modules:
+    for m in all_files:
         if m.endswith("__init__.py"):
             reverse_map[m].extend(direct_deps[m])
         for d in direct_deps[m]:
@@ -216,7 +252,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
     "modelcard.py": "test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
-    "modeling_tf_utils.py": "test_modeling_tf_common.py",
+    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_modeling_tf_core.py"],
     "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
     "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
     "models/auto/modeling_flax_auto.py": "test_flax_auto.py",
@@ -228,7 +264,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "models/blenderbot_small/tokenization_blenderbot_small.py": "test_tokenization_small_blenderbot.py",
     "models/blenderbot_small/tokenization_blenderbot_small_fast.py": "test_tokenization_small_blenderbot.py",
     "models/gpt2/modeling_gpt2.py": ["test_modeling_gpt2.py", "test_modeling_megatron_gpt2.py"],
-    "pipelines/base.py": "test_pipelines_common.py",
+    "pipelines/base.py": "test_pipelines_*.py",
     "pipelines/text2text_generation.py": [
         "test_pipelines_text2text_generation.py",
         "test_pipelines_summarization.py",
@@ -245,6 +281,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "test_trainer_distributed.py",
         "test_trainer_tpu.py",
     ],
+    "train_pt_utils.py": "test_trainer_utils.py",
     "utils/versions.py": "test_versions_utils.py",
 }
 
@@ -300,6 +337,7 @@ def module_to_test_file(module_fname):
 # launched separately.
 EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/test_doc_samples.py",  # Doc tests
+    "tests/test_pipelines_common.py",  # Actually checked by the pipeline based file
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
@@ -365,8 +403,8 @@ def sanity_check():
         )
 
 
-def infer_tests_to_run(output_file):
-    modified_files = get_modified_python_files()
+def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
+    modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
     # Create the map that will give us all impacted modules.
@@ -381,21 +419,38 @@ def infer_tests_to_run(output_file):
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     # Grab the corresponding test files:
-    test_files_to_run = []
-    for f in impacted_files:
-        # Modified test files are always added
-        if f.startswith("tests/"):
-            test_files_to_run.append(f)
-        else:
-            new_tests = module_to_test_file(f)
-            if new_tests is not None:
-                if isinstance(new_tests, str):
-                    test_files_to_run.append(new_tests)
-                else:
-                    test_files_to_run.extend(new_tests)
+    if "setup.py" in impacted_files:
+        test_files_to_run = ["tests"]
+    else:
+        # Grab the corresponding test files:
+        test_files_to_run = []
+        for f in impacted_files:
+            # Modified test files are always added
+            if f.startswith("tests/"):
+                test_files_to_run.append(f)
+            # Example files are tested separately
+            elif f.startswith("examples/pytorch"):
+                test_files_to_run.append("examples/pytorch/test_examples.py")
+            elif f.startswith("examples/flax"):
+                test_files_to_run.append("examples/flax/test_examples.py")
+            else:
+                new_tests = module_to_test_file(f)
+                if new_tests is not None:
+                    if isinstance(new_tests, str):
+                        test_files_to_run.append(new_tests)
+                    else:
+                        test_files_to_run.extend(new_tests)
 
-    # Remove duplicates
-    test_files_to_run = sorted(list(set(test_files_to_run)))
+        # Remove duplicates
+        test_files_to_run = sorted(list(set(test_files_to_run)))
+        # Make sure we did not end up with a test file that was removed
+        test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
+        if filters is not None:
+            filtered_files = []
+            for filter in filters:
+                filtered_files.extend([f for f in test_files_to_run if f.startswith(filter)])
+            test_files_to_run = filtered_files
+
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
         with open(output_file, "w", encoding="utf-8") as f:
@@ -410,22 +465,35 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output_file", type=str, default="test_list.txt", help="Where to store the list of tests to run"
     )
+    parser.add_argument(
+        "--diff_with_last_commit",
+        action="store_true",
+        help="To fetch the tests between the current commit and the last commit",
+    )
+    parser.add_argument(
+        "--filters",
+        type=str,
+        nargs="*",
+        default=["tests"],
+        help="Only keep the test files matching one of those filters.",
+    )
     args = parser.parse_args()
     if args.sanity_check:
         sanity_check()
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
-        # For now we run all tests on the master branch. After testing this more and making sure it works most of the
-        # time, we will apply the same logic to the tests on the master branch and only run the whole suite once per
-        # day.
-        if not repo.head.is_detached and repo.head.ref == repo.refs.master:
-            print("Master branch detected, running all tests.")
+
+        diff_with_last_commit = args.diff_with_last_commit
+        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.master:
+            print("Master branch detected, fetching tests against last commit.")
+            diff_with_last_commit = True
+
+        try:
+            infer_tests_to_run(args.output_file, diff_with_last_commit=diff_with_last_commit, filters=args.filters)
+        except Exception as e:
+            print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:
-                f.write("./tests/")
-        else:
-            try:
-                infer_tests_to_run(args.output_file)
-            except Exception as e:
-                print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
-                with open(args.output_file, "w", encoding="utf-8") as f:
+                if args.filters is None:
                     f.write("./tests/")
+                else:
+                    f.write(" ".join(args.filters))

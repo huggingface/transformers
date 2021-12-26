@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available, is_vision_available
+from ...file_utils import _LazyModule, is_flax_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -33,8 +33,18 @@ if is_torch_available():
         "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BeitForImageClassification",
         "BeitForMaskedImageModeling",
+        "BeitForSemanticSegmentation",
         "BeitModel",
         "BeitPreTrainedModel",
+    ]
+
+
+if is_flax_available():
+    _import_structure["modeling_flax_beit"] = [
+        "FlaxBeitForImageClassification",
+        "FlaxBeitForMaskedImageModeling",
+        "FlaxBeitModel",
+        "FlaxBeitPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -48,8 +58,17 @@ if TYPE_CHECKING:
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BeitForImageClassification,
             BeitForMaskedImageModeling,
+            BeitForSemanticSegmentation,
             BeitModel,
             BeitPreTrainedModel,
+        )
+
+    if is_flax_available():
+        from .modeling_flax_beit import (
+            FlaxBeitForImageClassification,
+            FlaxBeitForMaskedImageModeling,
+            FlaxBeitModel,
+            FlaxBeitPreTrainedModel,
         )
 
 

@@ -20,6 +20,7 @@ import bisect
 import itertools
 import re
 import unicodedata
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from .file_utils import PaddingStrategy, TensorType, add_end_docstrings
@@ -47,6 +48,214 @@ logger = logging.get_logger(__name__)
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+
+
+class Trie:
+    """
+    Trie in Python. Creates a Trie out of a list of words. The trie is used to split on `added_tokens` in one pass
+    Loose reference https://en.wikipedia.org/wiki/Trie
+    """
+
+    def __init__(self):
+        self.data = {}
+
+    def add(self, word: str):
+        """
+        Passes over every char (utf-8 char) on word and recursively adds it to the internal `data` trie representation.
+        The special key `""` is used to represent termination.
+
+        This function is idempotent, adding twice the same word will leave the trie unchanged
+
+        Example:
+
+        ```python
+        >>> trie = Trie()
+        >>> trie.add("Hello 友達")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
+        >>> trie.add("Hello")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
+        ```
+        """
+        if not word:
+            # Prevent empty string
+            return
+        ref = self.data
+        for char in word:
+            ref[char] = char in ref and ref[char] or {}
+            ref = ref[char]
+        ref[""] = 1
+
+    def split(self, text: str) -> List[str]:
+        """
+        Will look for the words added to the trie within `text`. Output is the original string splitted along the
+        boundaries of the words found.
+
+        This trie will match the longest possible word first !
+
+        Example:
+
+        ```python
+        >>> trie = Trie()
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS] This is a extra_id_100"]
+        >>> trie.add("[CLS]")
+        >>> trie.add("extra_id_1")
+        >>> trie.add("extra_id_100")
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS]", " This is a ", "extra_id_100"]
+        ```
+        """
+        # indexes are counted left of the chars index.
+        # "hello", index 0, is left of h, index 1 is between h and e.
+        # index 5 is right of the "o".
+
+        # States are going to capture every possible start (indexes as above)
+        # as keys, and have as values, a pointer to the position in the trie
+        # where we're at. This is a partial match for now.
+        # This enables to keep track of multiple matches while we're iterating
+        # the string
+        # If the trie contains, "blowing", and "lower" and we encounter the
+        # string "blower", we need to split into ["b", "lower"].
+        # This is where we need to keep track of multiple possible starts.
+        states = OrderedDict()
+
+        # This will contain every indices where we need
+        # to cut.
+        # We force to cut at offset 0 and len(text) (added later)
+        offsets = [0]
+
+        # This is used by the lookahead which needs to skip over
+        # some text where the full match exceeded the place in the initial
+        # for loop
+        skip = None
+        # Main loop, Giving this algorithm O(n) complexity
+        for current, current_char in enumerate(text):
+            if skip and current < skip:
+                # Prevents the lookahead for matching twice
+                # like extra_id_100 and id_100
+                continue
+
+            # This will track every state
+            # that stop matching, we need to stop tracking them.
+            # If we look at "lowball", we're going to match "l" (add it to states), "o", "w", then
+            # fail on "b", we need to remove 0 from the valid states.
+            to_remove = set()
+            # Whenever we found a match, we need to drop everything
+            # this is a greedy algorithm, it will match on the first found token
+            reset = False
+
+            # In this case, we already have partial matches (But unfinished)
+            for start, trie_pointer in states.items():
+                if "" in trie_pointer:
+                    # This is a final match, we need to reset and
+                    # store the results in `offsets`.
+
+                    # Lookahead to match longest first
+                    # Important in case of extra_id_1 vs extra_id_100
+                    # Here we are also actively looking for other earlier partial
+                    # matches
+                    # "[CLS]", "L", we need to match CLS even if L is special
+                    for lookstart, looktrie_pointer in states.items():
+                        if lookstart > start:
+                            # This partial match is later, we can stop looking
+                            break
+                        elif lookstart < start:
+                            # This partial match is earlier, the trie pointer
+                            # was already updated, so index is + 1
+                            lookahead_index = current + 1
+                            end = current + 1
+                        else:
+                            # Here lookstart == start and
+                            #      looktrie_pointer == trie_pointer
+                            # It wasn't updated yet so indices are current ones
+                            lookahead_index = current
+                            end = current
+                        next_char = text[lookahead_index] if lookahead_index < len(text) else None
+                        while next_char in looktrie_pointer:
+                            looktrie_pointer = looktrie_pointer[next_char]
+                            lookahead_index += 1
+                            if "" in looktrie_pointer:
+                                start = lookstart
+                                end = lookahead_index
+                                skip = lookahead_index
+
+                            if lookahead_index == len(text):
+                                # End of string
+                                break
+                            next_char = text[lookahead_index]
+                        # End lookahead
+
+                    # Storing and resetting
+                    offsets.append(start)
+                    offsets.append(end)
+                    reset = True
+                    break
+                elif current_char in trie_pointer:
+                    # The current character being looked at has a match within the trie
+                    # update the pointer (it will be stored back into states later).
+                    trie_pointer = trie_pointer[current_char]
+
+                    # Storing back the new pointer into the states.
+                    # Partial matches got longer by one.
+                    states[start] = trie_pointer
+                else:
+                    # The new character has not match in the trie, we need
+                    # to stop keeping track of this partial match.
+                    # We can't do it directly within the loop because of how
+                    # python iteration works
+                    to_remove.add(start)
+
+            # Either clearing the full start (we found a real match)
+            # Or clearing only the partial matches that didn't work.
+            if reset:
+                states = {}
+            else:
+                for start in to_remove:
+                    del states[start]
+
+            # If this character is a starting character within the trie
+            # start keeping track of this partial match.
+            if current_char in self.data:
+                states[current] = self.data[current_char]
+
+        # We have a cut at the end with states.
+        for start, trie_pointer in states.items():
+            if "" in trie_pointer:
+                # This is a final match, we need to reset and
+                # store the results in `offsets`.
+                end = len(text)
+                offsets.append(start)
+                offsets.append(end)
+                # Longest cut is always the one with lower start so the first
+                # item so we need to break.
+                break
+
+        return self.cut_text(text, offsets)
+
+    def cut_text(self, text, offsets):
+        # We have all the offsets now, we just need to do the actual splitting.
+        # We need to eventually add the first part of the string and the eventual
+        # last part.
+        offsets.append(len(text))
+        tokens = []
+        start = 0
+        for end in offsets:
+            if start > end:
+                logger.error(
+                    "There was a bug in Trie algorithm in tokenization. Attempting to recover. Please report it anyway."
+                )
+                continue
+            elif start == end:
+                # This might happen if there's a match at index 0
+                # we're also preventing zero-width cuts in case of two
+                # consecutive matches
+                continue
+            tokens.append(text[start:end])
+            start = end
+
+        return tokens
 
 
 def _is_whitespace(char):
@@ -118,7 +327,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
     Base class for all slow tokenizers.
 
-    Inherits from :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase`.
+    Inherits from [`~tokenization_utils_base.PreTrainedTokenizerBase`].
 
     Handle all the shared methods for tokenization and special tokens as well as methods downloading/caching/loading
     pretrained tokenizers as well as adding tokens to the vocabulary.
@@ -135,6 +344,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.added_tokens_encoder: Dict[str, int] = {}
         self.added_tokens_decoder: Dict[int, str] = {}
         self.unique_no_split_tokens: List[str] = []
+        self.tokens_trie = Trie()
 
         self._decode_use_source_tokenizer = False
 
@@ -145,7 +355,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     @property
     def vocab_size(self) -> int:
         """
-        :obj:`int`: Size of the base vocabulary (without the added tokens).
+        `int`: Size of the base vocabulary (without the added tokens).
         """
         raise NotImplementedError
 
@@ -154,7 +364,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of token to index.
 
         Returns:
-            :obj:`Dict[str, int]`: The added tokens.
+            `Dict[str, int]`: The added tokens.
         """
         return self.added_tokens_encoder
 
@@ -170,31 +380,33 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens (:obj:`List[str]`or :obj:`List[tokenizers.AddedToken]`):
+            new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
                 Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
-                checking if the tokenizer assign the index of the ``unk_token`` to them).
-            special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                checking if the tokenizer assign the index of the `unk_token` to them).
+            special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the tokens should be added as special tokens.
 
         Returns:
-            :obj:`int`: The number of tokens actually added to the vocabulary.
+            `int`: The number of tokens actually added to the vocabulary.
 
-        Examples::
+        Examples:
 
-            # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertModel.from_pretrained('bert-base-uncased')
+        ```python
+        # Let's see how to increase the vocabulary of Bert model and tokenizer
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertModel.from_pretrained('bert-base-uncased')
 
-            num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-            print('We have added', num_added_toks, 'tokens')
-            # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-            model.resize_token_embeddings(len(tokenizer))
-        """
+        num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
+        print('We have added', num_added_toks, 'tokens')
+        # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+        model.resize_token_embeddings(len(tokenizer))
+        ```"""
         new_tokens = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []
         for token in new_tokens:
-            assert isinstance(token, str)
+            if not isinstance(token, str):
+                raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if not special_tokens and hasattr(self, "do_lower_case") and self.do_lower_case:
                 token = token.lower()
             if (
@@ -223,24 +435,37 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 _insert_one_token_to_ordered_list(self.unique_no_split_tokens, tokens_to_add[0])
             else:
                 self.unique_no_split_tokens = sorted(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+        self._create_trie(self.unique_no_split_tokens)
 
         return len(tokens_to_add)
+
+    def _create_trie(self, unique_no_split_tokens):
+        trie = Trie()
+        for token in unique_no_split_tokens:
+            if hasattr(self, "do_lower_case") and self.do_lower_case and token not in self.all_special_tokens:
+                trie.add(token.lower())
+            else:
+                trie.add(token)
+        self.tokens_trie = trie
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
         Returns the number of added tokens when encoding a sequence with special tokens.
 
-        .. note::
-            This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
-            put this inside your training loop.
+        <Tip>
+
+        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
+        put this inside your training loop.
+
+        </Tip>
 
         Args:
-            pair (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            pair (`bool`, *optional*, defaults to `False`):
                 Whether the number of added tokens should be computed in the case of a sequence pair or a single
                 sequence.
 
         Returns:
-            :obj:`int`: Number of special tokens added to sequences.
+            `int`: Number of special tokens added to sequences.
         """
         token_ids_0 = []
         token_ids_1 = []
@@ -254,13 +479,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         (BPE/SentencePieces/WordPieces). Takes care of added tokens.
 
         Args:
-            text (:obj:`str`):
+            text (`str`):
                 The sequence to be encoded.
             **kwargs (additional keyword arguments):
-                Passed along to the model-specific ``prepare_for_tokenization`` preprocessing method.
+                Passed along to the model-specific `prepare_for_tokenization` preprocessing method.
 
         Returns:
-            :obj:`List[str]`: The list of tokens.
+            `List[str]`: The list of tokens.
         """
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
@@ -275,91 +500,45 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # TODO: should this be in the base class?
         if hasattr(self, "do_lower_case") and self.do_lower_case:
             # convert non-special tokens to lowercase
-            escaped_special_toks = [re.escape(s_tok) for s_tok in self.all_special_tokens]
+            escaped_special_toks = [
+                re.escape(s_tok) for s_tok in (self.unique_no_split_tokens + self.all_special_tokens)
+            ]
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        def split_on_token(tok, text):
-            result = []
-            tok_extended = all_special_tokens_extended.get(tok, None)
-            split_text = text.split(tok)
-            full_word = ""
-            for i, sub_text in enumerate(split_text):
-                # AddedToken can control whitespace stripping around them.
-                # We use them for GPT2 and Roberta to have different behavior depending on the special token
-                # Cf. https://github.com/huggingface/transformers/pull/2778
-                # and https://github.com/huggingface/transformers/issues/3788
+        no_split_token = set(self.unique_no_split_tokens)
+        tokens = self.tokens_trie.split(text)
+        # ["This is something", "<special_token_1>", "  else"]
+        for i, token in enumerate(tokens):
+            if token in no_split_token:
+                tok_extended = all_special_tokens_extended.get(token, None)
+                left = tokens[i - 1] if i > 0 else None
+                right = tokens[i + 1] if i < len(tokens) - 1 else None
                 if isinstance(tok_extended, AddedToken):
-                    if tok_extended.single_word:
-                        # Try to avoid splitting on token
-                        if (
-                            i < len(split_text) - 1
-                            and not _is_end_of_word(sub_text)
-                            and not _is_start_of_word(split_text[i + 1])
-                        ):
-                            # Don't extract the special token
-                            full_word += sub_text + tok
-                        elif full_word:
-                            full_word += sub_text
-                            result.append(full_word)
-                            full_word = ""
-                            continue
-                    # Strip white spaces on the right
-                    if tok_extended.rstrip and i > 0:
+                    if tok_extended.rstrip and right:
                         # A bit counter-intuitive but we strip the left of the string
                         # since tok_extended.rstrip means the special token is eating all white spaces on its right
-                        sub_text = sub_text.lstrip()
+                        tokens[i + 1] = right.lstrip()
                     # Strip white spaces on the left
-                    if tok_extended.lstrip and i < len(split_text) - 1:
-                        sub_text = sub_text.rstrip()  # Opposite here
+                    if tok_extended.lstrip and left:
+                        tokens[i - 1] = left.rstrip()  # Opposite here
                 else:
                     # We strip left and right by default
-                    if i < len(split_text) - 1:
-                        sub_text = sub_text.rstrip()
-                    if i > 0:
-                        sub_text = sub_text.lstrip()
-
-                if i == 0 and not sub_text:
-                    result.append(tok)
-                elif i == len(split_text) - 1:
-                    if sub_text:
-                        result.append(sub_text)
-                    else:
-                        pass
-                else:
-                    if sub_text:
-                        result.append(sub_text)
-                    result.append(tok)
-            return result
-
-        def split_on_tokens(tok_list, text):
-            if not text.strip():
-                return []
-            if not tok_list:
-                return self._tokenize(text)
-
-            tokenized_text = []
-            text_list = [text]
-            for tok in tok_list:
-                tokenized_text = []
-                for sub_text in text_list:
-                    if sub_text not in self.unique_no_split_tokens:
-                        tokenized_text.extend(split_on_token(tok, sub_text))
-                    else:
-                        tokenized_text.append(sub_text)
-                text_list = tokenized_text
-
-            return list(
-                itertools.chain.from_iterable(
-                    (
-                        self._tokenize(token) if token not in self.unique_no_split_tokens else [token]
-                        for token in tokenized_text
-                    )
-                )
-            )
-
-        no_split_token = self.unique_no_split_tokens
-        tokenized_text = split_on_tokens(no_split_token, text)
+                    if right:
+                        tokens[i + 1] = right.lstrip()
+                    if left:
+                        tokens[i - 1] = left.rstrip()
+        # ["This is something", "<special_token_1>", "else"]
+        tokenized_text = []
+        for token in tokens:
+            # Need to skip eventual empty (fully stripped) tokens
+            if not token:
+                continue
+            if token in no_split_token:
+                tokenized_text.append(token)
+            else:
+                tokenized_text.extend(self._tokenize(token))
+        # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
 
     def _tokenize(self, text, **kwargs):
@@ -377,10 +556,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         vocabulary.
 
         Args:
-            tokens (:obj:`str` or :obj:`List[str]`): One or several token(s) to convert to token id(s).
+            tokens (`str` or `List[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
-            :obj:`int` or :obj:`List[int]`: The token id or list of token ids.
+            `int` or `List[int]`: The token id or list of token ids.
         """
         if tokens is None:
             return None
@@ -451,9 +630,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
+                "transformers.PreTrainedTokenizerFast. "
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
@@ -528,7 +707,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         if return_offsets_mapping:
             raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers."
+                "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
@@ -636,21 +815,21 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Performs any necessary transformations before tokenization.
 
-        This method should pop the arguments from kwargs and return the remaining :obj:`kwargs` as well. We test the
-        :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
+        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
+        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
 
         Args:
-            text (:obj:`str`):
+            text (`str`):
                 The text to prepare.
-            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
+            is_split_into_words (`bool`, *optional*, defaults to `False`):
+                Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
             kwargs:
                 Keyword arguments to use for the tokenization.
 
         Returns:
-            :obj:`Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+            `Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
         """
         return (text, kwargs)
 
@@ -659,14 +838,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 List of ids of the second sequence.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
@@ -700,13 +879,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added tokens.
 
         Args:
-            ids (:obj:`int` or :obj:`List[int]`):
+            ids (`int` or `List[int]`):
                 The token id (or token ids) to convert to tokens.
-            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
         Returns:
-            :obj:`str` or :obj:`List[str]`: The decoded token(s).
+            `str` or `List[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
             if ids in self.added_tokens_decoder:

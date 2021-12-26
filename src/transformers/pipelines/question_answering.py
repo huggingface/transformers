@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
@@ -7,8 +8,11 @@ from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_featur
 from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
+
+logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -28,9 +32,9 @@ if is_torch_available():
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
     """
     QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped to
-    internal :class:`~transformers.SquadExample`.
+    internal [`SquadExample`].
 
-    QuestionAnsweringArgumentHandler manages all the possible to create a :class:`~transformers.SquadExample` from the
+    QuestionAnsweringArgumentHandler manages all the possible to create a [`SquadExample`] from the
     command-line supplied arguments.
     """
 
@@ -97,18 +101,17 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class QuestionAnsweringPipeline(Pipeline):
     """
-    Question Answering pipeline using any :obj:`ModelForQuestionAnswering`. See the `question answering examples
-    <../task_summary.html#question-answering>`__ for more information.
+    Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering examples](../task_summary#question-answering) for more information.
 
-    This question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"question-answering"`.
+    This question answering pipeline can currently be loaded from [`pipeline`] using the following
+    task identifier: `"question-answering"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a question answering task. See the
-    up-to-date list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=question-answering>`__.
+    up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=question-answering).
     """
 
     default_input_names = "question,context"
+    handle_impossible_answer = False
 
     def __init__(
         self,
@@ -140,17 +143,17 @@ class QuestionAnsweringPipeline(Pipeline):
         question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
-        QuestionAnsweringPipeline leverages the :class:`~transformers.SquadExample` internally. This helper method
-        encapsulate all the logic for converting question(s) and context(s) to :class:`~transformers.SquadExample`.
+        QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method
+        encapsulate all the logic for converting question(s) and context(s) to [`SquadExample`].
 
         We currently support extractive question answering.
 
         Arguments:
-            question (:obj:`str` or :obj:`List[str]`): The question(s) asked.
-            context (:obj:`str` or :obj:`List[str]`): The context(s) in which we will look for the answer.
+            question (`str` or `List[str]`): The question(s) asked.
+            context (`str` or `List[str]`): The context(s) in which we will look for the answer.
 
         Returns:
-            One or a list of :class:`~transformers.SquadExample`: The corresponding :class:`~transformers.SquadExample`
+            One or a list of [`SquadExample`]: The corresponding [`SquadExample`]
             grouping question and context.
         """
         if isinstance(question, list):
@@ -158,259 +161,324 @@ class QuestionAnsweringPipeline(Pipeline):
         else:
             return SquadExample(None, question, context, None, None, None)
 
+    def _sanitize_parameters(
+        self,
+        padding=None,
+        topk=None,
+        top_k=None,
+        doc_stride=None,
+        max_answer_len=None,
+        max_seq_len=None,
+        max_question_len=None,
+        handle_impossible_answer=None,
+        **kwargs
+    ):
+        # Set defaults values
+        preprocess_params = {}
+        if padding is not None:
+            preprocess_params["padding"] = padding
+        if doc_stride is not None:
+            preprocess_params["doc_stride"] = doc_stride
+        if max_question_len is not None:
+            preprocess_params["max_question_len"] = max_question_len
+
+        postprocess_params = {}
+        if topk is not None and top_k is None:
+            warnings.warn("topk parameter is deprecated, use top_k instead", UserWarning)
+            top_k = topk
+        if top_k is not None:
+            if top_k < 1:
+                raise ValueError(f"top_k parameter should be >= 1 (got {top_k})")
+            postprocess_params["top_k"] = top_k
+        if max_answer_len is not None:
+            if max_answer_len < 1:
+                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
+        if max_answer_len is not None:
+            postprocess_params["max_answer_len"] = max_answer_len
+        if handle_impossible_answer is not None:
+            postprocess_params["handle_impossible_answer"] = handle_impossible_answer
+        return preprocess_params, {}, postprocess_params
+
     def __call__(self, *args, **kwargs):
         """
         Answer the question(s) given as inputs by using the context(s).
 
         Args:
-            args (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`):
-                One or several :class:`~transformers.SquadExample` containing the question and context.
-            X (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
+            args ([`SquadExample`] or a list of [`SquadExample`]):
+                One or several [`SquadExample`] containing the question and context.
+            X ([`SquadExample`] or a list of [`SquadExample`], *optional*):
+                One or several [`SquadExample`] containing the question and context (will be treated
                 the same way as if passed as the first positional argument).
-            data (:class:`~transformers.SquadExample` or a list of :class:`~transformers.SquadExample`, `optional`):
-                One or several :class:`~transformers.SquadExample` containing the question and context (will be treated
+            data ([`SquadExample`] or a list of [`SquadExample`], *optional*):
+                One or several [`SquadExample`] containing the question and context (will be treated
                 the same way as if passed as the first positional argument).
-            question (:obj:`str` or :obj:`List[str]`):
-                One or several question(s) (must be used in conjunction with the :obj:`context` argument).
-            context (:obj:`str` or :obj:`List[str]`):
+            question (`str` or `List[str]`):
+                One or several question(s) (must be used in conjunction with the `context` argument).
+            context (`str` or `List[str]`):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
-                :obj:`question` argument).
-            topk (:obj:`int`, `optional`, defaults to 1):
+                `question` argument).
+            topk (`int`, *optional*, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood). Note that we return less than
                 topk answers if there are not enough options available within the context.
-            doc_stride (:obj:`int`, `optional`, defaults to 128):
+            doc_stride (`int`, *optional*, defaults to 128):
                 If the context is too long to fit with the question for the model, it will be split in several chunks
                 with some overlap. This argument controls the size of that overlap.
-            max_answer_len (:obj:`int`, `optional`, defaults to 15):
+            max_answer_len (`int`, *optional*, defaults to 15):
                 The maximum length of predicted answers (e.g., only answers with a shorter length are considered).
-            max_seq_len (:obj:`int`, `optional`, defaults to 384):
+            max_seq_len (`int`, *optional*, defaults to 384):
                 The maximum length of the total sentence (context + question) after tokenization. The context will be
-                split in several chunks (using :obj:`doc_stride`) if needed.
-            max_question_len (:obj:`int`, `optional`, defaults to 64):
+                split in several chunks (using `doc_stride`) if needed.
+            max_question_len (`int`, *optional*, defaults to 64):
                 The maximum length of the question after tokenization. It will be truncated if needed.
-            handle_impossible_answer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            handle_impossible_answer (`bool`, *optional*, defaults to `False`):
                 Whether or not we accept impossible as an answer.
 
         Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
+            A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **score** (:obj:`float`) -- The probability associated to the answer.
-            - **start** (:obj:`int`) -- The character start index of the answer (in the tokenized version of the
+            - **score** (`float`) -- The probability associated to the answer.
+            - **start** (`int`) -- The character start index of the answer (in the tokenized version of the
               input).
-            - **end** (:obj:`int`) -- The character end index of the answer (in the tokenized version of the input).
-            - **answer** (:obj:`str`) -- The answer to the question.
+            - **end** (`int`) -- The character end index of the answer (in the tokenized version of the input).
+            - **answer** (`str`) -- The answer to the question.
         """
-        # Set defaults values
-        kwargs.setdefault("padding", "longest")
-        kwargs.setdefault("topk", 1)
-        kwargs.setdefault("doc_stride", 128)
-        kwargs.setdefault("max_answer_len", 15)
-        kwargs.setdefault("max_seq_len", 384)
-        kwargs.setdefault("max_question_len", 64)
-        kwargs.setdefault("handle_impossible_answer", False)
-
-        if kwargs["topk"] < 1:
-            raise ValueError(f"topk parameter should be >= 1 (got {kwargs['topk']})")
-
-        if kwargs["max_answer_len"] < 1:
-            raise ValueError(f"max_answer_len parameter should be >= 1 (got {(kwargs['max_answer_len'])}")
+        if kwargs.get("batch_size", 1) > 1:
+            logger.error("Batch_size > 1 is not supported for question answering pipeline, setting it to 1.")
+            kwargs["batch_size"] = 1
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
+        if len(examples) == 1:
+            return super().__call__(examples[0], **kwargs)
+        return super().__call__(examples, **kwargs)
+
+    def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
+
+        if max_seq_len is None:
+            max_seq_len = min(self.tokenizer.model_max_length, 384)
+        if doc_stride is None:
+            doc_stride = min(max_seq_len // 2, 128)
+
         if not self.tokenizer.is_fast:
-            features_list = [
-                squad_convert_examples_to_features(
-                    examples=[example],
-                    tokenizer=self.tokenizer,
-                    max_seq_length=kwargs["max_seq_len"],
-                    doc_stride=kwargs["doc_stride"],
-                    max_query_length=kwargs["max_question_len"],
-                    padding_strategy=PaddingStrategy.MAX_LENGTH.value,
-                    is_training=False,
-                    tqdm_enabled=False,
-                )
-                for example in examples
-            ]
+            features = squad_convert_examples_to_features(
+                examples=[example],
+                tokenizer=self.tokenizer,
+                max_seq_length=max_seq_len,
+                doc_stride=doc_stride,
+                max_query_length=max_question_len,
+                padding_strategy=PaddingStrategy.MAX_LENGTH,
+                is_training=False,
+                tqdm_enabled=False,
+            )
         else:
-            features_list = []
-            for example in examples:
-                # Define the side we want to truncate / pad and the text/pair sorting
-                question_first = bool(self.tokenizer.padding_side == "right")
+            # Define the side we want to truncate / pad and the text/pair sorting
+            question_first = self.tokenizer.padding_side == "right"
 
-                encoded_inputs = self.tokenizer(
-                    text=example.question_text if question_first else example.context_text,
-                    text_pair=example.context_text if question_first else example.question_text,
-                    padding=kwargs["padding"],
-                    truncation="only_second" if question_first else "only_first",
-                    max_length=kwargs["max_seq_len"],
-                    stride=kwargs["doc_stride"],
-                    return_tensors="np",
-                    return_token_type_ids=True,
-                    return_overflowing_tokens=True,
-                    return_offsets_mapping=True,
-                    return_special_tokens_mask=True,
+            encoded_inputs = self.tokenizer(
+                text=example.question_text if question_first else example.context_text,
+                text_pair=example.context_text if question_first else example.question_text,
+                padding=padding,
+                truncation="only_second" if question_first else "only_first",
+                max_length=max_seq_len,
+                stride=doc_stride,
+                return_tensors="np",
+                return_token_type_ids=True,
+                return_overflowing_tokens=True,
+                return_offsets_mapping=True,
+                return_special_tokens_mask=True,
+            )
+            # When the input is too long, it's converted in a batch of inputs with overflowing tokens
+            # and a stride of overlap between the inputs. If a batch of inputs is given, a special output
+            # "overflow_to_sample_mapping" indicate which member of the encoded batch belong to which original batch sample.
+            # Here we tokenize examples one-by-one so we don't need to use "overflow_to_sample_mapping".
+            # "num_span" is the number of output samples generated from the overflowing tokens.
+            num_spans = len(encoded_inputs["input_ids"])
+
+            # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+            # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+            p_mask = np.asarray(
+                [
+                    [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                    for span_id in range(num_spans)
+                ]
+            )
+
+            # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+            if self.tokenizer.cls_token_id is not None:
+                cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
+                p_mask[cls_index] = 0
+
+            features = []
+            for span_idx in range(num_spans):
+                input_ids_span_idx = encoded_inputs["input_ids"][span_idx]
+                attention_mask_span_idx = (
+                    encoded_inputs["attention_mask"][span_idx] if "attention_mask" in encoded_inputs else None
                 )
-
-                # When the input is too long, it's converted in a batch of inputs with overflowing tokens
-                # and a stride of overlap between the inputs. If a batch of inputs is given, a special output
-                # "overflow_to_sample_mapping" indicate which member of the encoded batch belong to which original batch sample.
-                # Here we tokenize examples one-by-one so we don't need to use "overflow_to_sample_mapping".
-                # "num_span" is the number of output samples generated from the overflowing tokens.
-                num_spans = len(encoded_inputs["input_ids"])
-
-                # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-                # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
-                p_mask = np.asarray(
-                    [
-                        [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
-                        for span_id in range(num_spans)
-                    ]
+                token_type_ids_span_idx = (
+                    encoded_inputs["token_type_ids"][span_idx] if "token_type_ids" in encoded_inputs else None
                 )
-
-                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
-                if self.tokenizer.cls_token_id is not None:
-                    cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
-                    p_mask[cls_index] = 0
-
-                features = []
-                for span_idx in range(num_spans):
-                    features.append(
-                        SquadFeatures(
-                            input_ids=encoded_inputs["input_ids"][span_idx],
-                            attention_mask=encoded_inputs["attention_mask"][span_idx],
-                            token_type_ids=encoded_inputs["token_type_ids"][span_idx],
-                            p_mask=p_mask[span_idx].tolist(),
-                            encoding=encoded_inputs[span_idx],
-                            # We don't use the rest of the values - and actually
-                            # for Fast tokenizer we could totally avoid using SquadFeatures and SquadExample
-                            cls_index=None,
-                            token_to_orig_map={},
-                            example_index=0,
-                            unique_id=0,
-                            paragraph_len=0,
-                            token_is_max_context=0,
-                            tokens=[],
-                            start_position=0,
-                            end_position=0,
-                            is_impossible=False,
-                            qas_id=None,
-                        )
+                submask = p_mask[span_idx]
+                if isinstance(submask, np.ndarray):
+                    submask = submask.tolist()
+                features.append(
+                    SquadFeatures(
+                        input_ids=input_ids_span_idx,
+                        attention_mask=attention_mask_span_idx,
+                        token_type_ids=token_type_ids_span_idx,
+                        p_mask=submask,
+                        encoding=encoded_inputs[span_idx],
+                        # We don't use the rest of the values - and actually
+                        # for Fast tokenizer we could totally avoid using SquadFeatures and SquadExample
+                        cls_index=None,
+                        token_to_orig_map={},
+                        example_index=0,
+                        unique_id=0,
+                        paragraph_len=0,
+                        token_is_max_context=0,
+                        tokens=[],
+                        start_position=0,
+                        end_position=0,
+                        is_impossible=False,
+                        qas_id=None,
                     )
-                features_list.append(features)
-
-        all_answers = []
-        for features, example in zip(features_list, examples):
-            model_input_names = self.tokenizer.model_input_names
-            fw_args = {k: [feature.__dict__[k] for feature in features] for k in model_input_names}
-
-            # Manage tensor allocation on correct device
-            with self.device_placement():
-                if self.framework == "tf":
-                    fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
-                    start, end = self.model(fw_args)[:2]
-                    start, end = start.numpy(), end.numpy()
-                else:
-                    with torch.no_grad():
-                        # Retrieve the score for the context tokens only (removing question tokens)
-                        fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
-                        # On Windows, the default int type in numpy is np.int32 so we get some non-long tensors.
-                        fw_args = {k: v.long() if v.dtype == torch.int32 else v for (k, v) in fw_args.items()}
-                        start, end = self.model(**fw_args)[:2]
-                        start, end = start.cpu().numpy(), end.cpu().numpy()
-
-            min_null_score = 1000000  # large and positive
-            answers = []
-            for (feature, start_, end_) in zip(features, start, end):
-                # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
-                undesired_tokens = np.abs(np.array(feature.p_mask) - 1) & feature.attention_mask
-
-                # Generate mask
-                undesired_tokens_mask = undesired_tokens == 0.0
-
-                # Make sure non-context indexes in the tensor cannot contribute to the softmax
-                start_ = np.where(undesired_tokens_mask, -10000.0, start_)
-                end_ = np.where(undesired_tokens_mask, -10000.0, end_)
-
-                # Normalize logits and spans to retrieve the answer
-                start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
-                end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
-
-                if kwargs["handle_impossible_answer"]:
-                    min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
-
-                # Mask CLS
-                start_[0] = end_[0] = 0.0
-
-                starts, ends, scores = self.decode(
-                    start_, end_, kwargs["topk"], kwargs["max_answer_len"], undesired_tokens
                 )
-                if not self.tokenizer.is_fast:
-                    char_to_word = np.array(example.char_to_word_offset)
 
-                    # Convert the answer (tokens) back to the original text
-                    # Score: score from the model
-                    # Start: Index of the first character of the answer in the context string
-                    # End: Index of the character following the last character of the answer in the context string
-                    # Answer: Plain text of the answer
-                    answers += [
-                        {
-                            "score": score.item(),
-                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                            "answer": " ".join(
-                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                            ),
-                        }
-                        for s, e, score in zip(starts, ends, scores)
-                    ]
+        split_features = []
+        for feature in features:
+            fw_args = {}
+            others = {}
+            model_input_names = self.tokenizer.model_input_names
+
+            for k, v in feature.__dict__.items():
+                if k in model_input_names:
+                    if self.framework == "tf":
+                        tensor = tf.constant(v)
+                        if tensor.dtype == tf.int64:
+                            tensor = tf.cast(tensor, tf.int32)
+                        fw_args[k] = tf.expand_dims(tensor, 0)
+                    elif self.framework == "pt":
+                        tensor = torch.tensor(v)
+                        if tensor.dtype == torch.int32:
+                            tensor = tensor.long()
+                        fw_args[k] = tensor.unsqueeze(0)
                 else:
-                    # Convert the answer (tokens) back to the original text
-                    # Score: score from the model
-                    # Start: Index of the first character of the answer in the context string
-                    # End: Index of the character following the last character of the answer in the context string
-                    # Answer: Plain text of the answer
-                    question_first = bool(self.tokenizer.padding_side == "right")
-                    enc = feature.encoding
+                    others[k] = v
+            split_features.append({"fw_args": fw_args, "others": others})
+        return {"features": split_features, "example": example}
 
-                    # Sometimes the max probability token is in the middle of a word so:
-                    # - we start by finding the right word containing the token with `token_to_word`
-                    # - then we convert this word in a character span with `word_to_chars`
-                    answers += [
+    def _forward(self, model_inputs):
+        features = model_inputs["features"]
+        example = model_inputs["example"]
+        starts = []
+        ends = []
+        for feature in features:
+            fw_args = feature["fw_args"]
+            start, end = self.model(**fw_args)[:2]
+            starts.append(start)
+            ends.append(end)
+        return {"starts": starts, "ends": ends, "features": features, "example": example}
+
+    def postprocess(
+        self,
+        model_outputs,
+        top_k=1,
+        handle_impossible_answer=False,
+        max_answer_len=15,
+    ):
+        min_null_score = 1000000  # large and positive
+        answers = []
+        example = model_outputs["example"]
+        for i, (feature_, start_, end_) in enumerate(
+            zip(model_outputs["features"], model_outputs["starts"], model_outputs["ends"])
+        ):
+            feature = feature_["others"]
+            # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
+            undesired_tokens = np.abs(np.array(feature["p_mask"]) - 1)
+
+            if feature_["fw_args"].get("attention_mask", None) is not None:
+                undesired_tokens = undesired_tokens & feature_["fw_args"]["attention_mask"].numpy()
+
+            # Generate mask
+            undesired_tokens_mask = undesired_tokens == 0.0
+
+            # Make sure non-context indexes in the tensor cannot contribute to the softmax
+            start_ = np.where(undesired_tokens_mask, -10000.0, start_)
+            end_ = np.where(undesired_tokens_mask, -10000.0, end_)
+
+            # Normalize logits and spans to retrieve the answer
+            start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
+            end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+
+            if handle_impossible_answer:
+                min_null_score = min(min_null_score, (start_[0, 0] * end_[0, 0]).item())
+
+            # Mask CLS
+            start_[0, 0] = end_[0, 0] = 0.0
+
+            starts, ends, scores = self.decode(start_, end_, top_k, max_answer_len, undesired_tokens)
+            if not self.tokenizer.is_fast:
+                char_to_word = np.array(example.char_to_word_offset)
+
+                # Convert the answer (tokens) back to the original text
+                # Score: score from the model
+                # Start: Index of the first character of the answer in the context string
+                # End: Index of the character following the last character of the answer in the context string
+                # Answer: Plain text of the answer
+                for s, e, score in zip(starts, ends, scores):
+                    token_to_orig_map = feature["token_to_orig_map"]
+                    answers.append(
                         {
                             "score": score.item(),
-                            "start": enc.word_to_chars(
-                                enc.token_to_word(s), sequence_index=1 if question_first else 0
-                            )[0],
-                            "end": enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
-                                1
-                            ],
-                            "answer": example.context_text[
-                                enc.word_to_chars(enc.token_to_word(s), sequence_index=1 if question_first else 0)[
-                                    0
-                                ] : enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
-                                    1
-                                ]
-                            ],
+                            "start": np.where(char_to_word == token_to_orig_map[s])[0][0].item(),
+                            "end": np.where(char_to_word == token_to_orig_map[e])[0][-1].item(),
+                            "answer": " ".join(example.doc_tokens[token_to_orig_map[s] : token_to_orig_map[e] + 1]),
                         }
-                        for s, e, score in zip(starts, ends, scores)
-                    ]
+                    )
+            else:
+                # Convert the answer (tokens) back to the original text
+                # Score: score from the model
+                # Start: Index of the first character of the answer in the context string
+                # End: Index of the character following the last character of the answer in the context string
+                # Answer: Plain text of the answer
+                question_first = bool(self.tokenizer.padding_side == "right")
+                enc = feature["encoding"]
 
-            if kwargs["handle_impossible_answer"]:
-                answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
+                # Sometimes the max probability token is in the middle of a word so:
+                # - we start by finding the right word containing the token with `token_to_word`
+                # - then we convert this word in a character span with `word_to_chars`
+                sequence_index = 1 if question_first else 0
+                for s, e, score in zip(starts, ends, scores):
+                    try:
+                        start_word = enc.token_to_word(s)
+                        end_word = enc.token_to_word(e)
+                        start_index = enc.word_to_chars(start_word, sequence_index=sequence_index)[0]
+                        end_index = enc.word_to_chars(end_word, sequence_index=sequence_index)[1]
+                    except Exception:
+                        # Some tokenizers don't really handle words. Keep to offsets then.
+                        start_index = enc.offsets[s][0]
+                        end_index = enc.offsets[e][1]
 
-            answers = sorted(answers, key=lambda x: x["score"], reverse=True)[: kwargs["topk"]]
-            all_answers += answers
+                    answers.append(
+                        {
+                            "score": score.item(),
+                            "start": start_index,
+                            "end": end_index,
+                            "answer": example.context_text[start_index:end_index],
+                        }
+                    )
 
-        if len(all_answers) == 1:
-            return all_answers[0]
-        return all_answers
+        if handle_impossible_answer:
+            answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
+        answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
+        if len(answers) == 1:
+            return answers[0]
+        return answers
 
     def decode(
         self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
     ) -> Tuple:
         """
-        Take the output of any :obj:`ModelForQuestionAnswering` and will generate probabilities for each span to be the
+        Take the output of any `ModelForQuestionAnswering` and will generate probabilities for each span to be the
         actual answer.
 
         In addition, it filters out some unwanted/impossible cases like answer len being greater than max_answer_len or
@@ -418,11 +486,11 @@ class QuestionAnsweringPipeline(Pipeline):
         the topk argument.
 
         Args:
-            start (:obj:`np.ndarray`): Individual start probabilities for each token.
-            end (:obj:`np.ndarray`): Individual end probabilities for each token.
-            topk (:obj:`int`): Indicates how many possible answer span(s) to extract from the model output.
-            max_answer_len (:obj:`int`): Maximum size of the answer to extract from the model's output.
-            undesired_tokens (:obj:`np.ndarray`): Mask determining tokens that can be part of the answer
+            start (`np.ndarray`): Individual start probabilities for each token.
+            end (`np.ndarray`): Individual end probabilities for each token.
+            topk (`int`): Indicates how many possible answer span(s) to extract from the model output.
+            max_answer_len (`int`): Maximum size of the answer to extract from the model's output.
+            undesired_tokens (`np.ndarray`): Mask determining tokens that can be part of the answer
         """
         # Ensure we have batch axis
         if start.ndim == 1:
@@ -460,12 +528,12 @@ class QuestionAnsweringPipeline(Pipeline):
         When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 
         Args:
-            text (:obj:`str`): The actual context to extract the answer from.
-            start (:obj:`int`): The answer starting token index.
-            end (:obj:`int`): The answer end token index.
+            text (`str`): The actual context to extract the answer from.
+            start (`int`): The answer starting token index.
+            end (`int`): The answer end token index.
 
         Returns:
-            Dictionary like :obj:`{'answer': str, 'start': int, 'end': int}`
+            Dictionary like `{'answer': str, 'start': int, 'end': int}`
         """
         words = []
         token_idx = char_start_idx = char_end_idx = chars_idx = 0

@@ -17,6 +17,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
+import contextlib
 import inspect
 import math
 import os
@@ -26,7 +27,7 @@ import shutil
 import sys
 import time
 import warnings
-from logging import StreamHandler
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -41,36 +42,37 @@ from .integrations import (  # isort: split
     is_fairscale_available,
     is_optuna_available,
     is_ray_tune_available,
+    is_sigopt_available,
     run_hp_search_optuna,
     run_hp_search_ray,
+    run_hp_search_sigopt,
 )
 
 import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset, IterableDataset
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data.sampler import RandomSampler, SequentialSampler
+
+from huggingface_hub import Repository
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
+from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
     WEIGHTS_NAME,
-    PushToHubMixin,
+    get_full_repo_name,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_tpu_available,
-    is_training_run_on_sagemaker,
 )
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
@@ -112,6 +114,8 @@ from .trainer_utils import (
     EvalLoopOutput,
     EvalPrediction,
     HPSearchBackend,
+    HubStrategy,
+    IntervalStrategy,
     PredictionOutput,
     ShardedDDPOption,
     TrainerMemoryTracker,
@@ -175,9 +179,6 @@ if is_sagemaker_mp_enabled():
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
-if is_training_run_on_sagemaker():
-    logging.add_handler(StreamHandler(sys.stdout))
-
 
 if TYPE_CHECKING:
     import optuna
@@ -185,78 +186,89 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+# Name of the files used for checkpointing
+TRAINING_ARGS_NAME = "training_args.bin"
+TRAINER_STATE_NAME = "trainer_state.json"
+OPTIMIZER_NAME = "optimizer.pt"
+SCHEDULER_NAME = "scheduler.pt"
+SCALER_NAME = "scaler.pt"
+
+
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
 
     Args:
-        model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`, `optional`):
-            The model to train, evaluate or use for predictions. If not provided, a ``model_init`` must be passed.
+        model ([`PreTrainedModel`] or `torch.nn.Module`, *optional*):
+            The model to train, evaluate or use for predictions. If not provided, a `model_init` must be passed.
 
-            .. note::
+            <Tip>
 
-                :class:`~transformers.Trainer` is optimized to work with the :class:`~transformers.PreTrainedModel`
-                provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
-                they work the same way as the 🤗 Transformers models.
-        args (:class:`~transformers.TrainingArguments`, `optional`):
+            [`Trainer`] is optimized to work with the [`PreTrainedModel`]
+            provided by the library. You can still use your own models defined as `torch.nn.Module` as long as
+            they work the same way as the 🤗 Transformers models.
+
+            </Tip>
+
+        args ([`TrainingArguments`], *optional*):
             The arguments to tweak for training. Will default to a basic instance of
-            :class:`~transformers.TrainingArguments` with the ``output_dir`` set to a directory named `tmp_trainer` in
+            [`TrainingArguments`] with the `output_dir` set to a directory named *tmp_trainer* in
             the current directory if not provided.
-        data_collator (:obj:`DataCollator`, `optional`):
-            The function to use to form a batch from a list of elements of :obj:`train_dataset` or :obj:`eval_dataset`.
-            Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is provided, an instance of
-            :func:`~transformers.DataCollatorWithPadding` otherwise.
-        train_dataset (:obj:`torch.utils.data.dataset.Dataset` or :obj:`torch.utils.data.dataset.IterableDataset`, `optional`):
-            The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-            ``model.forward()`` method are automatically removed.
+        data_collator (`DataCollator`, *optional*):
+            The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`.
+            Will default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
+            [`DataCollatorWithPadding`] otherwise.
+        train_dataset (`torch.utils.data.Dataset` or `torch.utils.data.IterableDataset`, *optional*):
+            The dataset to use for training. If it is an `datasets.Dataset`, columns not accepted by the
+            `model.forward()` method are automatically removed.
 
-            Note that if it's a :obj:`torch.utils.data.dataset.IterableDataset` with some randomization and you are
-            training in a distributed fashion, your iterable dataset should either use a internal attribute
-            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identical on all
-            processes (and the Trainer will manually set the seed of this :obj:`generator` at each epoch) or have a
-            :obj:`set_epoch()` method that internally sets the seed of the RNGs used.
-        eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-             The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-             ``model.forward()`` method are automatically removed.
-        tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
+            Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in
+            a distributed fashion, your iterable dataset should either use a internal attribute `generator` that
+            is a `torch.Generator` for the randomization that must be identical on all processes (and the Trainer
+            will manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that
+            internally sets the seed of the RNGs used.
+        eval_dataset (`torch.utils.data.Dataset`, *optional*):
+             The dataset to use for evaluation. If it is an `datasets.Dataset`, columns not accepted by the
+             `model.forward()` method are automatically removed.
+        tokenizer ([`PreTrainedTokenizerBase`], *optional*):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
-        model_init (:obj:`Callable[[], PreTrainedModel]`, `optional`):
+        model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to
-            :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
+            [`~Trainer.train`] will start from a new instance of the model as given by this function.
 
-            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be
-            able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
-            layers, dropout probabilities etc).
-        compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
+            The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
+            be able to choose different architectures according to hyper parameters (such as layer count, sizes of
+            inner layers, dropout probabilities etc).
+        compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a
-            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
+            [`EvalPrediction`] and return a dictionary string to metric values.
+        callbacks (List of [`TrainerCallback`], *optional*):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
-            detailed in :doc:`here <callback>`.
+            detailed in [here](callback).
 
-            If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
-        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
+            If you want to remove one of the default callbacks used, use the [`Trainer.remove_callback`] method.
+        optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*): A tuple
             containing the optimizer and the scheduler to use. Will default to an instance of
-            :class:`~transformers.AdamW` on your model and a scheduler given by
-            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+            [`AdamW`] on your model and a scheduler given by
+            [`get_linear_schedule_with_warmup`] controlled by `args`.
 
     Important attributes:
 
         - **model** -- Always points to the core model. If using a transformers model, it will be a
-          :class:`~transformers.PreTrainedModel` subclass.
+          [`PreTrainedModel`] subclass.
         - **model_wrapped** -- Always points to the most external model in case one or more other modules wrap the
-          original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
-          the inner model is wrapped in ``DeepSpeed`` and then again in ``torch.nn.DistributedDataParallel``. If the
-          inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
+          original model. This is the model that should be used for the forward pass. For example, under `DeepSpeed`,
+          the inner model is wrapped in `DeepSpeed` and then again in `torch.nn.DistributedDataParallel`. If the
+          inner model hasn't been wrapped, then `self.model_wrapped` is the same as `self.model`.
         - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
           data parallelism, this means some of the model layers are split on different GPUs).
         - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
-          to :obj:`False` if model parallel or deepspeed is used, or if the default
-          ``TrainingArguments.place_model_on_device`` is overridden to return :obj:`False` .
-        - **is_in_train** -- Whether or not a model is currently running ``train`` (e.g. when ``evaluate`` is called
-          while in ``train``)
+          to `False` if model parallel or deepspeed is used, or if the default
+          `TrainingArguments.place_model_on_device` is overridden to return `False` .
+        - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called
+          while in `train`)
 
     """
 
@@ -346,13 +358,13 @@ class Trainer:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
         # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
         #    and we only use deepspeed for training at the moment
-        # 3. full fp16 eval - since the model needs to be half'ed first
+        # 3. full bf16 or fp16 eval - since the model needs to be cast to the right dtype first
         # 4. Sharded DDP - same as MP
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
             or args.deepspeed
-            or (args.fp16_full_eval and not args.do_train)
+            or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
             or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
         ):
             self.place_model_on_device = False
@@ -378,7 +390,7 @@ class Trainer:
         self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
-                "Passing a `model_init` is incompatible with providing the `optimizers` argument."
+                "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
@@ -394,6 +406,12 @@ class Trainer:
         # Create clone of distant repo and output directory if needed
         if self.args.push_to_hub:
             self.init_git_repo()
+            # In case of pull, we need to make sure every process has the latest.
+            if is_torch_tpu_available():
+                xm.rendezvous("init git repo")
+            elif args.local_rank != -1:
+                dist.barrier()
+
         if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
@@ -411,18 +429,24 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
-        self.fp16_backend = None
 
-        if args.fp16:
-            if args.fp16_backend == "auto":
-                self.fp16_backend = "amp" if _is_native_amp_available else "apex"
-            else:
-                self.fp16_backend = args.fp16_backend
-            logger.info(f"Using {self.fp16_backend} fp16 backend")
+        if args.fp16 or args.bf16:
+            if args.half_precision_backend == "auto":
+                if _is_native_amp_available:
+                    args.half_precision_backend = "amp"
+                else:
+                    if args.bf16:
+                        raise ValueError("Tried to use `bf16` but native amp is not available")
+                    else:
+                        args.half_precision_backend = "apex"
+            logger.info(f"Using {args.half_precision_backend} half precision backend")
 
-        if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
-            if self.fp16_backend == "amp":
+        self.do_grad_scaling = False
+        if (args.fp16 or args.bf16) and not args.deepspeed:  # deepspeed manages its own half precision
+            if args.half_precision_backend == "amp":
                 self.use_amp = True
+                self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
+                self.do_grad_scaling = True
                 if is_sagemaker_mp_enabled():
                     self.scaler = smp.amp.GradScaler()
                 elif self.sharded_ddp is not None:
@@ -469,38 +493,38 @@ class Trainer:
 
     def add_callback(self, callback):
         """
-        Add a callback to the current list of :class:`~transformer.TrainerCallback`.
+        Add a callback to the current list of [`~transformer.TrainerCallback`].
 
         Args:
-           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
-               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
+           callback (`type` or [`~transformer.TrainerCallback`]):
+               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`].
                In the first case, will instantiate a member of that class.
         """
         self.callback_handler.add_callback(callback)
 
     def pop_callback(self, callback):
         """
-        Remove a callback from the current list of :class:`~transformer.TrainerCallback` and returns it.
+        Remove a callback from the current list of [`~transformer.TrainerCallback`] and returns it.
 
-        If the callback is not found, returns :obj:`None` (and no error is raised).
+        If the callback is not found, returns `None` (and no error is raised).
 
         Args:
-           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
-               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
+           callback (`type` or [`~transformer.TrainerCallback`]):
+               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`].
                In the first case, will pop the first member of that class found in the list of callbacks.
 
         Returns:
-            :class:`~transformer.TrainerCallback`: The callback removed, if found.
+            [`~transformer.TrainerCallback`]: The callback removed, if found.
         """
         return self.callback_handler.pop_callback(callback)
 
     def remove_callback(self, callback):
         """
-        Remove a callback from the current list of :class:`~transformer.TrainerCallback`.
+        Remove a callback from the current list of [`~transformer.TrainerCallback`].
 
         Args:
-           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
-               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
+           callback (`type` or [`~transformer.TrainerCallback`]):
+               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`].
                In the first case, will remove the first member of that class found in the list of callbacks.
         """
         self.callback_handler.remove_callback(callback)
@@ -537,7 +561,7 @@ class Trainer:
         else:
             return dataset.remove_columns(ignored_columns)
 
-    def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
+    def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if not isinstance(self.train_dataset, collections.abc.Sized):
             return None
 
@@ -559,16 +583,16 @@ class Trainer:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             if self.args.world_size <= 1:
                 return LengthGroupedSampler(
-                    self.train_dataset,
                     self.args.train_batch_size,
+                    dataset=self.train_dataset,
                     lengths=lengths,
                     model_input_name=model_input_name,
                     generator=generator,
                 )
             else:
                 return DistributedLengthGroupedSampler(
-                    self.train_dataset,
                     self.args.train_batch_size,
+                    dataset=self.train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     lengths=lengths,
@@ -603,9 +627,9 @@ class Trainer:
 
     def get_train_dataloader(self) -> DataLoader:
         """
-        Returns the training :class:`~torch.utils.data.DataLoader`.
+        Returns the training [`~torch.utils.data.DataLoader`].
 
-        Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler (adapted
+        Will use no sampler if `self.train_dataset` does not implement `__len__`, a random sampler (adapted
         to distributed training if necessary) otherwise.
 
         Subclass and override this method if you want to inject some custom behavior.
@@ -617,7 +641,7 @@ class Trainer:
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
 
-        if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
+        if isinstance(train_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
                 train_dataset = IterableDatasetShard(
                     train_dataset,
@@ -629,7 +653,7 @@ class Trainer:
 
             return DataLoader(
                 train_dataset,
-                batch_size=self.args.train_batch_size,
+                batch_size=self.args.per_device_train_batch_size,
                 collate_fn=self.data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
@@ -647,7 +671,7 @@ class Trainer:
             pin_memory=self.args.dataloader_pin_memory,
         )
 
-    def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
+    def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
         # Deprecated code
         if self.args.use_legacy_prediction_loop:
             if is_torch_tpu_available():
@@ -678,14 +702,14 @@ class Trainer:
 
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
         """
-        Returns the evaluation :class:`~torch.utils.data.DataLoader`.
+        Returns the evaluation [`~torch.utils.data.DataLoader`].
 
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-            eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`, columns not
-                accepted by the ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
+            eval_dataset (`torch.utils.data.Dataset`, *optional*):
+                If provided, will override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not
+                accepted by the `model.forward()` method are automatically removed. It must implement `__len__`.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
@@ -694,11 +718,11 @@ class Trainer:
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
 
-        if isinstance(eval_dataset, torch.utils.data.dataset.IterableDataset):
+        if isinstance(eval_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
                 eval_dataset = IterableDatasetShard(
                     eval_dataset,
-                    batch_size=self.args.eval_batch_size,
+                    batch_size=self.args.per_device_eval_batch_size,
                     drop_last=self.args.dataloader_drop_last,
                     num_processes=self.args.world_size,
                     process_index=self.args.process_index,
@@ -725,19 +749,19 @@ class Trainer:
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         """
-        Returns the test :class:`~torch.utils.data.DataLoader`.
+        Returns the test [`~torch.utils.data.DataLoader`].
 
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-            test_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-                ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
+            test_dataset (`torch.utils.data.Dataset`, *optional*):
+                The test dataset to use. If it is an `datasets.Dataset`, columns not accepted by the
+                `model.forward()` method are automatically removed. It must implement `__len__`.
         """
         if is_datasets_available() and isinstance(test_dataset, datasets.Dataset):
             test_dataset = self._remove_unused_columns(test_dataset, description="test")
 
-        if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
+        if isinstance(test_dataset, torch.utils.data.IterableDataset):
             if self.args.world_size > 1:
                 test_dataset = IterableDatasetShard(
                     test_dataset,
@@ -771,18 +795,18 @@ class Trainer:
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
-        Trainer's init through :obj:`optimizers`, or subclass and override this method (or :obj:`create_optimizer`
-        and/or :obj:`create_scheduler`) in a subclass.
+        Trainer's init through `optimizers`, or subclass and override this method (or `create_optimizer`
+        and/or `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps)
+        self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
 
     def create_optimizer(self):
         """
         Setup the optimizer.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
-        Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
+        Trainer's init through `optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
             decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
@@ -820,9 +844,12 @@ class Trainer:
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
 
-    def create_scheduler(self, num_training_steps: int):
+        return self.optimizer
+
+    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
-        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
+        Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
+        passed as an argument.
 
         Args:
             num_training_steps (int): The number of training steps to do.
@@ -830,16 +857,17 @@ class Trainer:
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
-                self.optimizer,
+                optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
             )
+        return self.lr_scheduler
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
-        Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
+        Helper to get number of samples in a [`~torch.utils.data.DataLoader`] by accessing its dataset.
 
-        Will raise an exception if the underlying dataset does not implement method :obj:`__len__`
+        Will raise an exception if the underlying dataset does not implement method `__len__`
         """
         return len(dataloader.dataset)
 
@@ -854,6 +882,8 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.RAY:
             params = trial
             params.pop("wandb", None)
+        elif self.hp_search_backend == HPSearchBackend.SIGOPT:
+            params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
 
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -868,6 +898,8 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info("Trial:", trial.params)
+        if self.hp_search_backend == HPSearchBackend.SIGOPT:
+            logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfDeepSpeedConfig
@@ -902,9 +934,9 @@ class Trainer:
             output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             self.save_model(output_dir)
             if self.args.should_save:
-                self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
+                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
 
     def call_model_init(self, trial=None):
         model_init_argcount = number_of_arguments(self.model_init)
@@ -954,7 +986,7 @@ class Trainer:
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
                 model = ShardedDDP(model, self.optimizer)
             else:
-                mixed_precision = self.args.fp16
+                mixed_precision = self.args.fp16 or self.args.bf16
                 cpu_offload = ShardedDDPOption.OFFLOAD in self.args.sharded_ddp
                 zero_3 = self.sharded_ddp == ShardedDDPOption.ZERO_DP_3
                 # XXX: Breaking the self.model convention but I see no way around it for now.
@@ -970,19 +1002,23 @@ class Trainer:
         elif is_sagemaker_dp_enabled():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
+            kwargs = {}
             if self.args.ddp_find_unused_parameters is not None:
-                find_unused_parameters = self.args.ddp_find_unused_parameters
+                kwargs["find_unused_parameters"] = self.args.ddp_find_unused_parameters
             elif isinstance(model, PreTrainedModel):
                 # find_unused_parameters breaks checkpointing as per
                 # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
+                kwargs["find_unused_parameters"] = not model.is_gradient_checkpointing
             else:
-                find_unused_parameters = True
+                kwargs["find_unused_parameters"] = True
+
+            if self.args.ddp_bucket_cap_mb is not None:
+                kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
             model = nn.parallel.DistributedDataParallel(
                 model,
-                device_ids=[self.args.local_rank],
-                output_device=self.args.local_rank,
-                find_unused_parameters=find_unused_parameters,
+                device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
+                output_device=self.args.local_rank if self.args._n_gpu != 0 else None,
+                **kwargs,
             )
 
         return model
@@ -998,14 +1034,14 @@ class Trainer:
         Main training entry point.
 
         Args:
-            resume_from_checkpoint (:obj:`str` or :obj:`bool`, `optional`):
-                If a :obj:`str`, local path to a saved checkpoint as saved by a previous instance of
-                :class:`~transformers.Trainer`. If a :obj:`bool` and equals `True`, load the last checkpoint in
-                `args.output_dir` as saved by a previous instance of :class:`~transformers.Trainer`. If present,
+            resume_from_checkpoint (`str` or `bool`, *optional*):
+                If a `str`, local path to a saved checkpoint as saved by a previous instance of
+                [`Trainer`]. If a `bool` and equals *True*, load the last checkpoint in
+                *args.output_dir* as saved by a previous instance of [`Trainer`]. If present,
                 training will resume from the model/optimizer/scheduler states loaded here.
-            trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
+            trial (`optuna.Trial` or `Dict[str, Any]`, *optional*):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
-            ignore_keys_for_eval (:obj:`List[str]`, `optional`)
+            ignore_keys_for_eval (`List[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
             kwargs:
@@ -1022,7 +1058,7 @@ class Trainer:
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
-        if args.fp16_full_eval and not args.do_train:
+        if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train:
             self._move_model_to_device(self.model, args.device)
 
         if "model_path" in kwargs:
@@ -1147,6 +1183,10 @@ class Trainer:
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
 
+        # Activate gradient checkpointing if needed
+        if args.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+
         model = self._wrap_model(self.model_wrapped)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
@@ -1184,9 +1224,9 @@ class Trainer:
 
         # Check if continuing training from a checkpoint
         if resume_from_checkpoint is not None and os.path.isfile(
-            os.path.join(resume_from_checkpoint, "trainer_state.json")
+            os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
-            self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, "trainer_state.json"))
+            self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             if not args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
@@ -1213,7 +1253,11 @@ class Trainer:
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
         self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
-        self.state.trial_params = hp_params(trial) if trial is not None else None
+        if trial is not None:
+            assignments = trial.assignments if self.hp_search_backend == HPSearchBackend.SIGOPT else trial
+            self.state.trial_params = hp_params(assignments)
+        else:
+            self.state.trial_params = None
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
@@ -1258,6 +1302,7 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
+            step = -1
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -1282,9 +1327,20 @@ class Trainer:
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
-                        tr_loss += self.training_step(model, inputs)
+                        tr_loss_step = self.training_step(model, inputs)
                 else:
-                    tr_loss += self.training_step(model, inputs)
+                    tr_loss_step = self.training_step(model, inputs)
+
+                if (
+                    args.logging_nan_inf_filter
+                    and not is_torch_tpu_available()
+                    and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                ):
+                    # if loss is nan or inf simply add the average of previous logged losses
+                    tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                else:
+                    tr_loss += tr_loss_step
+
                 self.current_flos += float(self.floating_point_ops(inputs))
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
@@ -1300,7 +1356,7 @@ class Trainer:
                     if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
                         # deepspeed does its own clipping
 
-                        if self.use_amp:
+                        if self.do_grad_scaling:
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
@@ -1323,7 +1379,7 @@ class Trainer:
                         pass  # called outside the loop
                     elif is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
-                    elif self.use_amp:
+                    elif self.do_grad_scaling:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
@@ -1346,6 +1402,13 @@ class Trainer:
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
+            if step < 0:
+                logger.warning(
+                    f"There seems to be not a single sample in your epoch_iterator, stopping training at step"
+                    f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
+                    f" num_steps ({max_steps}) higher than the number of available samples."
+                )
+                self.control.should_training_stop = True
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
@@ -1380,19 +1443,26 @@ class Trainer:
 
             best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
             if os.path.exists(best_model_path):
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(best_model_path, map_location="cpu")
-                # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
+                if self.deepspeed:
+                    # temp hack until Deepspeed fixes the problem with resume from an existing engine that did some stepping
+                    deepspeed_engine, optimizer, lr_scheduler = deepspeed_reinit(self)
+                    self.model = deepspeed_engine.module
+                    self.model_wrapped = deepspeed_engine
+                    self.deepspeed = deepspeed_engine
+                    self.optimizer = optimizer
+                    self.lr_scheduler = lr_scheduler
+                    self.deepspeed.load_checkpoint(
+                        self.state.best_model_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+                    )
+                else:
+                    # We load the model state dict on the CPU to avoid an OOM error.
+                    state_dict = torch.load(best_model_path, map_location="cpu")
+                    # If the model is on the GPU, it still works!
+                    self._load_state_dict_in_model(state_dict)
             else:
                 logger.warn(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                     "on multiple nodes, you should activate `--save_on_each_node`."
-                )
-
-            if self.deepspeed:
-                self.deepspeed.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
         # add remaining tr_loss
@@ -1418,7 +1488,9 @@ class Trainer:
         load_result = self.model.load_state_dict(state_dict, strict=False)
 
         if len(load_result.missing_keys) != 0:
-            if set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save):
+            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
+                self.model._keys_to_ignore_on_save
+            ):
                 self.model.tie_weights()
             else:
                 logger.warn(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
@@ -1428,7 +1500,10 @@ class Trainer:
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
             logs: Dict[str, float] = {}
-            tr_loss_scalar = tr_loss.item()
+
+            # all_gather + mean() to get average loss over all processes
+            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
+
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
@@ -1466,7 +1541,7 @@ class Trainer:
                 return
         else:
             rng_file = os.path.join(checkpoint, "rng_state.pth")
-            if not os.path.isfile(os.path.join(checkpoint, rng_file)):
+            if not os.path.isfile(rng_file):
                 logger.info(
                     "Didn't find an RNG file, if you are resuming a training that was launched in a distributed "
                     "fashion, reproducibility is not guaranteed."
@@ -1496,10 +1571,12 @@ class Trainer:
         if self.hp_search_backend is not None and trial is not None:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
-            else:
+            elif self.hp_search_backend == HPSearchBackend.RAY:
                 from ray import tune
 
                 run_id = tune.get_trial_id()
+            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
+                run_id = trial.id
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             run_dir = os.path.join(self.args.output_dir, run_name)
         else:
@@ -1519,9 +1596,9 @@ class Trainer:
 
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
-            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
             if smp.dp_rank() == 0:
@@ -1529,20 +1606,20 @@ class Trainer:
                 opt_state_dict = self.optimizer.state_dict()
                 # Save it and the scheduler on the main process
                 if self.args.should_save:
-                    torch.save(opt_state_dict, os.path.join(output_dir, "optimizer.pt"))
+                    torch.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME))
                     with warnings.catch_warnings(record=True) as caught_warnings:
-                        torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                        torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                     reissue_pt_warnings(caught_warnings)
-                    if self.use_amp:
-                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
+                    if self.do_grad_scaling:
+                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
         elif self.args.should_save and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             with warnings.catch_warnings(record=True) as caught_warnings:
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
             reissue_pt_warnings(caught_warnings)
-            if self.use_amp:
-                torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
+            if self.do_grad_scaling:
+                torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -1562,7 +1639,7 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
+            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         # Save RNG state in non-distributed training
         rng_states = {
@@ -1589,6 +1666,9 @@ class Trainer:
         else:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
 
+        if self.args.push_to_hub:
+            self._push_from_checkpoint(output_dir)
+
         # Maybe delete some older checkpoints.
         if self.args.should_save:
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
@@ -1602,15 +1682,15 @@ class Trainer:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
-        if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
-            os.path.join(checkpoint, "scheduler.pt")
+        if os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME)) and os.path.isfile(
+            os.path.join(checkpoint, SCHEDULER_NAME)
         ):
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
-                optimizer_state = torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location="cpu")
+                optimizer_state = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu")
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    lr_scheduler_state = torch.load(os.path.join(checkpoint, "scheduler.pt"), map_location="cpu")
+                    lr_scheduler_state = torch.load(os.path.join(checkpoint, SCHEDULER_NAME), map_location="cpu")
                 reissue_pt_warnings(caught_warnings)
 
                 xm.send_cpu_data_to_device(optimizer_state, self.args.device)
@@ -1621,13 +1701,13 @@ class Trainer:
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
                 self.optimizer.load_state_dict(
-                    torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location=map_location)
+                    torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
                 )
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)
-                if self.use_amp and os.path.isfile(os.path.join(checkpoint, "scaler.pt")):
-                    self.scaler.load_state_dict(torch.load(os.path.join(checkpoint, "scaler.pt")))
+                if self.do_grad_scaling and os.path.isfile(os.path.join(checkpoint, SCALER_NAME)):
+                    self.scaler.load_state_dict(torch.load(os.path.join(checkpoint, SCALER_NAME)))
 
     def hyperparameter_search(
         self,
@@ -1640,53 +1720,56 @@ class Trainer:
         **kwargs,
     ) -> BestRun:
         """
-        Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
-        :obj:`compute_objective`, which defaults to a function returning the evaluation loss when no metric is
-        provided, the sum of all metrics otherwise.
+        Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is
+        determined by `compute_objective`, which defaults to a function returning the evaluation loss when no
+        metric is provided, the sum of all metrics otherwise.
 
-        .. warning::
+        <Tip warning={true}>
 
-            To use this method, you need to have provided a ``model_init`` when initializing your
-            :class:`~transformers.Trainer`: we need to reinitialize the model at each new run. This is incompatible
-            with the ``optimizers`` argument, so you need to subclass :class:`~transformers.Trainer` and override the
-            method :meth:`~transformers.Trainer.create_optimizer_and_scheduler` for custom optimizer/scheduler.
+        To use this method, you need to have provided a `model_init` when initializing your
+        [`Trainer`]: we need to reinitialize the model at each new run. This is incompatible
+        with the `optimizers` argument, so you need to subclass [`Trainer`] and override the
+        method [`~Trainer.create_optimizer_and_scheduler`] for custom optimizer/scheduler.
+
+        </Tip>
 
         Args:
-            hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
+            hp_space (`Callable[["optuna.Trial"], Dict[str, float]]`, *optional*):
                 A function that defines the hyperparameter search space. Will default to
-                :func:`~transformers.trainer_utils.default_hp_space_optuna` or
-                :func:`~transformers.trainer_utils.default_hp_space_ray` depending on your backend.
-            compute_objective (:obj:`Callable[[Dict[str, float]], float]`, `optional`):
+                [`~trainer_utils.default_hp_space_optuna`] or
+                [`~trainer_utils.default_hp_space_ray`] or
+                [`~trainer_utils.default_hp_space_sigopt`] depending on your backend.
+            compute_objective (`Callable[[Dict[str, float]], float]`, *optional*):
                 A function computing the objective to minimize or maximize from the metrics returned by the
-                :obj:`evaluate` method. Will default to :func:`~transformers.trainer_utils.default_compute_objective`.
-            n_trials (:obj:`int`, `optional`, defaults to 100):
+                `evaluate` method. Will default to [`~trainer_utils.default_compute_objective`].
+            n_trials (`int`, *optional*, defaults to 100):
                 The number of trial runs to test.
-            direction(:obj:`str`, `optional`, defaults to :obj:`"minimize"`):
-                Whether to optimize greater or lower objects. Can be :obj:`"minimize"` or :obj:`"maximize"`, you should
-                pick :obj:`"minimize"` when optimizing the validation loss, :obj:`"maximize"` when optimizing one or
+            direction(`str`, *optional*, defaults to `"minimize"`):
+                Whether to optimize greater or lower objects. Can be `"minimize"` or `"maximize"`, you should
+                pick `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or
                 several metrics.
-            backend(:obj:`str` or :class:`~transformers.training_utils.HPSearchBackend`, `optional`):
-                The backend to use for hyperparameter search. Will default to optuna or Ray Tune, depending on which
-                one is installed. If both are installed, will default to optuna.
+            backend(`str` or [`~training_utils.HPSearchBackend`], *optional*):
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
+                on which one is installed. If all are installed, will default to optuna.
             kwargs:
-                Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
+                Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For
                 more information see:
 
-                - the documentation of `optuna.create_study
-                  <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html>`__
-                - the documentation of `tune.run
-                  <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
+                - the documentation of [optuna.create_study](https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html)
+                - the documentation of [tune.run](https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run)
+                - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
 
         Returns:
-            :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
+            [`trainer_utils.BestRun`]: All the information about the best run.
         """
         if backend is None:
             backend = default_hp_search_backend()
             if backend is None:
                 raise RuntimeError(
                     "At least one of optuna or ray should be installed. "
-                    "To install optuna run `pip install optuna`."
-                    "To install ray run `pip install ray[tune]`."
+                    "To install optuna run `pip install optuna`. "
+                    "To install ray run `pip install ray[tune]`. "
+                    "To install sigopt run `pip install sigopt`."
                 )
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
@@ -1695,6 +1778,8 @@ class Trainer:
             raise RuntimeError(
                 "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
+        if backend == HPSearchBackend.SIGOPT and not is_sigopt_available():
+            raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install sigopt`.")
         self.hp_search_backend = backend
         if self.model_init is None:
             raise RuntimeError(
@@ -1705,20 +1790,24 @@ class Trainer:
         self.hp_name = hp_name
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
-        best_run = run_hp_search(self, n_trials, direction, **kwargs)
+        backend_dict = {
+            HPSearchBackend.OPTUNA: run_hp_search_optuna,
+            HPSearchBackend.RAY: run_hp_search_ray,
+            HPSearchBackend.SIGOPT: run_hp_search_sigopt,
+        }
+        best_run = backend_dict[backend](self, n_trials, direction, **kwargs)
 
         self.hp_search_backend = None
         return best_run
 
     def log(self, logs: Dict[str, float]) -> None:
         """
-        Log :obj:`logs` on the various objects watching training.
+        Log `logs` on the various objects watching training.
 
         Subclass and override this method to inject custom behavior.
 
         Args:
-            logs (:obj:`Dict[str, float]`):
+            logs (`Dict[str, float]`):
                 The values to log.
         """
         if self.state.epoch is not None:
@@ -1728,26 +1817,49 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
+    def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
+        """
+        Prepares one `data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
+        """
+        if isinstance(data, Mapping):
+            return type(data)({k: self._prepare_input(v) for k, v in data.items()})
+        elif isinstance(data, (tuple, list)):
+            return type(data)(self._prepare_input(v) for v in data)
+        elif isinstance(data, torch.Tensor):
+            kwargs = dict(device=self.args.device)
+            if self.deepspeed and data.dtype != torch.int64:
+                # NLP models inputs are int64 and those get adjusted to the right dtype of the
+                # embedding. Other models such as wav2vec2's inputs are already float and thus
+                # may need special handling to match the dtypes of the model
+                kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
+            return data.to(**kwargs)
+        return data
+
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
-        Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
+        Prepare `inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
         """
-        for k, v in inputs.items():
-            if isinstance(v, torch.Tensor):
-                kwargs = dict(device=self.args.device)
-                if self.deepspeed and inputs[k].dtype != torch.int64:
-                    # NLP models inputs are int64 and those get adjusted to the right dtype of the
-                    # embedding. Other models such as wav2vec2's inputs are already float and thus
-                    # may need special handling to match the dtypes of the model
-                    kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
-
-                inputs[k] = v.to(**kwargs)
-
+        inputs = self._prepare_input(inputs)
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
 
         return inputs
+
+    def autocast_smart_context_manager(self):
+        """
+        A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
+        arguments, depending on the situation.
+        """
+        if self.use_amp:
+            if version.parse(torch.__version__) >= version.parse("1.10"):
+                ctx_manager = autocast(dtype=self.amp_dtype)
+            else:
+                ctx_manager = autocast()
+        else:
+            ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
+
+        return ctx_manager
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
@@ -1756,29 +1868,26 @@ class Trainer:
         Subclass and override to inject custom behavior.
 
         Args:
-            model (:obj:`nn.Module`):
+            model (`nn.Module`):
                 The model to train.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+                argument `labels`. Check your model's documentation for all accepted arguments.
 
         Return:
-            :obj:`torch.Tensor`: The tensor with training loss on this batch.
+            `torch.Tensor`: The tensor with training loss on this batch.
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
-            scaler = self.scaler if self.use_amp else None
+            scaler = self.scaler if self.do_grad_scaling else None
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        if self.use_amp:
-            with autocast():
-                loss = self.compute_loss(model, inputs)
-        else:
+        with self.autocast_smart_context_manager():
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
@@ -1788,7 +1897,7 @@ class Trainer:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.args.gradient_accumulation_steps
 
-        if self.use_amp:
+        if self.do_grad_scaling:
             self.scaler.scale(loss).backward()
         elif self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
@@ -1835,7 +1944,7 @@ class Trainer:
     def is_world_process_zero(self) -> bool:
         """
         Whether or not this process is the global main process (when training in a distributed fashion on several
-        machines, this is only going to be :obj:`True` for one process).
+        machines, this is only going to be `True` for one process).
         """
         # Special case for SageMaker ModelParallel since there process_index is dp_process_index, not the global
         # process index.
@@ -1846,7 +1955,7 @@ class Trainer:
 
     def save_model(self, output_dir: Optional[str] = None):
         """
-        Will save the model, so you can reload it using :obj:`from_pretrained()`.
+        Will save the model, so you can reload it using `from_pretrained()`.
 
         Will only save from the main process.
         """
@@ -1890,6 +1999,9 @@ class Trainer:
                 # This must be called on all ranks
                 self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
 
+            # save a deepspeed checkpoint as well (this is very fast)
+            self.deepspeed.save_checkpoint(output_dir)
+
         elif self.args.should_save:
             self._save(output_dir)
 
@@ -1899,7 +2011,7 @@ class Trainer:
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
-            torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
+            torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
@@ -1944,12 +2056,14 @@ class Trainer:
             self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
-        torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
+        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
         if self.args.local_rank != -1:
-            self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
+            self.state.total_flos += (
+                distributed_broadcast_scalars([self.current_flos], device=self.args.device).sum().item()
+            )
             self.current_flos = 0
         else:
             self.state.total_flos += self.current_flos
@@ -2014,19 +2128,19 @@ class Trainer:
         Run evaluation and returns metrics.
 
         The calling script will be responsible for providing a method to compute metrics, as they are task-dependent
-        (pass it to the init :obj:`compute_metrics` argument).
+        (pass it to the init `compute_metrics` argument).
 
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (:obj:`Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
-                columns not accepted by the ``model.forward()`` method are automatically removed. It must implement the
-                :obj:`__len__` method.
-            ignore_keys (:obj:`Lst[str]`, `optional`):
+            eval_dataset (`Dataset`, *optional*):
+                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`,
+                columns not accepted by the `model.forward()` method are automatically removed. It must implement the
+                `__len__` method.
+            ignore_keys (`Lst[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
-            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
+            metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is "eval" (default)
 
@@ -2080,30 +2194,32 @@ class Trainer:
         Run prediction and returns predictions and potential metrics.
 
         Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
-        will also return metrics, like in :obj:`evaluate()`.
+        will also return metrics, like in `evaluate()`.
 
         Args:
-            test_dataset (:obj:`Dataset`):
-                Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
-                ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
-            ignore_keys (:obj:`Lst[str]`, `optional`):
+            test_dataset (`Dataset`):
+                Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
+                `model.forward()` method are automatically removed. Has to implement the method `__len__`
+            ignore_keys (`Lst[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
-            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"test"`):
+            metric_key_prefix (`str`, *optional*, defaults to `"test"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "test_bleu" if the prefix is "test" (default)
 
-        .. note::
+        <Tip>
 
-            If your predictions or labels have different sequence length (for instance because you're doing dynamic
-            padding in a token classification task) the predictions will be padded (on the right) to allow for
-            concatenation into one array. The padding index is -100.
+        If your predictions or labels have different sequence length (for instance because you're doing dynamic
+        padding in a token classification task) the predictions will be padded (on the right) to allow for
+        concatenation into one array. The padding index is -100.
 
-        Returns: `NamedTuple` A namedtuple with the following keys:
+        </Tip>
 
-            - predictions (:obj:`np.ndarray`): The predictions on :obj:`test_dataset`.
-            - label_ids (:obj:`np.ndarray`, `optional`): The labels (if the dataset contained some).
-            - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
+        Returns: *NamedTuple* A namedtuple with the following keys:
+
+            - predictions (`np.ndarray`): The predictions on `test_dataset`.
+            - label_ids (`np.ndarray`, *optional*): The labels (if the dataset contained some).
+            - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset
               contained labels).
         """
         # memory metrics - must set up as early as possible
@@ -2139,35 +2255,35 @@ class Trainer:
         metric_key_prefix: str = "eval",
     ) -> EvalLoopOutput:
         """
-        Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
+        Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
 
         Works both with or without labels.
         """
-        prediction_loss_only = (
-            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
-        )
+        args = self.args
+
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if self.args.deepspeed and not self.deepspeed:
+        if args.deepspeed and not self.deepspeed:
 
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
+            deepspeed_engine, _, _ = deepspeed_init(
+                self, num_training_steps=0, resume_from_checkpoint=None, inference=True
+            )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
-            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
-            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
-            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
-            deepspeed_engine.optimizer.optimizer = None
-            deepspeed_engine.lr_scheduler = None
 
         model = self._wrap_model(self.model, training=False)
 
-        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
-        # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.fp16_full_eval:
-            model = model.half().to(self.args.device)
+        # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
+        # while ``train`` is running, cast it to the right dtype first and then put on device
+        if not self.is_in_train:
+            if args.fp16_full_eval:
+                model = model.to(dtype=torch.float16, device=args.device)
+            elif args.bf16_full_eval:
+                model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = dataloader.batch_size
 
@@ -2185,9 +2301,9 @@ class Trainer:
         eval_dataset = dataloader.dataset
 
         if is_torch_tpu_available():
-            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
+            dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
 
-        if self.args.past_index >= 0:
+        if args.past_index >= 0:
             self._past = None
 
         # Initialize containers
@@ -2208,6 +2324,9 @@ class Trainer:
             observed_batch_size = find_batch_size(inputs)
             if observed_batch_size is not None:
                 observed_num_examples += observed_batch_size
+                # For batch samplers, batch_size is not known by the dataloader in advance.
+                if batch_size is None:
+                    batch_size = observed_batch_size
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
@@ -2224,10 +2343,10 @@ class Trainer:
                 labels = self._pad_across_processes(labels)
                 labels = self._nested_gather(labels)
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
-            self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
+            self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
+            if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
                 if losses_host is not None:
                     losses = nested_numpify(losses_host)
                     all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
@@ -2243,7 +2362,7 @@ class Trainer:
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, labels_host = None, None, None
 
-        if self.args.past_index and hasattr(self, "_past"):
+        if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
 
@@ -2354,21 +2473,21 @@ class Trainer:
         ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
-        Perform an evaluation step on :obj:`model` using obj:`inputs`.
+        Perform an evaluation step on `model` using obj:*inputs*.
 
         Subclass and override to inject custom behavior.
 
         Args:
-            model (:obj:`nn.Module`):
+            model (`nn.Module`):
                 The model to evaluate.
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
-                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
-            prediction_loss_only (:obj:`bool`):
+                argument `labels`. Check your model's documentation for all accepted arguments.
+            prediction_loss_only (`bool`):
                 Whether or not to return the loss only.
-            ignore_keys (:obj:`Lst[str]`, `optional`):
+            ignore_keys (`Lst[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
 
@@ -2414,18 +2533,17 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    with self.autocast_smart_context_manager():
+                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
+
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                     else:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    if self.use_amp:
-                        with autocast():
-                            outputs = model(**inputs)
-                    else:
+                    with self.autocast_smart_context_manager():
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
@@ -2446,16 +2564,16 @@ class Trainer:
 
     def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
-        For models that inherit from :class:`~transformers.PreTrainedModel`, uses that method to compute the number of
+        For models that inherit from [`PreTrainedModel`], uses that method to compute the number of
         floating point operations for every backward + forward pass. If using another model, either implement such a
         method in the model or subclass and override this method.
 
         Args:
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
         Returns:
-            :obj:`int`: The number of floating-point operations.
+            `int`: The number of floating-point operations.
         """
         if hasattr(self.model, "floating_point_ops"):
             return self.model.floating_point_ops(inputs)
@@ -2464,24 +2582,47 @@ class Trainer:
 
     def init_git_repo(self):
         """
-        Initializes a git repo in :obj:`self.args.push_to_hub_model_id`.
+        Initializes a git repo in `self.args.hub_model_id`.
         """
-        if not self.args.should_save:
+        if not self.is_world_process_zero():
             return
-        use_auth_token = True if self.args.push_to_hub_token is None else self.args.push_to_hub_token
-        repo_url = PushToHubMixin._get_repo_url_from_name(
-            self.args.push_to_hub_model_id,
-            organization=self.args.push_to_hub_organization,
-            use_auth_token=use_auth_token,
-        )
-        self.repo = PushToHubMixin._create_or_get_repo(
-            self.args.output_dir, repo_url=repo_url, use_auth_token=use_auth_token
-        )
+        use_auth_token = True if self.args.hub_token is None else self.args.hub_token
+        if self.args.hub_model_id is None:
+            repo_name = Path(self.args.output_dir).absolute().name
+        else:
+            repo_name = self.args.hub_model_id
+        if "/" not in repo_name:
+            repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
+
+        try:
+            self.repo = Repository(
+                self.args.output_dir,
+                clone_from=repo_name,
+                use_auth_token=use_auth_token,
+            )
+        except EnvironmentError:
+            if self.args.overwrite_output_dir:
+                # Try again after wiping output_dir
+                shutil.rmtree(self.args.output_dir)
+                self.repo = Repository(
+                    self.args.output_dir,
+                    clone_from=repo_name,
+                    use_auth_token=use_auth_token,
+                )
+            else:
+                raise
+
+        self.repo.git_pull()
 
         # By default, ignore the checkpoint folders
-        if not os.path.exists(os.path.join(self.args.output_dir, ".gitignore")):
+        if (
+            not os.path.exists(os.path.join(self.args.output_dir, ".gitignore"))
+            and self.args.hub_strategy != HubStrategy.ALL_CHECKPOINTS
+        ):
             with open(os.path.join(self.args.output_dir, ".gitignore"), "w", encoding="utf-8") as writer:
                 writer.writelines(["checkpoint-*/"])
+
+        self.push_in_progress = None
 
     def create_model_card(
         self,
@@ -2495,6 +2636,9 @@ class Trainer:
         dataset: Optional[Union[str, List[str]]] = None,
         dataset_args: Optional[Union[str, List[str]]] = None,
     ):
+        if not self.is_world_process_zero():
+            return
+
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,
@@ -2511,22 +2655,70 @@ class Trainer:
         with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
             f.write(model_card)
 
-    def push_to_hub(self, commit_message: Optional[str] = "add model", **kwargs) -> str:
+    def _push_from_checkpoint(self, checkpoint_folder):
+        # Only push from one node.
+        if not self.is_world_process_zero() or self.args.hub_strategy == HubStrategy.END:
+            return
+        # If we haven't finished the last push, we don't do this one.
+        if self.push_in_progress is not None and not self.push_in_progress.is_done:
+            return
+
+        output_dir = self.args.output_dir
+        # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
+        modeling_files = [CONFIG_NAME, WEIGHTS_NAME]
+        for modeling_file in modeling_files:
+            if os.path.isfile(os.path.join(checkpoint_folder, modeling_file)):
+                shutil.copy(os.path.join(checkpoint_folder, modeling_file), os.path.join(output_dir, modeling_file))
+        # Saving the tokenizer is fast and we don't know how many files it may have spawned, so we resave it to be sure.
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
+        # Same for the training arguments
+        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+
+        try:
+            if self.args.hub_strategy == HubStrategy.CHECKPOINT:
+                # Temporarily move the checkpoint just saved for the push
+                tmp_checkpoint = os.path.join(output_dir, "last-checkpoint")
+                # We have to remove the "last-checkpoint" dir if it exists, otherwise the checkpoint is moved as a
+                # subfolder.
+                if os.path.isdir(tmp_checkpoint):
+                    shutil.rmtree(tmp_checkpoint)
+                shutil.move(checkpoint_folder, tmp_checkpoint)
+
+            if self.args.save_strategy == IntervalStrategy.STEPS:
+                commit_message = f"Training in progress, step {self.state.global_step}"
+            else:
+                commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
+            _, self.push_in_progress = self.repo.push_to_hub(
+                commit_message=commit_message, blocking=False, auto_lfs_prune=True
+            )
+        finally:
+            if self.args.hub_strategy == HubStrategy.CHECKPOINT:
+                # Move back the checkpoint to its place
+                shutil.move(tmp_checkpoint, checkpoint_folder)
+
+    def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
         """
-        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.push_to_hub_model_id`.
+        Upload *self.model* and *self.tokenizer* to the 🤗 model hub on the repo *self.args.hub_model_id*.
 
         Parameters:
-            commit_message (:obj:`str`, `optional`, defaults to :obj:`"add model"`):
+            commit_message (`str`, *optional*, defaults to `"End of training"`):
                 Message to commit while pushing.
+            blocking (`bool`, *optional*, defaults to `True`):
+                Whether the function should return only when the `git push` has finished.
             kwargs:
-                Additional keyword arguments passed along to :meth:`~transformers.Trainer.create_model_card`.
+                Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
         Returns:
-            The url of the commit of your model in the given repository.
+            The url of the commit of your model in the given repository if `blocking=False`, a tuple with the url
+            of the commit and an object to track the progress of the commit if `blocking=True`
         """
 
         if self.args.should_save:
-            self.create_model_card(model_name=self.args.push_to_hub_model_id, **kwargs)
+            if self.args.hub_model_id is None:
+                model_name = Path(self.args.output_dir).name
+            else:
+                model_name = self.args.hub_model_id.split("/")[-1]
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
         self.save_model()
@@ -2535,7 +2727,20 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        return self.repo.push_to_hub(commit_message=commit_message)
+        git_head_commit_url = self.repo.push_to_hub(
+            commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
+        )
+        # push separately the model card to be independant from the rest of the model
+        if self.args.should_save:
+            self.create_model_card(model_name=model_name, **kwargs)
+            try:
+                self.repo.push_to_hub(
+                    commit_message="update model card README.md", blocking=blocking, auto_lfs_prune=True
+                )
+            except EnvironmentError as exc:
+                logger.error(f"Error pushing update to the model card. Please read logs and retry.\n${exc}")
+
+        return git_head_commit_url
 
     #
     # Deprecated code
@@ -2550,18 +2755,18 @@ class Trainer:
         metric_key_prefix: str = "eval",
     ) -> PredictionOutput:
         """
-        Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
+        Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
 
         Works both with or without labels.
         """
+        args = self.args
+
         if not isinstance(dataloader.dataset, collections.abc.Sized):
             raise ValueError("dataset must implement __len__")
-        prediction_loss_only = (
-            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
-        )
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init deepspeed here
-        if self.args.deepspeed and not self.deepspeed:
+        if args.deepspeed and not self.deepspeed:
 
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
@@ -2577,10 +2782,13 @@ class Trainer:
 
         model = self._wrap_model(self.model, training=False)
 
-        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
-        # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.fp16_full_eval:
-            model = model.half().to(self.args.device)
+        # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
+        # while ``train`` is running, cast it to the right dtype first and then put on device
+        if not self.is_in_train:
+            if args.fp16_full_eval:
+                model = model.to(dtype=torch.float16, device=args.device)
+            elif args.bf16_full_eval:
+                model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
@@ -2591,7 +2799,7 @@ class Trainer:
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
 
-        world_size = max(1, self.args.world_size)
+        world_size = max(1, args.world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
         if not prediction_loss_only:
@@ -2606,9 +2814,9 @@ class Trainer:
         model.eval()
 
         if is_torch_tpu_available():
-            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
+            dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
 
-        if self.args.past_index >= 0:
+        if args.past_index >= 0:
             self._past = None
 
         self.callback_handler.eval_dataloader = dataloader
@@ -2622,10 +2830,10 @@ class Trainer:
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
-            self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
+            self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
+            if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
                 if not prediction_loss_only:
                     preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
@@ -2634,7 +2842,7 @@ class Trainer:
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, labels_host = None, None, None
 
-        if self.args.past_index and hasattr(self, "_past"):
+        if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
 
