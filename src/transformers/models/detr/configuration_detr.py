@@ -158,7 +158,7 @@ class DetrConfig(PretrainedConfig):
         in_chans=3,
         pretrained=True,
         freeze_layers=True,
-        replace_batch_norm=True,
+        fix_batch_norm=True,
         **kwargs
     ):
         self.num_queries = num_queries
@@ -197,7 +197,7 @@ class DetrConfig(PretrainedConfig):
         self.in_chans = in_chans
         self.pretrained = pretrained
         self.freeze_layers = freeze_layers
-        self.replace_batch_norm = replace_batch_norm
+        self.fix_batch_norm = fix_batch_norm
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
