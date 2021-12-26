@@ -124,6 +124,7 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
         **kwargs
     ) -> None:
         super().__init__(
+            vocab_file,
             do_lower_case=do_lower_case,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -142,6 +143,7 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
                 "model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
 
+        self.do_lower_case = do_lower_case
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
