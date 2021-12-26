@@ -315,13 +315,12 @@ class DetrTimmConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, name: str, dilation: bool, in_chans: int,
-                 pretrained=True, freeze_layers=True, fix_batch_norm=True):
+    def __init__(
+        self, name: str, dilation: bool, in_chans: int, pretrained=True, freeze_layers=True, fix_batch_norm=True
+    ):
         super().__init__()
 
-        kwargs = {
-            'in_chans': in_chans
-        }
+        kwargs = {"in_chans": in_chans}
         if dilation:
             kwargs["output_stride"] = 16
 
@@ -1163,9 +1162,14 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(config.backbone, config.dilation, config.in_chans,
-                                       pretrained=config.pretrained, freeze_layers=config.freeze_layers,
-                                       fix_batch_norm=config.fix_batch_norm)
+        backbone = DetrTimmConvEncoder(
+            config.backbone,
+            config.dilation,
+            config.in_chans,
+            pretrained=config.pretrained,
+            freeze_layers=config.freeze_layers,
+            fix_batch_norm=config.fix_batch_norm,
+        )
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
