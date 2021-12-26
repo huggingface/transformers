@@ -591,7 +591,11 @@ class DataCollatorForSeq2Seq:
         )
 
         # prepare decoder_input_ids
-        if self.model is not None and hasattr(self.model, "prepare_decoder_input_ids_from_labels"):
+        if (
+            labels is not None
+            and self.model is not None
+            and hasattr(self.model, "prepare_decoder_input_ids_from_labels")
+        ):
             decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features["labels"])
             features["decoder_input_ids"] = decoder_input_ids
 
