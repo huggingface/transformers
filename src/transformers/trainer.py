@@ -1999,9 +1999,6 @@ class Trainer:
                 # This must be called on all ranks
                 self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
 
-            # save a deepspeed checkpoint as well (this is very fast)
-            self.deepspeed.save_checkpoint(output_dir)
-
         elif self.args.should_save:
             self._save(output_dir)
 
