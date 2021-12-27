@@ -476,6 +476,7 @@ following command should work:
 
 ```python
 from transformers import BrandNewBertModel, BrandNewBertConfig
+
 model = BrandNewBertModel(BrandNewBertConfig())
 ```
 
@@ -502,12 +503,13 @@ PyTorch, called `SimpleModel` as follows:
 ```python
 from torch import nn
 
+
 class SimpleModel(nn.Module):
     def __init__(self):
-            super().__init__()
-            self.dense = nn.Linear(10, 10)
-            self.intermediate = nn.Linear(10, 10)
-            self.layer_norm = nn.LayerNorm(10)
+        super().__init__()
+        self.dense = nn.Linear(10, 10)
+        self.intermediate = nn.Linear(10, 10)
+        self.layer_norm = nn.LayerNorm(10)
 ```
 
 Now we can create an instance of this model definition which will fill all weights: `dense`, `intermediate`,
@@ -565,7 +567,7 @@ In the conversion script, you should fill those randomly initialized weights wit
 corresponding layer in the checkpoint. *E.g.*
 
 ```python
-# retrieve matching layer weights, e.g. by 
+# retrieve matching layer weights, e.g. by
 # recursive algorithm
 layer_name = "dense"
 pretrained_weight = array_of_dense_layer
@@ -725,6 +727,7 @@ created. It should look similar to this:
 
 ```python
 from transformers import BrandNewBertTokenizer
+
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
 
 tokenizer = BrandNewBertTokenizer.from_pretrained("/path/to/tokenizer/folder/")
