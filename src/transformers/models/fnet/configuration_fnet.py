@@ -70,6 +70,18 @@ class FNetConfig(PretrainedConfig):
             The sequence length that is expected by the model when using TPUs. This will be used to initialize the DFT
             matrix only when *use_tpu_fourier_optimizations* is set to `True` and the input sequence is shorter
             than or equal to 4096 tokens.
+        use_fft (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Determines whether to use n-dimensional FFTs. If :obj:`True`, the model will use n-dimensional FFT
+            transforms. Set to :obj:`False` for using DFT matrix multiplication for fourier transform.
+        actual_seq_length (:obj:`int`, `optional`, defaults to 512):
+            The sequence length that is expected by the model. This will be used to initialize the DFT matrix when
+            `use_fft` is set to :obj:`False`. Additionally, this is used for validation when using FFT. The recommended
+            values for lengths greater than 4096 is powers of 2.
+        use_latest (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Determines whether to use the latest version of the FNet model according to the latest original code. If
+            set to :obj:`False`, the model will use the previous version of the FNet model, with custom fftn
+            implementation for TPU optimization. `use_tpu_fourier_optimizations` and `tpu_short_seq_length` will be
+            ignored if this is set to :obj:`True`, and `use_fft` and `actual_seq_length` will be used.
 
     Example:
 
@@ -101,6 +113,9 @@ class FNetConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         use_tpu_fourier_optimizations=False,
         tpu_short_seq_length=512,
+        use_fft=True,
+        actual_seq_length=512,
+        use_latest=False,
         pad_token_id=3,
         bos_token_id=1,
         eos_token_id=2,
@@ -120,3 +135,6 @@ class FNetConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_tpu_fourier_optimizations = use_tpu_fourier_optimizations
         self.tpu_short_seq_length = tpu_short_seq_length
+        self.use_fft = use_fft
+        self.actual_seq_length = actual_seq_length
+        self.use_latest = use_latest

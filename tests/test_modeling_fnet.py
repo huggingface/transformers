@@ -136,6 +136,9 @@ class FNetModelTester:
 
     @require_torch
     def create_and_check_fourier_transform(self, config):
+        # Current implementation test the older version of implementation
+        # Verifies all kinds of Fourier Transformers match
+        config.use_latest = False
         hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
         transform = FNetBasicFourierTransform(config)
         fftn_output = transform(hidden_states)
