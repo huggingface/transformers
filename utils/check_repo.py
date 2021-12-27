@@ -24,7 +24,6 @@ from pathlib import Path
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.file_utils import ENV_VARS_TRUE_VALUES
 from transformers.models.auto import get_values
-from transformers.models.auto.configuration_auto import model_type_to_module_name
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
