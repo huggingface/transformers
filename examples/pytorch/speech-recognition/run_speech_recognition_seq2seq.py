@@ -47,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.14.0.dev0")
+check_min_version("4.16.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -182,9 +182,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
-        processor (:class:`~transformers.Wav2Vec2Processor`)
+        processor ([`Wav2Vec2Processor`])
             The processor used for proccessing the data.
-        decoder_start_token_id (:obj:`int`)
+        decoder_start_token_id (`int`)
             The begin-of-sentence of the decoder.
     """
 
@@ -394,9 +394,9 @@ def main():
     )
 
     # for large datasets it is advised to run the preprocessing on a
-    # single machine first with ``args.preprocessing_only`` since there will mostly likely
+    # single machine first with `args.preprocessing_only` since there will mostly likely
     # be a timeout when running the script in distributed mode.
-    # In a second step ``args.preprocessing_only`` can then be set to `False` to load the
+    # In a second step `args.preprocessing_only` can then be set to `False` to load the
     # cached dataset
     if data_args.preprocessing_only:
         cache = {k: v.cache_files for k, v in vectorized_datasets.items()}
@@ -452,7 +452,7 @@ def main():
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+        trainer.save_model()  # Saves the feature extractor too for easy upload
 
         metrics = train_result.metrics
         max_train_samples = (

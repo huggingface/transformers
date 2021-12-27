@@ -555,10 +555,10 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_names clean
             --dataset_split_names validation
             --learning_rate 1e-4
-            --per_device_train_batch_size 2
-            --per_device_eval_batch_size 2
+            --per_device_train_batch_size 4
+            --per_device_eval_batch_size 4
             --preprocessing_num_workers 16
-            --max_train_steps 5
+            --max_train_steps 2
             --validation_split_percentage 5
             --seed 42
         """.split()
