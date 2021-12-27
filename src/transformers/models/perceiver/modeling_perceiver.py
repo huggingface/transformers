@@ -773,7 +773,11 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         ```python
         >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverFeatureExtractor, PerceiverModel
-        >>> from transformers.models.perceiver.modeling_perceiver import PerceiverTextPreprocessor, PerceiverImagePreprocessor, PerceiverClassificationDecoder
+        >>> from transformers.models.perceiver.modeling_perceiver import (
+        ...     PerceiverTextPreprocessor,
+        ...     PerceiverImagePreprocessor,
+        ...     PerceiverClassificationDecoder,
+        ... )
         >>> import torch
         >>> import requests
         >>> from PIL import Image
@@ -785,10 +789,12 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> # using trainable position embeddings
         >>> config = PerceiverConfig()
         >>> preprocessor = PerceiverTextPreprocessor(config)
-        >>> decoder = PerceiverClassificationDecoder(config,
-        ...                                          num_channels=config.d_latents,
-        ...                                          trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
-        ...                                          use_query_residual=True)
+        >>> decoder = PerceiverClassificationDecoder(
+        ...     config,
+        ...     num_channels=config.d_latents,
+        ...     trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
+        ...     use_query_residual=True,
+        ... )
         >>> model = PerceiverModel(config, input_preprocessor=preprocessor, decoder=decoder)
 
         >>> # you can then do a forward pass as follows:
@@ -797,7 +803,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 
         >>> with torch.no_grad():
-        >>>    outputs = model(inputs=inputs)
+        ...     outputs = model(inputs=inputs)
         >>> logits = outputs.logits
 
         >>> # to train, one can train the model using standard cross-entropy:
@@ -808,37 +814,39 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         >>> # EXAMPLE 2: using the Perceiver to classify images
         >>> # - we define an ImagePreprocessor, which can be used to embed images
-        >>> preprocessor=PerceiverImagePreprocessor(
-        ...              config,
-        ...              prep_type="conv1x1",
-        ...              spatial_downsample=1,
-        ...              out_channels=256,
-        ...              position_encoding_type="trainable",
-        ...              concat_or_add_pos="concat",
-        ...              project_pos_dim=256,
-        ...              trainable_position_encoding_kwargs=dict(num_channels=256, index_dims=config.image_size ** 2,
-        ...              ),
+        >>> preprocessor = PerceiverImagePreprocessor(
+        ...     config,
+        ...     prep_type="conv1x1",
+        ...     spatial_downsample=1,
+        ...     out_channels=256,
+        ...     position_encoding_type="trainable",
+        ...     concat_or_add_pos="concat",
+        ...     project_pos_dim=256,
+        ...     trainable_position_encoding_kwargs=dict(
+        ...         num_channels=256,
+        ...         index_dims=config.image_size ** 2,
+        ...     ),
         ... )
 
         >>> model = PerceiverModel(
+        ...     config,
+        ...     input_preprocessor=preprocessor,
+        ...     decoder=PerceiverClassificationDecoder(
         ...         config,
-        ...         input_preprocessor=preprocessor,
-        ...         decoder=PerceiverClassificationDecoder(
-        ...              config,
-        ...              num_channels=config.d_latents,
-        ...              trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
-        ...              use_query_residual=True,
-        ...          ),
+        ...         num_channels=config.d_latents,
+        ...         trainable_position_encoding_kwargs=dict(num_channels=config.d_latents, index_dims=1),
+        ...         use_query_residual=True,
+        ...     ),
         ... )
 
         >>> # you can then do a forward pass as follows:
         >>> feature_extractor = PerceiverFeatureExtractor()
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = feature_extractor(image, return_tensors="pt").pixel_values
 
         >>> with torch.no_grad():
-        >>>    outputs = model(inputs=inputs)
+        ...     outputs = model(inputs=inputs)
         >>> logits = outputs.logits
 
         >>> # to train, one can train the model using standard cross-entropy:
@@ -1001,14 +1009,14 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         >>> from transformers import PerceiverTokenizer, PerceiverForMaskedLM
         >>> import torch
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained('deepmind/language-perceiver')
-        >>> model = PerceiverForMaskedLM.from_pretrained('deepmind/language-perceiver')
+        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
 
         >>> # training
         >>> text = "This is an incomplete sentence where some words are missing."
         >>> inputs = tokenizer(text, padding="max_length", return_tensors="pt")
         >>> # mask " missing."
-        >>> inputs['input_ids'][0, 52:61] = tokenizer.mask_token_id
+        >>> inputs["input_ids"][0, 52:61] = tokenizer.mask_token_id
         >>> labels = tokenizer(text, padding="max_length", return_tensors="pt").input_ids
 
         >>> outputs = model(**inputs, labels=labels)
@@ -1020,11 +1028,11 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         >>> encoding = tokenizer(text, padding="max_length", return_tensors="pt")
 
         >>> # mask bytes corresponding to " missing.". Note that the model performs much better if the masked span starts with a space.
-        >>> encoding['input_ids'][0, 52:61] = tokenizer.mask_token_id
+        >>> encoding["input_ids"][0, 52:61] = tokenizer.mask_token_id
 
         >>> # forward pass
         >>> with torch.no_grad():
-        >>>    outputs = model(**encoding)
+        ...     outputs = model(**encoding)
         >>> logits = outputs.logits
 
         >>> masked_tokens_predictions = logits[0, 52:61].argmax(dim=-1).tolist()
@@ -1117,8 +1125,8 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import PerceiverTokenizer, PerceiverForSequenceClassification
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained('deepmind/language-perceiver')
-        >>> model = PerceiverForSequenceClassification.from_pretrained('deepmind/language-perceiver')
+        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> model = PerceiverForSequenceClassification.from_pretrained("deepmind/language-perceiver")
 
         >>> text = "hello world"
         >>> inputs = tokenizer(text, return_tensors="pt").input_ids
@@ -1252,11 +1260,11 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-learned')
-        >>> model = PerceiverForImageClassificationLearned.from_pretrained('deepmind/vision-perceiver-learned')
+        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-learned")
+        >>> model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
@@ -1389,11 +1397,11 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-fourier')
-        >>> model = PerceiverForImageClassificationFourier.from_pretrained('deepmind/vision-perceiver-fourier')
+        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-fourier")
+        >>> model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
@@ -1526,11 +1534,11 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained('deepmind/vision-perceiver-conv')
-        >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained('deepmind/vision-perceiver-conv')
+        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-conv")
+        >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
@@ -1676,7 +1684,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         >>> from transformers import PerceiverForOpticalFlow
         >>> import torch
 
-        >>> model = PerceiverForOpticalFlow.from_pretrained('deepmind/optical-flow-perceiver')
+        >>> model = PerceiverForOpticalFlow.from_pretrained("deepmind/optical-flow-perceiver")
 
         >>> # in the Perceiver IO paper, the authors extract a 3 x 3 patch around each pixel,
         >>> # leading to 3 x 3 x 3 = 27 values for each pixel (as each pixel also has 3 color channels)
@@ -1894,7 +1902,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         >>> audio = torch.randn((1, 30720, 1))
         >>> inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
 
-        >>> model = PerceiverForMultimodalAutoencoding.from_pretrained('deepmind/multimodal-perceiver')
+        >>> model = PerceiverForMultimodalAutoencoding.from_pretrained("deepmind/multimodal-perceiver")
 
         >>> # in the Perceiver IO paper, videos are auto-encoded in chunks
         >>> # each chunk subsamples different index dimensions of the image and audio modality decoder queries
@@ -1904,9 +1912,9 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         >>> # process the first chunk
         >>> chunk_idx = 0
         >>> subsampling = {
-        ... "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
-        ... "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
-        ... "label": None,
+        ...     "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
+        ...     "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
+        ...     "label": None,
         ... }
 
         >>> outputs = model(inputs=inputs, subsampled_output_points=subsampling)

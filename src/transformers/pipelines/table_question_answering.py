@@ -259,10 +259,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
         ```python
         data = {
-        "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
-        "age": ["56", "45", "59"],
-        "number of movies": ["87", "53", "69"],
-        "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+            "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
+            "age": ["56", "45", "59"],
+            "number of movies": ["87", "53", "69"],
+            "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
         }
         ```
 
@@ -272,6 +272,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
         ```python
         import pandas as pd
+
         table = pd.DataFrame.from_dict(data)
         ```
 

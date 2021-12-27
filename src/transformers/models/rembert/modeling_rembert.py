@@ -1085,10 +1085,10 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
         >>> from transformers import RemBertTokenizer, RemBertForCausalLM, RemBertConfig
         >>> import torch
 
-        >>> tokenizer = RemBertTokenizer.from_pretrained('google/rembert')
+        >>> tokenizer = RemBertTokenizer.from_pretrained("google/rembert")
         >>> config = RemBertConfig.from_pretrained("google/rembert")
         >>> config.is_decoder = True
-        >>> model = RemBertForCausalLM.from_pretrained('google/rembert', config=config)
+        >>> model = RemBertForCausalLM.from_pretrained("google/rembert", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

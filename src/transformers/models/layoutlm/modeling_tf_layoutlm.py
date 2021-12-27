@@ -954,8 +954,8 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-        >>> model = TFLayoutLMModel.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
         >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
@@ -967,13 +967,15 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         >>> # add bounding boxes of cls + sep tokens
         >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
         >>> input_ids = encoding["input_ids"]
         >>> attention_mask = encoding["attention_mask"]
         >>> token_type_ids = encoding["token_type_ids"]
         >>> bbox = tf.convert_to_tensor([token_boxes])
 
-        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        >>> outputs = model(
+        ...     input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids
+        ... )
 
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
@@ -1094,8 +1096,8 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-        >>> model = TFLayoutLMForMaskedLM.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMForMaskedLM.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "[MASK]"]
         >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
@@ -1107,7 +1109,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         >>> # add bounding boxes of cls + sep tokens
         >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
         >>> input_ids = encoding["input_ids"]
         >>> attention_mask = encoding["attention_mask"]
         >>> token_type_ids = encoding["token_type_ids"]
@@ -1115,8 +1117,13 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
 
         >>> labels = tokenizer("Hello world", return_tensors="tf")["input_ids"]
 
-        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-        ...                 labels=labels)
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     bbox=bbox,
+        ...     attention_mask=attention_mask,
+        ...     token_type_ids=token_type_ids,
+        ...     labels=labels,
+        ... )
 
         >>> loss = outputs.loss
         ```"""
@@ -1231,8 +1238,8 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-        >>> model = TFLayoutLMForSequenceClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
         >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
@@ -1244,15 +1251,20 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         >>> # add bounding boxes of cls + sep tokens
         >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
         >>> input_ids = encoding["input_ids"]
         >>> attention_mask = encoding["attention_mask"]
         >>> token_type_ids = encoding["token_type_ids"]
         >>> bbox = tf.convert_to_tensor([token_boxes])
         >>> sequence_label = tf.convert_to_tensor([1])
 
-        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-        ...                 labels=sequence_label)
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     bbox=bbox,
+        ...     attention_mask=attention_mask,
+        ...     token_type_ids=token_type_ids,
+        ...     labels=sequence_label,
+        ... )
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
@@ -1371,8 +1383,8 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
         >>> import torch
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-        >>> model = TFLayoutLMForTokenClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
         >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
@@ -1384,15 +1396,20 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         >>> # add bounding boxes of cls + sep tokens
         >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-        >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
         >>> input_ids = encoding["input_ids"]
         >>> attention_mask = encoding["attention_mask"]
         >>> token_type_ids = encoding["token_type_ids"]
         >>> bbox = tf.convert_to_tensor([token_boxes])
-        >>> token_labels = tf.convert_to_tensor([1,1,0,0])
+        >>> token_labels = tf.convert_to_tensor([1, 1, 0, 0])
 
-        >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-        ...                 labels=token_labels)
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     bbox=bbox,
+        ...     attention_mask=attention_mask,
+        ...     token_type_ids=token_type_ids,
+        ...     labels=token_labels,
+        ... )
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits

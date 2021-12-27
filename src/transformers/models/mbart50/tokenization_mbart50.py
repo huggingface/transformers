@@ -96,12 +96,13 @@ class MBart50Tokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import MBart50Tokenizer
+
     >>> tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
     >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
-    >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
+    >>> tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
     >>> model_inputs = tokenizer(src_text, return_tensors="pt")
     >>> with tokenizer.as_target_tokenizer():
-    ...    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
+    ...     labels = tokenizer(tgt_text, return_tensors="pt").input_ids
     >>> # model(**model_inputs, labels=labels) should work
     ```"""
 

@@ -96,7 +96,10 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
 
     ```python
     >>> from transformers import MBartTokenizerFast
-    >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+
+    >>> tokenizer = MBartTokenizerFast.from_pretrained(
+    ...     "facebook/mbart-large-en-ro", src_lang="en_XX", tgt_lang="ro_RO"
+    ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
     >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")

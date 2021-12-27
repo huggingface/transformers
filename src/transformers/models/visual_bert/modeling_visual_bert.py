@@ -745,19 +745,21 @@ class VisualBertModel(VisualBertPreTrainedModel):
         from transformers import BertTokenizer, VisualBertModel
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = VisualBertModel.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-        inputs.update({
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask
-        })
+        inputs.update(
+            {
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+            }
+        )
 
         outputs = model(**inputs)
 
@@ -927,22 +929,26 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image in the batch.
         from transformers import BertTokenizer, VisualBertForPreTraining
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = VisualBertForPreTraining.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-        inputs.update({
-        "visual_embeds": visual_embeds,
-        "visual_token_type_ids": visual_token_type_ids,
-        "visual_attention_mask": visual_attention_mask
-        })
-        max_length  = inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]
-        labels = tokenizer("The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=max_length)["input_ids"]
-        sentence_image_labels = torch.tensor(1).unsqueeze(0) # Batch_size
+        inputs.update(
+            {
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+            }
+        )
+        max_length = inputs["input_ids"].shape[-1] + visual_embeds.shape[-2]
+        labels = tokenizer(
+            "The capital of France is Paris.", return_tensors="pt", padding="max_length", max_length=max_length
+        )["input_ids"]
+        sentence_image_labels = torch.tensor(1).unsqueeze(0)  # Batch_size
 
 
         outputs = model(**inputs, labels=labels, sentence_image_labels=sentence_image_labels)
@@ -1063,8 +1069,8 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         from transformers import BertTokenizer, VisualBertForMultipleChoice
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = VisualBertForMultipleChoice.from_pretrained('uclanlp/visualbert-vcr')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        model = VisualBertForMultipleChoice.from_pretrained("uclanlp/visualbert-vcr")
 
         prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         choice0 = "It is eaten with a fork and a knife."
@@ -1078,15 +1084,17 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
 
         labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-        encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
+        encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors="pt", padding=True)
         # batch size is 1
-        inputs_dict = {k: v.unsqueeze(0) for k,v in encoding.items()}
-        inputs_dict.update({
-        "visual_embeds": visual_embeds,
-        "visual_attention_mask": visual_attention_mask,
-        "visual_token_type_ids": visual_token_type_ids,
-        "labels": labels
-        })
+        inputs_dict = {k: v.unsqueeze(0) for k, v in encoding.items()}
+        inputs_dict.update(
+            {
+                "visual_embeds": visual_embeds,
+                "visual_attention_mask": visual_attention_mask,
+                "visual_token_type_ids": visual_token_type_ids,
+                "labels": labels,
+            }
+        )
         outputs = model(**inputs_dict)
 
         loss = outputs.loss
@@ -1212,22 +1220,24 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         from transformers import BertTokenizer, VisualBertForQuestionAnswering
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = VisualBertForQuestionAnswering.from_pretrained('uclanlp/visualbert-vqa')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa")
 
         text = "Who is eating the apple?"
-        inputs = tokenizer(text, return_tensors='pt')
+        inputs = tokenizer(text, return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-        inputs.update({
-        "visual_embeds": visual_embeds,
-        "visual_token_type_ids": visual_token_type_ids,
-        "visual_attention_mask": visual_attention_mask
-        })
+        inputs.update(
+            {
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+            }
+        )
 
-        labels = torch.tensor([[0.0,1.0]]).unsqueeze(0)  # Batch size 1, Num labels 2
+        labels = torch.tensor([[0.0, 1.0]]).unsqueeze(0)  # Batch size 1, Num labels 2
 
         outputs = model(**inputs, labels=labels)
         loss = outputs.loss
@@ -1336,20 +1346,22 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         from transformers import BertTokenizer, VisualBertForVisualReasoning
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = VisualBertForVisualReasoning.from_pretrained('uclanlp/visualbert-nlvr2')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        model = VisualBertForVisualReasoning.from_pretrained("uclanlp/visualbert-nlvr2")
 
         text = "Who is eating the apple?"
-        inputs = tokenizer(text, return_tensors='pt')
+        inputs = tokenizer(text, return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
 
-        inputs.update({
-        "visual_embeds": visual_embeds,
-        "visual_token_type_ids": visual_token_type_ids,
-        "visual_attention_mask": visual_attention_mask
-        })
+        inputs.update(
+            {
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+            }
+        )
 
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1, Num choices 2
 
@@ -1498,24 +1510,28 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         from transformers import BertTokenizer, VisualBertForRegionToPhraseAlignment
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = VisualBertForRegionToPhraseAlignment.from_pretrained('uclanlp/visualbert-vqa-coco-pre')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        model = VisualBertForRegionToPhraseAlignment.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         text = "Who is eating the apple?"
-        inputs = tokenizer(text, return_tensors='pt')
+        inputs = tokenizer(text, return_tensors="pt")
         visual_embeds = get_visual_embeddings(image).unsqueeze(0)
         visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
         visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)
-        region_to_phrase_position = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2]))
+        region_to_phrase_position = torch.ones((1, inputs["input_ids"].shape[-1] + visual_embeds.shape[-2]))
 
-        inputs.update({
-        "region_to_phrase_position": region_to_phrase_position,
-        "visual_embeds": visual_embeds,
-        "visual_token_type_ids": visual_token_type_ids,
-        "visual_attention_mask": visual_attention_mask
-        })
+        inputs.update(
+            {
+                "region_to_phrase_position": region_to_phrase_position,
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+            }
+        )
 
-        labels = torch.ones((1, inputs["input_ids"].shape[-1]+visual_embeds.shape[-2], visual_embeds.shape[-2])) # Batch size 1
+        labels = torch.ones(
+            (1, inputs["input_ids"].shape[-1] + visual_embeds.shape[-2], visual_embeds.shape[-2])
+        )  # Batch size 1
 
         outputs = model(**inputs, labels=labels)
         loss = outputs.loss

@@ -303,8 +303,11 @@ class RagPreTrainedModel(PreTrainedModel):
 
         ```python
         >>> from transformers import RagModel
+
         >>> # initialize a RAG from two pretrained models.
-        >>> model = RagModel.from_question_encoder_generator_pretrained('facebook/dpr-question_encoder-single-nq-base', 't5-small')
+        >>> model = RagModel.from_question_encoder_generator_pretrained(
+        ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
+        ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./rag")
         >>> # load fine-tuned model
@@ -560,7 +563,9 @@ class RagModel(RagPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
-        >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-base", index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
+        ... )
         >>> # initialize with RagRetriever to do everything in one forward call
         >>> model = RagModel.from_pretrained("facebook/rag-token-base", retriever=retriever)
 
@@ -801,13 +806,15 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-        >>> retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+        ... )
         >>> # initialize with RagRetriever to do everything in one forward call
         >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
         >>> with tokenizer.as_target_tokenizer():
-        ...    targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+        ...     targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
         >>> labels = targets["input_ids"]
         >>> outputs = model(input_ids=input_ids, labels=labels)
@@ -818,9 +825,16 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> question_hidden_states = model.question_encoder(input_ids)[0]
         >>> # 2. Retrieve
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
-        >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
+        >>> doc_scores = torch.bmm(
+        ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
+        >>> ).squeeze(1)
         >>> # 3. Forward to generator
-        >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=labels)
+        >>> outputs = model(
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ...     decoder_input_ids=labels,
+        ... )
         ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
@@ -1259,13 +1273,15 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
-        >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True
+        ... )
         >>> # initialize with RagRetriever to do everything in one forward call
         >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
         >>> with tokenizer.as_target_tokenizer():
-        ...    targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+        ...     targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
         >>> labels = targets["input_ids"]
         >>> outputs = model(input_ids=input_ids, labels=labels)
@@ -1276,12 +1292,23 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> question_hidden_states = model.question_encoder(input_ids)[0]
         >>> # 2. Retrieve
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
-        >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
+        >>> doc_scores = torch.bmm(
+        ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
+        >>> ).squeeze(1)
         >>> # 3. Forward to generator
-        >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=labels)
+        >>> outputs = model(
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ...     decoder_input_ids=labels,
+        ... )
 
         >>> # or directly generate
-        >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
+        >>> generated = model.generate(
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ... )
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs

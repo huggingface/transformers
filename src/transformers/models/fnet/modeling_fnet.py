@@ -674,8 +674,9 @@ class FNetForPreTraining(FNetPreTrainedModel):
         ```python
         >>> from transformers import FNetTokenizer, FNetForPreTraining
         >>> import torch
-        >>> tokenizer = FNetTokenizer.from_pretrained('google/fnet-base')
-        >>> model = FNetForPreTraining.from_pretrained('google/fnet-base')
+
+        >>> tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
+        >>> model = FNetForPreTraining.from_pretrained("google/fnet-base")
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> prediction_logits = outputs.prediction_logits
@@ -822,14 +823,15 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
         ```python
         >>> from transformers import FNetTokenizer, FNetForNextSentencePrediction
         >>> import torch
-        >>> tokenizer = FNetTokenizer.from_pretrained('google/fnet-base')
-        >>> model = FNetForNextSentencePrediction.from_pretrained('google/fnet-base')
+
+        >>> tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
+        >>> model = FNetForNextSentencePrediction.from_pretrained("google/fnet-base")
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```"""
 
         if "next_sentence_label" in kwargs:

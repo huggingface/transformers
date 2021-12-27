@@ -982,11 +982,11 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
 
-        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained('facebook/blenderbot-400M-distill')
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-400M-distill')
+        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1050,11 +1050,11 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
 
-        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained('facebook/blenderbot-400M-distill')
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-400M-distill')
+        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1319,11 +1319,11 @@ class FlaxBlenderbotForConditionalGeneration(FlaxBlenderbotPreTrainedModel):
         ```python
         >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
 
-        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained('facebook/blenderbot-400M-distill')
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-400M-distill')
+        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id

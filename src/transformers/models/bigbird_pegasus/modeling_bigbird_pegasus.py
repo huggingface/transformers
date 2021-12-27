@@ -2984,7 +2984,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
 
         >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
-        >>> model = BigBirdPegasusForCausalLM.from_pretrained("google/bigbird-pegasus-large-arxiv", add_cross_attention=False)
+        >>> model = BigBirdPegasusForCausalLM.from_pretrained(
+        ...     "google/bigbird-pegasus-large-arxiv", add_cross_attention=False
+        ... )
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

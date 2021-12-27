@@ -32,7 +32,9 @@ class KerasMetricCallback(Callback):
 
     ```py
     from datasets import load_metric
+
     rouge_metric = load_metric("rouge")
+
 
     def rouge_fn(predictions, labels):
         decoded_predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
