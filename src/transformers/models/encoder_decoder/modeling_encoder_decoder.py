@@ -306,7 +306,7 @@ class EncoderDecoderModel(PreTrainedModel):
                       `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
                       PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
-            decoder_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to *None*):
+            decoder_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.

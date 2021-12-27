@@ -720,7 +720,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
-            decoder_pretrained_model_name_or_path (:obj: *Union[str, os.PathLike]*, *optional*, defaults to *None*):
+            decoder_pretrained_model_name_or_path (:obj: *Union[str, os.PathLike]*, *optional*, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.

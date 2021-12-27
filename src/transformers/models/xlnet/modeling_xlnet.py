@@ -1383,7 +1383,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, num_predict)`, *optional*):
             Labels for masked language modeling. `num_predict` corresponds to `target_mapping.shape[1]`. If
-            `target_mapping` is :obj*None*, then `num_predict` corresponds to `sequence_length`.
+            `target_mapping` is `None`, then `num_predict` corresponds to `sequence_length`.
 
             The labels should correspond to the masked input words that should be predicted and depends on
             `target_mapping`. Note in order to perform standard auto-regressive language modeling a *<mask>* token has
