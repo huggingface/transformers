@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch mT5 model. """
+""" PyTorch mT5 model."""
 
 from ...utils import logging
 from ..t5.modeling_t5 import T5EncoderModel, T5ForConditionalGeneration, T5Model
@@ -27,8 +27,8 @@ _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 class MT5Model(T5Model):
     r"""
-    This class overrides [`T5Model`]. Please check the superclass for the appropriate documentation
-    alongside usage examples.
+    This class overrides [`T5Model`]. Please check the superclass for the appropriate documentation alongside usage
+    examples.
 
     Examples:
 
@@ -60,8 +60,8 @@ class MT5Model(T5Model):
 
 class MT5ForConditionalGeneration(T5ForConditionalGeneration):
     r"""
-    This class overrides [`T5ForConditionalGeneration`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`T5ForConditionalGeneration`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
 
     Examples:
 
@@ -91,8 +91,8 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
 
 class MT5EncoderModel(T5EncoderModel):
     r"""
-    This class overrides [`T5EncoderModel`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`T5EncoderModel`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
 
     Examples:
 

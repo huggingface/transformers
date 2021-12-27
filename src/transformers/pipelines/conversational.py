@@ -19,17 +19,15 @@ logger = logging.get_logger(__name__)
 class Conversation:
     """
     Utility class containing a conversation and its history. This class is meant to be used as an input to the
-    [`ConversationalPipeline`]. The conversation contains a number of utility function to manage the
-    addition of new user input and generated model responses. A conversation needs to contain an unprocessed user input
-    before being passed to the [`ConversationalPipeline`]. This user input is either created when
-    the class is instantiated, or by calling `conversational_pipeline.append_response("input")` after a
-    conversation turn.
+    [`ConversationalPipeline`]. The conversation contains a number of utility function to manage the addition of new
+    user input and generated model responses. A conversation needs to contain an unprocessed user input before being
+    passed to the [`ConversationalPipeline`]. This user input is either created when the class is instantiated, or by
+    calling `conversational_pipeline.append_response("input")` after a conversation turn.
 
     Arguments:
         text (`str`, *optional*):
             The initial user input to start the conversation. If not provided, a user input needs to be provided
-            manually using the [`~Conversation.add_user_input`] method before the conversation can
-            begin.
+            manually using the [`~Conversation.add_user_input`] method before the conversation can begin.
         conversation_id (`uuid.UUID`, *optional*):
             Unique identifier for the conversation. If not provided, a random UUID4 id will be assigned to the
             conversation.
@@ -84,8 +82,7 @@ class Conversation:
 
     def add_user_input(self, text: str, overwrite: bool = False):
         """
-        Add a user input to the conversation for the next round. This populates the internal `new_user_input`
-        field.
+        Add a user input to the conversation for the next round. This populates the internal `new_user_input` field.
 
         Args:
             text (`str`): The user input for the next conversation round.
@@ -109,8 +106,8 @@ class Conversation:
 
     def mark_processed(self):
         """
-        Mark the conversation as processed (moves the content of `new_user_input` to `past_user_inputs`) and
-        empties the `new_user_input` field.
+        Mark the conversation as processed (moves the content of `new_user_input` to `past_user_inputs`) and empties
+        the `new_user_input` field.
         """
         if self.new_user_input:
             self.past_user_inputs.append(self.new_user_input)
@@ -129,8 +126,8 @@ class Conversation:
         """
         Iterates over all blobs of the conversation.
 
-        Returns: Iterator of (is_user, text_chunk) in chronological order of the conversation. `is_user` is a
-        `bool`, `text_chunks` is a `str`.
+        Returns: Iterator of (is_user, text_chunk) in chronological order of the conversation. `is_user` is a `bool`,
+        `text_chunks` is a `str`.
         """
         for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
             yield True, user_input
@@ -168,12 +165,13 @@ class ConversationalPipeline(Pipeline):
     """
     Multi-turn conversational pipeline.
 
-    This conversational pipeline can currently be loaded from [`pipeline`] using the following task
-    identifier: `"conversational"`.
+    This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"conversational"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
     currently: *'microsoft/DialoGPT-small'*, *'microsoft/DialoGPT-medium'*, *'microsoft/DialoGPT-large'*. See the
-    up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=conversational).
+    up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=conversational).
 
     Usage:
 
@@ -232,8 +230,8 @@ class ConversationalPipeline(Pipeline):
                 corresponding to your framework [here](./model#generative-models)).
 
         Returns:
-            [`Conversation`] or a list of [`Conversation`]: Conversation(s) with
-            updated generated responses for those containing a new user input.
+            [`Conversation`] or a list of [`Conversation`]: Conversation(s) with updated generated responses for those
+            containing a new user input.
         """
         # XXX: num_workers==0 is required to be backward compatible
         # Otherwise the threads will require a Conversation copy.

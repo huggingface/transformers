@@ -36,11 +36,11 @@ TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TapasConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TapasModel`]. It is used to
-    instantiate a TAPAS model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the TAPAS *tapas-base-finetuned-sqa*
-    architecture. Configuration objects inherit from [`PreTrainedConfig`] and can be used to control
-    the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    This is the configuration class to store the configuration of a [`TapasModel`]. It is used to instantiate a TAPAS
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the TAPAS *tapas-base-finetuned-sqa* architecture.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Hyperparameters additional to BERT are taken from run_task_main.py and hparam_utils.py of the original
     implementation. Original implementation available at https://github.com/google-research/tapas/tree/master.
@@ -58,8 +58,8 @@ class TapasConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"swish"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"swish"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):

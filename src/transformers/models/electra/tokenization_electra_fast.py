@@ -62,11 +62,10 @@ class ElectraTokenizerFast(BertTokenizerFast):
     r"""
     Construct a "fast" ELECTRA tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`ElectraTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+    [`ElectraTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

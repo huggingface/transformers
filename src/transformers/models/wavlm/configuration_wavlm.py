@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" WavLM model configuration """
+""" WavLM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,20 +28,20 @@ WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class WavLMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`WavLMModel`]. It is used to
-    instantiate an WavLM model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the WavLM [facebook/wavlm-base-960h](https://huggingface.co/facebook/wavlm-base-960h) architecture.
+    This is the configuration class to store the configuration of a [`WavLMModel`]. It is used to instantiate an WavLM
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the WavLM
+    [facebook/wavlm-base-960h](https://huggingface.co/facebook/wavlm-base-960h) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32):
             Vocabulary size of the WavLM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`WavLMModel`]. Vocabulary size of the model.
-            Defines the different tokens that can be represented by the *inputs_ids* passed to the forward method of
-            [`WavLMModel`].
+            `inputs_ids` passed when calling [`WavLMModel`]. Vocabulary size of the model. Defines the different tokens
+            that can be represented by the *inputs_ids* passed to the forward method of [`WavLMModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -51,8 +51,8 @@ class WavLMConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -92,24 +92,27 @@ class WavLMConfig(PretrainedConfig):
         num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
         do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is False` corresponds to applying layer norm after the attention layer.
+            Whether to apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
+            True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
+            False` corresponds to applying layer norm after the attention layer.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
-            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition](https://arxiv.org/abs/1904.08779).
+            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+            Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
-            masked. Approximately `mask_time_prob * sequence_length // mask_time_length` feature vectors will be
-            masked along the time axis. This is only relevant if `apply_spec_augment is True`.
+            masked. Approximately `mask_time_prob * sequence_length // mask_time_length` feature vectors will be masked
+            along the time axis. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
         mask_time_min_masks (`int`, *optional*, defaults to 2),:
-            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time
-            step, irrespectively of `mask_feature_prob`. Only relevant if
-            ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''
+            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+            mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
-            be masked. Approximately `mask_time_prob * hidden_size // mask_time_length` feature vectors will be
-            masked along the time axis. This is only relevant if `apply_spec_augment is True`.
+            be masked. Approximately `mask_time_prob * hidden_size // mask_time_length` feature vectors will be masked
+            along the time axis. This is only relevant if `apply_spec_augment is True`.
         mask_feature_length (`int`, *optional*, defaults to 10):
             Length of vector span along the feature axis.
         num_codevectors_per_group (`int`, *optional*, defaults to 320):
@@ -132,9 +135,9 @@ class WavLMConfig(PretrainedConfig):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
             instance of [`WavLMForCTC`].
         ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses
-            mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
-            instance of [`WavLMForCTC`].
+            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+            of [`WavLMForCTC`].
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
             instance of [`WavLMForSequenceClassification`].
@@ -159,7 +162,8 @@ class WavLMConfig(PretrainedConfig):
         adapter_stride (`int`, *optional*, defaults to 2):
             Stride of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         num_adapter_layers (`int`, *optional*, defaults to 3):
-            Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is True`.
+            Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
+            True`.
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.

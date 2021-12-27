@@ -57,11 +57,11 @@ ADDED_TOKENS_FILE = "added_tokens.json"
 
 INIT_TOKENIZER_DOCSTRING += """
         tokenizer_object ([`tokenizers.Tokenizer`]):
-            A [`tokenizers.Tokenizer`] object from 🤗 tokenizers to instantiate from. See [Using tokenizers
-            from 🤗 tokenizers](../fast_tokenizers) for more information.
+            A [`tokenizers.Tokenizer`] object from 🤗 tokenizers to instantiate from. See [Using tokenizers from 🤗
+            tokenizers](../fast_tokenizers) for more information.
         tokenizer_file ([`str`]):
-            A path to a local JSON file representing a previously serialized [`tokenizers.Tokenizer`] object from
-            🤗 tokenizers.
+            A path to a local JSON file representing a previously serialized [`tokenizers.Tokenizer`] object from 🤗
+            tokenizers.
 """
 
 MODEL_TO_TRAINER_MAPPING = {
@@ -272,8 +272,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         <Tip>
 
-        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
-        put this inside your training loop.
+        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not put
+        this inside your training loop.
 
         </Tip>
 
@@ -606,8 +606,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 Additional keyword arguments passed along to the trainer from the 🤗 Tokenizers library.
 
         Returns:
-            [`PreTrainedTokenizerFast`]: A new tokenizer of the same type as the original one,
-            trained on `text_iterator`.
+            [`PreTrainedTokenizerFast`]: A new tokenizer of the same type as the original one, trained on
+            `text_iterator`.
 
         """
         tokenizer_json = json.loads(self._tokenizer.to_str())

@@ -87,13 +87,12 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
 
     <Tip>
 
-    When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with
-    `add_prefix_space=True`.
+    When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with `add_prefix_space=True`.
 
     </Tip>
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -101,7 +100,8 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         merges_file (`str`):
             Path to the merges file.
         errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+            Paradigm to follow when decoding bytes to UTF-8. See
+            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -117,8 +117,8 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -214,8 +214,8 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
     @property
     def mask_token(self) -> str:
         """
-        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
-        not having been set.
+        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
+        having been set.
 
         Roberta tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
         comprise the space before the *<mask>*.

@@ -36,8 +36,8 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     predict_with_generate (`bool`, *optional*, defaults to `False`):
         Whether to use generate to calculate generative metrics (ROUGE, BLEU).
     generation_max_length (`int`, *optional*):
-        The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default to
-        the `max_length` value of the model configuration.
+        The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
+        `max_length` value of the model configuration.
     generation_num_beams (`int`, *optional*):
         The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
         `num_beams` value of the model configuration.

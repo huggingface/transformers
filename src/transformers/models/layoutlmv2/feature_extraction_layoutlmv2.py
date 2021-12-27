@@ -85,21 +85,20 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     Constructs a LayoutLMv2 feature extractor. This can be used to resize document images to the same size, as well as
     to apply OCR on them in order to get a list of words and normalized bounding boxes.
 
-    This feature extractor inherits from [`~feature_extraction_utils.PreTrainedFeatureExtractor`]
-    which contains most of the main methods. Users should refer to this superclass for more information regarding those
-    methods.
+    This feature extractor inherits from [`~feature_extraction_utils.PreTrainedFeatureExtractor`] which contains most
+    of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize`
-            is set to `True`.
+            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
+            set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`.
-            Only has an effect if `do_resize` is set to `True`.
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+            if `do_resize` is set to `True`.
         apply_ocr (`bool`, *optional*, defaults to `True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
         ocr_lang (`Optional[str]`, *optional*):
@@ -148,11 +147,10 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
-            - **words** -- Optional words as identified by Tesseract OCR (only when
-              [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`).
+            - **words** -- Optional words as identified by Tesseract OCR (only when [`LayoutLMv2FeatureExtractor`] was
+              initialized with `apply_ocr` set to `True`).
             - **boxes** -- Optional bounding boxes as identified by Tesseract OCR, normalized based on the image size
-              (only when [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to
-              `True`).
+              (only when [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`).
 
         Examples:
 
