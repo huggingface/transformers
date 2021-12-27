@@ -38,7 +38,7 @@
 # --base-dim '--tf32 0 --fp16 0' \
 # --metric-key train_samples_per_second --repeat-times 1
 #
-# and here a possible output:
+# and here is a possible output:
 #
 # *** Results: train_samples_per_second
 #
@@ -54,10 +54,10 @@
 # So you can quickly compare the different outcomes.
 #
 # Typically running each experiment once is enough, but if the environment is unstable you can
-# re-run each multiple times, e.g., 3 using --repeat-times 3 and it will report the average results.
+# re-run each multiple times, e.g., 3 using --repeat-times 3 and it will report the averaged results.
 #
-# by default it'll use the worst result as the base line to use as 100% and then compare the rest to
-# it as can be seen from the table, but you can also specify which combination is the one to use as
+# By default it'll use the worst result as the base line to use as 100% and then compare the rest to
+# it as can be seen from the table above, but you can also specify which combination is the one to use as
 # the baseline, e.g., to change to another entry use: --base-dim '--tf32 1 --fp16 0'
 #
 # --metric-key is there to tell the program which metrics to compare - the different metric keys are
@@ -81,16 +81,15 @@ from tqdm import tqdm
 def get_base_cmd(args, output_dir):
 
     # unwrap multi-line input
-    args.base_cmd = re.sub(r"\\", " ", args.base_cmd)
-    args.base_cmd = re.sub(r"\n", " ", args.base_cmd)
+    args.base_cmd = re.sub(r"[\\\n]+", " ", args.base_cmd)
 
     # remove --output_dir if any and set our own
     args.base_cmd = re.sub("--output_dir\s+[^\s]+", "", args.base_cmd)
-    args.base_cmd += f"--output_dir {output_dir} "
+    args.base_cmd += f" --output_dir {output_dir}"
 
     # ensure we have --overwrite_output_dir
     args.base_cmd = re.sub("--overwrite_output_dir\s+", "", args.base_cmd)
-    args.base_cmd += "--overwrite_output_dir "
+    args.base_cmd += " --overwrite_output_dir"
 
     return [sys.executable] + shlex.split(args.base_cmd)
 
@@ -217,14 +216,15 @@ def main():
     output_dir = "output_benchmark"
     base_cmd = get_base_cmd(args, output_dir)
 
-    results = {}
+    # split each dimension into its --foo variations
     dims = [list(map(str.strip, re.split(r"(?=--)", x)[1:])) for x in args.dims]
-    # cartesian product of dimensions and then converted back into cmd-line arg strings
+    # build a cartesian product of dimensions and convert those back into cmd-line arg strings
     opts = list(map(" ".join, itertools.product(*dims)))
 
     print(f"\n*** Running {len(opts)} benchmarks:")
     print(f"Base command: {' '.join(base_cmd)}")
 
+    results = {}
     for id, opt in enumerate(tqdm(opts, desc="Total completion: ", leave=False)):
         cmd = base_cmd + opt.split()
         results[opt] = process_run(id + 1, cmd, opt, args.repeat_times, output_dir, args.metric_key, args.verbose)
