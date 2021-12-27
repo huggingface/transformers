@@ -316,11 +316,11 @@ class DetrTimmConvEncoder(nn.Module):
     """
 
     def __init__(
-        self, name: str, dilation: bool, in_chans: int, pretrained=True, freeze_layers=True, fix_batch_norm=True
+        self, name: str, dilation: bool, num_channels: int, pretrained=True, freeze_layers=True, fix_batch_norm=True
     ):
         super().__init__()
 
-        kwargs = {"in_chans": in_chans}
+        kwargs = {"in_chans": num_channels}
         if dilation:
             kwargs["output_stride"] = 16
 
@@ -1165,8 +1165,8 @@ class DetrModel(DetrPreTrainedModel):
         backbone = DetrTimmConvEncoder(
             config.backbone,
             config.dilation,
-            config.in_chans,
-            pretrained=config.pretrained,
+            config.num_channels,
+            pretrained=config.use_pretrained_backbone,
             freeze_layers=config.freeze_layers,
             fix_batch_norm=config.fix_batch_norm,
         )

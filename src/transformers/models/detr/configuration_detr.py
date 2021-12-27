@@ -194,8 +194,8 @@ class DetrConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
-        self.in_chans = in_chans
-        self.pretrained = pretrained
+        self.num_channels = num_channels
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.freeze_layers = freeze_layers
         self.fix_batch_norm = fix_batch_norm
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
