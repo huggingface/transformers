@@ -322,8 +322,12 @@ def style_doc_files(*files, max_len=119, check_only=False):
                 changed.append(file)
         # Treat python files
         elif file.endswith(".py"):
-            if style_file_docstrings(file, max_len=max_len, check_only=check_only):
-                changed.append(file)
+            try:
+                if style_file_docstrings(file, max_len=max_len, check_only=check_only):
+                    changed.append(file)
+            except Exception as e:
+                print(f"There is a problem in {file}.")
+                raise
         else:
             warnings.warn(f"Ignoring {file} because it's not a py or an mdx file or a folder.")
     return changed
