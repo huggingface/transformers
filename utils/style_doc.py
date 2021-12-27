@@ -325,7 +325,7 @@ def style_doc_files(*files, max_len=119, check_only=False):
             try:
                 if style_file_docstrings(file, max_len=max_len, check_only=check_only):
                     changed.append(file)
-            except Exception as e:
+            except Exception:
                 print(f"There is a problem in {file}.")
                 raise
         else:
