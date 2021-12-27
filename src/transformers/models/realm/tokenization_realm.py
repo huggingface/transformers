@@ -56,10 +56,10 @@ class RealmTokenizer(BertTokenizer):
     r"""
     Construct a REALM tokenizer.
 
-    :class:`~transformers.RealmTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    [`RealmTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
     parameters.
     """
 
@@ -74,38 +74,40 @@ class RealmTokenizer(BertTokenizer):
         differences:
 
             1. Handle additional num_candidate axis. (batch_size, num_candidates, text)
-            2. Always pad the sequences to `max_length`.
-            3. Must specify `max_length` in order to stack packs of candidates into a batch.
+            2. Always pad the sequences to *max_length*.
+            3. Must specify *max_length* in order to stack packs of candidates into a batch.
 
-            - single sequence: ``[CLS] X [SEP]``
-            - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+            - single sequence: `[CLS] X [SEP]`
+            - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            text (:obj:`List[List[str]]`):
+            text (`List[List[str]]`):
                 The batch of sequences to be encoded. Each sequence must be in this format: (batch_size,
                 num_candidates, text).
-            text_pair (:obj:`List[List[str]]`, `optional`):
+            text_pair (`List[List[str]]`, *optional*):
                 The batch of sequences to be encoded. Each sequence must be in this format: (batch_size,
                 num_candidates, text).
             **kwargs:
                 Keyword arguments of the __call__ method.
 
         Returns:
-            :class:`~transformers.BatchEncoding`: Encoded text or text pair.
+            [`BatchEncoding`]: Encoded text or text pair.
 
-        Example::
+        Example:
 
-            >>> from transformers import RealmTokenizer
+        ```python
+        >>> from transformers import RealmTokenizer
 
-            >>> # batch_size = 2, num_candidates = 2
-            >>> text = [
-            >>>     ["Hello world!", "Nice to meet you!"],
-            >>>     ["The cute cat.", "The adorable dog."]
-            >>> ]
+        >>> # batch_size = 2, num_candidates = 2
+        >>> text = [
+        >>>     ["Hello world!", "Nice to meet you!"],
+        >>>     ["The cute cat.", "The adorable dog."]
+        >>> ]
 
-            >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
-            >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
-        """
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+        >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
+        ```
+"""
 
         # Always using a fixed sequence length to encode in order to stack candidates into a batch.
         kwargs["padding"] = PaddingStrategy.MAX_LENGTH
