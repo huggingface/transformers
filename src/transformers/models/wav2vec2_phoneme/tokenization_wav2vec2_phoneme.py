@@ -52,8 +52,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     """
     Constructs a Wav2Vec2PhonemeCTC tokenizer.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods.
-    Users should refer to the superclass for more information regarding such methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
+    the superclass for more information regarding such methods.
 
     Args:
         vocab_file (`str`):
@@ -226,8 +226,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has
-        not been set.
+        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
+        set.
         """
         if self._word_delimiter_token is None:
             return None
@@ -254,8 +254,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     @property
     def phone_delimiter_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the phone_delimiter_token in the vocabulary. Returns `None` if the token has
-        not been set.
+        `Optional[int]`: Id of the phone_delimiter_token in the vocabulary. Returns `None` if the token has not been
+        set.
         """
         if self._phone_delimiter_token is None:
             return None

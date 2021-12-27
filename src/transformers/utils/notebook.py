@@ -45,7 +45,7 @@ def html_progress_bar(value, total, prefix, label, width=300):
 def text_to_html_table(items):
     "Put the texts in `items` in an HTML table."
     html_code = """<table border="1" class="dataframe">\n"""
-    html_code += """  <thead>\n    <tr style="text-align: left;">\n"""
+    html_code += """  <thead>\n <tr style="text-align: left;">\n"""
     for i in items[0]:
         html_code += f"      <th>{i}</th>\n"
     html_code += "    </tr>\n  </thead>\n  <tbody>\n"
@@ -65,11 +65,10 @@ class NotebookProgressBar:
 
     Class attributes (overridden by derived classes)
 
-        - **warmup** (`int`) -- The number of iterations to do at the beginning while ignoring
-          `update_every`.
+        - **warmup** (`int`) -- The number of iterations to do at the beginning while ignoring `update_every`.
         - **update_every** (`float`) -- Since calling the time takes some time, we only do it every presumed
-          `update_every` seconds. The progress bar uses the average time passed up until now to guess the next
-          value for which it will call the update.
+          `update_every` seconds. The progress bar uses the average time passed up until now to guess the next value
+          for which it will call the update.
 
     Args:
         total (`int`):
@@ -80,8 +79,8 @@ class NotebookProgressBar:
             Whether or not to leave the progress bar once it's completed. You can always call the
             [`~utils.notebook.NotebookProgressBar.close`] method to make the bar disappear.
         parent ([`~notebook.NotebookTrainingTracker`], *optional*):
-            A parent object (like [`~utils.notebook.NotebookTrainingTracker`]) that spawns progress
-            bars and handle their display. If set, the object passed must have a `display()` method.
+            A parent object (like [`~utils.notebook.NotebookTrainingTracker`]) that spawns progress bars and handle
+            their display. If set, the object passed must have a `display()` method.
         width (`int`, *optional*, defaults to 300):
             The width (in pixels) that the bar will take.
 
@@ -127,8 +126,8 @@ class NotebookProgressBar:
                 The value to use. Must be between 0 and `total`.
             force_update (`bool`, *optional*, defaults to `False`):
                 Whether or not to force and update of the internal state and display (by default, the bar will wait for
-                `value` to reach the value it predicted corresponds to a time of more than the `update_every`
-                attribute since the last update to avoid adding boilerplate).
+                `value` to reach the value it predicted corresponds to a time of more than the `update_every` attribute
+                since the last update to avoid adding boilerplate).
             comment (`str`, *optional*):
                 A comment to add on the left of the progress bar.
         """
@@ -204,8 +203,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
 
     Args:
 
-        num_steps (`int`): The number of steps during training.
-        column_names (`List[str]`, *optional*):
+        num_steps (`int`): The number of steps during training. column_names (`List[str]`, *optional*):
             The list of column names for the metrics table (will be inferred from the first call to
             [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
     """
@@ -268,8 +266,8 @@ class NotebookTrainingTracker(NotebookProgressBar):
 
 class NotebookProgressCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that displays the progress of training or evaluation, optimized for
-    Jupyter Notebooks or Google colab.
+    A [`TrainerCallback`] that displays the progress of training or evaluation, optimized for Jupyter Notebooks or
+    Google colab.
     """
 
     def __init__(self):

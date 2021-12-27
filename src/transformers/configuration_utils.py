@@ -178,7 +178,8 @@ class PretrainedConfig(PushToHubMixin):
 
         > Parameters for fine-tuning tasks
 
-        architectures (`List[str]`, *optional*): Model architectures that can be used with the model pretrained weights.
+        architectures (`List[str]`, *optional*):
+            Model architectures that can be used with the model pretrained weights.
         finetuning_task (`str`, *optional*):
             Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow
             or PyTorch) checkpoint.
@@ -401,16 +402,14 @@ class PretrainedConfig(PushToHubMixin):
 
                 <Tip warning={true}>
 
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with
-                `save_directory`, which requires `save_directory` to be a local clone of the repo you are
-                pushing to if it's an existing folder. Pass along `temp_dir=True` to use a temporary directory
-                instead.
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
+                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
+                folder. Pass along `temp_dir=True` to use a temporary directory instead.
 
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the
-                [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -433,8 +432,7 @@ class PretrainedConfig(PushToHubMixin):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         r"""
-        Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model
-        configuration.
+        Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -445,8 +443,7 @@ class PretrainedConfig(PushToHubMixin):
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved configuration JSON *file*, e.g.,
-                  `./my_model_directory/configuration.json`.
+                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -457,10 +454,11 @@ class PretrainedConfig(PushToHubMixin):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -468,9 +466,9 @@ class PretrainedConfig(PushToHubMixin):
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.
 
-                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs*
-                is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
-                the part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -615,8 +613,7 @@ class PretrainedConfig(PushToHubMixin):
         Args:
             config_dict (`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the
-                [`~PretrainedConfig.get_config_dict`] method.
+                retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
             kwargs (`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
@@ -730,8 +727,8 @@ class PretrainedConfig(PushToHubMixin):
 
         Args:
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `PretrainedConfig()` is serialized to JSON string.
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON string.
 
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -750,8 +747,8 @@ class PretrainedConfig(PushToHubMixin):
             json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `PretrainedConfig()` is serialized to JSON file.
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
@@ -807,8 +804,8 @@ class PretrainedConfig(PushToHubMixin):
     def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
         """
         Checks whether the passed dictionary has a *torch_dtype* key and if it's not None, converts torch.dtype to a
-        string of just the type. For example, `torch.float32` get converted into *"float32"* string, which can
-        then be stored in the json format.
+        string of just the type. For example, `torch.float32` get converted into *"float32"* string, which can then be
+        stored in the json format.
         """
         if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
@@ -831,8 +828,8 @@ def get_configuration_file(
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
         use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-            generated when running `transformers-cli login` (stored in `~/.huggingface`).
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
         local_files_only (`bool`, *optional*, defaults to `False`):
             Whether or not to only rely on local files and not to attempt to download any files.
 

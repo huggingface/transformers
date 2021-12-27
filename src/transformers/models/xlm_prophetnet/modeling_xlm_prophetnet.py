@@ -37,8 +37,8 @@ XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class XLMProphetNetEncoder(ProphetNetEncoder):
     r"""
-    This class overrides [`ProphetNetEncoder`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`ProphetNetEncoder`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
 
     Example:
 
@@ -60,8 +60,8 @@ class XLMProphetNetEncoder(ProphetNetEncoder):
 
 class XLMProphetNetDecoder(ProphetNetDecoder):
     r"""
-    This class overrides [`ProphetNetDecoder`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`ProphetNetDecoder`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
 
     Example:
 
@@ -83,8 +83,8 @@ class XLMProphetNetDecoder(ProphetNetDecoder):
 
 class XLMProphetNetModel(ProphetNetModel):
     r"""
-    This class overrides [`ProphetNetModel`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`ProphetNetModel`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
 
     Example:
 
@@ -107,8 +107,8 @@ class XLMProphetNetModel(ProphetNetModel):
 
 class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
     r"""
-    This class overrides [`ProphetNetForConditionalGeneration`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`ProphetNetForConditionalGeneration`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Example:
 
@@ -131,8 +131,8 @@ class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
 
 class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
     r"""
-    This class overrides [`ProphetNetForCausalLM`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`ProphetNetForCausalLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
 
     Example:
 

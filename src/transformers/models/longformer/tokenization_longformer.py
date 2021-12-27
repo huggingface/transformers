@@ -52,8 +52,8 @@ class LongformerTokenizer(RobertaTokenizer):
     r"""
     Construct a Longformer tokenizer.
 
-    [`LongformerTokenizer`] is identical to [`RobertaTokenizer`]. Refer to the
-    superclass for usage examples and documentation concerning parameters.
+    [`LongformerTokenizer`] is identical to [`RobertaTokenizer`]. Refer to the superclass for usage examples and
+    documentation concerning parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

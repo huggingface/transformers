@@ -81,20 +81,19 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
                 The feature extractor that will be used by the pipeline to encode waveform for the model.
             model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
                 The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
-                from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`]
-                for TensorFlow.
+                from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
             tokenizer ([`PreTrainedTokenizer`]):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
                 [`PreTrainedTokenizer`].
             modelcard (`str` or [`ModelCard`], *optional*):
                 Model card attributed to the model for this pipeline.
             framework (`str`, *optional*):
-                The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified
-                framework must be installed.
+                The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must
+                be installed.
 
                 If no framework is specified, will default to the one currently installed. If no framework is specified
-                and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
-                no model is provided.
+                and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no
+                model is provided.
             device (`int`, *optional*, defaults to -1):
                 Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the
                 model on the associated CUDA device id.
@@ -114,16 +113,16 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`]
-        documentation for more information.
+        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
+        information.
 
         Args:
             inputs (`np.ndarray` or `bytes` or `str`):
-                The inputs is either a raw waveform (`np.ndarray` of shape (n, ) of type `np.float32` or
-                `np.float64`) at the correct sampling rate (no further check will be done) or a `str` that is
-                the filename of the audio file, the file will be read at the correct sampling rate to get the waveform
-                using *ffmpeg*. This requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is
-                supposed to be the content of an audio file and is interpreted by *ffmpeg* in the same way.
+                The inputs is either a raw waveform (`np.ndarray` of shape (n, ) of type `np.float32` or `np.float64`)
+                at the correct sampling rate (no further check will be done) or a `str` that is the filename of the
+                audio file, the file will be read at the correct sampling rate to get the waveform using *ffmpeg*. This
+                requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is supposed to be the
+                content of an audio file and is interpreted by *ffmpeg* in the same way.
 
         Return:
             A `dict` with the following keys:

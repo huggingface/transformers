@@ -152,16 +152,15 @@ def infer_framework_load_model(
     """
     Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
 
-    If `model` is instantiated, this function will just infer the framework from the model class. Otherwise
-    `model` is actually a checkpoint name and this method will try to instantiate it using `model_classes`.
-    Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
+    If `model` is instantiated, this function will just infer the framework from the model class. Otherwise `model` is
+    actually a checkpoint name and this method will try to instantiate it using `model_classes`. Since we don't want to
+    instantiate the model twice, this model is returned for use by the pipeline.
 
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
         model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok
-            from.
+            The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         config ([`AutoConfig`]):
             The config associated with the model to help using the correct class
         model_classes (dictionary `str` to `type`, *optional*):
@@ -169,7 +168,8 @@ def infer_framework_load_model(
         task (`str`):
             The task defining which pipeline will be returned.
         model_kwargs:
-            Additional dictionary of keyword arguments passed along to the model's `from_pretrained(..., **model_kwargs)` function.
+            Additional dictionary of keyword arguments passed along to the model's `from_pretrained(...,
+            **model_kwargs)` function.
 
     Returns:
         `Tuple`: A tuple framework, model.
@@ -248,22 +248,22 @@ def infer_framework_from_model(
     """
     Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
 
-    If `model` is instantiated, this function will just infer the framework from the model class. Otherwise
-    `model` is actually a checkpoint name and this method will try to instantiate it using `model_classes`.
-    Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
+    If `model` is instantiated, this function will just infer the framework from the model class. Otherwise `model` is
+    actually a checkpoint name and this method will try to instantiate it using `model_classes`. Since we don't want to
+    instantiate the model twice, this model is returned for use by the pipeline.
 
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
         model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok
-            from.
+            The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         model_classes (dictionary `str` to `type`, *optional*):
             A mapping framework to class.
         task (`str`):
             The task defining which pipeline will be returned.
         model_kwargs:
-            Additional dictionary of keyword arguments passed along to the model's `from_pretrained(..., **model_kwargs)` function.
+            Additional dictionary of keyword arguments passed along to the model's `from_pretrained(...,
+            **model_kwargs)` function.
 
     Returns:
         `Tuple`: A tuple framework, model.
@@ -389,8 +389,8 @@ class PipelineDataFormat:
     - CSV
     - stdin/stdout (pipe)
 
-    `PipelineDataFormat` also includes some utilities to work with multi-columns like mapping from datasets
-    columns to pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
+    `PipelineDataFormat` also includes some utilities to work with multi-columns like mapping from datasets columns to
+    pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
 
     Args:
         output_path (`str`, *optional*): Where to save the outgoing data.
@@ -432,8 +432,7 @@ class PipelineDataFormat:
     @abstractmethod
     def save(self, data: Union[dict, List[dict]]):
         """
-        Save the provided data object with the representation for the current
-        [`~pipelines.PipelineDataFormat`].
+        Save the provided data object with the representation for the current [`~pipelines.PipelineDataFormat`].
 
         Args:
             data (`dict` or list of `dict`): The data to store.
@@ -467,8 +466,7 @@ class PipelineDataFormat:
         overwrite=False,
     ) -> "PipelineDataFormat":
         """
-        Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on
-        `format`.
+        Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on `format`.
 
         Args:
             format: (`str`):
@@ -527,8 +525,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
     def save(self, data: List[dict]):
         """
-        Save the provided data object with the representation for the current
-        [`~pipelines.PipelineDataFormat`].
+        Save the provided data object with the representation for the current [`~pipelines.PipelineDataFormat`].
 
         Args:
             data (`List[dict]`): The data to store.
@@ -649,20 +646,19 @@ PIPELINE_INIT_ARGS = r"""
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for
-            TensorFlow.
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             [`PreTrainedTokenizer`].
         modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
         framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework
-            must be installed.
+            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
+            installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model
-            is provided.
+            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
+            provided.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         num_workers (`int`, *optional*, defaults to 8):
@@ -670,7 +666,8 @@ PIPELINE_INIT_ARGS = r"""
             workers to be used.
         batch_size (`int`, *optional*, defaults to 1):
             When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the size of
-            the batch to use, for inference this is not always beneficial, please read [Batching with pipelines](https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching) .
+            the batch to use, for inference this is not always beneficial, please read [Batching with
+            pipelines](https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching) .
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
@@ -702,10 +699,9 @@ class Pipeline(_ScikitCompat):
 
     Pipeline supports running on CPU or GPU through the device argument (see below).
 
-    Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature-extraction'`)
-    output large tensor object as nested-lists. In order to avoid dumping such large structure as textual data we
-    provide the `binary_output` constructor argument. If set to `True`, the output will be stored in the
-    pickle format.
+    Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature-extraction'`) output large tensor object
+    as nested-lists. In order to avoid dumping such large structure as textual data we provide the `binary_output`
+    constructor argument. If set to `True`, the output will be stored in the pickle format.
     """
 
     default_input_names = None
@@ -815,7 +811,8 @@ class Pipeline(_ScikitCompat):
         Ensure PyTorch tensors are on the specified device.
 
         Args:
-            inputs (keyword arguments that should be `torch.Tensor`, the rest is ignored): The tensors to place on `self.device`.
+            inputs (keyword arguments that should be `torch.Tensor`, the rest is ignored):
+                The tensors to place on `self.device`.
             Recursive on lists **only**.
 
         Return:

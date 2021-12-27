@@ -124,8 +124,8 @@ _re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
 
 class TruncationStrategy(ExplicitEnum):
     """
-    Possible values for the `truncation` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
-    tab-completion in an IDE.
+    Possible values for the `truncation` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in
+    an IDE.
     """
 
     ONLY_FIRST = "only_first"
@@ -163,8 +163,7 @@ class TokenSpan(NamedTuple):
 class BatchEncoding(UserDict):
     """
     Holds the output of the [`~tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`] and
-    [`~tokenization_utils_base.PreTrainedTokenizerBase.batch_encode`] methods (tokens,
-    attention_masks, etc).
+    [`~tokenization_utils_base.PreTrainedTokenizerBase.batch_encode`] methods (tokens, attention_masks, etc).
 
     This class is derived from a python dictionary and can be used as a dictionary. In addition, this class exposes
     utility methods to map from word/character space to token space.
@@ -213,16 +212,16 @@ class BatchEncoding(UserDict):
     def n_sequences(self) -> Optional[int]:
         """
         `Optional[int]`: The number of sequences used to generate each sample from the batch encoded in this
-        [`BatchEncoding`]. Currently can be one of `None` (unknown), `1` (a single
-        sentence) or `2` (a pair of sentences)
+        [`BatchEncoding`]. Currently can be one of `None` (unknown), `1` (a single sentence) or `2` (a pair of
+        sentences)
         """
         return self._n_sequences
 
     @property
     def is_fast(self) -> bool:
         """
-        `bool`: Indicate whether this [`BatchEncoding`] was generated from the result of a
-        [`PreTrainedTokenizerFast`] or not.
+        `bool`: Indicate whether this [`BatchEncoding`] was generated from the result of a [`PreTrainedTokenizerFast`]
+        or not.
         """
         return self._encodings is not None
 
@@ -275,8 +274,8 @@ class BatchEncoding(UserDict):
     @property
     def encodings(self) -> Optional[List[EncodingFast]]:
         """
-        `Optional[List[tokenizers.Encoding]]`: The list all encodings from the tokenization process. Returns
-        `None` if the input was tokenized through Python (i.e., not a fast) tokenizer.
+        `Optional[List[tokenizers.Encoding]]`: The list all encodings from the tokenization process. Returns `None` if
+        the input was tokenized through Python (i.e., not a fast) tokenizer.
         """
         return self._encodings
 
@@ -308,9 +307,9 @@ class BatchEncoding(UserDict):
             batch_index (`int`, *optional*, defaults to 0): The index to access in the batch.
 
         Returns:
-            `List[Optional[int]]`: A list indicating the sequence id corresponding to each token. Special tokens
-            added by the tokenizer are mapped to `None` and other tokens are mapped to the index of their
-            corresponding sequence.
+            `List[Optional[int]]`: A list indicating the sequence id corresponding to each token. Special tokens added
+            by the tokenizer are mapped to `None` and other tokens are mapped to the index of their corresponding
+            sequence.
         """
         if not self._encodings:
             raise ValueError("sequence_ids() is not available when using Python-based tokenizers")
@@ -324,9 +323,9 @@ class BatchEncoding(UserDict):
             batch_index (`int`, *optional*, defaults to 0): The index to access in the batch.
 
         Returns:
-            `List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by
-            the tokenizer are mapped to `None` and other tokens are mapped to the index of their corresponding
-            word (several tokens will be mapped to the same word index if they are parts of that word).
+            `List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by the
+            tokenizer are mapped to `None` and other tokens are mapped to the index of their corresponding word
+            (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
             raise ValueError("words() is not available when using Python-based tokenizers")
@@ -345,9 +344,9 @@ class BatchEncoding(UserDict):
             batch_index (`int`, *optional*, defaults to 0): The index to access in the batch.
 
         Returns:
-            `List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by
-            the tokenizer are mapped to `None` and other tokens are mapped to the index of their corresponding
-            word (several tokens will be mapped to the same word index if they are parts of that word).
+            `List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by the
+            tokenizer are mapped to `None` and other tokens are mapped to the index of their corresponding word
+            (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
             raise ValueError("word_ids() is not available when using Python-based tokenizers")
@@ -355,8 +354,8 @@ class BatchEncoding(UserDict):
 
     def token_to_sequence(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
         """
-        Get the index of the sequence represented by the given token. In the general use case, this method returns
-        `0` for a single sequence or the first sequence of a pair, and `1` for the second sequence of a pair
+        Get the index of the sequence represented by the given token. In the general use case, this method returns `0`
+        for a single sequence or the first sequence of a pair, and `1` for the second sequence of a pair
 
         Can be called as:
 
@@ -444,8 +443,8 @@ class BatchEncoding(UserDict):
         Can be called as:
 
         - `self.word_to_tokens(word_index, sequence_index: int = 0)` if batch size is 1
-        - `self.word_to_tokens(batch_index, word_index, sequence_index: int = 0)` if batch size is greater or equal
-          to 1
+        - `self.word_to_tokens(batch_index, word_index, sequence_index: int = 0)` if batch size is greater or equal to
+          1
 
         This method is particularly suited when the input sequences are provided as pre-tokenized sequences (i.e. words
         are defined by the user). In this case it allows to easily associate encoded tokens with provided tokenized
@@ -463,8 +462,8 @@ class BatchEncoding(UserDict):
                 or 1) the provided word index belongs to.
 
         Returns:
-            Optional [`~tokenization_utils_base.TokenSpan`] Span of tokens in the encoded sequence.
-            Returns `None` if no tokens correspond to the word.
+            Optional [`~tokenization_utils_base.TokenSpan`] Span of tokens in the encoded sequence. Returns `None` if
+            no tokens correspond to the word.
         """
 
         if not self._encodings:
@@ -586,8 +585,8 @@ class BatchEncoding(UserDict):
                 or 1) the provided word index belongs to.
 
         Returns:
-            `CharSpan` or `List[CharSpan]`: Span(s) of the associated character or characters in the string.
-            CharSpan are NamedTuple with:
+            `CharSpan` or `List[CharSpan]`: Span(s) of the associated character or characters in the string. CharSpan
+            are NamedTuple with:
 
                 - start: index of the first character associated to the token in the original string
                 - end: index of the character following the last character associated to the token in the original
@@ -749,10 +748,9 @@ class BatchEncoding(UserDict):
 
 class SpecialTokensMixin:
     """
-    A mixin derived by [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`] to
-    handle specific behaviors related to special tokens. In particular, this class hold the attributes which can be
-    used to directly access these special tokens in a model-independent manner and allow to set and update the special
-    tokens.
+    A mixin derived by [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`] to handle specific behaviors related to
+    special tokens. In particular, this class hold the attributes which can be used to directly access these special
+    tokens in a model-independent manner and allow to set and update the special tokens.
 
     Args:
         bos_token (`str` or `tokenizers.AddedToken`, *optional*):
@@ -834,9 +832,8 @@ class SpecialTokensMixin:
         special tokens are NOT in the vocabulary, they are added to it (indexed starting from the last index of the
         current vocabulary).
 
-        Note,None
-        When adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix of
-        the model so that its embedding matrix matches the tokenizer.
+        Note,None When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
+        matrix of the model so that its embedding matrix matches the tokenizer.
 
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
@@ -847,14 +844,13 @@ class SpecialTokensMixin:
           makes it easy to develop model-agnostic training and fine-tuning scripts.
 
         When possible, special tokens are already registered for provided pretrained models (for instance
-        [`BertTokenizer`] `cls_token` is already registered to be :obj*'[CLS]'* and XLM's one
-        is also registered to be `'</s>'`).
+        [`BertTokenizer`] `cls_token` is already registered to be :obj*'[CLS]'* and XLM's one is also registered to be
+        `'</s>'`).
 
         Args:
             special_tokens_dict (dictionary *str* to *str* or `tokenizers.AddedToken`):
-                Keys should be in the list of predefined special attributes: [`bos_token`, `eos_token`,
-                `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
-                `additional_special_tokens`].
+                Keys should be in the list of predefined special attributes: [`bos_token`, `eos_token`, `unk_token`,
+                `sep_token`, `pad_token`, `cls_token`, `mask_token`, `additional_special_tokens`].
 
                 Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer
                 assign the index of the `unk_token` to them).
@@ -909,18 +905,17 @@ class SpecialTokensMixin:
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary.
 
-        Note,None
-        When adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix of
-        the model so that its embedding matrix matches the tokenizer.
+        Note,None When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
+        matrix of the model so that its embedding matrix matches the tokenizer.
 
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
         Args:
             new_tokens (`str`, `tokenizers.AddedToken` or a list of *str* or `tokenizers.AddedToken`):
-                Tokens are only added if they are not already in the vocabulary. `tokenizers.AddedToken` wraps a
-                string token to let you personalize its behavior: whether this token should only match against a single
-                word, whether this token should strip all potential whitespaces on the left side, whether this token
-                should strip all potential whitespaces on the right side, etc.
+                Tokens are only added if they are not already in the vocabulary. `tokenizers.AddedToken` wraps a string
+                token to let you personalize its behavior: whether this token should only match against a single word,
+                whether this token should strip all potential whitespaces on the left side, whether this token should
+                strip all potential whitespaces on the right side, etc.
             special_tokens (`bool`, *optional*, defaults to `False`):
                 Can be used to specify if the token is a special token. This mostly change the normalization behavior
                 (special tokens like CLS or [MASK] are usually not lower-cased for instance).
@@ -986,8 +981,8 @@ class SpecialTokensMixin:
     @property
     def sep_token(self) -> str:
         """
-        `str`: Separation token, to separate context and query in an input sequence. Log an error if used while
-        not having been set.
+        `str`: Separation token, to separate context and query in an input sequence. Log an error if used while not
+        having been set.
         """
         if self._sep_token is None and self.verbose:
             logger.error("Using sep_token, but it is not set yet.")
@@ -1007,8 +1002,8 @@ class SpecialTokensMixin:
     @property
     def cls_token(self) -> str:
         """
-        `str`: Classification token, to extract a summary of an input sequence leveraging self-attention along the
-        full depth of the model. Log an error if used while not having been set.
+        `str`: Classification token, to extract a summary of an input sequence leveraging self-attention along the full
+        depth of the model. Log an error if used while not having been set.
         """
         if self._cls_token is None and self.verbose:
             logger.error("Using cls_token, but it is not set yet.")
@@ -1018,8 +1013,8 @@ class SpecialTokensMixin:
     @property
     def mask_token(self) -> str:
         """
-        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
-        not having been set.
+        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
+        having been set.
         """
         if self._mask_token is None and self.verbose:
             logger.error("Using mask_token, but it is not set yet.")
@@ -1029,8 +1024,8 @@ class SpecialTokensMixin:
     @property
     def additional_special_tokens(self) -> List[str]:
         """
-        `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having
-        been set.
+        `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having been
+        set.
         """
         if self._additional_special_tokens is None and self.verbose:
             logger.error("Using additional_special_tokens, but it is not set yet.")
@@ -1072,8 +1067,8 @@ class SpecialTokensMixin:
     @property
     def bos_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the beginning of sentence token in the vocabulary. Returns `None` if the token
-        has not been set.
+        `Optional[int]`: Id of the beginning of sentence token in the vocabulary. Returns `None` if the token has not
+        been set.
         """
         if self._bos_token is None:
             return None
@@ -1082,8 +1077,8 @@ class SpecialTokensMixin:
     @property
     def eos_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the end of sentence token in the vocabulary. Returns `None` if the token has
-        not been set.
+        `Optional[int]`: Id of the end of sentence token in the vocabulary. Returns `None` if the token has not been
+        set.
         """
         if self._eos_token is None:
             return None
@@ -1092,8 +1087,7 @@ class SpecialTokensMixin:
     @property
     def unk_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the unknown token in the vocabulary. Returns `None` if the token has not been
-        set.
+        `Optional[int]`: Id of the unknown token in the vocabulary. Returns `None` if the token has not been set.
         """
         if self._unk_token is None:
             return None
@@ -1112,8 +1106,7 @@ class SpecialTokensMixin:
     @property
     def pad_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been
-        set.
+        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
         """
         if self._pad_token is None:
             return None
@@ -1129,8 +1122,8 @@ class SpecialTokensMixin:
     @property
     def cls_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the classification token in the vocabulary, to extract a summary of an input
-        sequence leveraging self-attention along the full depth of the model.
+        `Optional[int]`: Id of the classification token in the vocabulary, to extract a summary of an input sequence
+        leveraging self-attention along the full depth of the model.
 
         Returns `None` if the token has not been set.
         """
@@ -1151,8 +1144,8 @@ class SpecialTokensMixin:
     @property
     def additional_special_tokens_ids(self) -> List[int]:
         """
-        `List[int]`: Ids of all the additional special tokens in the vocabulary. Log an error if used while not
-        having been set.
+        `List[int]`: Ids of all the additional special tokens in the vocabulary. Log an error if used while not having
+        been set.
         """
         return self.convert_tokens_to_ids(self.additional_special_tokens)
 
@@ -1210,12 +1203,11 @@ class SpecialTokensMixin:
     @property
     def special_tokens_map_extended(self) -> Dict[str, Union[str, AddedToken, List[Union[str, AddedToken]]]]:
         """
-        `Dict[str, Union[str, tokenizers.AddedToken, List[Union[str, tokenizers.AddedToken]]]]`: A dictionary
-        mapping special token class attributes (`cls_token`, `unk_token`, etc.) to their values
-        (`'<unk>'`, `'<cls>'`, etc.).
+        `Dict[str, Union[str, tokenizers.AddedToken, List[Union[str, tokenizers.AddedToken]]]]`: A dictionary mapping
+        special token class attributes (`cls_token`, `unk_token`, etc.) to their values (`'<unk>'`, `'<cls>'`, etc.).
 
-        Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely
-        how special tokens are tokenized.
+        Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
+        special tokens are tokenized.
         """
         set_attr = {}
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
@@ -1237,11 +1229,11 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens_extended(self) -> List[Union[str, AddedToken]]:
         """
-        `List[Union[str, tokenizers.AddedToken]]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.)
-        mapped to class attributes.
+        `List[Union[str, tokenizers.AddedToken]]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.) mapped to class
+        attributes.
 
-        Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely
-        how special tokens are tokenized.
+        Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
+        special tokens are tokenized.
         """
         all_toks = []
         set_attr = self.special_tokens_map_extended
@@ -1253,8 +1245,7 @@ class SpecialTokensMixin:
     @property
     def all_special_ids(self) -> List[int]:
         """
-        `List[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class
-        attributes.
+        `List[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
         """
         all_toks = self.all_special_tokens
         all_ids = self.convert_tokens_to_ids(all_toks)
@@ -1267,33 +1258,33 @@ ENCODE_KWARGS_DOCSTRING = r"""
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 Activates and controls truncation. Accepts the following values:
 
-                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument
-                  `max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
-                  if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with
-                  sequence lengths greater than the model maximum admissible input size).
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
             max_length (`int`, *optional*):
                 Controls the maximum length to use by one of the truncation/padding parameters.
 
-                If left unset or set to `None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
             stride (`int`, *optional*, defaults to 0):
                 If set to a number along with `max_length`, the overflowing tokens returned when
                 `return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
@@ -1327,16 +1318,15 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 [What are attention masks?](../glossary#attention-mask)
             return_overflowing_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to return overflowing token sequences. If a pair of sequences of input ids (or a batch
-                of pairs) is provided with `truncation_strategy = longest_first` or `True`, an error is
-                raised instead of returning overflowing tokens.
+                of pairs) is provided with `truncation_strategy = longest_first` or `True`, an error is raised instead
+                of returning overflowing tokens.
             return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
                 Whether or not to return special tokens mask information.
             return_offsets_mapping (`bool`, *optional*, defaults to `False`):
                 Whether or not to return `(char_start, char_end)` for each token.
 
-                This is only available on fast tokenizers inheriting from
-                [`PreTrainedTokenizerFast`], if using Python's tokenizer, this method will raise
-                `NotImplementedError`.
+                This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
+                Python's tokenizer, this method will raise `NotImplementedError`.
             return_length  (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the lengths of the encoded inputs.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -1350,8 +1340,8 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
               [What are input IDs?](../glossary#input-ids)
 
-            - **token_type_ids** -- List of token type ids to be fed to a model (when `return_token_type_ids=True`
-              or if *"token_type_ids"* is in `self.model_input_names`).
+            - **token_type_ids** -- List of token type ids to be fed to a model (when `return_token_type_ids=True` or
+              if *"token_type_ids"* is in `self.model_input_names`).
 
               [What are token type IDs?](../glossary#token-type-ids)
 
@@ -1372,31 +1362,30 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
 
-        - **vocab_files_names** (`Dict[str, str]`) -- A dictionary with, as keys, the `__init__` keyword name of
-          each vocabulary file required by the model, and as associated values, the filename for saving the associated
-          file (string).
+        - **vocab_files_names** (`Dict[str, str]`) -- A dictionary with, as keys, the `__init__` keyword name of each
+          vocabulary file required by the model, and as associated values, the filename for saving the associated file
+          (string).
         - **pretrained_vocab_files_map** (`Dict[str, Dict[str, str]]`) -- A dictionary of dictionaries, with the
           high-level keys being the `__init__` keyword name of each vocabulary file required by the model, the
-          low-level being the `short-cut-names` of the pretrained models with, as associated values, the
-          `url` to the associated pretrained vocabulary file.
-        - **max_model_input_sizes** (`Dict[str, Optional[int]]`) -- A dictionary with, as keys, the
-          `short-cut-names` of the pretrained models, and as associated values, the maximum length of the sequence
-          inputs of this model, or `None` if the model has no maximum input size.
+          low-level being the `short-cut-names` of the pretrained models with, as associated values, the `url` to the
+          associated pretrained vocabulary file.
+        - **max_model_input_sizes** (`Dict[str, Optional[int]]`) -- A dictionary with, as keys, the `short-cut-names`
+          of the pretrained models, and as associated values, the maximum length of the sequence inputs of this model,
+          or `None` if the model has no maximum input size.
         - **pretrained_init_configuration** (`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
-          `short-cut-names` of the pretrained models, and as associated values, a dictionary of specific arguments
-          to pass to the `__init__` method of the tokenizer class for this pretrained model when loading the
-          tokenizer with the [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`]
-          method.
+          `short-cut-names` of the pretrained models, and as associated values, a dictionary of specific arguments to
+          pass to the `__init__` method of the tokenizer class for this pretrained model when loading the tokenizer
+          with the [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`] method.
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
-        - **padding_side** (`str`) -- The default value for the side on which the model should have padding
-          applied. Should be `'right'` or `'left'`.
+        - **padding_side** (`str`) -- The default value for the side on which the model should have padding applied.
+          Should be `'right'` or `'left'`.
 
     Args:
         model_max_length (`int`, *optional*):
             The maximum length (in number of tokens) for the inputs to the transformer model. When the tokenizer is
-            loaded with [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], this
-            will be set to the value stored for the associated model in `max_model_input_sizes` (see above). If no
-            value is provided, will default to VERY_LARGE_INTEGER (`int(1e30)`).
+            loaded with [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], this will be set to the
+            value stored for the associated model in `max_model_input_sizes` (see above). If no value is provided, will
+            default to VERY_LARGE_INTEGER (`int(1e30)`).
         padding_side: (`str`, *optional*):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
@@ -1417,8 +1406,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
             associated to `self.sep_token` and `self.sep_token_id`.
         pad_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
-            attention mechanisms or loss computation. Will be associated to `self.pad_token` and
-            `self.pad_token_id`.
+            attention mechanisms or loss computation. Will be associated to `self.pad_token` and `self.pad_token_id`.
         cls_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token representing the class of the input (used by BERT for instance). Will be associated to
             `self.cls_token` and `self.cls_token_id`.
@@ -1528,8 +1516,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Returns the vocabulary as a dictionary of token to index.
 
-        `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when
-        `token` is in the vocab.
+        `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the
+        vocab.
 
         Returns:
             `Dict[str, int]`: The vocabulary.
@@ -1539,8 +1527,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
         r"""
-        Instantiate a [`~tokenization_utils_base.PreTrainedTokenizerBase`] (or a derived class) from
-        a predefined tokenizer.
+        Instantiate a [`~tokenization_utils_base.PreTrainedTokenizerBase`] (or a derived class) from a predefined
+        tokenizer.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -1550,8 +1538,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                   Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
                   user or organization name, like `dbmdz/bert-base-german-cased`.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
-                  using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`]
-                  method, e.g., `./my_model_directory/`.
+                  using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] method, e.g.,
+                  `./my_model_directory/`.
                 - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   `./my_model_directory/vocab.txt`.
@@ -1565,10 +1553,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Whether or not to delete incompletely received files. Attempt to resume the download if such a file
                 exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
             revision(`str`, *optional*, defaults to `"main"`):
@@ -1581,9 +1570,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__` method.
             kwargs (additional keyword arguments, *optional*):
-                Will be passed to the Tokenizer `__init__` method. Can be used to set special tokens like
-                `bos_token`, `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`,
-                `mask_token`, `additional_special_tokens`. See parameters in the `__init__` for more details.
+                Will be passed to the Tokenizer `__init__` method. Can be used to set special tokens like `bos_token`,
+                `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
+                `additional_special_tokens`. See parameters in the `__init__` for more details.
 
         <Tip>
 
@@ -1961,9 +1950,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         This method make sure the full tokenizer can then be re-loaded using the
         [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`] class method..
 
-        Warning,None
-        This won't save modifications you may have applied to the tokenizer after the instantiation (for instance,
-        modifying `tokenizer.do_lower_case` after creation).
+        Warning,None This won't save modifications you may have applied to the tokenizer after the instantiation (for
+        instance, modifying `tokenizer.do_lower_case` after creation).
 
         Args:
             save_directory (`str` or `os.PathLike`): The path to a directory where the tokenizer will be saved.
@@ -1972,12 +1960,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 format as well as in legacy format if it exists, i.e. with tokenizer specific vocabulary and a separate
                 added_tokens files.
 
-                If `False`, will only save the tokenizer in the unified JSON format. This format is incompatible
-                with "slow" tokenizers (not powered by the *tokenizers* library), so the tokenizer will not be able to
-                be loaded in the corresponding "slow" tokenizer.
+                If `False`, will only save the tokenizer in the unified JSON format. This format is incompatible with
+                "slow" tokenizers (not powered by the *tokenizers* library), so the tokenizer will not be able to be
+                loaded in the corresponding "slow" tokenizer.
 
-                If `True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a
-                value error is raised.
+                If `True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a value
+                error is raised.
             filename_prefix: (`str`, *optional*):
                 A prefix to add to the names of the files saved by the tokenizer.
             push_to_hub (`bool`, *optional*, defaults to `False`):
@@ -1985,10 +1973,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                 <Tip warning={true}>
 
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with
-                `save_directory`, which requires `save_directory` to be a local clone of the repo you are
-                pushing to if it's an existing folder. Pass along `temp_dir=True` to use a temporary directory
-                instead.
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
+                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
+                folder. Pass along `temp_dir=True` to use a temporary directory instead.
 
                 </Tip>
 
@@ -2147,8 +2134,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """,
         """
         Returns:
-            `List[int]`, `torch.Tensor`, `tf.Tensor` or `np.ndarray`: The tokenized ids of the
-            text.
+            `List[int]`, `torch.Tensor`, `tf.Tensor` or `np.ndarray`: The tokenized ids of the text.
         """,
     )
     def encode(
@@ -2175,8 +2161,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 method).
             text_pair (`str`, `List[str]` or `List[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the `tokenize` method) or a list of integers (tokenized string ids using the
-                `convert_tokens_to_ids` method).
+                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
+                method).
         """
         encoded_inputs = self.encode_plus(
             text,
@@ -2494,8 +2480,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 method).
             text_pair (`str`, `List[str]` or `List[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the `tokenize` method) or a list of integers (tokenized string ids using the
-                `convert_tokens_to_ids` method).
+                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
+                method).
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
@@ -2681,29 +2667,30 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         <Tip>
 
         If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
-        result will use the same type unless you provide a different tensor type with `return_tensors`. In the
-        case of PyTorch tensors, you will lose the specific device of your tensors however.
+        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        PyTorch tensors, you will lose the specific device of your tensors however.
 
         </Tip>
 
         Args:
             encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of tokenized inputs (list of [`BatchEncoding`], *Dict[str,
-                List[List[int]]]* or *List[Dict[str, List[int]]]*) so you can use this method during preprocessing as
-                well as in a PyTorch Dataloader collate function.
+                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
+                tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
+                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                collate function.
 
-                Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
-                see the note above for the return type.
+                Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
+                the note above for the return type.
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             pad_to_multiple_of (`int`, *optional*):
@@ -2819,7 +2806,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create the token type IDs corresponding to the sequences passed. [What are token type IDs?](../glossary#token-type-ids)
+        Create the token type IDs corresponding to the sequences passed. [What are token type
+        IDs?](../glossary#token-type-ids)
 
         Should be overridden in a subclass if the model has a special way of building those.
 
@@ -2885,8 +2873,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Args:
             ids (`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize`
-                and `convert_tokens_to_ids` methods.
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_tokens_to_ids` methods.
             pair_ids (`List[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_tokens_to_ids` methods.
@@ -3003,8 +2991,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Args:
             ids (`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize`
-                and `convert_tokens_to_ids` methods.
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_tokens_to_ids` methods.
             pair_ids (`List[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_tokens_to_ids` methods.
@@ -3013,26 +3001,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 The strategy to follow for truncation. Can be:
 
-                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will
-                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
-                  sequences (or a batch of pairs) is provided.
-                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will truncate
+                  token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a
+                  batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
-                  greater than the model maximum admissible input size).
+                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths greater
+                  than the model maximum admissible input size).
             stride (`int`, *optional*, defaults to 0):
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the
-            list of overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if
-            a pair of sequences (or a batch of pairs) is provided.
+            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
+            overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if a pair
+            of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
             return ids, pair_ids, []
@@ -3098,7 +3086,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+            encoded_inputs:
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -3113,7 +3102,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         # Load from model defaults
         if return_attention_mask is None:
@@ -3358,21 +3348,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 List of summaries or target language texts.
             max_length (`int`, *optional*):
                 Controls the maximum length for encoder inputs (documents to summarize or source language texts) If
-                left unset or set to `None`, this will use the predefined model maximum length if a maximum length
-                is required by one of the truncation/padding parameters. If the model has no specific maximum input
-                length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                left unset or set to `None`, this will use the predefined model maximum length if a maximum length is
+                required by one of the truncation/padding parameters. If the model has no specific maximum input length
+                (like XLNet) truncation/padding to a maximum length will be deactivated.
             max_target_length (`int`, *optional*):
                 Controls the maximum length of decoder inputs (target language texts or summaries) If left unset or set
                 to `None`, this will use the max_length value.
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -3382,18 +3372,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `True`):
                 Activates and controls truncation. Accepts the following values:
 
-                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument
-                  `max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
-                  if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with
-                  sequence lengths greater than the model maximum admissible input size).
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
             **kwargs:
                 Additional keyword arguments passed along to `self.__call__`.
 
@@ -3474,8 +3464,8 @@ def get_fast_tokenizer_file(
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
         use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-            generated when running `transformers-cli login` (stored in `~/.huggingface`).
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
         local_files_only (`bool`, *optional*, defaults to `False`):
             Whether or not to only rely on local files and not to attempt to download any files.
 
