@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DeBERTa-v2 model configuration """
+""" DeBERTa-v2 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,13 +30,13 @@ DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class DebertaV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DebertaV2Model`]. It is used
-    to instantiate a DeBERTa-v2 model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the DeBERTa
+    This is the configuration class to store the configuration of a [`DebertaV2Model`]. It is used to instantiate a
+    DeBERTa-v2 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the DeBERTa
     [microsoft/deberta-v2-xlarge](https://huggingface.co/microsoft/deberta-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 128100):
@@ -51,9 +51,9 @@ class DebertaV2Config(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 6144):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"`, `"gelu"`, `"tanh"`, `"gelu_fast"`,
-            `"mish"`, `"linear"`, `"sigmoid"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"`, `"gelu"`, `"tanh"`, `"gelu_fast"`, `"mish"`, `"linear"`, `"sigmoid"` and `"gelu_new"`
+            are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -62,8 +62,7 @@ class DebertaV2Config(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 0):
-            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`] or
-            [`TFDebertaModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-7):
@@ -71,8 +70,8 @@ class DebertaV2Config(PretrainedConfig):
         relative_attention (`bool`, *optional*, defaults to `True`):
             Whether use relative position encoding.
         max_relative_positions (`int`, *optional*, defaults to -1):
-            The range of relative positions `[-max_position_embeddings, max_position_embeddings]`. Use the same
-            value as `max_position_embeddings`.
+            The range of relative positions `[-max_position_embeddings, max_position_embeddings]`. Use the same value
+            as `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
         position_biased_input (`bool`, *optional*, defaults to `False`):

@@ -454,8 +454,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         <Tip>
 
-        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
-        put this inside your training loop.
+        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not put
+        this inside your training loop.
 
         </Tip>
 

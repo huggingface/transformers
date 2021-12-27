@@ -47,12 +47,12 @@ _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 FLAX_DISTILBERT_START_DOCSTRING = r"""
 
-    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. Use it as a regular Flax linen Module
-    and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -64,8 +64,7 @@ FLAX_DISTILBERT_START_DOCSTRING = r"""
     Parameters:
         config ([`DistilBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
@@ -73,9 +72,8 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`numpy.ndarray` of shape `({0})`, *optional*):
@@ -598,7 +596,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""DistilBert Model with a `language modeling` head on top. """, FLAX_DISTILBERT_START_DOCSTRING)
+@add_start_docstrings("""DistilBert Model with a `language modeling` head on top.""", FLAX_DISTILBERT_START_DOCSTRING)
 class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMaskedLMModule
 

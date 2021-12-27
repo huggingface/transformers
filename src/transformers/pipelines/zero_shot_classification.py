@@ -143,8 +143,8 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the [`ZeroShotClassificationPipeline`]
-        documentation for more information.
+        Classify the sequence(s) given as inputs. See the [`ZeroShotClassificationPipeline`] documentation for more
+        information.
 
         Args:
             sequences (`str` or `List[str]`):
@@ -155,13 +155,13 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
             hypothesis_template (`str`, *optional*, defaults to `"This example is {}."`):
                 The template used to turn each label into an NLI-style hypothesis. This template must include a {} or
                 similar syntax for the candidate label to be inserted into the template. For example, the default
-                template is `"This example is {}."` With the candidate label `"sports"`, this would be fed
-                into the model like `"<cls> sequence to classify <sep> This example is sports . <sep>"`. The
-                default template works well in many cases, but it may be worthwhile to experiment with different
-                templates depending on the task setting.
+                template is `"This example is {}."` With the candidate label `"sports"`, this would be fed into the
+                model like `"<cls> sequence to classify <sep> This example is sports . <sep>"`. The default template
+                works well in many cases, but it may be worthwhile to experiment with different templates depending on
+                the task setting.
             multi_label (`bool`, *optional*, defaults to `False`):
-                Whether or not multiple candidate labels can be true. If `False`, the scores are normalized such
-                that the sum of the label likelihoods for each sequence is 1. If `True`, the labels are considered
+                Whether or not multiple candidate labels can be true. If `False`, the scores are normalized such that
+                the sum of the label likelihoods for each sequence is 1. If `True`, the labels are considered
                 independent and probabilities are normalized for each candidate by doing a softmax of the entailment
                 score vs. the contradiction score.
 

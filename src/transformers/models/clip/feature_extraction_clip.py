@@ -32,8 +32,8 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a CLIP feature extractor.
 
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
+    should refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -42,14 +42,13 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`.
-            Only has an effect if `do_resize` is set to `True`.
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+            if `do_resize` is set to `True`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge,
-            the image is padded with 0's and then center cropped.
+            Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
+            image is padded with 0's and then center cropped.
         crop_size (`int`, *optional*, defaults to 224):
-            Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to
-            `True`.
+            Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with `image_mean` and `image_std`.
         image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
@@ -159,8 +158,8 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def center_crop(self, image, size):
         """
-        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to
-        the size is given, it will be padded (so the returned result has the size asked).
+        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to the
+        size is given, it will be padded (so the returned result has the size asked).
 
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):

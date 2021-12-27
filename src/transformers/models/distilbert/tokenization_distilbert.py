@@ -57,11 +57,10 @@ class DistilBertTokenizer(BertTokenizer):
     r"""
     Construct a DistilBERT tokenizer.
 
-    [`DistilBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`DistilBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting
+    and wordpiece.
 
-    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -53,18 +53,18 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             max_length (`int`, *optional*):
                 Controls the maximum length to use by one of the truncation/padding parameters.
 
-                If left unset or set to `None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
@@ -84,8 +84,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     """
     Constructs a Wav2Vec2CTC tokenizer.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods.
-    Users should refer to the superclass for more information regarding such methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
+    the superclass for more information regarding such methods.
 
     Args:
         vocab_file (`str`):
@@ -163,8 +163,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has
-        not been set.
+        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
+        set.
         """
         if self._word_delimiter_token is None:
             return None
@@ -342,8 +342,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
     """
     Constructs a Wav2Vec2 tokenizer.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods.
-    Users should refer to the superclass for more information regarding such methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
+    the superclass for more information regarding such methods.
 
     Args:
         vocab_file (`str`):
@@ -363,17 +363,20 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             Whether or not to lowercase the output when decoding.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-            improve the performance for some models, *e.g.*, [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
+            improve the performance for some models, *e.g.*,
+            [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~Wav2Vec2Tokenizer.__call__`] should return `attention_mask`.
 
             <Tip>
 
-            Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
-            `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
-            `attention_mask` should be passed.
+            Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
+            [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+            `attention_mask`. For such models, `input_values` should simply be padded with 0 and no `attention_mask`
+            should be passed.
 
-            For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
+            For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
+            [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
             passed for batched inference.
 
             </Tip>
@@ -447,8 +450,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token_id(self) -> Optional[int]:
         """
-        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has
-        not been set.
+        `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
+        set.
         """
         if self._word_delimiter_token is None:
             return None

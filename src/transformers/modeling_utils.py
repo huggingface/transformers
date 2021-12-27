@@ -176,8 +176,8 @@ class ModuleUtilsMixin:
         """
         Add a memory hook before and after each sub-module forward pass to record increase in memory consumption.
 
-        Increase in memory consumption is stored in a `mem_rss_diff` attribute for each module and can be reset to
-        zero with `model.reset_memory_hooks_state()`.
+        Increase in memory consumption is stored in a `mem_rss_diff` attribute for each module and can be reset to zero
+        with `model.reset_memory_hooks_state()`.
         """
         for module in self.modules():
             module.register_forward_pre_hook(self._hook_rss_memory_pre_forward)
@@ -186,8 +186,7 @@ class ModuleUtilsMixin:
 
     def reset_memory_hooks_state(self):
         """
-        Reset the `mem_rss_diff` attribute of each module (see
-        [`~modeling_utils.ModuleUtilsMixin.add_memory_hooks`]).
+        Reset the `mem_rss_diff` attribute of each module (see [`~modeling_utils.ModuleUtilsMixin.add_memory_hooks`]).
         """
         for module in self.modules():
             module.mem_rss_diff = 0
@@ -316,8 +315,8 @@ class ModuleUtilsMixin:
                 Whether or not the attentions scores are computed by chunks or not.
 
         Returns:
-            `torch.Tensor` with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or
-            list with `[None]` for each layer.
+            `torch.Tensor` with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or list with
+            `[None]` for each layer.
         """
         if head_mask is not None:
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
@@ -389,7 +388,8 @@ class ModuleUtilsMixin:
         """
         Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
         batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
-        tokens (valid if `12 * d_model << sequence_length`) as laid out in [this paper](https://arxiv.org/pdf/2001.08361.pdf) section 2.1. Should be overridden for transformers with parameter
+        tokens (valid if `12 * d_model << sequence_length`) as laid out in [this
+        paper](https://arxiv.org/pdf/2001.08361.pdf) section 2.1. Should be overridden for transformers with parameter
         re-use e.g. Albert or Universal Transformers, or if doing long-range modeling with very high sequence lengths.
 
         Args:
@@ -413,30 +413,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     r"""
     Base class for all models.
 
-    [`PreTrainedModel`] takes care of storing the configuration of the models and handles methods
-    for loading, downloading and saving models as well as a few methods common to all models to:
+    [`PreTrainedModel`] takes care of storing the configuration of the models and handles methods for loading,
+    downloading and saving models as well as a few methods common to all models to:
 
         - resize the input embeddings,
         - prune heads in the self-attention heads.
 
     Class attributes (overridden by derived classes):
 
-        - **config_class** ([`PretrainedConfig`]) -- A subclass of
-          [`PretrainedConfig`] to use as configuration class for this model architecture.
-        - **load_tf_weights** (`Callable`) -- A python *method* for loading a TensorFlow checkpoint in a PyTorch
-          model, taking as arguments:
+        - **config_class** ([`PretrainedConfig`]) -- A subclass of [`PretrainedConfig`] to use as configuration class
+          for this model architecture.
+        - **load_tf_weights** (`Callable`) -- A python *method* for loading a TensorFlow checkpoint in a PyTorch model,
+          taking as arguments:
 
-            - **model** ([`PreTrainedModel`]) -- An instance of the model on which to load the
-              TensorFlow checkpoint.
-            - **config** ([`PreTrainedConfig`]) -- An instance of the configuration associated to
-              the model.
+            - **model** ([`PreTrainedModel`]) -- An instance of the model on which to load the TensorFlow checkpoint.
+            - **config** ([`PreTrainedConfig`]) -- An instance of the configuration associated to the model.
             - **path** (`str`) -- A path to the TensorFlow checkpoint.
 
-        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in
-          derived classes of the same architecture adding modules on top of the base model.
+        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in derived
+          classes of the same architecture adding modules on top of the base model.
         - **is_parallelizable** (`bool`) -- A flag indicating whether this model supports model parallelization.
-        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for
-          NLP models, `pixel_values` for vision models and `input_values` for speech models).
+        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
+          models, `pixel_values` for vision models and `input_values` for speech models).
     """
     config_class = None
     base_model_prefix = ""
@@ -539,8 +537,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 a floating dtype to set to.
 
         Returns:
-            `torch.dtype`: the original `dtype` that can be used to restore `torch.set_default_dtype(dtype)`
-            if it was modified. If it wasn't, returns `None`.
+            `torch.dtype`: the original `dtype` that can be used to restore `torch.set_default_dtype(dtype)` if it was
+            modified. If it wasn't, returns `None`.
 
         Note `set_default_dtype` currently only works with floating-point types and asserts if for example,
         `torch.int64` is passed. So if a non-float `dtype` is passed this functions will throw an exception.
@@ -607,8 +605,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Tie the weights between the input embeddings and the output embeddings.
 
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning
-        the weights instead.
+        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
+        weights instead.
         """
         output_embeddings = self.get_output_embeddings()
         if output_embeddings is not None and self.config.tie_word_embeddings:
@@ -725,9 +723,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Arguments:
             new_num_tokens (`int`, *optional*):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
-                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`,
-                just returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing
-                anything.
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
+                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
 
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
@@ -836,12 +833,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
-                ``torch.nn.Linear``` module of the model without doing anything. transposed (`bool`, *optional*, defaults to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is `lm_head_dim,
-                vocab_size` else `vocab_size, lm_head_dim`.
+                ``torch.nn.Linear``` module of the model without doing anything. transposed (`bool`, *optional*,
+                defaults to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is
+                `lm_head_dim, vocab_size` else `vocab_size, lm_head_dim`.
 
         Return:
-            `torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if
-            `new_num_tokens` is `None`
+            `torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if `new_num_tokens` is
+            `None`
         """
         if new_num_tokens is None:
             return old_lm_head
@@ -944,9 +942,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         Arguments:
             heads_to_prune (`Dict[int, List[int]]`):
-                Dictionary with keys being selected layer indices (`int`) and associated values being the list of
-                heads to prune in said layer (list of `int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads
-                0 and 2 on layer 1 and heads 2 and 3 on layer 2.
+                Dictionary with keys being selected layer indices (`int`) and associated values being the list of heads
+                to prune in said layer (list of `int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads 0 and 2 on
+                layer 1 and heads 2 and 3 on layer 2.
         """
         # save new sets of pruned heads as union of previously stored pruned heads and newly pruned heads
         for layer, heads in heads_to_prune.items():
@@ -1004,12 +1002,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Directory to which to save. Will be created if it doesn't exist.
             save_config (`bool`, *optional*, defaults to `True`):
                 Whether or not to save the config of the model. Useful when in distributed training like TPUs and need
-                to call this function on all processes. In this case, set `save_config=True` only on the main
-                process to avoid race conditions.
+                to call this function on all processes. In this case, set `save_config=True` only on the main process
+                to avoid race conditions.
             state_dict (nested dictionary of `torch.Tensor`):
-                The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to
-                only save parts of the model or if special precautions need to be taken when recovering the state
-                dictionary of a model (like when using model parallelism).
+                The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to only
+                save parts of the model or if special precautions need to be taken when recovering the state dictionary
+                of a model (like when using model parallelism).
             save_function (`Callable`):
                 The function to use to save the state dictionary. Useful on distributed training like TPUs when one
                 need to replace `torch.save` by another method.
@@ -1018,16 +1016,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 <Tip warning={true}>
 
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with
-                `save_directory`, which requires `save_directory` to be a local clone of the repo you are
-                pushing to if it's an existing folder. Pass along `temp_dir=True` to use a temporary directory
-                instead.
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
+                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
+                folder. Pass along `temp_dir=True` to use a temporary directory instead.
 
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the
-                [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -1079,8 +1075,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
-        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated). To
-        train the model, you should first set it back in training mode with `model.train()`.
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated). To train
+        the model, you should first set it back in training mode with `model.train()`.
 
         The warning *Weights from XXX not initialized from pretrained model* means that the weights of XXX do not come
         pretrained with the rest of the model. It is up to you to train those weights with a downstream fine-tuning
@@ -1094,17 +1090,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
-                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided
-                      as `config` argument. This loading path is slower than converting the TensorFlow checkpoint in
-                      a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
+                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
+                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
                     - A path or url to a model folder containing a *flax checkpoint file* in *.msgpack* format (e.g,
-                      `./flax_model/` containing `flax_model.msgpack`). In this case, `from_flax` should be set
-                      to `True`.
+                      `./flax_model/` containing `flax_model.msgpack`). In this case, `from_flax` should be set to
+                      `True`.
                     - `None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments `config` and `state_dict`).
             model_args (sequence of positional arguments, *optional*):
@@ -1120,16 +1116,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     - The model is a model provided by the library (loaded with the *model id* string of a pretrained
                       model).
-                    - The model was saved using [`~PreTrainedModel.save_pretrained`] and is reloaded
-                      by supplying the save directory.
+                    - The model was saved using [`~PreTrainedModel.save_pretrained`] and is reloaded by supplying the
+                      save directory.
                     - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
                       configuration JSON file named *config.json* is found in the directory.
             state_dict (`Dict[str, torch.Tensor]`, *optional*):
                 A state dictionary to use instead of a state dictionary loaded from saved weights file.
 
                 This option can be used if you want to create a model from a pretrained configuration but load your own
-                weights. In this case though, you should check if using
-                [`~PreTrainedModel.save_pretrained`] and
+                weights. In this case though, you should check if using [`~PreTrainedModel.save_pretrained`] and
                 [`~PreTrainedModel.from_pretrained`] is not a simpler option.
             cache_dir (`Union[str, os.PathLike]`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -1151,14 +1146,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -1173,14 +1169,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 This is an experimental feature and a subject to change at any moment.
             torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the
-                dtype will be automatically derived from the model's weights.
+                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
+                will be automatically derived from the model's weights.
 
                 <Tip warning={true}>
 
-                One should only disable *_fast_init* to ensure backwards compatibility with
-                `transformers.__version__ < 4.6.0` for seeded model initialization. This argument will be removed
-                at the next major version. See [pull request 11471](https://github.com/huggingface/transformers/pull/11471) for more information.
+                One should only disable *_fast_init* to ensure backwards compatibility with `transformers.__version__ <
+                4.6.0` for seeded model initialization. This argument will be removed at the next major version. See
+                [pull request 11471](https://github.com/huggingface/transformers/pull/11471) for more information.
 
                 </Tip>
 
@@ -1193,10 +1189,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                       underlying model's `__init__` method (we assume all relevant updates to the configuration have
                       already been done)
                     - If a configuration is not provided, `kwargs` will be first passed to the configuration class
-                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of
-                      `kwargs` that corresponds to a configuration attribute will be used to override said attribute
-                      with the supplied `kwargs` value. Remaining keys that do not correspond to any configuration
-                      attribute will be passed to the underlying model's `__init__` function.
+                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of `kwargs` that
+                      corresponds to a configuration attribute will be used to override said attribute with the
+                      supplied `kwargs` value. Remaining keys that do not correspond to any configuration attribute
+                      will be passed to the underlying model's `__init__` function.
 
         <Tip>
 
@@ -1206,8 +1202,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         <Tip>
 
-        Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to use this method in a firewalled
-        environment.
+        Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
+        use this method in a firewalled environment.
 
         </Tip>
 
@@ -1812,8 +1808,8 @@ class PoolerEndLogits(nn.Module):
 
     Args:
         config ([`PretrainedConfig`]):
-            The config used by the model, will be used to grab the `hidden_size` of the model and the
-            `layer_norm_eps` to use.
+            The config used by the model, will be used to grab the `hidden_size` of the model and the `layer_norm_eps`
+            to use.
     """
 
     def __init__(self, config: PretrainedConfig):
@@ -1844,8 +1840,8 @@ class PoolerEndLogits(nn.Module):
 
         <Tip>
 
-        One of `start_states` or `start_positions` should be not obj:*None*. If both are set,
-        `start_positions` overrides `start_states`.
+        One of `start_states` or `start_positions` should be not obj:*None*. If both are set, `start_positions`
+        overrides `start_states`.
 
         </Tip>
 
@@ -1910,8 +1906,8 @@ class PoolerAnswerClass(nn.Module):
 
         <Tip>
 
-        One of `start_states` or `start_positions` should be not obj:*None*. If both are set,
-        `start_positions` overrides `start_states`.
+        One of `start_states` or `start_positions` should be not obj:*None*. If both are set, `start_positions`
+        overrides `start_states`.
 
         </Tip>
 
@@ -1977,8 +1973,8 @@ class SQuADHead(nn.Module):
 
     Args:
         config ([`PretrainedConfig`]):
-            The config used by the model, will be used to grab the `hidden_size` of the model and the
-            `layer_norm_eps` to use.
+            The config used by the model, will be used to grab the `hidden_size` of the model and the `layer_norm_eps`
+            to use.
     """
 
     def __init__(self, config):
@@ -2106,14 +2102,12 @@ class SequenceSummary(nn.Module):
                 - `"attn"` -- Not implemented now, use multi-head attention
 
             - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
-            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to
-              `config.num_labels` classes (otherwise to `config.hidden_size`).
-            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the
-              output, another string or `None` will add no activation.
-            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and
-              activation.
-            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and
-              activation.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
     """
 
     def __init__(self, config: PretrainedConfig):
@@ -2155,8 +2149,7 @@ class SequenceSummary(nn.Module):
             hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
-                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification
-                token.
+                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
             `torch.FloatTensor`: The summary of the sequence hidden states.
@@ -2285,8 +2278,7 @@ def prune_layer(
         dim (`int`, *optional*): The dimension on which to keep the indices.
 
     Returns:
-        `torch.nn.Linear` or [`~modeling_utils.Conv1D`]: The pruned layer as a new layer with
-        `requires_grad=True`.
+        `torch.nn.Linear` or [`~modeling_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
     """
     if isinstance(layer, nn.Linear):
         return prune_linear_layer(layer, index, dim=0 if dim is None else dim)
@@ -2300,11 +2292,11 @@ def apply_chunking_to_forward(
     forward_fn: Callable[..., torch.Tensor], chunk_size: int, chunk_dim: int, *input_tensors
 ) -> torch.Tensor:
     """
-    This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the
-    dimension `chunk_dim`. It then applies a layer `forward_fn` to each chunk independently to save memory.
+    This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension
+    `chunk_dim`. It then applies a layer `forward_fn` to each chunk independently to save memory.
 
-    If the `forward_fn` is independent across the `chunk_dim` this function will yield the same result as
-    directly applying `forward_fn` to `input_tensors`.
+    If the `forward_fn` is independent across the `chunk_dim` this function will yield the same result as directly
+    applying `forward_fn` to `input_tensors`.
 
     Args:
         forward_fn (`Callable[..., torch.Tensor]`):

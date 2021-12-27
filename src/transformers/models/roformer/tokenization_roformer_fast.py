@@ -64,12 +64,11 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" RoFormer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`RoFormerTokenizerFast`] is almost identical to [`BertTokenizerFast`] and
-    runs end-to-end tokenization: punctuation splitting and wordpiece. There are some difference between them when
-    tokenizing Chinese.
+    [`RoFormerTokenizerFast`] is almost identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    punctuation splitting and wordpiece. There are some difference between them when tokenizing Chinese.
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Example:
 
@@ -181,8 +180,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
