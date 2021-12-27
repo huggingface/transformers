@@ -133,6 +133,13 @@ def parse_code_example(code_lines):
     return code_samples, outputs
 
 
+BLACK_AVOID_PATTERNS = {
+    "===PT-TF-SPLIT===": "### PT-TF-SPLIT",
+    "{processor_class}": "ProcessorClass",
+    "{model_class}": "ModelClass",
+}
+
+
 def format_code_example(code: str, max_len: int):
     """
     Format a code example using black. Will take into account the doctest syntax as well as any initial indentation in
@@ -168,13 +175,17 @@ def format_code_example(code: str, max_len: int):
     line_length = max_len - indent
     if has_doctest:
         line_length -= 4
-    full_code = full_code.replace("===PT-TF-SPLIT===", "### PT-TF-SPLIT")
+
+    for k, v in BLACK_AVOID_PATTERNS.items():
+        full_code = full_code.replace(k, v)
     formatted_code = black.format_str(
         full_code, mode=black.FileMode([black.TargetVersion.PY37], line_length=line_length)
     )
 
     # Let's get back the formatted code samples
-    formatted_code = formatted_code.replace("### PT-TF-SPLIT", "===PT-TF-SPLIT===")
+    for k, v in BLACK_AVOID_PATTERNS.items():
+        format_code_example = format_code_example.replace(v, k)
+
     code_samples = formatted_code.split(delimiter)
     # We can have one output less than code samples
     if len(outputs) == len(code_samples) - 1:
