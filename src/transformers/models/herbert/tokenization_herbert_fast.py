@@ -46,8 +46,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     - uses BERT's pre-tokenizer: BertPreTokenizer splits tokens on spaces, and also on punctuation. Each occurrence of
       a punctuation character will be treated separately.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the methods. Users should refer to the
+    superclass for more information regarding methods.
 
     Args:
         vocab_file (`str`):
@@ -160,8 +160,7 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

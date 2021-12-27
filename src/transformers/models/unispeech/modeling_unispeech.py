@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UniSpeech model. """
+""" PyTorch UniSpeech model."""
 
 import math
 from dataclasses import dataclass
@@ -68,12 +68,13 @@ class UniSpeechBaseModelOutput(ModelOutput):
         extract_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
             Sequence of extracted feature vectors of the last convolutional layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -101,12 +102,13 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
             Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
             target vectors for contrastive loss.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -130,8 +132,8 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run
-    on CPU as part of the preprocessing during training.
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    CPU as part of the preprocessing during training.
 
     Args:
         shape: The shape for which to compute masks. This should be of a tuple of size 2 where
@@ -983,11 +985,12 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
 
 
 UNISPEECH_START_DOCSTRING = r"""
-    UniSpeech was proposed in [UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data](https://arxiv.org/abs/2101.07597) by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei,
+    UniSpeech was proposed in [UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled
+    Data](https://arxiv.org/abs/2101.07597) by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei,
     Michael Zeng, Xuedong Huang.
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving etc.).
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving etc.).
 
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -996,8 +999,7 @@ UNISPEECH_START_DOCSTRING = r"""
     Parameters:
         config ([`UniSpeechConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -1006,11 +1008,12 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`UniSpeechProcessor`] should
-            be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
-            [`UniSpeechProcessor.__call__`] for details.
+            soundfile*). To prepare the array into *input_values*, the [`UniSpeechProcessor`] should be used for
+            padding and conversion into a tensor of type *torch.FloatTensor*. See [`UniSpeechProcessor.__call__`] for
+            details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
+            1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1019,12 +1022,11 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
 
             <Tip warning={true}>
 
-            `attention_mask` should only be passed if the corresponding processor has
-            `config.return_attention_mask == True`. For all models whose processor has
-            `config.return_attention_mask == False`, `attention_mask` should **not** be passed to avoid
-            degraded performance when doing batched inference. For such models `input_values` should simply be
-            padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
-            different results depending on whether `input_values` is padded or not.
+            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
+            True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
+            **not** be passed to avoid degraded performance when doing batched inference. For such models
+            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
+            models also yield slightly different results depending on whether `input_values` is padded or not.
 
             </Tip>
 
@@ -1164,7 +1166,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
 
 
 @add_start_docstrings(
-    """UniSpeech Model with a vector-quantization module and ctc loss for pre-training. """, UNISPEECH_START_DOCSTRING
+    """UniSpeech Model with a vector-quantization module and ctc loss for pre-training.""", UNISPEECH_START_DOCSTRING
 )
 class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
@@ -1204,8 +1206,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
-        `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be
-        applied.
+        `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
@@ -1333,7 +1334,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
 
 @add_start_docstrings(
-    """UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    """UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     UNISPEECH_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
@@ -1382,7 +1383,9 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`.
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size - 1]`.
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1497,8 +1500,9 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -71,9 +71,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
     """
     Construct an MBART tokenizer.
 
-    [`MBartTokenizer`] is a subclass of [`XLMRobertaTokenizer`]. Refer to
-    superclass [`XLMRobertaTokenizer`] for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    [`MBartTokenizer`] is a subclass of [`XLMRobertaTokenizer`]. Refer to superclass [`XLMRobertaTokenizer`] for usage
+    examples and documentation concerning the initialization parameters and other methods.
 
     The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
