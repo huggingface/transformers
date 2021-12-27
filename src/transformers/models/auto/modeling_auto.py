@@ -222,6 +222,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("xlnet", "XLNetLMHeadModel"),
         ("xlm", "XLMWithLMHeadModel"),
+        ("electra", "ElectraForCausalLM"),
         ("ctrl", "CTRLLMHeadModel"),
         ("reformer", "ReformerModelWithLMHead"),
         ("bert-generation", "BertGenerationDecoder"),
