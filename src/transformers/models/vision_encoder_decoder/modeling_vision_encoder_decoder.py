@@ -260,7 +260,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         the model, you need to first set it back in training mode with `model.train()`.
 
         Params:
-            encoder_pretrained_model_name_or_path (:obj: *str*, *optional*):
+            encoder_pretrained_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the image encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co. An
@@ -272,7 +272,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                       `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
                       PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
-            decoder_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
+            decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the text decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
