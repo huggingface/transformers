@@ -106,7 +106,7 @@ def parse_code_example(code_lines):
     return code_samples, outputs
 
 
-def format_code_example(code: str, max_len: int):
+def format_code_example(code: str, max_len: int, in_docstring: bool = False):
     """
     Format a code example using black. Will take into account the doctest syntax as well as any initial indentation in
     the code provided.
@@ -114,6 +114,7 @@ def format_code_example(code: str, max_len: int):
     Args:
         code (`str`): The code example to format.
         max_len (`int`): The maximum lengh per line.
+        in_docstring (`bool`, *optional*, defaults to `False`): Whether or not the code example is inside a docstring.
 
     Returns:
         `str`: The formatted code.
@@ -156,7 +157,9 @@ def format_code_example(code: str, max_len: int):
     # Let's get back the formatted code samples
     for k, v in BLACK_AVOID_PATTERNS.items():
         formatted_code = formatted_code.replace(v, k)
-    formatted_code = formatted_code.replace('"""', "'''")
+    # Triple quotes will mess docstrings.
+    if in_docstring:
+        formatted_code = formatted_code.replace('"""', "'''")
 
     code_samples = formatted_code.split(delimiter)
     # We can have one output less than code samples
@@ -291,7 +294,7 @@ def style_docstring(docstring, max_len):
                 current_indent = -1
                 code = "\n".join(current_paragraph)
                 if current_code in ["py", "python"]:
-                    formatted_code, error = format_code_example(code, max_len)
+                    formatted_code, error = format_code_example(code, max_len, in_docstring=True)
                     new_lines.append(formatted_code)
                     if len(error) > 0:
                         black_errors.append(error)

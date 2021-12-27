@@ -176,11 +176,11 @@ leverages a fine-tuned model on SQuAD.
 
 >>> question_answerer = pipeline("question-answering")
 
->>> context = r'''
->>> Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
->>> question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
->>> a model on a SQuAD task, you may leverage the examples/pytorch/question-answering/run_squad.py script.
->>> '''
+>>> context = r"""
+... Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
+... question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
+... a model on a SQuAD task, you may leverage the examples/pytorch/question-answering/run_squad.py script.
+... """
 ```
 
 This returns an answer extracted from the text, a confidence score, alongside "start" and "end" values, which are the
@@ -220,12 +220,12 @@ Here is an example of question answering using a model and a tokenizer. The proc
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
 >>> model = AutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
 
->>> text = r'''
->>> 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
->>> architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet…) for Natural Language Understanding (NLU) and Natural
->>> Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
->>> TensorFlow 2.0 and PyTorch.
->>> '''
+>>> text = r"""
+... 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
+... architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet…) for Natural Language Understanding (NLU) and Natural
+... Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
+... TensorFlow 2.0 and PyTorch.
+... """
 
 >>> questions = [
 ...     "How many pretrained models are available in 🤗 Transformers?",
@@ -265,12 +265,12 @@ Answer: tensorflow 2. 0 and pytorch
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
 >>> model = TFAutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
 
->>> text = r'''
->>> 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
->>> architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet…) for Natural Language Understanding (NLU) and Natural
->>> Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
->>> TensorFlow 2.0 and PyTorch.
->>> '''
+>>> text = r"""
+... 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
+... architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet…) for Natural Language Understanding (NLU) and Natural
+... Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
+... TensorFlow 2.0 and PyTorch.
+... """
 
 >>> questions = [
 ...     "How many pretrained models are available in 🤗 Transformers?",
@@ -545,16 +545,16 @@ Below is an example of text generation using `XLNet` and its tokenizer, which in
 >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
 >>> # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
->>> PADDING_TEXT = '''In 1991, the remains of Russian Tsar Nicholas II and his family
->>> (except for Alexei and Maria) are discovered.
->>> The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
->>> remainder of the story. 1883 Western Siberia,
->>> a young Grigori Rasputin is asked by his father and a group of men to perform magic.
->>> Rasputin has a vision and denounces one of the men as a horse thief. Although his
->>> father initially slaps him for making such an accusation, Rasputin watches as the
->>> man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
->>> the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
->>> with people, even a bishop, begging for his blessing. <eod> </s> <eos>'''
+>>> PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+... (except for Alexei and Maria) are discovered.
+... The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+... remainder of the story. 1883 Western Siberia,
+... a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+... Rasputin has a vision and denounces one of the men as a horse thief. Although his
+... father initially slaps him for making such an accusation, Rasputin watches as the
+... man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+... the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+... with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
 >>> prompt = "Today the weather is really nice and I am planning on "
 >>> inputs = tokenizer(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="pt")["input_ids"]
@@ -572,16 +572,16 @@ Today the weather is really nice and I am planning ...
 >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
 >>> # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
->>> PADDING_TEXT = '''In 1991, the remains of Russian Tsar Nicholas II and his family
->>> (except for Alexei and Maria) are discovered.
->>> The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
->>> remainder of the story. 1883 Western Siberia,
->>> a young Grigori Rasputin is asked by his father and a group of men to perform magic.
->>> Rasputin has a vision and denounces one of the men as a horse thief. Although his
->>> father initially slaps him for making such an accusation, Rasputin watches as the
->>> man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
->>> the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
->>> with people, even a bishop, begging for his blessing. <eod> </s> <eos>'''
+>>> PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+... (except for Alexei and Maria) are discovered.
+... The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+... remainder of the story. 1883 Western Siberia,
+... a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+... Rasputin has a vision and denounces one of the men as a horse thief. Although his
+... father initially slaps him for making such an accusation, Rasputin watches as the
+... man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+... the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+... with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
 >>> prompt = "Today the weather is really nice and I am planning on "
 >>> inputs = tokenizer(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="tf")["input_ids"]
@@ -630,8 +630,8 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by [@stefan-it](https:
 
 >>> ner_pipe = pipeline("ner")
 
->>> sequence = '''Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO,
->>> therefore very close to the Manhattan Bridge which is visible from the window.'''
+>>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO,
+... therefore very close to the Manhattan Bridge which is visible from the window."""
 ```
 
 This outputs a list of all words that have been identified as one of the entities from the 9 classes defined above.
@@ -769,24 +769,24 @@ Here is an example of using the pipelines to do summarization. It leverages a Ba
 
 >>> summarizer = pipeline("summarization")
 
->>> ARTICLE = ''' New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.
->>> A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.
->>> Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other.
->>> In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage.
->>> Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the
->>> 2010 marriage license application, according to court documents.
->>> Prosecutors said the marriages were part of an immigration scam.
->>> On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further.
->>> After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective
->>> Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.
->>> All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say.
->>> Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.
->>> Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted.
->>> The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s
->>> Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali.
->>> Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force.
->>> If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
->>> '''
+>>> ARTICLE = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.
+... A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.
+... Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other.
+... In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage.
+... Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the
+... 2010 marriage license application, according to court documents.
+... Prosecutors said the marriages were part of an immigration scam.
+... On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further.
+... After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective
+... Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.
+... All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say.
+... Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.
+... Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted.
+... The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s
+... Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali.
+... Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force.
+... If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
+... """
 ```
 
 Because the summarization pipeline depends on the `PreTrainedModel.generate()` method, we can override the default

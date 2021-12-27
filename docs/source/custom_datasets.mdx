@@ -238,55 +238,26 @@ or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/no
 Load the WNUT 17 dataset from the 🤗 Datasets library:
 
 ```python
-from datasets import load_dataset
+>>> from datasets import load_dataset
 
-wnut = load_dataset("wnut_17")
+>>> wnut = load_dataset("wnut_17")
 ```
 
 A quick look at the dataset shows the labels associated with each word in the sentence:
 
 ```python
-wnut["train"][0]
-{
-    "id": "0",
-    "ner_tags": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
-    "tokens": [
-        "@paulwalk",
-        "It",
-        "'s",
-        "the",
-        "view",
-        "from",
-        "where",
-        "I",
-        "'m",
-        "living",
-        "for",
-        "two",
-        "weeks",
-        ".",
-        "Empire",
-        "State",
-        "Building",
-        "=",
-        "ESB",
-        ".",
-        "Pretty",
-        "bad",
-        "storm",
-        "here",
-        "last",
-        "evening",
-        ".",
-    ],
+>>> wnut["train"][0]
+{'id': '0',
+ 'ner_tags': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
+ 'tokens': ['@paulwalk', 'It', "'s", 'the', 'view', 'from', 'where', 'I', "'m", 'living', 'for', 'two', 'weeks', '.', 'Empire', 'State', 'Building', '=', 'ESB', '.', 'Pretty', 'bad', 'storm', 'here', 'last', 'evening', '.']
 }
 ```
 
 View the specific NER tags by:
 
 ```python
-label_list = wnut["train"].features[f"ner_tags"].feature.names
-label_list
+>>> label_list = wnut["train"].features[f"ner_tags"].feature.names
+>>> label_list
 [
     "O",
     "B-corporation",
@@ -325,45 +296,10 @@ Since the input has already been split into words, set `is_split_into_words=True
 subwords:
 
 ```python
-tokenized_input = tokenizer(example["tokens"], is_split_into_words=True)
-tokens = tokenizer.convert_ids_to_tokens(tokenized_input["input_ids"])
-tokens
-[
-    "[CLS]",
-    "@",
-    "paul",
-    "##walk",
-    "it",
-    "'",
-    "s",
-    "the",
-    "view",
-    "from",
-    "where",
-    "i",
-    "'",
-    "m",
-    "living",
-    "for",
-    "two",
-    "weeks",
-    ".",
-    "empire",
-    "state",
-    "building",
-    "=",
-    "es",
-    "##b",
-    ".",
-    "pretty",
-    "bad",
-    "storm",
-    "here",
-    "last",
-    "evening",
-    ".",
-    "[SEP]",
-]
+>>> tokenized_input = tokenizer(example["tokens"], is_split_into_words=True)
+>>> tokens = tokenizer.convert_ids_to_tokens(tokenized_input["input_ids"])
+>>> tokens
+['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 ```
 
 The addition of the special tokens `[CLS]` and `[SEP]` and subword tokenization creates a mismatch between the
@@ -552,13 +488,12 @@ squad = load_dataset("squad")
 Take a look at an example from the dataset:
 
 ```python
-squad["train"][0]
-{
-    "answers": {"answer_start": [515], "text": ["Saint Bernadette Soubirous"]},
-    "context": 'Architecturally, the school has a Catholic character. Atop the Main Building\'s gold dome is a golden statue of the Virgin Mary. Immediately in front of the Main Building and facing it, is a copper statue of Christ with arms upraised with the legend "Venite Ad Me Omnes". Next to the Main Building is the Basilica of the Sacred Heart. Immediately behind the basilica is the Grotto, a Marian place of prayer and reflection. It is a replica of the grotto at Lourdes, France where the Virgin Mary reputedly appeared to Saint Bernadette Soubirous in 1858. At the end of the main drive (and in a direct line that connects through 3 statues and the Gold Dome), is a simple, modern stone statue of Mary.',
-    "id": "5733be284776f41900661182",
-    "question": "To whom did the Virgin Mary allegedly appear in 1858 in Lourdes France?",
-    "title": "University_of_Notre_Dame",
+>>> squad["train"][0]
+{'answers': {'answer_start': [515], 'text': ['Saint Bernadette Soubirous']},
+ 'context': 'Architecturally, the school has a Catholic character. Atop the Main Building\'s gold dome is a golden statue of the Virgin Mary. Immediately in front of the Main Building and facing it, is a copper statue of Christ with arms upraised with the legend "Venite Ad Me Omnes". Next to the Main Building is the Basilica of the Sacred Heart. Immediately behind the basilica is the Grotto, a Marian place of prayer and reflection. It is a replica of the grotto at Lourdes, France where the Virgin Mary reputedly appeared to Saint Bernadette Soubirous in 1858. At the end of the main drive (and in a direct line that connects through 3 statues and the Gold Dome), is a simple, modern stone statue of Mary.',
+ 'id': '5733be284776f41900661182',
+ 'question': 'To whom did the Virgin Mary allegedly appear in 1858 in Lourdes France?',
+ 'title': 'University_of_Notre_Dame'
 }
 ```
 
