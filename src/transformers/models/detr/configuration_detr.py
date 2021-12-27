@@ -155,8 +155,8 @@ class DetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        in_chans=3,
-        pretrained=True,
+        num_channels=3,
+        use_pretrained_backbone=True,
         freeze_layers=True,
         fix_batch_norm=True,
         **kwargs
