@@ -581,13 +581,20 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if pad_and_return_pixel_mask:
             # pad images up to largest image in batch and create pixel_mask
             max_size = self._max_by_axis([list(image.shape) for image in images])
-            c, h, w = max_size
+            if len(max_size) != 2:
+                c, h, w = max_size
+            else:
+                h, w = max_size
+                c = 1
             padded_images = []
             pixel_mask = []
             for image in images:
                 # create padded image
                 padded_image = np.zeros((c, h, w), dtype=np.float32)
-                padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
+                if c != 1:
+                    padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
+                else:
+                    padded_image[0, : image.shape[0], : image.shape[1]] = np.copy(image)
                 padded_images.append(padded_image)
                 # create pixel mask
                 mask = np.zeros((h, w), dtype=np.int64)
