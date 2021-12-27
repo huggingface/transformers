@@ -174,7 +174,8 @@ def format_code_example(code: str, max_len: int):
                 prefix = "... " if line.startswith(" ") or line in [")", "]", "}"] or in_triple_quotes else ">>> "
             else:
                 prefix = ""
-            formatted_lines.append(" " * indent + prefix + line)
+            indent_str = "" if is_empty_line(line) else (" " * indent)
+            formatted_lines.append(indent_str + prefix + line)
 
             if '"""' in line:
                 in_triple_quotes = not in_triple_quotes
