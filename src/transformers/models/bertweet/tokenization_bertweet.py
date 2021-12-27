@@ -632,7 +632,7 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
             List of entity names which should not be replaced. This supports both numeric entities (`&#nnnn;` and
             `&#hhhh;`) and named entities (such as `&nbsp;` or `&gt;`).
         remove_illegal (bool):
-            If *True*, entities that can't be converted are removed. Otherwise, entities that can't be converted are
+            If `True`, entities that can't be converted are removed. Otherwise, entities that can't be converted are
             kept "as is".
 
     Returns: A unicode string with the entities removed.
