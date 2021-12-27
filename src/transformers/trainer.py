@@ -1585,6 +1585,10 @@ class Trainer:
 
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
+        if self.deepspeed:
+            # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
+            # config `stage3_gather_fp16_weights_on_model_save` is True
+            self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
