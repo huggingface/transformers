@@ -137,6 +137,7 @@ BLACK_AVOID_PATTERNS = {
     "===PT-TF-SPLIT===": "### PT-TF-SPLIT",
     "{processor_class}": "ProcessorClass",
     "{model_class}": "ModelClass",
+    "{object_class}": "ObjectClass",
 }
 
 
