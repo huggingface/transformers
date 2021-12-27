@@ -598,7 +598,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 padded_images.append(padded_image)
                 # create pixel mask
                 mask = np.zeros((h, w), dtype=np.int64)
-                mask[: image.shape[1], : image.shape[2]] = True
+                if c == 1:
+                    mask[: image.shape[0], : image.shape[1]] = True
                 pixel_mask.append(mask)
             images = padded_images
 
