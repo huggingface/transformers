@@ -319,7 +319,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
                     - A path or url to a *pytorch index checkpoint file* (e.g, `./pt_model/`). In this case,
                       `encoder_from_pt` should be set to `True`.
 
-            decoder_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to *None*):
+            decoder_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.

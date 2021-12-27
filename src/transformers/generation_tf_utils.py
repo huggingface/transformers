@@ -446,15 +446,15 @@ class TFGenerationMixin:
             use_cache: (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
-            output_attentions (`bool`, *optional*, defaults to *False*):
+            output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
-            output_hidden_states (`bool`, *optional*, defaults to *False*):
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more details.
-            output_scores (`bool`, *optional*, defaults to *False*):
+            output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to *False*):
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             forced_bos_token_id (`int`, *optional*):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful

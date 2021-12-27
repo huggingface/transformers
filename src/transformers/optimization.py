@@ -285,7 +285,7 @@ class AdamW(Optimizer):
             Adam's epsilon for numerical stability.
         weight_decay (`float`, *optional*, defaults to 0):
             Decoupled weight decay to apply.
-        correct_bias (`bool`, *optional*, defaults to *True*):
+        correct_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to correct bias in Adam (for instance, in Bert TF repository they use `False`).
     """
 
