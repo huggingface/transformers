@@ -104,7 +104,7 @@ class AudioClassificationPipeline(Pipeline):
                 requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is supposed to be the
                 content of an audio file and is interpreted by *ffmpeg* in the same way.
             top_k (`int`, *optional*, defaults to None):
-                The number of top labels that will be returned by the pipeline. If the provided number is *None* or
+                The number of top labels that will be returned by the pipeline. If the provided number is `None` or
                 higher than the number of labels available in the model configuration, it will default to the number of
                 labels.
 
