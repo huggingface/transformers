@@ -223,8 +223,15 @@ def style_docstring(docstring, max_len):
     prefix = ""
 
     # Special case for docstrings that begin with continuation of Args with no Args block.
-    if len(lines[0]) > 1 and lines[0].rstrip().endswith(":") and find_indent(lines[1]) > find_indent(lines[0]):
-        param_indent = find_indent(lines[0])
+    idx = 0
+    while idx < len(lines) and is_empty_line(lines[idx]):
+        idx += 1
+    if (
+        len(lines[idx]) > 1
+        and lines[idx].rstrip().endswith(":")
+        and find_indent(lines[idx + 1]) > find_indent(lines[idx])
+    ):
+        param_indent = find_indent(lines[idx])
 
     for idx, line in enumerate(lines):
         # Doing all re searches once for the one we need to repeat.
