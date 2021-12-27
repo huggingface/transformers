@@ -316,7 +316,7 @@ at the beginning of this section.
 If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated
 cell with:
 
-```python
+```python no-style
 %%bash
 cat <<'EOT' > ds_config_zero3.json
 {
@@ -382,14 +382,14 @@ EOT
 If the training script is in a normal file and not in the notebook cells, you can launch `deepspeed` normally via
 shell from a cell. For example, to use `run_translation.py` you would launch it with:
 
-```python
+```python no-style
 !git clone https://github.com/huggingface/transformers
 !cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
 ```
 
 or with `%%bash` magic, where you can write a multi-line code for the shell program to run:
 
-```python
+```python no-style
 %%bash
 
 git clone https://github.com/huggingface/transformers

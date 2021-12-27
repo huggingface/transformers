@@ -422,14 +422,14 @@ Let's depict the GPU requirements in the following table:
 
 For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
 
-```python
+```python no-style
 @require_torch_multi_gpu
 def test_example_with_multi_gpu():
 ```
 
 If a test requires `tensorflow` use the `require_tf` decorator. For example:
 
-```python
+```python no-style
 @require_tf
 def test_tf_thing_with_tensorflow():
 ```
@@ -437,7 +437,7 @@ def test_tf_thing_with_tensorflow():
 These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
 how to set it up:
 
-```python
+```python no-style
 @require_torch_gpu
 @slow
 def test_example_slow_on_gpu():
@@ -446,7 +446,7 @@ def test_example_slow_on_gpu():
 Some decorators like `@parametrized` rewrite test names, therefore `@require_*` skip decorators have to be listed
 last for them to work correctly. Here is an example of the correct usage:
 
-```python
+```python no-style
 @parameterized.expand(...)
 @require_torch_multi_gpu
 def test_integration_foo():
@@ -786,20 +786,20 @@ code that's buggy causes some bad state that will affect other tests, do not use
 
 - Here is how to skip whole test unconditionally:
 
-```python
+```python no-style
 @unittest.skip("this bug needs to be fixed")
 def test_feature_x():
 ```
 
 or via pytest:
 
-```python
+```python no-style
 @pytest.mark.skip(reason="this bug needs to be fixed")
 ```
 
 or the `xfail` way:
 
-```python
+```python no-style
 @pytest.mark.xfail
 def test_feature_x():
 ```
@@ -835,21 +835,21 @@ docutils = pytest.importorskip("docutils", minversion="0.3")
 
 -  Skip a test based on a condition:
 
-```python
+```python no-style
 @pytest.mark.skipif(sys.version_info < (3,6), reason="requires python3.6 or higher")
 def test_feature_x():
 ```
 
 or:
 
-```python
+```python no-style
 @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
 def test_feature_x():
 ```
 
 or skip the whole module:
 
-```python
+```python no-style
 @pytest.mark.skipif(sys.platform == 'win32', reason="does not run on windows")
 class TestClass():
     def test_feature_x(self):
@@ -863,7 +863,7 @@ The library of tests is ever-growing, and some of the tests take minutes to run,
 an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be
 marked as in the example below:
 
-```python
+```python no-style
 from transformers.testing_utils import slow
 @slow
 def test_integration_foo():
@@ -878,8 +878,8 @@ RUN_SLOW=1 pytest tests
 Some decorators like `@parameterized` rewrite test names, therefore `@slow` and the rest of the skip decorators
 `@require_*` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
-```python
-@parameterized.expand(...)
+```python no-style
+@parameteriz ed.expand(...)
 @slow
 def test_integration_foo():
 ```

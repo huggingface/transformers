@@ -203,10 +203,10 @@ def _forward(self, hidden_states):
 import torch
 def forward(self, hidden_states):
     if torch.is_autocast_enabled():
-         with torch.cuda.amp.autocast(enabled=False):
-             return self._forward(hidden_states)
-     else:
-         return self._forward(hidden_states)
+        with torch.cuda.amp.autocast(enabled=False):
+            return self._forward(hidden_states)
+    else:
+        return self._forward(hidden_states)
 ```
 
 Since the automatic detector only reports on inputs and outputs of full frames, once you know where to look, you may

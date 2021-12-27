@@ -298,10 +298,10 @@ If you want to try simply you can:
 
 ```python
 class MyPipeline(TextClassificationPipeline):
-    def postprocess(...):
-        ...
+    def postprocess():
+        # Your code goes here
         scores = scores * 100
-        ...
+        # And here
 
 my_pipeline = MyPipeline(model=model, tokenizer=tokenizer, ...)
 # or if you use *pipeline* function, then:

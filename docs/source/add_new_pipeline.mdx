@@ -34,7 +34,7 @@ class MyPipeline(Pipeline):
         return preprocess_kwargs, {}, {}
 
     def preprocess(self, inputs, maybe_arg=2):
-        model_input = Tensor(....)
+        model_input = Tensor(inputs["input_ids"])
         return {"model_input": model_input}
 
     def _forward(self, model_inputs):

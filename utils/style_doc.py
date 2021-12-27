@@ -19,8 +19,6 @@ import os
 import re
 import warnings
 
-from torch._C import Value
-
 import black
 
 
@@ -462,7 +460,7 @@ def style_doc_files(*files, max_len=119, check_only=False):
         # Treat folders
         if os.path.isdir(file):
             files = [os.path.join(file, f) for f in os.listdir(file)]
-            files = [f for f in files if os.path.isdir(f) or f.endswith(".rst") or f.endswith(".py")]
+            files = [f for f in files if os.path.isdir(f) or f.endswith(".mdx") or f.endswith(".py")]
             changed += style_doc_files(*files, max_len=max_len, check_only=check_only)
         # Treat mdx
         elif file.endswith(".mdx"):
