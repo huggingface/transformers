@@ -258,7 +258,7 @@ class RagPreTrainedModel(PreTrainedModel):
         the model, you need to first set it back in training mode with `model.train()`.
 
         Params:
-            question_encoder_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
+            question_encoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
@@ -271,7 +271,7 @@ class RagPreTrainedModel(PreTrainedModel):
                       `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
                       PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
-            generator_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
+            generator_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
