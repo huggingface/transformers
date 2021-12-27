@@ -158,6 +158,7 @@ def format_code_example(code: str, max_len: int):
     # Let's get back the formatted code samples
     for k, v in BLACK_AVOID_PATTERNS.items():
         formatted_code = formatted_code.replace(v, k)
+    formatted_code = formatted_code.replace('"""', "'''")
 
     code_samples = formatted_code.split(delimiter)
     # We can have one output less than code samples
