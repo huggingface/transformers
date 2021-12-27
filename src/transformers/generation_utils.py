@@ -1320,7 +1320,7 @@ class GenerationMixin:
 
         Return:
             [`~generation_utils.GreedySearchDecoderOnlyOutput`], [`~generation_utils.GreedySearchEncoderDecoderOutput`]
-            or obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            or `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation_utils.GreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation_utils.GreedySearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
@@ -1547,7 +1547,7 @@ class GenerationMixin:
 
         Return:
             [`~generation_utils.SampleDecoderOnlyOutput`], [`~generation_utils.SampleEncoderDecoderOutput`] or
-            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation_utils.SampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation_utils.SampleEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
@@ -1785,7 +1785,7 @@ class GenerationMixin:
 
         Return:
             [`generation_utilsBeamSearchDecoderOnlyOutput`], [`~generation_utils.BeamSearchEncoderDecoderOutput`] or
-            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation_utils.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation_utils.BeamSearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
@@ -2079,7 +2079,7 @@ class GenerationMixin:
 
         Return:
             [`~generation_utils.BeamSampleDecoderOnlyOutput`], [`~generation_utils.BeamSampleEncoderDecoderOutput`] or
-            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation_utils.BeamSampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation_utils.BeamSampleEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
@@ -2375,7 +2375,7 @@ class GenerationMixin:
 
         Return:
             [`~generation_utils.BeamSearchDecoderOnlyOutput`], [`~generation_utils.BeamSearchEncoderDecoderOutput`] or
-            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation_utils.BeamSearchDecoderOnlyOutput`] if [`~generation_utils.BeamSearchDecoderOnlyOutput`] if
             `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
             [`~generation_utils.BeamSearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.

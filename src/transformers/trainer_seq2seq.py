@@ -126,7 +126,7 @@ class Seq2SeqTrainer(Trainer):
         ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
-        Perform an evaluation step on `model` using obj:*inputs*.
+        Perform an evaluation step on `model` using `inputs`.
 
         Subclass and override to inject custom behavior.
 
