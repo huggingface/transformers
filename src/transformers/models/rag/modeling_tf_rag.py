@@ -245,7 +245,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                     - A path or url to a *pytorch index checkpoint file* (e.g, `./pt_model/`). In this case,
                       `question_encoder_from_pt` should be set to `True`.
 
-            generator_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to *None*):
+            generator_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string with the *shortcut name* of a pretrained model to load from cache or download, e.g.,
@@ -426,7 +426,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
             Used by the ([`TFRagModel`]) model during decoding.
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Provide for generation tasks. *None* by default, construct as per instructions for the generator model
+            Provide for generation tasks. `None` by default, construct as per instructions for the generator model
             you're using with your RAG instance.
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size,  target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
@@ -1136,15 +1136,15 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
-            output_attentions (`bool`, *optional*, defaults to *False*):
+            output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
-            output_hidden_states (`bool`, *optional*, defaults to *False*):
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more details.
-            output_scores (`bool`, *optional*, defaults to *False*):
+            output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to *False*):
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.

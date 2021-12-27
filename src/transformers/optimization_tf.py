@@ -168,7 +168,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
             The beta2 parameter in Adam, which is the exponential decay rate for the 2nd momentum estimates.
         epsilon (`float`, *optional*, defaults to 1e-7):
             The epsilon parameter in Adam, which is a small constant for numerical stability.
-        amsgrad (`bool`, *optional*, default to *False*):
+        amsgrad (`bool`, *optional*, default to `False`):
             Whether to apply AMSGrad variant of this algorithm or not, see [On the Convergence of Adam and
             Beyond](https://arxiv.org/abs/1904.09237).
         weight_decay_rate (`float`, *optional*, defaults to 0):
