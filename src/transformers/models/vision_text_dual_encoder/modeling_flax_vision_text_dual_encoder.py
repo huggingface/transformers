@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax VisionTextDualEncoder model. """
+""" Flax VisionTextDualEncoder model."""
 
 
 from typing import Optional, Tuple
@@ -38,8 +38,8 @@ _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
 VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
     as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded
-    via the [`~FlaxAutoModel.from_pretrained`] method. The projection layers are automatically added
-    to the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
+    via the [`~FlaxAutoModel.from_pretrained`] method. The projection layers are automatically added to the model and
+    should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
     In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
     leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
@@ -48,12 +48,13 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
     models (see the examples for more information).
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-     This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. Use it as a regular Flax linen Module
-     and refer to the Flax documentation for all matter related to general usage and behavior.
+     This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+     subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+     general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -65,11 +66,10 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     Parameters:
         config ([`VisionTextDualEncoderConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the
-            model weights.
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
-            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
-            GPUs) and `jax.numpy.bfloat16` (on TPUs).
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
             specified all the computation will be performed with the given `dtype`.
@@ -77,8 +77,8 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
-            If you wish to change the dtype of the model parameters, see
-            [`~FlaxPreTrainedModel.to_fp16`] and [`~FlaxPreTrainedModel.to_bf16`].
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 
@@ -88,9 +88,8 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PreTrainedTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -101,14 +100,14 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            a feature extractor (e.g. if you use ViT as the encoder, you should use
-            [`ViTFeatureExtractor`]). See [`ViTFeatureExtractor.__call__`] for
-            details.
+            a feature extractor (e.g. if you use ViT as the encoder, you should use [`ViTFeatureExtractor`]). See
+            [`ViTFeatureExtractor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -315,15 +314,14 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PreTrainedTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
+                Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
 
         Returns:
-            text_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of text model.
+            text_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The text embeddings obtained by applying
+            the projection layer to the pooled output of text model.
         """
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -369,12 +367,11 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         Args:
             pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
-                using [`ImageFeatureExtractionMixin`]. See
-                [`ImageFeatureExtractionMixin.__call__`] for details.
+                using [`ImageFeatureExtractionMixin`]. See [`ImageFeatureExtractionMixin.__call__`] for details.
 
         Returns:
-            image_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The image embeddings obtained
-            by applying the projection layer to the pooled output of vision model.
+            image_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of vision model.
         """
 
         # Handle any PRNG if needed
@@ -410,27 +407,27 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
-                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config`
-                      argument. This loading path is slower than converting the PyTorch checkpoint in a Flax model
-                      using the provided conversion scripts and loading the Flax model afterwards.
+                      should be set to `True` and a configuration object should be provided as `config` argument. This
+                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
+                      conversion scripts and loading the Flax model afterwards.
 
             text_model_name_or_path (:obj: *str*, *optional*):
                 Information necessary to initiate the text model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
-                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config`
-                      argument. This loading path is slower than converting the PyTorch checkpoint in a Flax model
-                      using the provided conversion scripts and loading the Flax model afterwards.
+                      should be set to `True` and a configuration object should be provided as `config` argument. This
+                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
+                      conversion scripts and loading the Flax model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaning positional arguments will be passed to the underlying model's `__init__` method.

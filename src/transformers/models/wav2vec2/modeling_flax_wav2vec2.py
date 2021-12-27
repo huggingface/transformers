@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax Wav2Vec2 model. """
+""" Flax Wav2Vec2 model."""
 
 from functools import partial
 from typing import Optional, Tuple, Union
@@ -54,12 +54,13 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
             Sequence of extracted feature vectors of the last convolutional layer of the model with `last_conv_dim`
             being the dimension of the last convolutional layer.
         hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(jnp.ndarray)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -74,8 +75,7 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
 @flax.struct.dataclass
 class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     """
-    Output type of [`FlaxWav2Vec2ForPreTrainingOutput`], with potential hidden states and
-    attentions.
+    Output type of [`FlaxWav2Vec2ForPreTrainingOutput`], with potential hidden states and attentions.
 
     Args:
         loss (*optional*, returned when model is in train mode, `jnp.ndarray` of shape `(1,)`):
@@ -88,12 +88,13 @@ class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
             Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
             target vectors for contrastive loss.
         hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(jnp.ndarray)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -115,13 +116,14 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run
-    on CPU as part of the preprocessing during training.
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    CPU as part of the preprocessing during training.
 
     Args:
         shape: the the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
+        mask_prob:
+            probability for each token to be chosen as start of the span to be masked. this will be multiplied by
             number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
         mask_length: size of the mask
@@ -211,14 +213,17 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attentio
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
-    Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
+    Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
+    Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
+    Auli.
 
-    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a Flax Linen [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen
+    [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
+    regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -230,11 +235,10 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
     Parameters:
         config ([`Wav2Vec2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the
-            model weights.
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
-            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
-            GPUs) and `jax.numpy.bfloat16` (on TPUs).
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
             specified all the computation will be performed with the given `dtype`.
@@ -242,8 +246,8 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
-            If you wish to change the dtype of the model parameters, see
-            [`~FlaxPreTrainedModel.to_fp16`] and [`~FlaxPreTrainedModel.to_bf16`].
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 
@@ -252,20 +256,21 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
         input_values (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should
-            be used for padding and conversion into a tensor of type *jnp.ndarray*. See
-            [`Wav2Vec2Processor.__call__`] for details.
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
+            and conversion into a tensor of type *jnp.ndarray*. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
+            1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            [What are attention masks?](../glossary#attention-mask) .. warning:: `attention_mask` should
-            only be passed if the corresponding processor has `config.return_attention_mask == True`. For all models
-            whose processor has `config.return_attention_mask == False`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), `attention_mask` should **not** be passed to
-            avoid degraded performance when doing batched inference. For such models `input_values` should simply
-            be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
+            [What are attention masks?](../glossary#attention-mask) .. warning:: `attention_mask` should only be passed
+            if the corresponding processor has `config.return_attention_mask == True`. For all models whose processor
+            has `config.return_attention_mask == False`, such as
+            [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), `attention_mask` should **not** be
+            passed to avoid degraded performance when doing batched inference. For such models `input_values` should
+            simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
             different results depending on whether `input_values` is padded or not.
         mask_time_indices (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1167,7 +1172,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         return input_lengths
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
+@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
 class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForPreTrainingModule
 

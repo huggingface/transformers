@@ -32,9 +32,8 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`PreTrainedTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         scores (`jnp.ndarray` of shape `(batch_size, config.vocab_size)`):
@@ -73,10 +72,9 @@ class FlaxLogitsWarper(ABC):
 
 class FlaxLogitsProcessorList(list):
     """
-    This class can be used to create a list of [`FlaxLogitsProcessor`] or
-    [`FlaxLogitsWarper`] to subsequently process a `scores` input tensor. This class inherits
-    from list and adds a specific *__call__* method to apply each [`FlaxLogitsProcessor`] or
-    [`FlaxLogitsWarper`] to the inputs.
+    This class can be used to create a list of [`FlaxLogitsProcessor`] or [`FlaxLogitsWarper`] to subsequently process
+    a `scores` input tensor. This class inherits from list and adds a specific *__call__* method to apply each
+    [`FlaxLogitsProcessor`] or [`FlaxLogitsWarper`] to the inputs.
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -117,13 +115,12 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopPLogitsWarper(FlaxLogitsWarper):
     """
-    [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
-    prob_cut_off.
+    [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
 
     Args:
         top_p (`float`):
-            If set to < 1, only the most probable tokens with probabilities that add up to `top_p` or higher are
-            kept for generation.
+            If set to < 1, only the most probable tokens with probabilities that add up to `top_p` or higher are kept
+            for generation.
         filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
@@ -219,8 +216,7 @@ class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    [`FlaxLogitsProcessor`] that enforces the specified token as the last generated token when
-    `max_length` is reached.
+    [`FlaxLogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
 
     Args:
         max_length (`int`):

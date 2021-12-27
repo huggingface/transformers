@@ -35,14 +35,14 @@ logger = logging.get_logger(__name__)
 @dataclass
 class TrainerState:
     """
-    A class containing the [`Trainer`] inner state that will be saved along the model and optimizer
-    when checkpointing and passed to the [`TrainerCallback`].
+    A class containing the [`Trainer`] inner state that will be saved along the model and optimizer when checkpointing
+    and passed to the [`TrainerCallback`].
 
     <Tip>
 
-    In all this class, one step is to be understood as one update step. When using gradient accumulation, one
-    update step may require several forward and backward passes: if you use `gradient_accumulation_steps=n`,
-    then one update step requires going through *n* batches.
+    In all this class, one step is to be understood as one update step. When using gradient accumulation, one update
+    step may require several forward and backward passes: if you use `gradient_accumulation_steps=n`, then one update
+    step requires going through *n* batches.
 
     </Tip>
 
@@ -110,8 +110,8 @@ class TrainerState:
 @dataclass
 class TrainerControl:
     """
-    A class that handles the [`Trainer`] control flow. This class is used by the
-    [`TrainerCallback`] to activate some switches in the training loop.
+    A class that handles the [`Trainer`] control flow. This class is used by the [`TrainerCallback`] to activate some
+    switches in the training loop.
 
     Args:
         should_training_stop (`bool`, *optional*, defaults to `False`):
@@ -190,12 +190,12 @@ class TrainerCallback:
 
             Those are only accessible in the event `on_log`.
 
-    The `control` object is the only one that can be changed by the callback, in which case the event that changes
-    it should return the modified version.
+    The `control` object is the only one that can be changed by the callback, in which case the event that changes it
+    should return the modified version.
 
-    The argument `args`, `state` and `control` are positionals for all events, all the others are
-    grouped in `kwargs`. You can unpack the ones you need in the signature of the event using them. As an example,
-    see the code of the simple [`~transformer.PrinterCallback`].
+    The argument `args`, `state` and `control` are positionals for all events, all the others are grouped in `kwargs`.
+    You can unpack the ones you need in the signature of the event using them. As an example, see the code of the
+    simple [`~transformer.PrinterCallback`].
 
     Example:
 
@@ -407,8 +407,7 @@ class CallbackHandler(TrainerCallback):
 
 class DefaultFlowCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that handles the default flow of the training loop for logs, evaluation
-    and checkpoints.
+    A [`TrainerCallback`] that handles the default flow of the training loop for logs, evaluation and checkpoints.
     """
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
@@ -514,11 +513,11 @@ class EarlyStoppingCallback(TrainerCallback):
             Use with `metric_for_best_model` to stop training when the specified metric worsens for
             `early_stopping_patience` evaluation calls.
        early_stopping_threshold(`float`, *optional*):
-            Use with TrainingArguments `metric_for_best_model` and `early_stopping_patience` to denote how
-            much the specified metric must improve to satisfy early stopping conditions. `
+            Use with TrainingArguments `metric_for_best_model` and `early_stopping_patience` to denote how much the
+            specified metric must improve to satisfy early stopping conditions. `
 
-    This callback depends on [`TrainingArguments`] argument *load_best_model_at_end* functionality
-    to set best_metric in [`TrainerState`].
+    This callback depends on [`TrainingArguments`] argument *load_best_model_at_end* functionality to set best_metric
+    in [`TrainerState`].
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):

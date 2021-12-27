@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Salesforce CTRL configuration """
+""" Salesforce CTRL configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,19 +25,18 @@ CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://huggingface.co/ctrl/resol
 
 class CTRLConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`CTRLModel`] or a
-    [`TFCTRLModel`]. It is used to instantiate a CTRL model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the [ctrl](https://huggingface.co/ctrl) architecture from SalesForce.
+    This is the configuration class to store the configuration of a [`CTRLModel`] or a [`TFCTRLModel`]. It is used to
+    instantiate a CTRL model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the
+    [ctrl](https://huggingface.co/ctrl) architecture from SalesForce.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 246534):
             Vocabulary size of the CTRL model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CTRLModel`] or
-            [`TFCTRLModel`].
+            `inputs_ids` passed when calling [`CTRLModel`] or [`TFCTRLModel`].
         n_positions (`int`, *optional*, defaults to 256):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).

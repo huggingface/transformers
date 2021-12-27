@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SEW-D model configuration """
+""" SEW-D model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,12 +28,13 @@ SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SEWDConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SEWDModel`]. It is used to
-    instantiate a SEW-D model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SEW-D [asapp/sew-d-tiny-100k](https://huggingface.co/asapp/sew-d-tiny-100k) architecture.
+    This is the configuration class to store the configuration of a [`SEWDModel`]. It is used to instantiate a SEW-D
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the SEW-D
+    [asapp/sew-d-tiny-100k](https://huggingface.co/asapp/sew-d-tiny-100k) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -67,8 +68,8 @@ class SEWDConfig(PretrainedConfig):
         norm_rel_ebd (`str`, *optional*, defaults to `"layer_norm"`):
             Whether to use layer norm in relative embedding (`"layer_norm"` if yes)
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"`, `"gelu_python"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"`, `"gelu_python"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -109,25 +110,27 @@ class SEWDConfig(PretrainedConfig):
             Number of groups of 1D convolutional positional embeddings layer.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
-            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition](https://arxiv.org/abs/1904.08779).
+            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+            Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
             reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
-            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease
-            the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
+            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
+            actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
         mask_time_min_masks (`int`, *optional*, defaults to 2),:
-            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time
-            step, irrespectively of `mask_feature_prob`. Only relevant if
-            ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''
+            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+            mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
             masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
             the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
-            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that
-            overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
+            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+            True`.
         mask_feature_length (`int`, *optional*, defaults to 10):
             Length of vector span along the feature axis.
         mask_feature_min_masks (`int`, *optional*, defaults to 0),:
@@ -140,9 +143,9 @@ class SEWDConfig(PretrainedConfig):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
             instance of [`SEWDForCTC`].
         ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses
-            mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
-            instance of [`SEWDForCTC`].
+            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+            of [`SEWDForCTC`].
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
             instance of [`Wav2Vec2ForSequenceClassification`].

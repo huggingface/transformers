@@ -68,8 +68,8 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
     """
     Constructs a Speech2Text2Tokenizer.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods.
-    Users should refer to the superclass for more information regarding such methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
+    the superclass for more information regarding such methods.
 
     Args:
         vocab_file (`str`):

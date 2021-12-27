@@ -76,8 +76,8 @@ class SplinterTokenizer(PreTrainedTokenizer):
     r"""
     Construct a Splinter tokenizer. Based on WordPiece.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -109,7 +109,8 @@ class SplinterTokenizer(PreTrainedTokenizer):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
@@ -278,7 +279,8 @@ class SplinterTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create the token type IDs corresponding to the sequences passed. [What are token type IDs?](../glossary#token-type-ids)
+        Create the token type IDs corresponding to the sequences passed. [What are token type
+        IDs?](../glossary#token-type-ids)
 
         Should be overridden in a subclass if the model has a special way of building those.
 
@@ -336,7 +338,8 @@ class BasicTokenizer(object):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).

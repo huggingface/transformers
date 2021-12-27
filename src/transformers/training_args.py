@@ -75,29 +75,29 @@ class TrainingArguments:
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
 
-    Using [`HfArgumentParser`] we can turn this class into [argparse](https://docs.python.org/3/library/argparse#module-argparse) arguments that can be specified on the command
-    line.
+    Using [`HfArgumentParser`] we can turn this class into
+    [argparse](https://docs.python.org/3/library/argparse#module-argparse) arguments that can be specified on the
+    command line.
 
     Parameters:
         output_dir (`str`):
             The output directory where the model predictions and checkpoints will be written.
         overwrite_output_dir (`bool`, *optional*, defaults to `False`):
-            If `True`, overwrite the content of the output directory. Use this to continue training if
-            `output_dir` points to a checkpoint directory.
+            If `True`, overwrite the content of the output directory. Use this to continue training if `output_dir`
+            points to a checkpoint directory.
         do_train (`bool`, *optional*, defaults to `False`):
-            Whether to run training or not. This argument is not directly used by [`Trainer`], it's
-            intended to be used by your training/evaluation scripts instead. See the [example scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
+            by your training/evaluation scripts instead. See the [example
+            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
         do_eval (`bool`, *optional*):
-            Whether to run evaluation on the validation set or not. Will be set to `True` if
-            `evaluation_strategy` is different from `"no"`. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See
-            the [example scripts](https://github.com/huggingface/transformers/tree/master/examples) for more
-            details.
+            Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
+            different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
+            training/evaluation scripts instead. See the [example
+            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
         do_predict (`bool`, *optional*, defaults to `False`):
-            Whether to run predictions on the test set or not. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See
-            the [example scripts](https://github.com/huggingface/transformers/tree/master/examples) for more
-            details.
+            Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
+            intended to be used by your training/evaluation scripts instead. See the [example
+            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
         evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
@@ -116,9 +116,8 @@ class TrainingArguments:
 
             <Tip warning={true}>
 
-            When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
-            logging, evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training
-            examples.
+            When using gradient accumulation, one step is counted as one step with backward pass. Therefore, logging,
+            evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training examples.
 
             </Tip>
 
@@ -129,8 +128,8 @@ class TrainingArguments:
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
-            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in
-            [`AdamW`] optimizer.
+            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in [`AdamW`]
+            optimizer.
         adam_beta1 (`float`, *optional*, defaults to 0.9):
             The beta1 hyperparameter for the [`AdamW`] optimizer.
         adam_beta2 (`float`, *optional*, defaults to 0.999):
@@ -143,17 +142,15 @@ class TrainingArguments:
             Total number of training epochs to perform (if not an integer, will perform the decimal part percents of
             the last epoch before stopping training).
         max_steps (`int`, *optional*, defaults to -1):
-            If set to a positive number, the total number of training steps to perform. Overrides
-            `num_train_epochs`. In case of using a finite iterable dataset the training may stop before reaching
-            the set number of steps when all data is exhausted
+            If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+            In case of using a finite iterable dataset the training may stop before reaching the set number of steps
+            when all data is exhausted
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
-            The scheduler type to use. See the documentation of [`SchedulerType`] for all possible
-            values.
+            The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
-            Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of
-            `warmup_ratio`.
+            Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of `warmup_ratio`.
         log_level (`str`, *optional*, defaults to `passive`):
             Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
             'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
@@ -178,14 +175,13 @@ class TrainingArguments:
         logging_steps (`int`, *optional*, defaults to 500):
             Number of update steps between two logs if `logging_strategy="steps"`.
         logging_nan_inf_filter (`bool`, *optional*, defaults to `True`):
-            Whether to filter `nan` and `inf` losses for logging. If set to obj:*True* the loss of every step
-            that is `nan` or `inf` is filtered and the average loss of the current logging window is taken
-            instead.
+            Whether to filter `nan` and `inf` losses for logging. If set to obj:*True* the loss of every step that is
+            `nan` or `inf` is filtered and the average loss of the current logging window is taken instead.
 
             <Tip>
 
-            `logging_nan_inf_filter` only influences the logging of loss values, it does not change the
-            behavior the gradient is computed or applied to the model.
+            `logging_nan_inf_filter` only influences the logging of loss values, it does not change the behavior the
+            gradient is computed or applied to the model.
 
             </Tip>
 
@@ -210,22 +206,21 @@ class TrainingArguments:
             Whether to not use CUDA even when it is available or not.
         seed (`int`, *optional*, defaults to 42):
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
-            [`~Trainer.model_init`] function to instantiate the model if it has some randomly
-            initialized parameters.
+            [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture. This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
-            For `fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
-            on the [Apex documentation](https://nvidia.github.io/apex/amp).
+            For `fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details on
+            the [Apex documentation](https://nvidia.github.io/apex/amp).
         fp16_backend (`str`, *optional*, defaults to `"auto"`):
             This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto"`, `"amp"` or
-            `"apex"`. `"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
-            other choices will force the requested backend.
+            The backend to use for mixed precision training. Must be one of `"auto"`, `"amp"` or `"apex"`. `"auto"`
+            will use AMP or APEX depending on the PyTorch version detected, while the other choices will force the
+            requested backend.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values. This is an experimental API and it may change.
@@ -245,22 +240,23 @@ class TrainingArguments:
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
         eval_steps (`int`, *optional*):
-            Number of update steps between two evaluations if `evaluation_strategy="steps"`. Will default to the
-            same value as `logging_steps` if not set.
+            Number of update steps between two evaluations if `evaluation_strategy="steps"`. Will default to the same
+            value as `logging_steps` if not set.
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
         past_index (`int`, *optional*, defaults to -1):
-            Some models like [TransformerXL](../model_doc/transformerxl) or [XLNet](../model_doc/xlnet) can
-            make use of the past hidden states for their predictions. If this argument is set to a positive int, the
-            `Trainer` will use the corresponding output (usually index 2) as the past state and feed it to the model
-            at the next training step under the keyword argument `mems`.
+            Some models like [TransformerXL](../model_doc/transformerxl) or [XLNet](../model_doc/xlnet) can make use of
+            the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
+            use the corresponding output (usually index 2) as the past state and feed it to the model at the next
+            training step under the keyword argument `mems`.
         run_name (`str`, *optional*):
-            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and [mlflow](https://www.mlflow.org/) logging.
+            A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and
+            [mlflow](https://www.mlflow.org/) logging.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
-            [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True`
-            if the logging level is set to warn or lower (default), `False` otherwise.
+            [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
+            set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
             If using `datasets.Dataset` datasets, whether or not to automatically remove the columns unused by the
             model forward method.
@@ -269,50 +265,46 @@ class TrainingArguments:
         label_names (`List[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
-            Will eventually default to `["labels"]` except if the model used is one of the
-            `XxxForQuestionAnswering` in which case it will default to `["start_positions", "end_positions"]`.
+            Will eventually default to `["labels"]` except if the model used is one of the `XxxForQuestionAnswering` in
+            which case it will default to `["start_positions", "end_positions"]`.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Whether or not to load the best model found during training at the end of training.
 
             <Tip>
 
-            When set to `True`, the parameters `save_strategy` needs to be the same as
-            `eval_strategy`, and in the case it is "steps", `save_steps` must be a round multiple of
-            `eval_steps`.
+            When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in the case
+            it is "steps", `save_steps` must be a round multiple of `eval_steps`.
 
             </Tip>
 
         metric_for_best_model (`str`, *optional*):
             Use in conjunction with `load_best_model_at_end` to specify the metric to use to compare two different
-            models. Must be the name of a metric returned by the evaluation with or without the prefix `"eval_"`.
-            Will default to `"loss"` if unspecified and `load_best_model_at_end=True` (to use the evaluation
-            loss).
+            models. Must be the name of a metric returned by the evaluation with or without the prefix `"eval_"`. Will
+            default to `"loss"` if unspecified and `load_best_model_at_end=True` (to use the evaluation loss).
 
-            If you set this value, `greater_is_better` will default to `True`. Don't forget to set it to
-            `False` if your metric is better when lower.
+            If you set this value, `greater_is_better` will default to `True`. Don't forget to set it to `False` if
+            your metric is better when lower.
         greater_is_better (`bool`, *optional*):
-            Use in conjunction with `load_best_model_at_end` and `metric_for_best_model` to specify if better
-            models should have a greater metric or not. Will default to:
+            Use in conjunction with `load_best_model_at_end` and `metric_for_best_model` to specify if better models
+            should have a greater metric or not. Will default to:
 
-            - `True` if `metric_for_best_model` is set to a value that isn't `"loss"` or
-              `"eval_loss"`.
+            - `True` if `metric_for_best_model` is set to a value that isn't `"loss"` or `"eval_loss"`.
             - `False` if `metric_for_best_model` is not set, or set to `"loss"` or `"eval_loss"`.
         ignore_data_skip (`bool`, *optional*, defaults to `False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
-            stage as in the previous training. If set to `True`, the training will begin faster (as that skipping
-            step can take a long time) but will not yield the same results as the interrupted training would have.
+            stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
+            can take a long time) but will not yield the same results as the interrupted training would have.
         sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `False`):
             Use Sharded DDP training from [FairScale](https://github.com/facebookresearch/fairscale) (in distributed
             training only). This is an experimental feature.
 
             A list of options along the following:
 
-            - `"simple"`: to use first instance of sharded DDP released by fairscale (`ShardedDDP`) similar
-              to ZeRO-2.
-            - `"zero_dp_2"`: to use the second instance of sharded DPP released by fairscale
-              (`FullyShardedDDP`) in Zero-2 mode (with `reshard_after_forward=False`).
-            - `"zero_dp_3"`: to use the second instance of sharded DPP released by fairscale
-              (`FullyShardedDDP`) in Zero-3 mode (with `reshard_after_forward=True`).
+            - `"simple"`: to use first instance of sharded DDP released by fairscale (`ShardedDDP`) similar to ZeRO-2.
+            - `"zero_dp_2"`: to use the second instance of sharded DPP released by fairscale (`FullyShardedDDP`) in
+              Zero-2 mode (with `reshard_after_forward=False`).
+            - `"zero_dp_3"`: to use the second instance of sharded DPP released by fairscale (`FullyShardedDDP`) in
+              Zero-3 mode (with `reshard_after_forward=True`).
             - `"offload"`: to add ZeRO-offload (only compatible with `"zero_dp_2"` and `"zero_dp_3"`).
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
@@ -323,38 +315,36 @@ class TrainingArguments:
             `ds_config.json`) or an already loaded json file as a `dict`"
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
-            labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor + label_smoothing_factor/num_labels` respectively.
+            labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
+            label_smoothing_factor/num_labels` respectively.
         debug (`str` or list of [`~debug_utils.DebugOption`], *optional*, defaults to `""`):
             Enable one or more debug features. This is an experimental feature.
 
             Possible options are:
 
-            - `"underflow_overflow"`: detects overflow in model's input/outputs and reports the last frames that
-              led to the event
+            - `"underflow_overflow"`: detects overflow in model's input/outputs and reports the last frames that led to
+              the event
             - `"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
         adafactor (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the [`Adafactor`] optimizer instead of
-            [`AdamW`].
+            Whether or not to use the [`Adafactor`] optimizer instead of [`AdamW`].
         group_by_length (`bool`, *optional*, defaults to `False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
         length_column_name (`str`, *optional*, defaults to `"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
-            than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset
-            is an instance of `Dataset`.
+            than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
+            instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"comet_ml"`, `"mlflow"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to
-            all integrations installed, `"none"` for no integrations.
+            `"comet_ml"`, `"mlflow"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all integrations
+            installed, `"none"` for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
-            `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True`
-            otherwise.
+            `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
         ddp_bucket_cap_mb (`int`, *optional*):
-            When using distributed training, the value of the flag `bucket_cap_mb` passed to
-            `DistributedDataParallel`.
+            When using distributed training, the value of the flag `bucket_cap_mb` passed to `DistributedDataParallel`.
         dataloader_pin_memory (`bool`, *optional*, defaults to `True`):
             Whether you want to pin memory in data loaders or not. Will default to `True`.
         skip_memory_metrics (`bool`, *optional*, defaults to `True`):
@@ -362,36 +352,34 @@ class TrainingArguments:
             down the training and evaluation speed.
         push_to_hub (`bool`, *optional*, defaults to `False`):
             Whether or not to upload the trained model to the hub after training. If this is activated, and
-            `output_dir` exists, it needs to be a local clone of the repository to which the
-            [`Trainer`] will be pushed.
+            `output_dir` exists, it needs to be a local clone of the repository to which the [`Trainer`] will be
+            pushed.
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See
-            the [example scripts](https://github.com/huggingface/transformers/tree/master/examples) for more
-            details.
+            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
+            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
         hub_model_id (`str`, *optional*):
             The name of the repository to keep in sync with the local *output_dir*. It can be a simple model ID in
             which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
             for instance `"user_name/model"`, which allows you to push to an organization you are a member of with
-            `"organization_name/model"`. Will default to `user_name/output_dir_name` with *output_dir_name*
-            being the name of `output_dir`.
+            `"organization_name/model"`. Will default to `user_name/output_dir_name` with *output_dir_name* being the
+            name of `output_dir`.
 
             Will default to to the name of `output_dir`.
         hub_strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
-            - `"end"`: push the model, its configuration, the tokenizer (if passed along to the
-              [`Trainer`]) and a draft of a model card at the end of training.
-            - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the
-              [`Trainer`]) and a draft of a model card each time there is a model save. The pushes
-              are asynchronous to not block training, and in case the save are very frequent, a new push is only
-              attempted if the previous one is finished. A last push is made with the final model at the end of
-              training.
-            - `"checkpoint"`: like `"every_save"` but the latest checkpoint is also pushed in a subfolder
-              named last-checkpoint, allowing you to resume training easily with
+            - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
+              draft of a model card at the end of training.
+            - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and
+              a draft of a model card each time there is a model save. The pushes are asynchronous to not block
+              training, and in case the save are very frequent, a new push is only attempted if the previous one is
+              finished. A last push is made with the final model at the end of training.
+            - `"checkpoint"`: like `"every_save"` but the latest checkpoint is also pushed in a subfolder named
+              last-checkpoint, allowing you to resume training easily with
               `trainer.train(resume_from_checkpoint="last-checkpoint")`.
-            - `"all_checkpoints"`: like `"checkpoint"` but all checkpoints are pushed like they appear in the
-              output folder (so you will get one checkpoint folder per folder in your final repository)
+            - `"all_checkpoints"`: like `"checkpoint"` but all checkpoints are pushed like they appear in the output
+              folder (so you will get one checkpoint folder per folder in your final repository)
 
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
@@ -1172,11 +1160,10 @@ class TrainingArguments:
 
         For the main process the log level defaults to `logging.INFO` unless overridden by `log_level` argument.
 
-        For the replica processes the log level defaults to `logging.WARNING` unless overridden by
-        `log_level_replica` argument.
+        For the replica processes the log level defaults to `logging.WARNING` unless overridden by `log_level_replica`
+        argument.
 
-        The choice between the main and replica process settings is made according to the return value of
-        `should_log`.
+        The choice between the main and replica process settings is made according to the return value of `should_log`.
         """
 
         log_level_main_node = logging.INFO if self.log_level == -1 else self.log_level
@@ -1200,17 +1187,17 @@ class TrainingArguments:
     @contextlib.contextmanager
     def main_process_first(self, local=True, desc="work"):
         """
-        A context manager for torch distributed environment where on needs to do something on the main process,
-        while blocking replicas, and when it's finished releasing the replicas.
+        A context manager for torch distributed environment where on needs to do something on the main process, while
+        blocking replicas, and when it's finished releasing the replicas.
 
-        One such use is for `datasets`'s `map` feature which to be efficient should be run once on the main
-        process, which upon completion saves a cached version of results and which then automatically gets loaded
-        by the replicas.
+        One such use is for `datasets`'s `map` feature which to be efficient should be run once on the main process,
+        which upon completion saves a cached version of results and which then automatically gets loaded by the
+        replicas.
 
         Args:
             local (`bool`, *optional*, defaults to `True`):
-                if `True` first means process of rank 0 of each node if `False` first means process of rank 0
-                of node rank 0 In multi-node environment with a shared filesystem you most likely will want to use
+                if `True` first means process of rank 0 of each node if `False` first means process of rank 0 of node
+                rank 0 In multi-node environment with a shared filesystem you most likely will want to use
                 `local=False` so that only the main process of the first node will do the processing. If however, the
                 filesystem is not shared, then the main process of each node will need to do the processing, which is
                 the default behavior.

@@ -47,7 +47,8 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
         past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+            List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
+            sequence_length, embed_size_per_head)`).
 
             Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -55,8 +56,8 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
             Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
             `question_encoder_last_hidden_state`.
         retrieved_doc_embeds (`tf.Tensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
-            Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to
-            compute the `doc_scores`.
+            Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
+            the `doc_scores`.
         retrieved_doc_ids (`tf.Tensor` (int32) of shape `(batch_size, config.n_docs)`, *optional*, returned when *output_retrieved=True*):
             The indexes of the embedded documents retrieved by the retriever.
         context_input_ids (`tf.Tensor`(int32) of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
@@ -68,34 +69,37 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
             Sequence of hidden states at the output of the last layer of the question encoder pooled output of the
             model.
         question_enc_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden states of the question encoder at the output of each layer plus the initial embedding outputs.
         question_enc_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights of the question encoder, after the attention softmax, used to compute the weighted
             average in the self-attention heads.
         generator_enc_last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the generator encoder of the model.
         generator_enc_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden states of the generator encoder at the output of each layer plus the initial embedding outputs.
         generator_enc_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights of the generator encoder, after the attention softmax, used to compute the weighted
             average in the self-attention heads.
         generator_dec_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden states of the generator decoder at the output of each layer plus the initial embedding outputs.
         generator_dec_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights of the generator decoder, after the attention softmax, used to compute the weighted
             average in the self-attention heads.
@@ -127,7 +131,8 @@ class TFRetrievAugLMOutput(ModelOutput):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
         past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+            List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
+            sequence_length, embed_size_per_head)`).
 
             Contains precomputed hidden-states (key and values in the attention blocks) of the decoder that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -135,8 +140,8 @@ class TFRetrievAugLMOutput(ModelOutput):
             Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
             `question_encoder_last_hidden_state`.
         retrieved_doc_embeds (`tf.Tensor` of shape `(batch_size, config.n_docs, hidden_size)`, *optional*, returned when *output_retrieved=True*):
-            Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to
-            compute the `doc_scores`.
+            Embedded documents retrieved by the retriever. Is used with `question_encoder_last_hidden_state` to compute
+            the `doc_scores`.
         retrieved_doc_ids (`tf.Tensor` of shape `(batch_size, config.n_docs)`, *optional*, returned when *output_retrieved=True*):
             The indexes of the embedded documents retrieved by the retriever.
         context_input_ids (`tf.Tensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
@@ -148,34 +153,37 @@ class TFRetrievAugLMOutput(ModelOutput):
             Sequence of hidden states at the output of the last layer of the question encoder pooled output of the
             model.
         question_enc_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden states of the question encoder at the output of each layer plus the initial embedding outputs.
         question_enc_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights of the question encoder, after the attention softmax, used to compute the weighted
             average in the self-attention heads.
         generator_enc_last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the generator encoder of the model.
         generator_enc_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden states of the generator encoder at the output of each layer plus the initial embedding outputs.
         generator_enc_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights of the generator encoder, after the attention softmax, used to compute the weighted
             average in the self-attention heads.
         generator_dec_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings and one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden states of the generator decoder at the output of each layer plus the initial embedding outputs.
         generator_dec_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights of the generator decoder, after the attention softmax, used to compute the weighted
             average in the self-attention heads.
@@ -363,18 +371,18 @@ RAG_START_DOCSTRING = r"""
     relevant context documents. The documents are then prepended to the input. Such contextualized inputs is passed to
     the generator.
 
-    The question encoder can be any *autoencoding* model, preferably [`TFDPRQuestionEncoder`], and
-    the generator can be any *seq2seq* model, preferably [`TFBartForConditionalGeneration`].
+    The question encoder can be any *autoencoding* model, preferably [`TFDPRQuestionEncoder`], and the generator can be
+    any *seq2seq* model, preferably [`TFBartForConditionalGeneration`].
 
-    The model can be initialized with a [`RagRetriever`] for end-to-end generation or used in
-    combination with the outputs of a retriever in multiple steps---see examples for more details. The model is
-    compatible any *autoencoding* model as the `question_encoder` and any *seq2seq* model with language model head as
-    the `generator`. It has been tested with [`TFDPRQuestionEncoder`] as the `question_encoder`
-    and [`TFBartForConditionalGeneration`] as the `generator`.
+    The model can be initialized with a [`RagRetriever`] for end-to-end generation or used in combination with the
+    outputs of a retriever in multiple steps---see examples for more details. The model is compatible any
+    *autoencoding* model as the `question_encoder` and any *seq2seq* model with language model head as the `generator`.
+    It has been tested with [`TFDPRQuestionEncoder`] as the `question_encoder` and [`TFBartForConditionalGeneration`]
+    as the `generator`.
 
-    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
     This model is also a Tensorflow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
@@ -400,9 +408,9 @@ RAG_START_DOCSTRING = r"""
 RAG_FORWARD_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize
-            the model, specifies which generator to use, it also specifies a compatible generator tokenizer. Use that
-            tokenizer class to obtain the indices.
+            Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
+            which generator to use, it also specifies a compatible generator tokenizer. Use that tokenizer class to
+            obtain the indices.
         attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -412,41 +420,41 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         encoder_outputs (`tuple(tuple(tf.Tensor)`, *optional*)
             Tuple consists of (`generator_enc_last_hidden_state`, *optional*: `generator_enc_hidden_states`,
-            *optional*: `generator_enc_attentions`). `generator_enc_last_hidden_state` of shape
-            `(batch_size, n_docs * sequence_length, hidden_size)` is a sequence of hidden-states at the output of
-            the last layer of the generator's encoder.
+            *optional*: `generator_enc_attentions`). `generator_enc_last_hidden_state` of shape `(batch_size, n_docs *
+            sequence_length, hidden_size)` is a sequence of hidden-states at the output of the last layer of the
+            generator's encoder.
 
             Used by the ([`TFRagModel`]) model during decoding.
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Provide for generation tasks. *None* by default, construct as per instructions for the generator model
             you're using with your RAG instance.
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size,  target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
-            also be used by default.
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
         past_key_values (`tuple(tuple(tf.Tensor))`):
             Tuple consists of two elements: `encoder_outputs` of the RAG model (see `encoder_outputs`) and
-            `past_key_values` of the underlying generator. Can be used to speed up decoding.
-            `past_key_values` are used in the ([`RagTokenForGeneration`]) model during
-            decoding.
+            `past_key_values` of the underlying generator. Can be used to speed up decoding. `past_key_values` are used
+            in the ([`RagTokenForGeneration`]) model during decoding.
         doc_scores (`tf.Tensor` of shape `(batch_size, config.n_docs)`):
             Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
-            `question_encoder_last_hidden_state`. If the model has is not initialized with a `retriever`
-            `doc_scores` has to be provided to the forward pass. `doc_scores` can be computed via
-            `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more
-            information.
+            `question_encoder_last_hidden_state`. If the model has is not initialized with a `retriever` `doc_scores`
+            has to be provided to the forward pass. `doc_scores` can be computed via
+            `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more information.
         context_input_ids (`tf.Tensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
             Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
             retriever.
 
-            If the model has is not initialized with a `retriever` ``context_input_ids` has to be provided to the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`]. context_attention_mask (`tf.Tensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*): Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
-            retriever.
+            If the model has is not initialized with a `retriever` ``context_input_ids` has to be provided to the
+            forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`]. context_attention_mask
+            (`tf.Tensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when
+            *output_retrieved=True*): Attention mask post-processed from the retrieved documents and the question
+            encoder `input_ids` by the retriever.
 
-            If the model has is not initialized with a `retriever` `context_attention_mask` has to be provided
-            to the forward pass. `context_attention_mask` are returned by
-            [`~RagRetriever.__call__`].
+            If the model has is not initialized with a `retriever` `context_attention_mask` has to be provided to the
+            forward pass. `context_attention_mask` are returned by [`~RagRetriever.__call__`].
         use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -454,8 +462,8 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         output_retrieved(`bool`, *optional*):
-            Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`,
-            `context_input_ids` and `context_attention_mask`. See returned tensors for more detail.
+            Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
+            `context_attention_mask`. See returned tensors for more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`TFRetrievAugLMOutput`] instead of a plain tuple.
         n_docs (`int`, *optional*, defaults to `config.n_docs``)
@@ -829,7 +837,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             Output:
                 mimic of torch_tensor.index_select(dim, indices)
 
-            credit: https://stackoverflow.com/questions/58464790/is-there-an-equivalent-function-of-pytorch-named-index-select-in-tensorflow
+            credit:
+                https://stackoverflow.com/questions/58464790/is-there-an-equivalent-function-of-pytorch-named-index-select-in-tensorflow
             """
             shape = shape_list(input_)
             if dim == -1:
@@ -1078,23 +1087,20 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
                 retriever.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided
-                to the forward pass. `context_input_ids` are returned by
-                [`~RagRetriever.__call__`].
+                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             context_attention_mask (`tf.Tensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
-                Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by
-                the retriever.
+                Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+                retriever.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided
-                to the forward pass. `context_input_ids` are returned by
-                [`~RagRetriever.__call__`].
+                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             doc_scores (`tf.Tensor` of shape `(batch_size, config.n_docs)`):
                 Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
                 `question_encoder_last_hidden_state`.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided
-                to the forward pass. `context_input_ids` are returned by
-                [`~RagRetriever.__call__`].
+                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             max_length (`int`, *optional*, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (`int`, *optional*, defaults to 10):
@@ -1125,9 +1131,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Number of beams for beam search. 1 means no beam search.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the `generator`'s
-                `[`~generation_utils.GenerationMixin.generate`] function, where we set `num_return_sequences` to `num_beams`. decoder_start_token_id (`int`, *optional*):
-                If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+                is not the value we pass to the `generator`'s `[`~generation_utils.GenerationMixin.generate`] function,
+                where we set `num_return_sequences` to `num_beams`. decoder_start_token_id (`int`, *optional*): If an
+                encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
             output_attentions (`bool`, *optional*, defaults to *False*):
@@ -1144,9 +1150,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
         Return:
-            `tf.Tensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated
-            sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter if all
-            batches finished early due to the `eos_token_id`.
+            `tf.Tensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated sequences. The
+            second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished early
+            due to the `eos_token_id`.
         """
         # set default parameters
         n_docs = n_docs if n_docs is not None else self.config.n_docs
@@ -1493,8 +1499,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
     ):
         r"""
         exclude_bos_score (`bool`, *optional*):
-            Only relevant if `labels` is passed. If `True`, the score of the BOS token is disregarded when
-            computing the loss.
+            Only relevant if `labels` is passed. If `True`, the score of the BOS token is disregarded when computing
+            the loss.
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss according to Rag-Sequence model formulation See
             https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Sequence formulation. Indices should
@@ -1717,38 +1723,37 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         **model_kwargs
     ):
         """
-        Implements RAG sequence "thorough" decoding. Read the
-        [`~generation_utils.GenerationMixin.generate`]` documentation for more information on how to
-        set other generate input parameters
+        Implements RAG sequence "thorough" decoding. Read the [`~generation_utils.GenerationMixin.generate`]`
+        documentation for more information on how to set other generate input parameters
 
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 The sequence used as a prompt for the generation. If `input_ids` is not passed, then
                 `context_input_ids` has to be provided.
             attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`: - 1
-                for tokens that are **not masked**, - 0 for tokens that are **masked**. [What are attention masks?](../glossary#attention-mask)
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`: - 1 for
+                tokens that are **not masked**, - 0 for tokens that are **masked**. [What are attention
+                masks?](../glossary#attention-mask)
             context_input_ids (`tf.Tensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
                 Input IDs post-processed from the retrieved documents and the question encoder input_ids by the
                 retriever.
             context_attention_mask (`tf.Tensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
-                Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by
-                the retriever. If the model has is not initialized with a `retriever` or `input_ids` is not given,
-                `context_input_ids` and `context_attention_mask` have to be provided to the forward pass.
-                They are returned by [`~RagRetriever.__call__`].
+                Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+                retriever. If the model has is not initialized with a `retriever` or `input_ids` is not given,
+                `context_input_ids` and `context_attention_mask` have to be provided to the forward pass. They are
+                returned by [`~RagRetriever.__call__`].
             doc_scores (`tf.Tensor` of shape `(batch_size, config.n_docs)`):
                 Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
                 `question_encoder_last_hidden_state`. If the model has is not initialized with a `retriever` or
-                `input_ids` is not given, `doc_scores` has to be provided to the forward pass. `doc_scores`
-                are returned by [`~RagRetriever.__call__`].
+                `input_ids` is not given, `doc_scores` has to be provided to the forward pass. `doc_scores` are
+                returned by [`~RagRetriever.__call__`].
             do_deduplication (`bool`, *optional*):
                 Whether or not to deduplicate the generations from different context documents for a given input. Has
                 to be set to `False` if used while training with distributed backend.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the `generator`'s
-                `[`~generation_utils.GenerationMixin.generate`]` function, where we set
-                `num_return_sequences` to `num_beams`.
+                is not the value we pass to the `generator`'s `[`~generation_utils.GenerationMixin.generate`]`
+                function, where we set `num_return_sequences` to `num_beams`.
             num_beams (`int`, *optional*, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
@@ -1757,9 +1762,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 Additional kwargs will be passed to [`~generation_utils.GenerationMixin.generate`]
 
         Return:
-            `tf.Tensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated
-            sequences. The second dimension (sequence length) is either equal to `max_length` or shorter if all
-            batches finished early due to the `eos_token_id`.
+            `tf.Tensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated sequences. The
+            second dimension (sequence length) is either equal to `max_length` or shorter if all batches finished early
+            due to the `eos_token_id`.
         """
 
         n_docs = n_docs if n_docs is not None else self.config.n_docs

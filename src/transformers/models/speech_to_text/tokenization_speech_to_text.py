@@ -56,8 +56,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     """
     Construct an Speech2Text tokenizer.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods.
-    Users should refer to the superclass for more information regarding such methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
+    the superclass for more information regarding such methods.
 
     Args:
         vocab_file (`str`):
@@ -80,7 +80,9 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         tgt_lang (`str`, *optional*):
             A string representing the target language.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.

@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" I-BERT configuration """
+""" I-BERT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -31,11 +31,11 @@ IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class IBertConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`IBertModel`]. It is used to
-    instantiate a I-BERT model according to the specified arguments,
+    This is the configuration class to store the configuration of a [`IBertModel`]. It is used to instantiate a I-BERT
+    model according to the specified arguments,
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -50,8 +50,8 @@ class IBertConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -66,18 +66,19 @@ class IBertConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`,
-            `"relative_key_query"`. For positional embeddings use `"absolute"`. For more information on
-            `"relative_key"`, please refer to [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155). For more information on `"relative_key_query"`, please refer to
-            *Method 4* in [Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         quant_mode (`bool`, *optional*, defaults to `False`):
             Whether to quantize the model or not.
         force_dequant (`str`, *optional*, defaults to `"none"`):
             Force dequantize specific nonlinear layer. Dequatized layers are then executed with full precision.
-            `"none"`, `"gelu"`, `"softmax"`, `"layernorm"` and `"nonlinear"` are supported. As
-            deafult, it is set as `"none"`, which does not dequantize any layers. Please specify `"gelu"`,
-            `"softmax"`, or `"layernorm"` to dequantize GELU, Softmax, or LayerNorm, respectively.
-            `"nonlinear"` will dequantize all nonlinear layers, i.e., GELU, Softmax, and LayerNorm.
+            `"none"`, `"gelu"`, `"softmax"`, `"layernorm"` and `"nonlinear"` are supported. As deafult, it is set as
+            `"none"`, which does not dequantize any layers. Please specify `"gelu"`, `"softmax"`, or `"layernorm"` to
+            dequantize GELU, Softmax, or LayerNorm, respectively. `"nonlinear"` will dequantize all nonlinear layers,
+            i.e., GELU, Softmax, and LayerNorm.
     """
 
     model_type = "ibert"

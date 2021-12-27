@@ -118,8 +118,7 @@ class BeamSearchState:
 
 class FlaxGenerationMixin:
     """
-    A class containing all of the functions supporting generation, to be used as a mixin in
-    [`FlaxPreTrainedModel`].
+    A class containing all of the functions supporting generation, to be used as a mixin in [`FlaxPreTrainedModel`].
     """
 
     @staticmethod
@@ -148,8 +147,7 @@ class FlaxGenerationMixin:
     def _adapt_logits_for_beam_search(self, logits):
         """
         This function can be overwritten in the specific modeling_flax_<model-name>.py classes to allow for custom beam
-        search behavior. Note that the only model that overwrites this method is
-        [`~transformes.FlaxMarianMTModel`].
+        search behavior. Note that the only model that overwrites this method is [`~transformes.FlaxMarianMTModel`].
         """
         return logits
 
@@ -181,11 +179,12 @@ class FlaxGenerationMixin:
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         and, multinomial sampling.
 
-        Apart from `input_ids`, all the arguments below will default to the value of the attribute of the same
-        name inside the [`PretrainedConfig`] of the model. The default values indicated are the
-        default values of those config.
+        Apart from `input_ids`, all the arguments below will default to the value of the attribute of the same name
+        inside the [`PretrainedConfig`] of the model. The default values indicated are the default values of those
+        config.
 
-        Most of these parameters are explained in more detail in [this blog post](https://huggingface.co/blog/how-to-generate).
+        Most of these parameters are explained in more detail in [this blog
+        post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
 
@@ -200,8 +199,8 @@ class FlaxGenerationMixin:
             top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to 1.0):
-                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or
-                higher are kept for generation.
+                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
+                are kept for generation.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             bos_token_id (`int`, *optional*):
@@ -213,8 +212,8 @@ class FlaxGenerationMixin:
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
             trace (`bool`, *optional*, defaults to `True`):
-                Whether to trace generation. Setting `trace=False` should only be used for debugging and will lead to
-                a considerably slower runtime.
+                Whether to trace generation. Setting `trace=False` should only be used for debugging and will lead to a
+                considerably slower runtime.
             params (`Dict[str, jnp.ndarray]`, *optional*):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
             model_kwargs:
@@ -327,8 +326,8 @@ class FlaxGenerationMixin:
         self, top_k: int = None, top_p: float = None, temperature: float = None
     ) -> FlaxLogitsProcessorList:
         """
-        This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant
-        [`FlaxLogitsWarper`] instances used for multinomial sampling.
+        This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsWarper`]
+        instances used for multinomial sampling.
         """
 
         # init warp parameters
@@ -359,8 +358,8 @@ class FlaxGenerationMixin:
         forced_eos_token_id: int,
     ) -> FlaxLogitsProcessorList:
         """
-        This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant
-        [`FlaxLogitsProcessor`] instances used to modify the scores of the language model head.
+        This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsProcessor`]
+        instances used to modify the scores of the language model head.
         """
         processors = FlaxLogitsProcessorList()
 
