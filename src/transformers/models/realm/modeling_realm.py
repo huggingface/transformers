@@ -1416,8 +1416,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1945,8 +1944,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         >>> searcher_output, reader_output, predicted_answer = model(question, answer_ids)
         >>> loss = reader_output.loss
-        ```
-"""
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

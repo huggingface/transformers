@@ -39,7 +39,8 @@ if is_torch_available():
 
 # Direct download link
 # https://storage.cloud.google.com/orqa-data/enwiki-20181220/blocks.tfr
-BLOCK_RECORDS_PATH = r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
+# BLOCK_RECORDS_PATH = r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
+BLOCK_RECORDS_PATH = "/home/patrick/realm/blocks.tfr"
 
 
 class RealmModelTester:

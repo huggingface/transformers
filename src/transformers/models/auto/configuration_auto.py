@@ -30,14 +30,11 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-<<<<<<< HEAD
         ("realm", "RealmConfig"),
-=======
         ("imagegpt", "ImageGPTConfig"),
         ("qdqbert", "QDQBertConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
         ("trocr", "TrOCRConfig"),
->>>>>>> 705ca7f21b2b557e0cfd5d0853b297fa53489d20
         ("fnet", "FNetConfig"),
         ("segformer", "SegformerConfig"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderConfig"),
@@ -120,12 +117,9 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
-<<<<<<< HEAD
         ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-=======
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
->>>>>>> 705ca7f21b2b557e0cfd5d0853b297fa53489d20
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -198,14 +192,11 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-<<<<<<< HEAD
         ("realm", "Realm"),
-=======
         ("imagegpt", "ImageGPT"),
         ("qdqbert", "QDQBert"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
         ("trocr", "TrOCR"),
->>>>>>> 705ca7f21b2b557e0cfd5d0853b297fa53489d20
         ("fnet", "FNet"),
         ("segformer", "SegFormer"),
         ("vision-text-dual-encoder", "VisionTextDualEncoder"),
