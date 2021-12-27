@@ -404,7 +404,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     ) -> PreTrainedModel:
         """
         Params:
-            vision_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
+            vision_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
@@ -417,7 +417,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                       loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
                       conversion scripts and loading the Flax model afterwards.
 
-            text_model_name_or_path (:obj: *str*, *optional*):
+            text_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the text model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
