@@ -23,30 +23,29 @@ class PipelineIterator(IterableDataset):
         """
         Roughly equivalent to
 
-        .. code-block::
+        ```
+        for item in loader:
+            yield infer(item, **params)
+        ```
 
-            for item in loader:
+                Arguments:
+                    loader (`torch.utils.data.DataLoader` or any iterator):
+                        The iterator that will be used to apply `infer` on.
+                    infer (any function):
+                        The function to apply of each element of `loader`.
+                    params (`dict`):
+                        The parameters passed to `infer` along with every item
+                    loader_batch_size (`int`, *optional*):
+                        If specified, the items of `loader` are supposed to come as batch, and are loader_batched here
+                        making it roughly behave as
+
+
+        ```
+        for items in loader:
+            for i in loader_batch_size:
+                item = items[i]
                 yield infer(item, **params)
-
-        Arguments:
-            loader (:obj:`torch.utils.data.DataLoader` or any iterator):
-                The iterator that will be used to apply :obj:`infer` on.
-            infer (any function):
-                The function to apply of each element of :obj:`loader`.
-            params (:obj:`dict`):
-                The parameters passed to :obj:`infer` along with every item
-            loader_batch_size (:obj:`int`, `optional`):
-                If specified, the items of :obj:`loader` are supposed to come as batch, and are loader_batched here
-                making it roughly behave as
-
-
-                .. code-block::
-
-                    for items in loader:
-                        for i in loader_batch_size:
-                            item = items[i]
-                            yield infer(item, **params)
-        """
+        ```"""
         self.loader = loader
         self.infer = infer
         self.params = params
@@ -141,19 +140,19 @@ class PipelineChunkIterator(PipelineIterator):
         """
         Roughly equivalent to
 
-        .. code-block::
+        ```
+        for iterator in loader:
+            for item in iterator:
+                yield infer(item, **params)
+        ```
 
-            for iterator in loader:
-                for item in iterator:
-                    yield infer(item, **params)
-
-        Arguments:
-            loader (:obj:`torch.utils.data.DataLoader` or any iterator):
-                The iterator that will be used to apply :obj:`infer` on.
-            infer (any function):
-                The function to apply of each element of :obj:`loader`.
-            params (:obj:`dict`):
-                The parameters passed to :obj:`infer` along with every item
+                Arguments:
+                    loader (`torch.utils.data.DataLoader` or any iterator):
+                        The iterator that will be used to apply `infer` on.
+                    infer (any function):
+                        The function to apply of each element of `loader`.
+                    params (`dict`):
+                        The parameters passed to `infer` along with every item
         """
         super().__init__(loader, infer, params)
 
@@ -185,49 +184,47 @@ class PipelinePackIterator(PipelineIterator):
     """
     Roughly equivalent to
 
-    .. code-block::
+    ```
+    packed =  []
+    for item in loader:
+        packed.append(item)
+        if item["is_last"]:
+            yield packed
+            packed = []
+    ```
 
-        packed =  []
-        for item in loader:
+        but it also handles cases where `item` are batched (meaning it's a dict of Tensor with first dimension > 1. In
+        that case it does
+
+    ```
+    packed =  []
+    for batch in loader:
+        # item is batched
+        for item in batch:
             packed.append(item)
             if item["is_last"]:
                 yield packed
                 packed = []
+    ```
 
-    but it also handles cases where :obj:`item` are batched (meaning it's a dict of Tensor with first dimension > 1. In
-    that case it does
-
-    .. code-block::
-
-        packed =  []
-        for batch in loader:
-            # item is batched
-            for item in batch:
-                packed.append(item)
-                if item["is_last"]:
-                    yield packed
-                    packed = []
+        Arguments:
+            loader (`torch.utils.data.DataLoader` or any iterator):
+                The iterator that will be used to apply `infer` on.
+            infer (any function):
+                The function to apply of each element of `loader`.
+            params (`dict`):
+                The parameters passed to `infer` along with every item
+            loader_batch_size (`int`, *optional*):
+                If specified, the items of `loader` are supposed to come as batch, and are loader_batched here making
+                it roughly behave as
 
 
-    Arguments:
-        loader (:obj:`torch.utils.data.DataLoader` or any iterator):
-            The iterator that will be used to apply :obj:`infer` on.
-        infer (any function):
-            The function to apply of each element of :obj:`loader`.
-        params (:obj:`dict`):
-            The parameters passed to :obj:`infer` along with every item
-        loader_batch_size (:obj:`int`, `optional`):
-            If specified, the items of :obj:`loader` are supposed to come as batch, and are loader_batched here making
-            it roughly behave as
-
-
-            .. code-block::
-
-                for items in loader:
-                    for i in loader_batch_size:
-                        item = items[i]
-                        yield infer(item, **params)
-    """
+    ```
+    for items in loader:
+        for i in loader_batch_size:
+            item = items[i]
+            yield infer(item, **params)
+    ```"""
 
     def __iter__(self):
         self.iterator = iter(self.loader)
