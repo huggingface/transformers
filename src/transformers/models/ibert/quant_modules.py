@@ -713,7 +713,7 @@ def batch_frexp(inputs, max_bit=31):
             Target scaling factor to decompose.
 
     Returns:
-        :obj:``Tuple(torch.Tensor, torch.Tensor)`: mantisa and exponent
+        ``Tuple(torch.Tensor, torch.Tensor)`: mantisa and exponent
     """
 
     shape_of_input = inputs.size()

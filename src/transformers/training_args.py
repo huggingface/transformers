@@ -175,8 +175,8 @@ class TrainingArguments:
         logging_steps (`int`, *optional*, defaults to 500):
             Number of update steps between two logs if `logging_strategy="steps"`.
         logging_nan_inf_filter (`bool`, *optional*, defaults to `True`):
-            Whether to filter `nan` and `inf` losses for logging. If set to obj:`True` the loss of every step that is
-            `nan` or `inf` is filtered and the average loss of the current logging window is taken instead.
+            Whether to filter `nan` and `inf` losses for logging. If set to `True` the loss of every step that is `nan`
+            or `inf` is filtered and the average loss of the current logging window is taken instead.
 
             <Tip>
 
