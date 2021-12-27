@@ -184,12 +184,16 @@ def format_code_example(code: str, max_len: int):
     for code_sample, output in zip(code_samples, outputs):
         # black may have added some new lines, we remove them
         code_sample = code_sample.strip()
+        in_triple_quotes = False
         for line in code_sample.strip().split("\n"):
             if has_doctest and not is_empty_line(line):
-                prefix = "... " if line.startswith(" ") or line in [")", "]", "}"] else ">>> "
+                prefix = "... " if line.startswith(" ") or line in [")", "]", "}"] or in_triple_quotes else ">>> "
             else:
                 prefix = ""
             formatted_lines.append(" " * indent + prefix + line)
+
+            if '"""' in line:
+                in_triple_quotes = not in_triple_quotes
 
         formatted_lines.extend([" " * indent + line for line in output.split("\n")])
         if not output.endswith("===PT-TF-SPLIT==="):
@@ -359,6 +363,55 @@ def style_file_docstrings(code_file, max_len=119, check_only=False):
     return diff
 
 
+def style_mdx_file(mdx_file, max_len=119, check_only=False):
+    """
+    Style a MDX file by formatting all Python code samples.
+
+    Args:
+        mdx_file (`str` or `os.PathLike`): The file in which we want to style the examples.
+        max_len (`int`): The maximum number of characters per line.
+        check_only (`bool`, *optional*, defaults to `False`):
+            Whether to restyle file or just check if they should be restyled.
+
+    Returns:
+        `bool`: Whether or not the file was or should be restyled.
+    """
+    with open(mdx_file, "r", encoding="utf-8", newline="\n") as f:
+        content = f.read()
+
+    lines = content.split("\n")
+    current_code = []
+    current_language = ""
+    in_code = False
+    new_lines = []
+    for line in lines:
+        if _re_code.search(line) is not None:
+            in_code = not in_code
+            if in_code:
+                current_language = _re_code.search(line).groups()[1]
+                current_code = []
+            else:
+                code = "\n".join(current_code)
+                if current_language in ["py", "python"]:
+                    code = format_code_example(code, max_len)
+                new_lines.append(code)
+
+            new_lines.append(line)
+        elif in_code:
+            current_code.append(line)
+        else:
+            new_lines.append(line)
+
+    clean_content = "\n".join(new_lines)
+    diff = clean_content != content
+    if not check_only and diff:
+        print(f"Overwriting content of {mdx_file}.")
+        with open(mdx_file, "w", encoding="utf-8", newline="\n") as f:
+            f.write(clean_content)
+
+    return diff
+
+
 def style_doc_files(*files, max_len=119, check_only=False):
     """
     Applies doc styling or checks everything is correct in a list of files.
@@ -381,10 +434,8 @@ def style_doc_files(*files, max_len=119, check_only=False):
             changed += style_doc_files(*files, max_len=max_len, check_only=check_only)
         # Treat mdx
         elif file.endswith(".mdx"):
-            pass
-            # Will add code samples black styling in the mdx files.
-            # if style_mdx_file(file, max_len=max_len, check_only=check_only):
-            #     changed.append(file)
+            if style_mdx_file(file, max_len=max_len, check_only=check_only):
+                changed.append(file)
         # Treat python files
         elif file.endswith(".py"):
             if style_file_docstrings(file, max_len=max_len, check_only=check_only):
