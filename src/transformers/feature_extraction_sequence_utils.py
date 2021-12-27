@@ -78,35 +78,36 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad input values / input vectors or a batch of input values / input vectors up to predefined length or to the
         max sequence length in the batch.
 
-        Padding side (left/right) padding values are defined at the feature extractor level (with
-        `self.padding_side`, `self.padding_value`)
+        Padding side (left/right) padding values are defined at the feature extractor level (with `self.padding_side`,
+        `self.padding_value`)
 
         <Tip>
 
-        If the `processed_features` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors,
-        the result will use the same type unless you provide a different tensor type with `return_tensors`. In
-        the case of PyTorch tensors, you will lose the specific device of your tensors however.
+        If the `processed_features` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        PyTorch tensors, you will lose the specific device of your tensors however.
 
         </Tip>
 
         Args:
             processed_features ([`BatchFeature`], list of [`BatchFeature`], `Dict[str, List[float]]`, `Dict[str, List[List[float]]` or `List[Dict[str, List[float]]]`):
-                Processed inputs. Can represent one input ([`BatchFeature`] or `Dict[str, List[float]]`) or a batch of input values / vectors (list of [`BatchFeature`],
-                *Dict[str, List[List[float]]]* or *List[Dict[str, List[float]]]*) so you can use this method during
-                preprocessing as well as in a PyTorch Dataloader collate function.
+                Processed inputs. Can represent one input ([`BatchFeature`] or `Dict[str, List[float]]`) or a batch of
+                input values / vectors (list of [`BatchFeature`], *Dict[str, List[List[float]]]* or *List[Dict[str,
+                List[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                collate function.
 
-                Instead of `List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow
-                tensors), see the note above for the return type.
+                Instead of `List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                see the note above for the return type.
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`):
@@ -242,7 +243,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features:
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
+                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
             padding_strategy: PaddingStrategy to use for padding.
 
@@ -256,7 +259,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         required_input = processed_features[self.model_input_names[0]]
 
@@ -307,12 +311,15 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features:
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
+                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            truncation: (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            truncation:
+                (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
         if not truncation:
             return processed_features

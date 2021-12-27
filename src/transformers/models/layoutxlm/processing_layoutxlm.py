@@ -32,20 +32,17 @@ class LayoutXLMProcessor:
 
     [`LayoutXLMProcessor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`LayoutLMv2FeatureExtractor`] to resize document images to a fixed size, and
-    optionally applies OCR to get words and normalized bounding boxes. These are then provided to
-    [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`], which turns the words
-    and bounding boxes into token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`.
-    Optionally, one can provide integer `word_labels`, which are turned into token-level `labels` for token
-    classification tasks (such as FUNSD, CORD).
+    It first uses [`LayoutLMv2FeatureExtractor`] to resize document images to a fixed size, and optionally applies OCR
+    to get words and normalized bounding boxes. These are then provided to [`LayoutXLMTokenizer`] or
+    [`LayoutXLMTokenizerFast`], which turns the words and bounding boxes into token-level `input_ids`,
+    `attention_mask`, `token_type_ids`, `bbox`. Optionally, one can provide integer `word_labels`, which are turned
+    into token-level `labels` for token classification tasks (such as FUNSD, CORD).
 
     Args:
         feature_extractor (`LayoutLMv2FeatureExtractor`):
-            An instance of [`LayoutLMv2FeatureExtractor`]. The feature extractor is a required
-            input.
+            An instance of [`LayoutLMv2FeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`LayoutXLMTokenizer` or `LayoutXLMTokenizerFast`):
-            An instance of [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`].
-            The tokenizer is a required input.
+            An instance of [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`]. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -63,15 +60,14 @@ class LayoutXLMProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a LayoutXLM feature_extractor object and LayoutXLM tokenizer object to the directory `save_directory`,
-        so that it can be re-loaded using the [`~LayoutXLMProcessor.from_pretrained`] class method.
+        Save a LayoutXLM feature_extractor object and LayoutXLM tokenizer object to the directory `save_directory`, so
+        that it can be re-loaded using the [`~LayoutXLMProcessor.from_pretrained`] class method.
 
         <Tip>
 
-        This class method is simply calling
-        [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
+        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
+        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -92,9 +88,9 @@ class LayoutXLMProcessor:
         <Tip>
 
         This class method is simply calling Layoutv2FeatureExtractor's
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
-        LayoutXLMTokenizerFast's [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
-        Please refer to the docstrings of the methods above for more information.
+        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and LayoutXLMTokenizerFast's
+        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -106,8 +102,7 @@ class LayoutXLMProcessor:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a feature extractor file saved using the
-                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g.,
-                  `./my_model_directory/`.
+                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
 
@@ -150,12 +145,12 @@ class LayoutXLMProcessor:
         **kwargs
     ) -> BatchEncoding:
         """
-        This method first forwards the `images` argument to
-        [`~LayoutLMv2FeatureExtractor.__call__`]. In case [`LayoutLMv2FeatureExtractor`] was
-        initialized with `apply_ocr` set to `True`, it passes the obtained words and bounding boxes along with
-        the additional arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output, together
-        with resized `images`. In case [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr`
-        set to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output, together with resized `images``.
+        This method first forwards the `images` argument to [`~LayoutLMv2FeatureExtractor.__call__`]. In case
+        [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
+        bounding boxes along with the additional arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output,
+        together with resized `images`. In case [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to
+        `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional
+        arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output, together with resized `images``.
 
         Please refer to the docstring of the above two methods for more information.
         """

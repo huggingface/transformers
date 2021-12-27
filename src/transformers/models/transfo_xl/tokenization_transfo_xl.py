@@ -114,11 +114,12 @@ def detokenize_numbers(text: str) -> str:
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
-    Construct a Transformer-XL tokenizer adapted from Vocab class in [the original code](https://github.com/kimiyoung/transformer-xl). The Transformer-XL tokenizer is a word-level tokenizer (no
+    Construct a Transformer-XL tokenizer adapted from Vocab class in [the original
+    code](https://github.com/kimiyoung/transformer-xl). The Transformer-XL tokenizer is a word-level tokenizer (no
     sub-word tokenization).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         special (`List[str]`, *optional*):
@@ -410,10 +411,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def moses_pipeline(self, text: str) -> List[str]:
         """
-        Does basic tokenization using [`sacremoses.MosesPunctNormalizer`] and [`sacremoses.MosesTokenizer`]
-        with *aggressive_dash_splits=True* (see [`sacremoses.tokenize.MosesTokenizer.tokenize`]). Additionally,
-        large comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23
-        @,@ 000 people are 1 @.@ 80m tall"
+        Does basic tokenization using [`sacremoses.MosesPunctNormalizer`] and [`sacremoses.MosesTokenizer`] with
+        *aggressive_dash_splits=True* (see [`sacremoses.tokenize.MosesTokenizer.tokenize`]). Additionally, large
+        comma-separated numbers and floating point values are split. E.g. "23,000 people are 1.80m tall" -> "23 @,@ 000
+        people are 1 @.@ 80m tall"
 
         Args:
             text: Text to be tokenize

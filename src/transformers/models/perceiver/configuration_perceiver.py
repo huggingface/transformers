@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Perceiver model configuration """
+""" Perceiver model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,13 +28,13 @@ PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PerceiverConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PerceiverModel`]. It is used
-    to instantiate an Perceiver model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Perceiver
+    This is the configuration class to store the configuration of a [`PerceiverModel`]. It is used to instantiate an
+    Perceiver model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Perceiver
     [deepmind/language-perceiver](https://huggingface.co/deepmind/language-perceiver) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         num_latents (`int`, *optional*, defaults to 256):
@@ -65,8 +65,8 @@ class PerceiverConfig(PretrainedConfig):
         cross_attention_widening_factor (`int`, *optional*, defaults to 1):
             Dimension of the feed-forward layer in the self-attention layers of the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):

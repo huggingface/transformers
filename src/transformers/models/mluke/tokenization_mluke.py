@@ -84,16 +84,15 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 [What are attention masks?](../glossary#attention-mask)
             return_overflowing_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to return overflowing token sequences. If a pair of sequences of input ids (or a batch
-                of pairs) is provided with `truncation_strategy = longest_first` or `True`, an error is
-                raised instead of returning overflowing tokens.
+                of pairs) is provided with `truncation_strategy = longest_first` or `True`, an error is raised instead
+                of returning overflowing tokens.
             return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
                 Whether or not to return special tokens mask information.
             return_offsets_mapping (`bool`, *optional*, defaults to `False`):
                 Whether or not to return `(char_start, char_end)` for each token.
 
-                This is only available on fast tokenizers inheriting from
-                [`PreTrainedTokenizerFast`], if using Python's tokenizer, this method will raise
-                `NotImplementedError`.
+                This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
+                Python's tokenizer, this method will raise `NotImplementedError`.
             return_length  (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the lengths of the encoded inputs.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -107,8 +106,8 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
               [What are input IDs?](../glossary#input-ids)
 
-            - **token_type_ids** -- List of token type ids to be fed to a model (when `return_token_type_ids=True`
-              or if *"token_type_ids"* is in `self.model_input_names`).
+            - **token_type_ids** -- List of token type ids to be fed to a model (when `return_token_type_ids=True` or
+              if *"token_type_ids"* is in `self.model_input_names`).
 
               [What are token type IDs?](../glossary#token-type-ids)
 
@@ -129,8 +128,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
               [What are token type IDs?](../glossary#token-type-ids)
 
             - **entity_attention_mask** -- List of indices specifying which entities should be attended to by the model
-              (when `return_attention_mask=True` or if *"entity_attention_mask"* is in
-              `self.model_input_names`).
+              (when `return_attention_mask=True` or if *"entity_attention_mask"* is in `self.model_input_names`).
 
               [What are attention masks?](../glossary#attention-mask)
 
@@ -154,8 +152,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
     Adapted from [`XLMRobertaTokenizer`] and [`LukeTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -177,8 +175,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -199,8 +197,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         task (`str`, *optional*):
             Task for which you want to prepare sequences. One of `"entity_classification"`,
-            `"entity_pair_classification"`, or `"entity_span_classification"`. If you specify this argument,
-            the entity sequence is automatically created based on the given entity span(s).
+            `"entity_pair_classification"`, or `"entity_span_classification"`. If you specify this argument, the entity
+            sequence is automatically created based on the given entity span(s).
         max_entity_length (`int`, *optional*, defaults to 32):
             The maximum length of `entity_ids`.
         max_mention_length (`int`, *optional*, defaults to 30):
@@ -214,7 +212,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
@@ -405,9 +405,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
             entity_spans (`List[Tuple[int, int]]`, `List[List[Tuple[int, int]]]`, *optional*):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting character-based start and end positions of entities. If you specify
-                `"entity_classification"` or `"entity_pair_classification"` as the `task` argument in the
-                constructor, the length of each sequence must be 1 or 2, respectively. If you specify `entities`, the
-                length of each sequence must be equal to the length of each sequence of `entities`.
+                `"entity_classification"` or `"entity_pair_classification"` as the `task` argument in the constructor,
+                the length of each sequence must be 1 or 2, respectively. If you specify `entities`, the length of each
+                sequence must be equal to the length of each sequence of `entities`.
             entity_spans_pair (`List[Tuple[int, int]]`, `List[List[Tuple[int, int]]]`, *optional*):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting character-based start and end positions of entities. If you specify the
@@ -416,15 +416,15 @@ class MLukeTokenizer(PreTrainedTokenizer):
             entities (`List[str]`, `List[List[str]]`, *optional*):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
-                Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length
-                of each sequence must be equal to the length of each sequence of `entity_spans`. If you specify
+                Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length of
+                each sequence must be equal to the length of each sequence of `entity_spans`. If you specify
                 `entity_spans` without specifying this argument, the entity sequence or the batch of entity sequences
                 is automatically constructed by filling it with the [MASK] entity.
             entities_pair (`List[str]`, `List[List[str]]`, *optional*):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
-                Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length
-                of each sequence must be equal to the length of each sequence of `entity_spans_pair`. If you specify
+                Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length of
+                each sequence must be equal to the length of each sequence of `entity_spans_pair`. If you specify
                 `entity_spans_pair` without specifying this argument, the entity sequence or the batch of entity
                 sequences is automatically constructed by filling it with the [MASK] entity.
             max_entity_length (`int`, *optional*):
@@ -1210,27 +1210,28 @@ class MLukeTokenizer(PreTrainedTokenizer):
         """
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch. Padding side (left/right) padding token ids are defined at the tokenizer level (with
-        `self.padding_side`, `self.pad_token_id` and `self.pad_token_type_id`) .. note:: If the
-        `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the result
-        will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
-        PyTorch tensors, you will lose the specific device of your tensors however.
+        `self.padding_side`, `self.pad_token_id` and `self.pad_token_type_id`) .. note:: If the `encoded_inputs` passed
+        are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the result will use the same type unless
+        you provide a different tensor type with `return_tensors`. In the case of PyTorch tensors, you will lose the
+        specific device of your tensors however.
 
         Args:
             encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of tokenized inputs (list of [`BatchEncoding`], *Dict[str,
-                List[List[int]]]* or *List[Dict[str, List[int]]]*) so you can use this method during preprocessing as
-                well as in a PyTorch Dataloader collate function. Instead of `List[int]` you can have tensors
-                (numpy arrays, PyTorch tensors or TensorFlow tensors), see the note above for the return type.
+                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
+                tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
+                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                collate function. Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or
+                TensorFlow tensors), see the note above for the return type.
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             max_entity_length (`int`, *optional*):
@@ -1240,8 +1241,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific tokenizer's default, defined by the `return_outputs` attribute. [What are
-                attention masks?](../glossary#attention-mask)
+                to the specific tokenizer's default, defined by the `return_outputs` attribute. [What are attention
+                masks?](../glossary#attention-mask)
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -1364,7 +1365,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
 
         Args:
-            encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+            encoded_inputs:
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             max_entity_length: The maximum length of the entity sequence.
@@ -1382,7 +1384,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         entities_provided = bool("entity_ids" in encoded_inputs)
 

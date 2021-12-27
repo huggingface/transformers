@@ -66,8 +66,8 @@ def whitespace_tokenize(text):
 class MPNetTokenizer(PreTrainedTokenizer):
     """
 
-    This tokenizer inherits from [`BertTokenizer`] which contains most of the methods. Users should
-    refer to the superclass for more information regarding methods.
+    This tokenizer inherits from [`BertTokenizer`] which contains most of the methods. Users should refer to the
+    superclass for more information regarding methods.
 
     Args:
         vocab_file (`str`):
@@ -94,8 +94,8 @@ class MPNetTokenizer(PreTrainedTokenizer):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -117,7 +117,8 @@ class MPNetTokenizer(PreTrainedTokenizer):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
@@ -337,7 +338,8 @@ class BasicTokenizer(object):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).

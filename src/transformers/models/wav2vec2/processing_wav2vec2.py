@@ -29,10 +29,8 @@ class Wav2Vec2Processor:
     Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor and a Wav2Vec2 CTC tokenizer into a single
     processor.
 
-    [`Wav2Vec2Processor`] offers all the functionalities of
-    [`Wav2Vec2FeatureExtractor`] and [`PreTrainedTokenizer`]. See the docstring
-    of [`~Wav2Vec2Processor.__call__`] and [`~Wav2Vec2Processor.decode`] for more
-    information.
+    [`Wav2Vec2Processor`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`PreTrainedTokenizer`].
+    See the docstring of [`~Wav2Vec2Processor.__call__`] and [`~Wav2Vec2Processor.decode`] for more information.
 
     Args:
         feature_extractor (`Wav2Vec2FeatureExtractor`):
@@ -62,10 +60,9 @@ class Wav2Vec2Processor:
 
         <Tip>
 
-        This class method is simply calling
-        [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
+        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
+        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -86,9 +83,9 @@ class Wav2Vec2Processor:
         <Tip>
 
         This class method is simply calling Wav2Vec2FeatureExtractor's
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
-        PreTrainedTokenizer's [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
-        Please refer to the docstrings of the methods above for more information.
+        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and PreTrainedTokenizer's
+        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -100,8 +97,7 @@ class Wav2Vec2Processor:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a feature extractor file saved using the
-                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g.,
-                  `./my_model_directory/`.
+                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             **kwargs
@@ -133,9 +129,8 @@ class Wav2Vec2Processor:
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the
-        above two methods for more information.
+        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
+        [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
@@ -143,25 +138,22 @@ class Wav2Vec2Processor:
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         [`~Wav2Vec2FeatureExtractor.pad`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above
-        two methods for more information.
+        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
+        [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
         """
         return self.current_processor.pad(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.decode`]. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 

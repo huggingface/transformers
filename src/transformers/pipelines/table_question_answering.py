@@ -85,11 +85,12 @@ class TableQuestionAnsweringPipeline(Pipeline):
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in
     PyTorch.
 
-    This tabular question answering pipeline can currently be loaded from [`pipeline`] using the
-    following task identifier: `"table-question-answering"`.
+    This tabular question answering pipeline can currently be loaded from [`pipeline`] using the following task
+    identifier: `"table-question-answering"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a tabular question answering task.
-    See the up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=table-question-answering).
+    See the up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=table-question-answering).
     """
 
     default_input_names = "table,query"
@@ -287,29 +288,29 @@ class TableQuestionAnsweringPipeline(Pipeline):
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
 
             truncation (`bool`, `str` or [`TapasTruncationStrategy`], *optional*, defaults to `False`):
                 Activates and controls truncation. Accepts the following values:
 
-                - `True` or `'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument
-                  `max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate row by row, removing rows from the table.
-                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with
-                  sequence lengths greater than the model maximum admissible input size).
+                - `True` or `'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument `max_length`
+                  or to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate row by row, removing rows from the table.
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
 
 
         Return:
             A dictionary or a list of dictionaries containing results: Each result is a dictionary with the following
             keys:
 
-            - **answer** (`str`) -- The answer of the query given the table. If there is an aggregator, the answer
-              will be preceded by `AGGREGATOR >`.
+            - **answer** (`str`) -- The answer of the query given the table. If there is an aggregator, the answer will
+              be preceded by `AGGREGATOR >`.
             - **coordinates** (`List[Tuple[int, int]]`) -- Coordinates of the cells of the answers.
             - **cells** (`List[str]`) -- List of strings made up of the answer cell values.
             - **aggregator** (`str`) -- If the model has an aggregator, this returns the aggregator.

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BlenderbotSmall model. """
+""" PyTorch BlenderbotSmall model."""
 
 
 import copy
@@ -382,7 +382,8 @@ class BlenderbotSmallDecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
             attention_mask (`torch.FloatTensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`): cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
+            encoder_hidden_states (`torch.FloatTensor`):
+                cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -487,13 +488,13 @@ class BlenderbotSmallPreTrainedModel(PreTrainedModel):
 
 
 BLENDERBOT_SMALL_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`BlenderbotSmallConfig`]):
@@ -505,28 +506,18 @@ BLENDERBOT_SMALL_START_DOCSTRING = r"""
 BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     Conversation example::
 
-        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration
-        >>> mname = 'facebook/blenderbot_small-90M'
-        >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
-        >>> UTTERANCE = "My friends are cool but they eat too many carbs."
-        >>> print("Human: ", UTTERANCE)
-        >>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
-        >>> reply_ids = model.generate(**inputs)
-        >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
-        what kind of carbs do they eat? i don't know much about carbs.
+        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration >>> mname =
+        'facebook/blenderbot_small-90M' >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname) >>>
+        tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname) >>> UTTERANCE = "My friends are cool but they eat
+        too many carbs." >>> print("Human: ", UTTERANCE) >>> inputs = tokenizer([UTTERANCE], return_tensors='pt') >>>
+        reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(reply_ids,
+        skip_special_tokens=True)[0]) what kind of carbs do they eat? i don't know much about carbs.
 
-        >>> REPLY = "I'm not sure"
-        >>> print("Human: ", REPLY)
-        >>> NEXT_UTTERANCE = (
-        ... "My friends are cool but they eat too many carbs.</s> "
-        ... "<s>what kind of carbs do they eat? i don't know much about carbs.</s> "
-        ... "<s>I'm not sure."
-        ... )
-        >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt')
-        >>> inputs.pop("token_type_ids")
-        >>> next_reply_ids = model.generate(**inputs)
-        >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+        >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) >>> NEXT_UTTERANCE = ( ... "My friends are cool but they
+        eat too many carbs.</s> " ... "<s>what kind of carbs do they eat? i don't know much about carbs.</s> " ...
+        "<s>I'm not sure." ... ) >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt') >>>
+        inputs.pop("token_type_ids") >>> next_reply_ids = model.generate(**inputs) >>> print("Bot: ",
+        tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
 """
 
 BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
@@ -535,9 +526,8 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -550,18 +540,17 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            BlenderbotSmall uses the `bos_token_id` as the starting token for `decoder_input_ids` generation.
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            BlenderbotSmall uses the `bos_token_id` as the starting token for `decoder_input_ids` generation. If
+            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
-            also be used by default.
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -575,39 +564,42 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0, 1]`:
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
-            `attentions`) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`,
-            *optional*) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-            cross-attention of the decoder.
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors
-            of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-            shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
+            you can choose to directly pass an embedded representation. This is useful if you want more control over
+            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
+            matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds`
-            have to be input (see `past_key_values`). This is useful if you want more control over how to convert
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
             `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds`
-            takes the value of `inputs_embeds`.
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -672,9 +664,8 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
+                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -691,9 +682,9 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
                 - 0 indicates the head is **masked**.
 
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert `input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -789,8 +780,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
 
 class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
-    [`BlenderbotSmallDecoderLayer`]
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`BlenderbotSmallDecoderLayer`]
 
     Args:
         config: BlenderbotSmallConfig
@@ -867,9 +857,8 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
+                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -904,19 +893,20 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
                 - 0 indicates the head is **masked**.
 
             past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
-                tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-                tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-                decoding.
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last
-                `decoder_input_ids` (those that don't have their past key value states given to this model) of
-                shape `(batch_size, 1)` instead of all ``decoder_input_ids``` of shape `(batch_size,
-                sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
+                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
+                control over how to convert `input_ids` indices into associated vectors than the model's internal
+                embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1257,7 +1247,8 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
@@ -1419,9 +1410,8 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
+                Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1450,25 +1440,24 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
                 - 0 indicates the head is **masked**.
 
             past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
-                tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-                tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
-                additional tensors are only required when the model is used as a decoder in a Sequence to Sequence
-                model.
+                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional
+                tensors are only required when the model is used as a decoder in a Sequence to Sequence model.
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-                decoding.
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-                (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-                instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are
-                ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-                decoding (see `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.

@@ -27,11 +27,12 @@ class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
 
-    This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the
-    following task identifier: `"text2text-generation"`.
+    This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the following task
+    identifier: `"text2text-generation"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
-    up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text2text-generation).
+    up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=text2text-generation).
 
     Usage:
 
@@ -119,9 +120,9 @@ class Text2TextGenerationPipeline(Pipeline):
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             truncation (`TruncationStrategy`, *optional*, defaults to `TruncationStrategy.DO_NOT_TRUNCATE`):
-                The truncation strategy for the tokenization within the pipeline.
-                `TruncationStrategy.DO_NOT_TRUNCATE` (default) will never truncate, but it is sometimes desirable
-                to truncate the input to fit the model's max_length instead of throwing an error down the line.
+                The truncation strategy for the tokenization within the pipeline. `TruncationStrategy.DO_NOT_TRUNCATE`
+                (default) will never truncate, but it is sometimes desirable to truncate the input to fit the model's
+                max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework [here](./model#generative-models)).
@@ -130,8 +131,8 @@ class Text2TextGenerationPipeline(Pipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
-            - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`)
-              -- The token ids of the generated text.
+            - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
+              ids of the generated text.
         """
 
         result = super().__call__(*args, **kwargs)
@@ -175,8 +176,8 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     """
     Summarize news articles and other documents.
 
-    This summarizing pipeline can currently be loaded from [`pipeline`] using the following task
-    identifier: `"summarization"`.
+    This summarizing pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"summarization"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
     currently, '*bart-large-cnn*', '*t5-small*', '*t5-base*', '*t5-large*', '*t5-3b*', '*t5-11b*'. See the up-to-date
@@ -217,10 +218,9 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **summary_text** (`str`, present when `return_text=True`) -- The summary of the corresponding
-              input.
-            - **summary_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) --
-              The token ids of the summary.
+            - **summary_text** (`str`, present when `return_text=True`) -- The summary of the corresponding input.
+            - **summary_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
+              ids of the summary.
         """
         return super().__call__(*args, **kwargs)
 
@@ -243,8 +243,8 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     """
     Translates from one language to another.
 
-    This translation pipeline can currently be loaded from [`pipeline`] using the following task
-    identifier: `"translation_xx_to_yy"`.
+    This translation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"translation_xx_to_yy"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
@@ -318,7 +318,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **translation_text** (`str`, present when `return_text=True`) -- The translation.
-            - **translation_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`)
-              -- The token ids of the translation.
+            - **translation_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The
+              token ids of the translation.
         """
         return super().__call__(*args, **kwargs)

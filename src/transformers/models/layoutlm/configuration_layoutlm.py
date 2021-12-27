@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LayoutLM model configuration """
+""" LayoutLM model configuration"""
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -34,12 +34,13 @@ LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LayoutLMConfig(BertConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to
-    instantiate a LayoutLM model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the LayoutLM [layoutlm-base-uncased](https://huggingface.co/microsoft/layoutlm-base-uncased) architecture.
+    This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a
+    LayoutLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the LayoutLM
+    [layoutlm-base-uncased](https://huggingface.co/microsoft/layoutlm-base-uncased) architecture.
 
-    Configuration objects inherit from [`BertConfig`] and can be used to control the model outputs.
-    Read the documentation from [`BertConfig`] for more information.
+    Configuration objects inherit from [`BertConfig`] and can be used to control the model outputs. Read the
+    documentation from [`BertConfig`] for more information.
 
 
     Args:
@@ -55,8 +56,8 @@ class LayoutLMConfig(BertConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):

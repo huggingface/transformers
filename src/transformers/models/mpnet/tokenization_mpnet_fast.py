@@ -52,8 +52,8 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" MPNet tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -75,8 +75,8 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -157,8 +157,8 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
     @property
     def mask_token(self) -> str:
         """
-        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
-        not having been set.
+        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
+        having been set.
 
         MPNet tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
         comprise the space before the *<mask>*.

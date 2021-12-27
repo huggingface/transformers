@@ -60,8 +60,8 @@ class LongformerTokenizerFast(RobertaTokenizerFast):
     r"""
     Construct a "fast" Longformer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`LongformerTokenizerFast`] is identical to [`RobertaTokenizerFast`]. Refer
-    to the superclass for usage examples and documentation concerning parameters.
+    [`LongformerTokenizerFast`] is identical to [`RobertaTokenizerFast`]. Refer to the superclass for usage examples
+    and documentation concerning parameters.
     """
     # merges and vocab same as Roberta
     vocab_files_names = VOCAB_FILES_NAMES

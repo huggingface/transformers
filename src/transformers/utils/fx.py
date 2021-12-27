@@ -404,9 +404,9 @@ class HFTracer(Tracer):
 
     def path_of_module(self, mod: nn.Module) -> str:
         """
-        Helper method to find the qualified name of `mod` in the Module hierarchy of `root`. For example, if
-        `root` has a submodule named `foo`, which has a submodule named `bar`, passing `bar` into this function
-        will return the string "foo.bar".
+        Helper method to find the qualified name of `mod` in the Module hierarchy of `root`. For example, if `root` has
+        a submodule named `foo`, which has a submodule named `bar`, passing `bar` into this function will return the
+        string "foo.bar".
 
         Args:
             mod (str): The `Module` to retrieve the qualified name for.
@@ -514,7 +514,8 @@ def symbolic_trace(
             The batch size of the traced model inputs.
         sequence_length (`int` or `List[int]]`):
             The sequence length of the traced model inputs. For sequence-to-sequence models with different sequence
-            lengths between the encoder and the decoder inputs, this must be `[encoder_sequence_length, decoder_sequence_length]`.
+            lengths between the encoder and the decoder inputs, this must be `[encoder_sequence_length,
+            decoder_sequence_length]`.
         num_choices (`int`, *optional*, defaults to -1):
             The number of possible choices for a multiple choice task.
 

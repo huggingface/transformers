@@ -855,7 +855,7 @@ def add_start_docstrings_to_model_forward(*docstr):
 
 def add_end_docstrings(*docstr):
     def docstring_decorator(fn):
-        fn.__doc__ = fn.__doc__ + "".join(docstr)
+        fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "".join(docstr)
         return fn
 
     return docstring_decorator
@@ -1169,7 +1169,8 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
 
     >>> # audio file is decoded on the fly
     >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
-    >>> logits = model(**inputs).logits >>> predicted_class_ids = torch.argmax(logits, dim=-1)
+    >>> logits = model(**inputs).logits
+    >>> predicted_class_ids = torch.argmax(logits, dim=-1)
     >>> predicted_label = model.config.id2label[predicted_class_ids]
 
     >>> # compute loss - target_label is e.g. "down"

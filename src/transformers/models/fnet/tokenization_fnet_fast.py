@@ -55,9 +55,10 @@ SPIECE_UNDERLINE = "▁"
 class FNetTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" FNetTokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
-    [`AlbertTokenizerFast`]. Based on [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models). This tokenizer
-    inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods
+    [`AlbertTokenizerFast`]. Based on
+    [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models). This
+    tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods
 
     Args:
         vocab_file (`str`):
@@ -180,8 +181,7 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

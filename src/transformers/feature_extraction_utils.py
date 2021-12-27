@@ -54,8 +54,7 @@ PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]  # noqa: F821
 
 class BatchFeature(UserDict):
     r"""
-    Holds the output of the [`~SequenceFeatureExtractor.pad`] and feature extractor specific
-    `__call__` methods.
+    Holds the output of the [`~SequenceFeatureExtractor.pad`] and feature extractor specific `__call__` methods.
 
     This class is derived from a python dictionary and can be used as a dictionary.
 
@@ -74,8 +73,8 @@ class BatchFeature(UserDict):
 
     def __getitem__(self, item: str) -> Union[Any]:
         """
-        If the key is a string, returns the value of the dict associated to `key` ('input_values',
-        'attention_mask', etc.).
+        If the key is a string, returns the value of the dict associated to `key` ('input_values', 'attention_mask',
+        etc.).
         """
         if isinstance(item, str):
             return self.data[item]
@@ -216,8 +215,8 @@ class FeatureExtractionMixin:
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> PreTrainedFeatureExtractor:
         r"""
-        Instantiate a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a feature
-        extractor, *e.g.* a derived class of [`SequenceFeatureExtractor`].
+        Instantiate a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a feature extractor, *e.g.* a
+        derived class of [`SequenceFeatureExtractor`].
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -241,19 +240,20 @@ class FeatureExtractionMixin:
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final feature extractor object. If `True`,
-                then this functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a
-                dictionary consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the
-                part of `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
+                If `False`, then this function returns just the final feature extractor object. If `True`, then this
+                functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
+                consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
+                `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
@@ -311,16 +311,14 @@ class FeatureExtractionMixin:
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] using
-        `from_dict`.
+        feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
 
         Returns:
-            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature extractor
-            object.
+            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature extractor object.
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -398,8 +396,8 @@ class FeatureExtractionMixin:
     @classmethod
     def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
         """
-        Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python
-        dictionary of parameters.
+        Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
+        parameters.
 
         Args:
             feature_extractor_dict (`Dict[str, Any]`):
@@ -410,8 +408,8 @@ class FeatureExtractionMixin:
                 Additional parameters from which to initialize the feature extractor object.
 
         Returns:
-            [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object
-            instantiated from those parameters.
+            [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object instantiated from those
+            parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
@@ -447,16 +445,16 @@ class FeatureExtractionMixin:
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]) -> PreTrainedFeatureExtractor:
         """
-        Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`]
-        from the path to a JSON file of parameters.
+        Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] from the path to
+        a JSON file of parameters.
 
         Args:
             json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The
-            feature_extractor object instantiated from that JSON file.
+            A feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature_extractor
+            object instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
@@ -468,8 +466,7 @@ class FeatureExtractionMixin:
         Serializes this instance to a JSON string.
 
         Returns:
-            `str`: String containing all the attributes that make up this feature_extractor instance in JSON
-            format.
+            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
         """
         dictionary = self.to_dict()
 

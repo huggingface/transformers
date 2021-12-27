@@ -120,8 +120,8 @@ class CTRLTokenizer(PreTrainedTokenizer):
     """
     Construct a CTRL tokenizer. Based on Byte-Pair-Encoding.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):

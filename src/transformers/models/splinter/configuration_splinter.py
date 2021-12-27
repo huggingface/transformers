@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Splinter model configuration """
+""" Splinter model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -31,12 +31,13 @@ SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SplinterConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SplinterModel`]. It is used to
-    instantiate an Splinter model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the Splinter [tau/splinter-base](https://huggingface.co/tau/splinter-base) architecture.
+    This is the configuration class to store the configuration of a [`SplinterModel`]. It is used to instantiate an
+    Splinter model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Splinter
+    [tau/splinter-base](https://huggingface.co/tau/splinter-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -52,8 +53,8 @@ class SplinterConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):

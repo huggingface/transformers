@@ -9,8 +9,8 @@ class FeatureExtractionPipeline(Pipeline):
     Feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
 
-    This feature extraction pipeline can currently be loaded from [`pipeline`] using the task
-    identifier: `"feature-extraction"`.
+    This feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
+    `"feature-extraction"`.
 
     All models may be used for this pipeline. See a list of all models, including community-contributed models on
     [huggingface.co/models](https://huggingface.co/models).
@@ -18,20 +18,19 @@ class FeatureExtractionPipeline(Pipeline):
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for
-            TensorFlow.
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             [`PreTrainedTokenizer`].
         modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
         framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework
-            must be installed.
+            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
+            installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model
-            is provided.
+            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
+            provided.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VisionTextDualEncoder model configuration """
+""" VisionTextDualEncoder model configuration"""
 
 import copy
 
@@ -28,12 +28,11 @@ logger = logging.get_logger(__name__)
 class VisionTextDualEncoderConfig(PretrainedConfig):
     r"""
     [`VisionTextDualEncoderConfig`] is the configuration class to store the configuration of a
-    [`VisionTextDualEncoderModel`]. It is used to instantiate
-    [`VisionTextDualEncoderModel`] model according to the specified arguments, defining the text
-    model and vision model configs.
+    [`VisionTextDualEncoderModel`]. It is used to instantiate [`VisionTextDualEncoderModel`] model according to the
+    specified arguments, defining the text model and vision model configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         text_config_dict (`dict`):
@@ -106,8 +105,8 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     @classmethod
     def from_vision_text_configs(cls, vision_config: PretrainedConfig, text_config: PretrainedConfig, **kwargs):
         r"""
-        Instantiate a [`VisionTextDualEncoderConfig`] (or a derived class) from text model configuration and
-        vision model configuration.
+        Instantiate a [`VisionTextDualEncoderConfig`] (or a derived class) from text model configuration and vision
+        model configuration.
 
         Returns:
             [`VisionTextDualEncoderConfig`]: An instance of a configuration object
@@ -117,8 +116,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default
-        [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

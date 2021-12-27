@@ -33,29 +33,29 @@ class TFTrainingArguments(TrainingArguments):
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
 
-    Using [`HfArgumentParser`] we can turn this class into [argparse](https://docs.python.org/3/library/argparse#module-argparse) arguments that can be specified on the command
-    line.
+    Using [`HfArgumentParser`] we can turn this class into
+    [argparse](https://docs.python.org/3/library/argparse#module-argparse) arguments that can be specified on the
+    command line.
 
     Parameters:
         output_dir (`str`):
             The output directory where the model predictions and checkpoints will be written.
         overwrite_output_dir (`bool`, *optional*, defaults to `False`):
-            If `True`, overwrite the content of the output directory. Use this to continue training if
-            `output_dir` points to a checkpoint directory.
+            If `True`, overwrite the content of the output directory. Use this to continue training if `output_dir`
+            points to a checkpoint directory.
         do_train (`bool`, *optional*, defaults to `False`):
-            Whether to run training or not. This argument is not directly used by [`Trainer`], it's
-            intended to be used by your training/evaluation scripts instead. See the [example scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
+            Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
+            by your training/evaluation scripts instead. See the [example
+            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
         do_eval (`bool`, *optional*):
-            Whether to run evaluation on the validation set or not. Will be set to `True` if
-            `evaluation_strategy` is different from `"no"`. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See
-            the [example scripts](https://github.com/huggingface/transformers/tree/master/examples) for more
-            details.
+            Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
+            different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
+            training/evaluation scripts instead. See the [example
+            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
         do_predict (`bool`, *optional*, defaults to `False`):
-            Whether to run predictions on the test set or not. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See
-            the [example scripts](https://github.com/huggingface/transformers/tree/master/examples) for more
-            details.
+            Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
+            intended to be used by your training/evaluation scripts instead. See the [example
+            scripts](https://github.com/huggingface/transformers/tree/master/examples) for more details.
         evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
@@ -72,9 +72,8 @@ class TFTrainingArguments(TrainingArguments):
 
             <Tip warning={true}>
 
-            When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
-            logging, evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training
-            examples.
+            When using gradient accumulation, one step is counted as one step with backward pass. Therefore, logging,
+            evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training examples.
 
             </Tip>
 
@@ -93,13 +92,11 @@ class TFTrainingArguments(TrainingArguments):
         num_train_epochs(`float`, *optional*, defaults to 3.0):
             Total number of training epochs to perform.
         max_steps (`int`, *optional*, defaults to -1):
-            If set to a positive number, the total number of training steps to perform. Overrides
-            `num_train_epochs`.
+            If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
-            Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of
-            `warmup_ratio`.
+            Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of `warmup_ratio`.
         logging_dir (`str`, *optional*):
             [TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to
             *runs/**CURRENT_DATETIME_HOSTNAME***.
@@ -133,8 +130,8 @@ class TFTrainingArguments(TrainingArguments):
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
-            For `fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
-            on the [Apex documentation](https://nvidia.github.io/apex/amp).
+            For `fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details on
+            the [Apex documentation](https://nvidia.github.io/apex/amp).
         local_rank (`int`, *optional*, defaults to -1):
             During distributed training, the rank of the process.
         tpu_num_cores (`int`, *optional*):
@@ -147,10 +144,10 @@ class TFTrainingArguments(TrainingArguments):
         eval_steps (`int`, *optional*, defaults to 1000):
             Number of update steps before two evaluations.
         past_index (`int`, *optional*, defaults to -1):
-            Some models like [TransformerXL](../model_doc/transformerxl) or :doc*XLNet <../model_doc/xlnet>* can
-            make use of the past hidden states for their predictions. If this argument is set to a positive int, the
-            `Trainer` will use the corresponding output (usually index 2) as the past state and feed it to the model
-            at the next training step under the keyword argument `mems`.
+            Some models like [TransformerXL](../model_doc/transformerxl) or :doc*XLNet <../model_doc/xlnet>* can make
+            use of the past hidden states for their predictions. If this argument is set to a positive int, the
+            `Trainer` will use the corresponding output (usually index 2) as the past state and feed it to the model at
+            the next training step under the keyword argument `mems`.
         tpu_name (`str`, *optional*):
             The name of the TPU the process is running on.
         tpu_zone (`str`, *optional*):

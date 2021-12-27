@@ -29,8 +29,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using any class inheriting from [`PreTrainedTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         next_scores (`torch.FloatTensor` of shape `(batch_size, 2 * num_beams)`):
@@ -47,10 +46,10 @@ PROCESS_INPUTS_DOCSTRING = r"""
     Return:
         `UserDict`: A dictionary composed of the fields as defined above:
 
-            - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated
-              scores of all non-finished beams.
-            - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens
-              to be added to the non-finished beam_hypotheses.
+            - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of all
+              non-finished beams.
+            - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
+              to the non-finished beam_hypotheses.
             - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
               indicating to which beam the next tokens shall be added.
 
@@ -62,8 +61,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using any class inheriting from [`PreTrainedTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         final_beam_scores (`torch.FloatTensor` of shape `(batch_size * num_beams)`):
@@ -78,9 +76,9 @@ FINALIZE_INPUTS_DOCSTRING = r"""
             The id of the *end-of-sequence* token.
 
     Return:
-        `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated
-        sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter if all
-        batches finished early due to the `eos_token_id`.
+        `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated sequences.
+        The second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished early
+        due to the `eos_token_id`.
 
 """
 
@@ -121,9 +119,11 @@ class BeamSearchScorer(BeamScorer):
     r"""
     [`BeamScorer`] implementing standard beam search decoding.
 
-    Adapted in part from [Facebook's XLM beam search code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
+    Adapted in part from [Facebook's XLM beam search
+    code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
 
-    Reference for the diverse beam search algorithm and implementation [Ashwin Kalyan's DBS implementation](https://github.com/ashwinkalyan/dbs/blob/master/dbs/beam_utils.lua)
+    Reference for the diverse beam search algorithm and implementation [Ashwin Kalyan's DBS
+    implementation](https://github.com/ashwinkalyan/dbs/blob/master/dbs/beam_utils.lua)
 
     Args:
         batch_size (`int`):
@@ -133,8 +133,8 @@ class BeamSearchScorer(BeamScorer):
         num_beams (`int`):
             Number of beams for beam search.
         device (`torch.device`):
-            Defines the device type (*e.g.*, `"cpu"` or `"cuda"`) on which this instance of
-            `BeamSearchScorer` will be allocated.
+            Defines the device type (*e.g.*, `"cpu"` or `"cuda"`) on which this instance of `BeamSearchScorer` will be
+            allocated.
         length_penalty (`float`, *optional*, defaults to 1.0):
             Exponential penalty to the length. 1.0 means no penalty. Set to values < 1.0 in order to encourage the
             model to generate shorter sequences, to a value > 1.0 in order to encourage the model to produce longer
@@ -145,8 +145,8 @@ class BeamSearchScorer(BeamScorer):
             The number of beam hypotheses that shall be returned upon calling
             [`~transformer.BeamSearchScorer.finalize`].
         num_beam_groups (`int`):
-            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of
-            beams. See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
+            See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
     """
 
     def __init__(

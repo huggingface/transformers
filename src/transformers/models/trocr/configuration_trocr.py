@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TrOCR model configuration """
+""" TrOCR model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,12 +28,13 @@ TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TrOCRConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TrOCRForCausalLM`]. It is used
-    to instantiate an TrOCR model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the TrOCR [microsoft/trocr-base](https://huggingface.co/microsoft/trocr-base) architecture.
+    This is the configuration class to store the configuration of a [`TrOCRForCausalLM`]. It is used to instantiate an
+    TrOCR model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the TrOCR
+    [microsoft/trocr-base](https://huggingface.co/microsoft/trocr-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -49,8 +50,8 @@ class TrOCRConfig(PretrainedConfig):
         decoder_ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the pooler. If string, `"gelu"`, `"relu"`,
+            `"silu"` and `"gelu_new"` are supported.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -65,8 +66,8 @@ class TrOCRConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         scale_embedding (`bool`, *optional*, defaults to `False`):

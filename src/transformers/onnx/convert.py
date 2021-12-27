@@ -264,9 +264,7 @@ def ensure_model_and_config_inputs_match(
 ) -> Tuple[bool, List[str]]:
     """
 
-    :param model_inputs:
-    :param config_inputs:
-    :return:
+    :param model_inputs: :param config_inputs: :return:
     """
     if issubclass(type(model), PreTrainedModel):
         forward_parameters = signature(model.forward).parameters

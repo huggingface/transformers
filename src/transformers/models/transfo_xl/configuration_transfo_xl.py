@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Transformer XL configuration """
+""" Transformer XL configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,19 +28,18 @@ TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TransfoXLConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`TransfoXLModel`] or a
-    [`TFTransfoXLModel`]. It is used to instantiate a Transformer-XL model according to the
-    specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a
-    similar configuration to that of the [Transformer XL](https://huggingface.co/transfo-xl-wt103) architecture.
+    This is the configuration class to store the configuration of a [`TransfoXLModel`] or a [`TFTransfoXLModel`]. It is
+    used to instantiate a Transformer-XL model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the [Transformer
+    XL](https://huggingface.co/transfo-xl-wt103) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 267735):
             Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`TransfoXLModel`] or
-            [`TFTransfoXLModel`].
+            `inputs_ids` passed when calling [`TransfoXLModel`] or [`TFTransfoXLModel`].
         cutoffs (`List[int]`, *optional*, defaults to `[20000, 40000, 200000]`):
             Cutoffs for the adaptive softmax.
         d_model (`int`, *optional*, defaults to 1024):

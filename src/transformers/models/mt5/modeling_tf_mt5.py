@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tensorflow mT5 model. """
+""" Tensorflow mT5 model."""
 
 from ...utils import logging
 from ..t5.modeling_tf_t5 import TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
@@ -27,8 +27,8 @@ _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 class TFMT5Model(TFT5Model):
     r"""
-    This class overrides [`TFT5Model`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFT5Model`]. Please check the superclass for the appropriate documentation alongside usage
+    examples.
 
     Examples:
 
@@ -51,8 +51,8 @@ class TFMT5Model(TFT5Model):
 
 class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     r"""
-    This class overrides [`TFT5ForConditionalGeneration`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFT5ForConditionalGeneration`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Examples:
 
@@ -76,8 +76,8 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
 
 class TFMT5EncoderModel(TFT5EncoderModel):
     r"""
-    This class overrides [`TFT5EncoderModel`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFT5EncoderModel`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
 
     Examples:
 

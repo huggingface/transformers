@@ -24,11 +24,11 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ObjectDetectionPipeline(Pipeline):
     """
-    Object detection pipeline using any `AutoModelForObjectDetection`. This pipeline predicts bounding boxes of
-    objects and their classes.
+    Object detection pipeline using any `AutoModelForObjectDetection`. This pipeline predicts bounding boxes of objects
+    and their classes.
 
-    This object detection pipeline can currently be loaded from [`pipeline`] using the following task
-    identifier: `"object-detection"`.
+    This object detection pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"object-detection"`.
 
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=object-detection).
     """

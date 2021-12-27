@@ -35,8 +35,8 @@ class FillMaskPipeline(Pipeline):
     Masked language modeling prediction pipeline using any `ModelWithLMHead`. See the [masked language modeling
     examples](../task_summary#masked-language-modeling) for more information.
 
-    This mask filling pipeline can currently be loaded from [`pipeline`] using the following task
-    identifier: `"fill-mask"`.
+    This mask filling pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"fill-mask"`.
 
     The models that this pipeline can use are models that have been trained with a masked language modeling objective,
     which includes the bi-directional models in the library. See the up-to-date list of available models on
@@ -45,8 +45,8 @@ class FillMaskPipeline(Pipeline):
     <Tip>
 
     This pipeline only works for inputs with exactly one token masked. Experimental: We added support for multiple
-    masks. The returned values are raw model output, and correspond to disjoint probabilities where one might
-    expect joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
+    masks. The returned values are raw model output, and correspond to disjoint probabilities where one might expect
+    joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
 
     </Tip>"""
 

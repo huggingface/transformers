@@ -29,13 +29,14 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageSegmentationPipeline(Pipeline):
     """
-    Image segmentation pipeline using any `AutoModelForImageSegmentation`. This pipeline predicts masks of objects
-    and their classes.
+    Image segmentation pipeline using any `AutoModelForImageSegmentation`. This pipeline predicts masks of objects and
+    their classes.
 
-    This image segmntation pipeline can currently be loaded from [`pipeline`] using the following
-    task identifier: `"image-segmentation"`.
+    This image segmntation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"image-segmentation"`.
 
-    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-segmentation).
+    See the list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=image-segmentation).
     """
 
     def __init__(self, *args, **kwargs):

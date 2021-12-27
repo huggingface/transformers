@@ -35,12 +35,12 @@ class TFGreedySearchDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with
-            each tensor of shape `(batch_size, config.vocab_size)`).
+            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with each tensor
+            of shape `(batch_size, config.vocab_size)`).
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -65,17 +65,18 @@ class TFGreedySearchEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape
             `(batch_size, config.vocab_size)`).
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
         encoder_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -104,12 +105,12 @@ class TFSampleDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with
-            each tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with each tensor
+            of shape `(batch_size*num_return_sequences, config.vocab_size)`).
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(num_return_sequences*batch_size, num_heads, generated_length, sequence_length)`.
@@ -134,18 +135,18 @@ class TFSampleEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape
             `(batch_size*num_return_sequences, config.vocab_size)`).
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape
-            `(batch_size*num_return_sequences, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size*num_return_sequences,
+            num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size*num_return_sequences, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size*num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_return_sequences, num_heads, generated_length, sequence_length)`.
@@ -173,8 +174,8 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`tf.Tensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
@@ -206,24 +207,26 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`tf.Tensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape
-            `(batch_size*num_beams, config.vocab_size)`).
+            . `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape `(batch_size*num_beams,
+            config.vocab_size)`).
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
         encoder_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size*num_beams*num_return_sequences, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size*num_beams*num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `tf.Tensor` of shape `(batch_size*num_beams*num_return_sequences, num_heads, generated_length, sequence_length)`.
+            `tf.Tensor` of shape `(batch_size*num_beams*num_return_sequences, num_heads, generated_length,
+            sequence_length)`.
         cross_attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -249,8 +252,8 @@ class TFBeamSampleDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`tf.Tensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
@@ -282,20 +285,21 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`tf.Tensor` of shape `(batch_size*num_beams, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`tf.Tensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape
-            `(batch_size*num_beams, config.vocab_size)`).
+            . `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape `(batch_size*num_beams,
+            config.vocab_size)`).
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
         encoder_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size*num_beams, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size*num_beams, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -325,14 +329,12 @@ TFBeamSampleOutput = Union[TFBeamSampleEncoderDecoderOutput, TFBeamSampleDecoder
 
 class TFGenerationMixin:
     """
-    A class containing all of the functions supporting generation, to be used as a mixin in
-    [`TFPreTrainedModel`].
+    A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
     """
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         """
-        Implement in subclasses of [`TFPreTrainedModel`] for custom behavior to prepare inputs in
-        the generate method.
+        Implement in subclasses of [`TFPreTrainedModel`] for custom behavior to prepare inputs in the generate method.
         """
         return {"input_ids": inputs}
 
@@ -379,13 +381,15 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
-        Adapted in part from [Facebook's XLM beam search code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
+        Adapted in part from [Facebook's XLM beam search
+        code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
 
-        Apart from `input_ids` and `attention_mask`, all the arguments below will default to the value of the
-        attribute of the same name inside the [`PretrainedConfig`] of the model. The default values
-        indicated are the default values of those config.
+        Apart from `input_ids` and `attention_mask`, all the arguments below will default to the value of the attribute
+        of the same name inside the [`PretrainedConfig`] of the model. The default values indicated are the default
+        values of those config.
 
-        Most of these parameters are explained in more detail in [this blog post](https://huggingface.co/blog/how-to-generate).
+        Most of these parameters are explained in more detail in [this blog
+        post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
 
@@ -407,10 +411,11 @@ class TFGenerationMixin:
             top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to 1.0):
-                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or
-                higher are kept for generation.
+                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
+                are kept for generation.
             repetition_penalty (`float`, *optional*, defaults to 1.0):
-                The parameter for repetition penalty. 1.0 means no penalty. See [this paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+                The parameter for repetition penalty. 1.0 means no penalty. See [this
+                paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             bos_token_id (`int`, *optional*):
@@ -430,8 +435,8 @@ class TFGenerationMixin:
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
             attention_mask (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for
-                tokens that are not masked, and 0 for masked tokens.
+                Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for tokens
+                that are not masked, and 0 for masked tokens.
 
                 If not provided, will default to a tensor the same shape as `input_ids` that masks the pad token.
 
@@ -452,21 +457,20 @@ class TFGenerationMixin:
             return_dict_in_generate (`bool`, *optional*, defaults to *False*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             forced_bos_token_id (`int`, *optional*):
-                The id of the token to force as the first generated token after the `decoder_start_token_id`.
-                Useful for multilingual models like [mBART](../model_doc/mbart) where the first generated token
-                needs to be the target language token.
+                The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
+                for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
+                the target language token.
             forced_eos_token_id (`int`, *optional*):
                 The id of the token to force as the last generated token when `max_length` is reached.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
         Return:
-            [`~file_utils.ModelOutput`] or `tf.Tensor`: A
-            [`~file_utils.ModelOutput`] (if `return_dict_in_generate=True` or when
-            `config.return_dict_in_generate=True`) or a `tf.Tensor`.
+            [`~file_utils.ModelOutput`] or `tf.Tensor`: A [`~file_utils.ModelOutput`] (if
+            `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `tf.Tensor`.
 
-                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the
-                possible [`~file_utils.ModelOutput`] types are:
+                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                [`~file_utils.ModelOutput`] types are:
 
                     - [`~generation_utils.TFGreedySearchDecoderOnlyOutput`],
                     - [`~generation_utils.TFSampleDecoderOnlyOutput`],
@@ -1438,8 +1442,7 @@ class TFGenerationMixin:
         self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
     ):
         """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in
-        the generate method.
+        Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
         """
         vocab_size = getattr(self.config, "vocab_size", None)
         if vocab_size is None and self.config.is_encoder_decoder:

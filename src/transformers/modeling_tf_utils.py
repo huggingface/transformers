@@ -102,15 +102,15 @@ def keras_serializable(cls):
 
     1. Adding a `transformers_config` dict to the Keras config dictionary in `get_config` (called by Keras at
        serialization time.
-    2. Wrapping `__init__` to accept that `transformers_config` dict (passed by Keras at deserialization
-       time) and convert it to a config object for the actual layer initializer.
+    2. Wrapping `__init__` to accept that `transformers_config` dict (passed by Keras at deserialization time) and
+       convert it to a config object for the actual layer initializer.
     3. Registering the class as a custom object in Keras (if the Tensorflow version supports this), so that it does not
        need to be supplied in `custom_objects` in the call to `tf.keras.models.load_model`.
 
     Args:
         cls (a `tf.keras.layers.Layers subclass`):
-            Typically a `TF.MainLayer` class in this project, in general must accept a `config` argument to
-            its initializer.
+            Typically a `TF.MainLayer` class in this project, in general must accept a `config` argument to its
+            initializer.
 
     Returns:
         The same class object, with modifications for Keras deserialization.
@@ -648,20 +648,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     r"""
     Base class for all TF models.
 
-    [`TFPreTrainedModel`] takes care of storing the configuration of the models and handles methods
-    for loading, downloading and saving models as well as a few methods common to all models to:
+    [`TFPreTrainedModel`] takes care of storing the configuration of the models and handles methods for loading,
+    downloading and saving models as well as a few methods common to all models to:
 
         - resize the input embeddings,
         - prune heads in the self-attention heads.
 
     Class attributes (overridden by derived classes):
 
-        - **config_class** ([`PretrainedConfig`]) -- A subclass of
-          [`PretrainedConfig`] to use as configuration class for this model architecture.
-        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in
-          derived classes of the same architecture adding modules on top of the base model.
-        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for
-          NLP models, `pixel_values` for vision models and `input_values` for speech models).
+        - **config_class** ([`PretrainedConfig`]) -- A subclass of [`PretrainedConfig`] to use as configuration class
+          for this model architecture.
+        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in derived
+          classes of the same architecture adding modules on top of the base model.
+        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
+          models, `pixel_values` for vision models and `input_values` for speech models).
     """
     config_class = None
     base_model_prefix = ""
@@ -1104,9 +1104,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Arguments:
             new_num_tokens (`int`, *optional*):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
-                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`,
-                just returns a pointer to the input tokens `tf.Variable` module of the model without doing
-                anything.
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
+                returns a pointer to the input tokens `tf.Variable` module of the model without doing anything.
 
         Return:
             `tf.Variable`: Pointer to the input tokens Embeddings Module of the model.
@@ -1234,8 +1233,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 vectors from the end. If not provided or `None`, just returns None
 
         Return:
-            `tf.Variable`: Pointer to the resized decoder or None if the output embeddings are different from the
-            input ones.
+            `tf.Variable`: Pointer to the resized decoder or None if the output embeddings are different from the input
+            ones.
         """
         new_lm_head_decoder = old_lm_head_decoder
         is_input_output_equals = tf.reduce_any(
@@ -1273,8 +1272,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ``tf.Variable``` module of the model without doing anything.
 
         Return:
-            `tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if
-            `new_num_tokens` is `None`
+            `tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if `new_num_tokens` is
+            `None`
         """
         old_embedding_dim = shape_list(old_embeddings)[1]
         init_range = getattr(self.config, "initializer_range", 0.02)
@@ -1297,9 +1296,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         Arguments:
             heads_to_prune (`Dict[int, List[int]]`):
-                Dictionary with keys being selected layer indices (`int`) and associated values being the list of
-                heads to prune in said layer (list of `int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads
-                0 and 2 on layer 1 and heads 2 and 3 on layer 2.
+                Dictionary with keys being selected layer indices (`int`) and associated values being the list of heads
+                to prune in said layer (list of `int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads 0 and 2 on
+                layer 1 and heads 2 and 3 on layer 2.
         """
         raise NotImplementedError
 
@@ -1322,16 +1321,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
                 <Tip warning={true}>
 
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with
-                `save_directory`, which requires `save_directory` to be a local clone of the repo you are
-                pushing to if it's an existing folder. Pass along `temp_dir=True` to use a temporary directory
-                instead.
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
+                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
+                folder. Pass along `temp_dir=True` to use a temporary directory instead.
 
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the
-                [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -1378,15 +1375,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
-                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch state_dict save file* (e.g, `./pt_model/pytorch_model.bin`). In
-                      this case, `from_pt` should be set to `True` and a configuration object should be provided
-                      as `config` argument. This loading path is slower than converting the PyTorch model in a
-                      TensorFlow model using the provided conversion scripts and loading the TensorFlow model
-                      afterwards.
+                    - A path or url to a *PyTorch state_dict save file* (e.g, `./pt_model/pytorch_model.bin`). In this
+                      case, `from_pt` should be set to `True` and a configuration object should be provided as `config`
+                      argument. This loading path is slower than converting the PyTorch model in a TensorFlow model
+                      using the provided conversion scripts and loading the TensorFlow model afterwards.
                     - `None` if you are both providing the configuration and state dictionary (resp. with keyword
                       arguments `config` and `state_dict`).
             model_args (sequence of positional arguments, *optional*):
@@ -1402,8 +1398,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
                     - The model is a model provided by the library (loaded with the *model id* string of a pretrained
                       model).
-                    - The model was saved using [`~TFPreTrainedModel.save_pretrained`] and is reloaded
-                      by supplying the save directory.
+                    - The model was saved using [`~TFPreTrainedModel.save_pretrained`] and is reloaded by supplying the
+                      save directory.
                     - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
                       configuration JSON file named *config.json* is found in the directory.
             from_pt: (`bool`, *optional*, defaults to `False`):
@@ -1422,14 +1418,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies: (`Dict[str, str], `optional`): A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request. output_loading_info(`bool`, *optional*, defaults to `False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
+            proxies:
+                (`Dict[str, str], `optional`): A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+                output_loading_info(`bool`, *optional*, defaults to `False`): Whether ot not to also return a
+                dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -1447,10 +1445,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                       underlying model's `__init__` method (we assume all relevant updates to the configuration have
                       already been done)
                     - If a configuration is not provided, `kwargs` will be first passed to the configuration class
-                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of
-                      `kwargs` that corresponds to a configuration attribute will be used to override said attribute
-                      with the supplied `kwargs` value. Remaining keys that do not correspond to any configuration
-                      attribute will be passed to the underlying model's `__init__` function.
+                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of `kwargs` that
+                      corresponds to a configuration attribute will be used to override said attribute with the
+                      supplied `kwargs` value. Remaining keys that do not correspond to any configuration attribute
+                      will be passed to the underlying model's `__init__` function.
 
         <Tip>
 
@@ -1782,19 +1780,20 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
 
                 In linear mode, should be a float tensor with shape `[batch_size, length, hidden_size]`.
             mode (`str`, defaults to `"embedding"`):
-               A valid value is either `"embedding"` or `"linear"`, the first one indicates that the layer
-               should be used as an embedding layer, the second one that the layer should be used as a linear decoder.
+               A valid value is either `"embedding"` or `"linear"`, the first one indicates that the layer should be
+               used as an embedding layer, the second one that the layer should be used as a linear decoder.
 
         Returns:
-            `tf.Tensor`: In embedding mode, the output is a float32 embedding tensor, with shape
-            `[batch_size, length, embedding_size]`.
+            `tf.Tensor`: In embedding mode, the output is a float32 embedding tensor, with shape `[batch_size, length,
+            embedding_size]`.
 
             In linear mode, the output is a float32 with shape `[batch_size, length, vocab_size]`.
 
         Raises:
             ValueError: if `mode` is not valid.
 
-        Shared weights logic is adapted from [here](https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24).
+        Shared weights logic is adapted from
+        [here](https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24).
         """
         if mode == "embedding":
             return self._embedding(inputs)
@@ -1842,14 +1841,12 @@ class TFSequenceSummary(tf.keras.layers.Layer):
                 - `"attn"` -- Not implemented now, use multi-head attention
 
             - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
-            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to
-              `config.num_labels` classes (otherwise to `config.hidden_size`).
-            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the
-              output, another string or `None` will add no activation.
-            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and
-              activation.
-            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and
-              activation.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
 
         initializer_range (`float`, defaults to 0.02): The standard deviation to use to initialize the weights.
         kwargs:

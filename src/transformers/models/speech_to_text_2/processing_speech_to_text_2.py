@@ -27,10 +27,8 @@ class Speech2Text2Processor:
     Constructs a Speech2Text2 processor which wraps a Speech2Text2 feature extractor and a Speech2Text2 tokenizer into
     a single processor.
 
-    [`Speech2Text2Processor`] offers all the functionalities of
-    [`AutoFeatureExtractor`] and [`Speech2Text2Tokenizer`]. See the
-    [`~Speech2Text2Processor.__call__`] and [`~Speech2Text2Processor.decode`] for
-    more information.
+    [`Speech2Text2Processor`] offers all the functionalities of [`AutoFeatureExtractor`] and [`Speech2Text2Tokenizer`].
+    See the [`~Speech2Text2Processor.__call__`] and [`~Speech2Text2Processor.decode`] for more information.
 
     Args:
         feature_extractor (`AutoFeatureExtractor`):
@@ -56,14 +54,14 @@ class Speech2Text2Processor:
     def save_pretrained(self, save_directory):
         """
         Save a Speech2Text2 feature extractor object and Speech2Text2 tokenizer object to the directory
-        `save_directory`, so that it can be re-loaded using the
-        [`~Speech2Text2Processor.from_pretrained`] class method.
+        `save_directory`, so that it can be re-loaded using the [`~Speech2Text2Processor.from_pretrained`] class
+        method.
 
         <Tip>
 
         This class method is simply calling [`~PreTrainedFeatureExtractor.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
+        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -83,9 +81,8 @@ class Speech2Text2Processor:
 
         <Tip>
 
-        This class method is simply calling AutoFeatureExtractor's
-        [`~PreTrainedFeatureExtractor.from_pretrained`] and Speech2Text2Tokenizer's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
+        This class method is simply calling AutoFeatureExtractor's [`~PreTrainedFeatureExtractor.from_pretrained`] and
+        Speech2Text2Tokenizer's [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
         docstrings of the methods above for more information.
 
         </Tip>
@@ -98,8 +95,7 @@ class Speech2Text2Processor:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a feature extractor file saved using the
-                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g.,
-                  `./my_model_directory/`.
+                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             **kwargs
@@ -116,24 +112,22 @@ class Speech2Text2Processor:
         When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
         [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Speech2Text2Processor.as_target_processor`] this method forwards all its arguments to
-        Speech2Text2Tokenizer's [`~Speech2Text2Tokenizer.__call__`]. Please refer to the doctsring of
-        the above two methods for more information.
+        Speech2Text2Tokenizer's [`~Speech2Text2Tokenizer.__call__`]. Please refer to the doctsring of the above two
+        methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to Speech2Text2Tokenizer's
-        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to Speech2Text2Tokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to Speech2Text2Tokenizer's
-        [`~PreTrainedTokenizer.decode`]. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to Speech2Text2Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 

@@ -18,8 +18,8 @@ class TextGenerationPipeline(Pipeline):
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
     specified text prompt.
 
-    This language generation pipeline can currently be loaded from [`pipeline`] using the following
-    task identifier: `"text-generation"`.
+    This language generation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
     objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available models
@@ -141,8 +141,8 @@ class TextGenerationPipeline(Pipeline):
             return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to include the decoded texts in the outputs.
             return_full_text (`bool`, *optional*, defaults to `True`):
-                If set to `False` only added text is returned, otherwise the full text is returned Only meaningful
-                if *return_text* is set to True.
+                If set to `False` only added text is returned, otherwise the full text is returned Only meaningful if
+                *return_text* is set to True.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             prefix (`str`, *optional*):
@@ -165,8 +165,8 @@ class TextGenerationPipeline(Pipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
-            - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`)
-              -- The token ids of the generated text.
+            - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
+              ids of the generated text.
         """
         return super().__call__(text_inputs, **kwargs)
 

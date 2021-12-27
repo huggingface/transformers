@@ -196,8 +196,8 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             hidden (Tensor): a minibatch of example
 
         Returns:
-            log-probabilities of for each class \\(c\\) in range \\(0 <= c <= n\_classes\\), where
-            \\(n\_classes\\) is a parameter passed to `AdaptiveLogSoftmaxWithLoss` constructor. Shape:
+            log-probabilities of for each class \\(c\\) in range \\(0 <= c <= n\_classes\\), where \\(n\_classes\\) is
+            a parameter passed to `AdaptiveLogSoftmaxWithLoss` constructor. Shape:
 
             - Input: \\((N, in\_features)\\)
             - Output: \\((N, n\_classes)\\)
