@@ -19,8 +19,6 @@ import os
 import re
 import warnings
 
-import black
-
 
 # Regexes
 # Re pattern that catches list introduction (with potential indent)
@@ -85,134 +83,6 @@ def format_text(text, max_len, prefix="", min_indent=None):
             current_line = try_line
     new_lines.append(current_line)
     return "\n".join(new_lines)
-
-
-def parse_code_example(code_lines):
-    """
-    Parses a code example
-
-    Args:
-        code_lines (`List[str]`): The code lines to parse.
-        max_len (`int`): The maximum lengh per line.
-
-    Returns:
-        (List[`str`], List[`str`]): The list of code samples and the list of outputs.
-    """
-    has_doctest = code_lines[0][:3] in DOCTEST_PROMPTS
-
-    code_samples = []
-    outputs = []
-    in_code = True
-    current_bit = []
-
-    for line in code_lines:
-        if in_code and has_doctest and not is_empty_line(line) and line[:3] not in DOCTEST_PROMPTS:
-            code_sample = "\n".join(current_bit)
-            code_samples.append(code_sample.strip())
-            in_code = False
-            current_bit = []
-        elif not in_code and line[:3] in DOCTEST_PROMPTS:
-            output = "\n".join(current_bit)
-            outputs.append(output.strip())
-            in_code = True
-            current_bit = []
-
-        # Add the line without doctest prompt
-        if line[:3] in DOCTEST_PROMPTS:
-            line = line[4:]
-        current_bit.append(line)
-
-    # Add last sample
-    if in_code:
-        code_sample = "\n".join(current_bit)
-        code_samples.append(code_sample.strip())
-    else:
-        output = "\n".join(current_bit)
-        outputs.append(output.strip())
-
-    return code_samples, outputs
-
-
-BLACK_AVOID_PATTERNS = {
-    "===PT-TF-SPLIT===": "### PT-TF-SPLIT",
-    "{processor_class}": "ProcessorClass",
-    "{model_class}": "ModelClass",
-    "{object_class}": "ObjectClass",
-}
-
-
-def format_code_example(code: str, max_len: int):
-    """
-    Format a code example using black. Will take into account the doctest syntax as well as any initial indentation in
-    the code provided.
-
-    Args:
-        code (`str`): The code example to format.
-        max_len (`int`): The maximum lengh per line.
-
-    Returns:
-        `str`: The formatted code.
-    """
-    code_lines = code.split("\n")
-
-    # Find initial indent
-    idx = 0
-    while idx < len(code_lines) and is_empty_line(code_lines[idx]):
-        idx += 1
-    if idx >= len(code_lines):
-        return ""
-    indent = find_indent(code_lines[idx])
-    has_doctest = code_lines[0][:3] in DOCTEST_PROMPTS
-
-    # Remove the initial indent for now, we will had it back after styling.
-    # Note that l[indent:] works for empty lines
-    code_lines = [l[indent:] for l in code_lines[idx:]]
-
-    code_samples, outputs = parse_code_example(code_lines)
-
-    # Let's blackify the code! We put everything in one big text to go faster.
-    delimiter = "\n\n### New code sample ###\n"
-    full_code = delimiter.join(code_samples)
-    line_length = max_len - indent
-    if has_doctest:
-        line_length -= 4
-
-    for k, v in BLACK_AVOID_PATTERNS.items():
-        full_code = full_code.replace(k, v)
-    formatted_code = black.format_str(
-        full_code, mode=black.FileMode([black.TargetVersion.PY37], line_length=line_length)
-    )
-
-    # Let's get back the formatted code samples
-    for k, v in BLACK_AVOID_PATTERNS.items():
-        formatted_code = formatted_code.replace(v, k)
-
-    code_samples = formatted_code.split(delimiter)
-    # We can have one output less than code samples
-    if len(outputs) == len(code_samples) - 1:
-        outputs.append("")
-
-    formatted_lines = []
-    for code_sample, output in zip(code_samples, outputs):
-        # black may have added some new lines, we remove them
-        code_sample = code_sample.strip()
-        in_triple_quotes = False
-        for line in code_sample.strip().split("\n"):
-            if has_doctest and not is_empty_line(line):
-                prefix = "... " if line.startswith(" ") or line in [")", "]", "}"] or in_triple_quotes else ">>> "
-            else:
-                prefix = ""
-            formatted_lines.append(" " * indent + prefix + line)
-
-            if '"""' in line:
-                in_triple_quotes = not in_triple_quotes
-
-        formatted_lines.extend([" " * indent + line for line in output.split("\n")])
-        if not output.endswith("===PT-TF-SPLIT==="):
-            formatted_lines.append("")
-
-    result = "\n".join(formatted_lines)
-    return result.rstrip()
 
 
 def split_line_on_first_colon(line):
@@ -283,7 +153,8 @@ def style_docstring(docstring, max_len):
                 current_indent = -1
                 code = "\n".join(current_paragraph)
                 if current_code in ["py", "python"]:
-                    new_lines.append(format_code_example(code, max_len))
+                    new_lines.append(code)
+                    # new_lines.append(format_code_example(code, max_len))
                 else:
                     new_lines.append(code)
                 current_paragraph = None
@@ -405,7 +276,8 @@ def style_mdx_file(mdx_file, max_len=119, check_only=False):
             else:
                 code = "\n".join(current_code)
                 if current_language in ["py", "python"]:
-                    code = format_code_example(code, max_len)
+                    pass
+                    # code = format_code_example(code, max_len)
                 new_lines.append(code)
 
             new_lines.append(line)
