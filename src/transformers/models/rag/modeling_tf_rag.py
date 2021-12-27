@@ -233,7 +233,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         model checkpoints.
 
         Params:
-            question_encoder_pretrained_model_name_or_path (:obj: *str*, *optional*):
+            question_encoder_pretrained_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string with the *shortcut name* of a pretrained model to load from cache or download, e.g.,
@@ -245,7 +245,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                     - A path or url to a *pytorch index checkpoint file* (e.g, `./pt_model/`). In this case,
                       `question_encoder_from_pt` should be set to `True`.
 
-            generator_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
+            generator_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string with the *shortcut name* of a pretrained model to load from cache or download, e.g.,

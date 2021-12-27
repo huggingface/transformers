@@ -1840,8 +1840,8 @@ class PoolerEndLogits(nn.Module):
 
         <Tip>
 
-        One of `start_states` or `start_positions` should be not obj:`None`. If both are set, `start_positions`
-        overrides `start_states`.
+        One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
+        `start_states`.
 
         </Tip>
 
@@ -1906,8 +1906,8 @@ class PoolerAnswerClass(nn.Module):
 
         <Tip>
 
-        One of `start_states` or `start_positions` should be not obj:`None`. If both are set, `start_positions`
-        overrides `start_states`.
+        One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
+        `start_states`.
 
         </Tip>
 
