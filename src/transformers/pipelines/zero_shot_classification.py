@@ -5,7 +5,7 @@ import numpy as np
 from ..file_utils import add_end_docstrings
 from ..tokenization_utils import TruncationStrategy
 from ..utils import logging
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
 logger = logging.get_logger(__name__)
@@ -44,7 +44,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class ZeroShotClassificationPipeline(Pipeline):
+class ZeroShotClassificationPipeline(ChunkPipeline):
     """
     NLI-based zero-shot classification pipeline using a `ModelForSequenceClassification` trained on NLI (natural
     language inference) tasks.
@@ -84,48 +84,37 @@ class ZeroShotClassificationPipeline(Pipeline):
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
         return_tensors = self.framework
-        if getattr(self.tokenizer, "pad_token", None) is None:
-            # XXX some tokenizers do not have a padding token, we use simple lists
-            # and no padding then
-            logger.warning("The tokenizer {self.tokenizer} does not have a pad token, we're not running it as a batch")
-            padding = False
-            inputs = []
-            for sequence_pair in sequence_pairs:
-                model_input = self.tokenizer(
-                    text=sequence_pair[0],
-                    text_pair=sequence_pair[1],
-                    add_special_tokens=add_special_tokens,
-                    return_tensors=return_tensors,
-                    padding=padding,
-                    truncation=truncation,
-                )
-                inputs.append(model_input)
-        else:
-            try:
+        if self.tokenizer.pad_token is None:
+            # Override for tokenizers not supporting padding
+            logger.error(
+                "Tokenizer was not supporting padding necessary for zero-shot, attempting to use  `pad_token=eos_token`"
+            )
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        try:
+            inputs = self.tokenizer(
+                sequence_pairs,
+                add_special_tokens=add_special_tokens,
+                return_tensors=return_tensors,
+                padding=padding,
+                truncation=truncation,
+            )
+        except Exception as e:
+            if "too short" in str(e):
+                # tokenizers might yell that we want to truncate
+                # to a value that is not even reached by the input.
+                # In that case we don't want to truncate.
+                # It seems there's not a really better way to catch that
+                # exception.
+
                 inputs = self.tokenizer(
                     sequence_pairs,
                     add_special_tokens=add_special_tokens,
                     return_tensors=return_tensors,
                     padding=padding,
-                    truncation=truncation,
+                    truncation=TruncationStrategy.DO_NOT_TRUNCATE,
                 )
-            except Exception as e:
-                if "too short" in str(e):
-                    # tokenizers might yell that we want to truncate
-                    # to a value that is not even reached by the input.
-                    # In that case we don't want to truncate.
-                    # It seems there's not a really better way to catch that
-                    # exception.
-
-                    inputs = self.tokenizer(
-                        sequence_pairs,
-                        add_special_tokens=add_special_tokens,
-                        return_tensors=return_tensors,
-                        padding=padding,
-                        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
-                    )
-                else:
-                    raise e
+            else:
+                raise e
 
         return inputs
 
@@ -183,10 +172,6 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **labels** (`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (`List[float]`) -- The probabilities for each of the labels.
         """
-        if kwargs.get("batch_size", 1) > 1:
-            logger.error("Batch size > 1 is not supported for zero-shot pipeline, setting batch_size=1.")
-            kwargs["batch_size"] = 1
-
         if len(args) == 0:
             pass
         elif len(args) == 1 and "candidate_labels" not in kwargs:
@@ -198,45 +183,35 @@ class ZeroShotClassificationPipeline(Pipeline):
 
     def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
         sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
-        model_inputs = self._parse_and_tokenize(sequence_pairs)
 
-        prepared_inputs = {
-            "candidate_labels": candidate_labels,
-            "sequences": sequences,
-            "inputs": model_inputs,
-        }
-        return prepared_inputs
+        for i, (candidate_label, sequence_pair) in enumerate(zip(candidate_labels, sequence_pairs)):
+            model_input = self._parse_and_tokenize([sequence_pair])
+
+            yield {
+                "candidate_label": candidate_label,
+                "sequence": sequences[0],
+                "is_last": i == len(candidate_labels) - 1,
+                **model_input,
+            }
 
     def _forward(self, inputs):
-        candidate_labels = inputs["candidate_labels"]
-        sequences = inputs["sequences"]
-        model_inputs = inputs["inputs"]
-        if isinstance(model_inputs, list):
-            outputs = []
-            for input_ in model_inputs:
-                prediction = self.model(**input_)[0].cpu()
-                outputs.append(prediction)
-        else:
-            outputs = self.model(**model_inputs)
+        candidate_label = inputs["candidate_label"]
+        sequence = inputs["sequence"]
+        model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        outputs = self.model(**model_inputs)
 
-        model_outputs = {"candidate_labels": candidate_labels, "sequences": sequences, "outputs": outputs}
+        model_outputs = {
+            "candidate_label": candidate_label,
+            "sequence": sequence,
+            "is_last": inputs["is_last"],
+            **outputs,
+        }
         return model_outputs
 
     def postprocess(self, model_outputs, multi_label=False):
-        candidate_labels = model_outputs["candidate_labels"]
-        sequences = model_outputs["sequences"]
-        outputs = model_outputs["outputs"]
-
-        if self.framework == "pt":
-            if isinstance(outputs, list):
-                logits = np.concatenate([output.cpu().numpy() for output in outputs], axis=0)
-            else:
-                logits = outputs["logits"].cpu().numpy()
-        else:
-            if isinstance(outputs, list):
-                logits = np.concatenate([output.numpy() for output in outputs], axis=0)
-            else:
-                logits = outputs["logits"].numpy()
+        candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
+        sequences = [outputs["sequence"] for outputs in model_outputs]
+        logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n
@@ -254,16 +229,9 @@ class ZeroShotClassificationPipeline(Pipeline):
             entail_logits = reshaped_outputs[..., self.entailment_id]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
 
-        result = []
-        for iseq in range(num_sequences):
-            top_inds = list(reversed(scores[iseq].argsort()))
-            result.append(
-                {
-                    "sequence": sequences[iseq],
-                    "labels": [candidate_labels[i] for i in top_inds],
-                    "scores": scores[iseq, top_inds].tolist(),
-                }
-            )
-        if len(result) == 1:
-            return result[0]
-        return result
+        top_inds = list(reversed(scores[0].argsort()))
+        return {
+            "sequence": sequences[0],
+            "labels": [candidate_labels[i] for i in top_inds],
+            "scores": scores[0, top_inds].tolist(),
+        }

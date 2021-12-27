@@ -204,8 +204,10 @@ class PipelineTestCaseMeta(type):
                             # Need to copy because Conversation object is mutated
                             yield copy.deepcopy(random.choice(examples))
 
+                    out = []
                     for item in pipeline(data(10), batch_size=4):
-                        pass
+                        out.append(item)
+                    self.assertEqual(len(out), 10)
 
                 run_batch_test(pipeline, examples)
 
@@ -444,3 +446,141 @@ class PipelinePadTest(unittest.TestCase):
                 torch.zeros((2, 11, 2), dtype=torch.long),
             ),
         )
+
+
+@is_pipeline_test
+@require_torch
+class PipelineUtilsTest(unittest.TestCase):
+    def test_pipeline_dataset(self):
+        from transformers.pipelines.pt_utils import PipelineDataset
+
+        dummy_dataset = [0, 1, 2, 3]
+
+        def add(number, extra=0):
+            return number + extra
+
+        dataset = PipelineDataset(dummy_dataset, add, {"extra": 2})
+        self.assertEqual(len(dataset), 4)
+        outputs = [dataset[i] for i in range(4)]
+        self.assertEqual(outputs, [2, 3, 4, 5])
+
+    def test_pipeline_iterator(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        dummy_dataset = [0, 1, 2, 3]
+
+        def add(number, extra=0):
+            return number + extra
+
+        dataset = PipelineIterator(dummy_dataset, add, {"extra": 2})
+        self.assertEqual(len(dataset), 4)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [2, 3, 4, 5])
+
+    def test_pipeline_iterator_no_len(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        def dummy_dataset():
+            for i in range(4):
+                yield i
+
+        def add(number, extra=0):
+            return number + extra
+
+        dataset = PipelineIterator(dummy_dataset(), add, {"extra": 2})
+        with self.assertRaises(TypeError):
+            len(dataset)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [2, 3, 4, 5])
+
+    def test_pipeline_batch_unbatch_iterator(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        dummy_dataset = [{"id": [0, 1, 2]}, {"id": [3]}]
+
+        def add(number, extra=0):
+            return {"id": [i + extra for i in number["id"]]}
+
+        dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}])
+
+    def test_pipeline_batch_unbatch_iterator_tensors(self):
+        import torch
+
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        dummy_dataset = [{"id": torch.LongTensor([[10, 20], [0, 1], [0, 2]])}, {"id": torch.LongTensor([[3]])}]
+
+        def add(number, extra=0):
+            return {"id": number["id"] + extra}
+
+        dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(
+            nested_simplify(outputs), [{"id": [[12, 22]]}, {"id": [[2, 3]]}, {"id": [[2, 4]]}, {"id": [[5]]}]
+        )
+
+    def test_pipeline_chunk_iterator(self):
+        from transformers.pipelines.pt_utils import PipelineChunkIterator
+
+        def preprocess_chunk(n: int):
+            for i in range(n):
+                yield i
+
+        dataset = [2, 3]
+
+        dataset = PipelineChunkIterator(dataset, preprocess_chunk, {}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+
+        self.assertEqual(outputs, [0, 1, 0, 1, 2])
+
+    def test_pipeline_pack_iterator(self):
+        from transformers.pipelines.pt_utils import PipelinePackIterator
+
+        def pack(item):
+            return {"id": item["id"] + 1, "is_last": item["is_last"]}
+
+        dataset = [
+            {"id": 0, "is_last": False},
+            {"id": 1, "is_last": True},
+            {"id": 0, "is_last": False},
+            {"id": 1, "is_last": False},
+            {"id": 2, "is_last": True},
+        ]
+
+        dataset = PipelinePackIterator(dataset, pack, {})
+
+        outputs = [item for item in dataset]
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"id": 1},
+                    {"id": 2},
+                ],
+                [
+                    {"id": 1},
+                    {"id": 2},
+                    {"id": 3},
+                ],
+            ],
+        )
+
+    def test_pipeline_pack_unbatch_iterator(self):
+        from transformers.pipelines.pt_utils import PipelinePackIterator
+
+        dummy_dataset = [{"id": [0, 1, 2], "is_last": [False, True, False]}, {"id": [3], "is_last": [True]}]
+
+        def add(number, extra=0):
+            return {"id": [i + extra for i in number["id"]], "is_last": number["is_last"]}
+
+        dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [[{"id": 2}, {"id": 3}], [{"id": 4}, {"id": 5}]])
