@@ -177,10 +177,10 @@ class ImageFeatureExtractionMixin:
 
             if not isinstance(mean, torch.Tensor):
                 mean = torch.tensor(mean)
-            mean.to(image.device)
+            mean = mean.to(image.device)
             if not isinstance(std, torch.Tensor):
                 std = torch.tensor(std)
-            std.to(image.device)
+            std = std.to(image.device)
 
         if image.ndim == 3 and image.shape[0] in [1, 3]:
             return (image - mean[:, None, None]) / std[:, None, None]
