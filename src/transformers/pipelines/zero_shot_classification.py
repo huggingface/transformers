@@ -185,7 +185,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
 
         for i, (candidate_label, sequence_pair) in enumerate(zip(candidate_labels, sequence_pairs)):
-            model_input = self._parse_and_tokenize(sequence_pair)
+            model_input = self._parse_and_tokenize([sequence_pair])
 
             yield {
                 "candidate_label": candidate_label,
