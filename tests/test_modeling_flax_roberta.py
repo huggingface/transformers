@@ -116,6 +116,8 @@ class FlaxRobertaModelTester(unittest.TestCase):
 @require_flax
 class FlaxRobertaModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
+    test_head_masking = True
+
     all_model_classes = (
         (
             FlaxRobertaModel,

@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.14.0.dev0"
+__version__ = "4.16.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -116,6 +116,7 @@ _import_structure = {
         "is_datasets_available",
         "is_faiss_available",
         "is_flax_available",
+        "is_phonemizer_available",
         "is_psutil_available",
         "is_py3nvml_available",
         "is_pyctcdecode_available",
@@ -313,7 +314,12 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
+    "models.wavlm": [
+        "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "WavLMConfig",
+    ],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
@@ -649,6 +655,8 @@ if is_torch_available():
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoModel",
             "AutoModelForAudioClassification",
+            "AutoModelForAudioFrameClassification",
+            "AutoModelForAudioXVector",
             "AutoModelForCausalLM",
             "AutoModelForCTC",
             "AutoModelForImageClassification",
@@ -877,6 +885,7 @@ if is_torch_available():
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ElectraForCausalLM",
             "ElectraForMaskedLM",
             "ElectraForMultipleChoice",
             "ElectraForPreTraining",
@@ -1325,9 +1334,11 @@ if is_torch_available():
     _import_structure["models.unispeech_sat"].extend(
         [
             "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UniSpeechSatForAudioFrameClassification",
             "UniSpeechSatForCTC",
             "UniSpeechSatForPreTraining",
             "UniSpeechSatForSequenceClassification",
+            "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
         ]
@@ -1358,12 +1369,25 @@ if is_torch_available():
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ForAudioFrameClassification",
             "Wav2Vec2ForCTC",
             "Wav2Vec2ForMaskedLM",
             "Wav2Vec2ForPreTraining",
             "Wav2Vec2ForSequenceClassification",
+            "Wav2Vec2ForXVector",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.wavlm"].extend(
+        [
+            "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WavLMForAudioFrameClassification",
+            "WavLMForCTC",
+            "WavLMForSequenceClassification",
+            "WavLMForXVector",
+            "WavLMModel",
+            "WavLMPreTrainedModel",
         ]
     )
     _import_structure["models.xlm"].extend(
@@ -1524,6 +1548,15 @@ if is_tf_available():
             "TFCamembertForSequenceClassification",
             "TFCamembertForTokenClassification",
             "TFCamembertModel",
+        ]
+    )
+    _import_structure["models.clip"].extend(
+        [
+            "TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCLIPModel",
+            "TFCLIPPreTrainedModel",
+            "TFCLIPTextModel",
+            "TFCLIPVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -2139,6 +2172,7 @@ if TYPE_CHECKING:
         is_datasets_available,
         is_faiss_available,
         is_flax_available,
+        is_phonemizer_available,
         is_psutil_available,
         is_py3nvml_available,
         is_pyctcdecode_available,
@@ -2320,7 +2354,9 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
+    from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
+    from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -2603,6 +2639,8 @@ if TYPE_CHECKING:
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
             AutoModelForAudioClassification,
+            AutoModelForAudioFrameClassification,
+            AutoModelForAudioXVector,
             AutoModelForCausalLM,
             AutoModelForCTC,
             AutoModelForImageClassification,
@@ -2793,6 +2831,7 @@ if TYPE_CHECKING:
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ElectraForCausalLM,
             ElectraForMaskedLM,
             ElectraForMultipleChoice,
             ElectraForPreTraining,
@@ -3164,9 +3203,11 @@ if TYPE_CHECKING:
         )
         from .models.unispeech_sat import (
             UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechSatForAudioFrameClassification,
             UniSpeechSatForCTC,
             UniSpeechSatForPreTraining,
             UniSpeechSatForSequenceClassification,
+            UniSpeechSatForXVector,
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
@@ -3191,12 +3232,23 @@ if TYPE_CHECKING:
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ForAudioFrameClassification,
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
             Wav2Vec2ForPreTraining,
             Wav2Vec2ForSequenceClassification,
+            Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+        from .models.wavlm import (
+            WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WavLMForAudioFrameClassification,
+            WavLMForCTC,
+            WavLMForSequenceClassification,
+            WavLMForXVector,
+            WavLMModel,
+            WavLMPreTrainedModel,
         )
         from .models.xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3352,6 +3404,13 @@ if TYPE_CHECKING:
             TFCamembertForSequenceClassification,
             TFCamembertForTokenClassification,
             TFCamembertModel,
+        )
+        from .models.clip import (
+            TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCLIPModel,
+            TFCLIPPreTrainedModel,
+            TFCLIPTextModel,
+            TFCLIPVisionModel,
         )
         from .models.convbert import (
             TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

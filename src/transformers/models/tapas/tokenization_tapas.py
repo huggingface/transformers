@@ -89,7 +89,7 @@ PRETRAINED_INIT_CONFIGURATION = {name: {"do_lower_case": True} for name in PRETR
 
 class TapasTruncationStrategy(ExplicitEnum):
     """
-    Possible values for the ``truncation`` argument in :meth:`~transformers.TapasTokenizer.__call__`. Useful for
+    Possible values for the `truncation` argument in [`~TapasTokenizer.__call__`]. Useful for
     tab-completion in an IDE.
     """
 
@@ -146,44 +146,44 @@ def whitespace_tokenize(text):
 
 
 TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
-            add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            add_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to encode the sequences with the special tokens relative to their model.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
                   maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.TapasTruncationStrategy`, `optional`, defaults to :obj:`False`):
+            truncation (`bool`, `str` or [`TapasTruncationStrategy`], *optional*, defaults to `False`):
                 Activates and controls truncation. Accepts the following values:
 
-                * :obj:`True` or :obj:`'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument
-                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
+                - `True` or `'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument
+                  `max_length` or to the maximum acceptable input length for the model if that argument is not
                   provided. This will truncate row by row, removing rows from the table.
-                * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with
                   sequence lengths greater than the model maximum admissible input size).
-            max_length (:obj:`int`, `optional`):
+            max_length (`int`, *optional*):
                 Controls the maximum length to use by one of the truncation/padding parameters.
 
-                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
+                If left unset or set to `None`, this will use the predefined model maximum length if a maximum
                 length is required by one of the truncation/padding parameters. If the model has no specific maximum
                 input length (like XLNet) truncation/padding to a maximum length will be deactivated.
-            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the input is already pre-tokenized (e.g., split into words). If set to :obj:`True`, the
+            is_split_into_words (`bool`, *optional*, defaults to `False`):
+                Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
-            pad_to_multiple_of (:obj:`int`, `optional`):
+            pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
 """
 
 
@@ -192,11 +192,11 @@ class TapasTokenizer(PreTrainedTokenizer):
     Construct a TAPAS tokenizer. Based on WordPiece. Flattens a table and one or more related sentences to be used by
     TAPAS models.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
-    :class:`~transformers.TapasTokenizer` creates several token type ids to encode tabular structure. To be more
-    precise, it adds 7 token type ids, in the following order: :obj:`segment_ids`, :obj:`column_ids`, :obj:`row_ids`,
-    :obj:`prev_labels`, :obj:`column_ranks`, :obj:`inv_column_ranks` and :obj:`numeric_relations`:
+    [`TapasTokenizer`] creates several token type ids to encode tabular structure. To be more
+    precise, it adds 7 token type ids, in the following order: `segment_ids`, `column_ids`, `row_ids`,
+    `prev_labels`, `column_ranks`, `inv_column_ranks` and `numeric_relations`:
 
     - segment_ids: indicate whether a token belongs to the question (0) or the table (1). 0 for special tokens and
       padding.
@@ -215,56 +215,56 @@ class TapasTokenizer(PreTrainedTokenizer):
     - numeric_relations: indicate numeric relations between the question and the tokens of the table. 0 for all
       question tokens, special tokens and padding.
 
-    :class:`~transformers.TapasTokenizer` runs end-to-end tokenization on a table and associated sentences: punctuation
+    [`TapasTokenizer`] runs end-to-end tokenization on a table and associated sentences: punctuation
     splitting and wordpiece.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             File containing the vocabulary.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_basic_tokenize (`bool`, *optional*, defaults to `True`):
             Whether or not to do basic tokenization before WordPiece.
-        never_split (:obj:`Iterable`, `optional`):
+        never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
-            :obj:`do_basic_tokenize=True`
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
+            `do_basic_tokenize=True`
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        empty_token (:obj:`str`, `optional`, defaults to :obj:`"[EMPTY]"`):
+        empty_token (`str`, *optional*, defaults to `"[EMPTY]"`):
             The token used for empty cell values in a table. Empty cell values include "", "n/a", "nan" and "?".
-        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see this
-            `issue <https://github.com/huggingface/transformers/issues/328>`__).
-        strip_accents: (:obj:`bool`, `optional`):
+            [issue](https://github.com/huggingface/transformers/issues/328)).
+        strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for :obj:`lowercase` (as in the original BERT).
-        cell_trim_length (:obj:`int`, `optional`, defaults to -1):
+            value for `lowercase` (as in the original BERT).
+        cell_trim_length (`int`, *optional*, defaults to -1):
             If > 0: Trim cells so that the length is <= this value. Also disables further cell trimming, should thus be
-            used with :obj:`truncation` set to :obj:`True`.
-        max_column_id (:obj:`int`, `optional`):
+            used with `truncation` set to `True`.
+        max_column_id (`int`, *optional*):
             Max column id to extract.
-        max_row_id (:obj:`int`, `optional`):
+        max_row_id (`int`, *optional*):
             Max row id to extract.
-        strip_column_names (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        strip_column_names (`bool`, *optional*, defaults to `False`):
             Whether to add empty strings instead of column names.
-        update_answer_coordinates (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        update_answer_coordinates (`bool`, *optional*, defaults to `False`):
             Whether to recompute the answer coordinates from the answer text.
-        min_question_length (:obj:`int`, `optional`):
+        min_question_length (`int`, *optional*):
             Minimum length of each question in terms of tokens (will be skipped otherwise).
-        max_question_length (:obj:`int`, `optional`):
+        max_question_length (`int`, *optional*):
             Maximum length of each question in terms of tokens (will be skipped otherwise).
     """
 
@@ -421,12 +421,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the attention mask according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
-            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`List[int]`): list of token IDs corresponding to the ID.
+            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            :obj:`List[int]`: List of ints containing the attention mask values.
+            `List[int]`: List of ints containing the attention mask values.
         """
         return [1] * (1 + len(query_ids) + 1 + len(table_values))
 
@@ -437,12 +437,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the segment token type IDs according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
-            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`List[int]`): list of token IDs corresponding to the ID.
+            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            :obj:`List[int]`: List of ints containing the segment token type IDs values.
+            `List[int]`: List of ints containing the segment token type IDs values.
         """
         table_ids = list(zip(*table_values))[0] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + [1] * len(table_ids)
@@ -454,12 +454,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the column token type IDs according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
-            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`List[int]`): list of token IDs corresponding to the ID.
+            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            :obj:`List[int]`: List of ints containing the column token type IDs values.
+            `List[int]`: List of ints containing the column token type IDs values.
         """
         table_column_ids = list(zip(*table_values))[1] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + list(table_column_ids)
@@ -471,12 +471,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the row token type IDs according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
-            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`List[int]`): list of token IDs corresponding to the ID.
+            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            :obj:`List[int]`: List of ints containing the row token type IDs values.
+            `List[int]`: List of ints containing the row token type IDs values.
         """
         table_row_ids = list(zip(*table_values))[2] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + list(table_row_ids)
@@ -489,11 +489,11 @@ class TapasTokenizer(PreTrainedTokenizer):
         by concatenating and adding special tokens.
 
         Args:
-            token_ids_0 (:obj:`List[int]`): The ids of the question.
-            token_ids_1 (:obj:`List[int]`, `optional`): The ids of the flattened table.
+            token_ids_0 (`List[int]`): The ids of the question.
+            token_ids_1 (`List[int]`, *optional*): The ids of the flattened table.
 
         Returns:
-            :obj:`List[int]`: The model input with special tokens.
+            `List[int]`: The model input with special tokens.
         """
         if token_ids_1 is None:
             raise ValueError("With TAPAS, you must provide both question IDs and table IDs.")
@@ -505,18 +505,18 @@ class TapasTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of question IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 List of flattened table IDs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -563,20 +563,20 @@ class TapasTokenizer(PreTrainedTokenizer):
         Main method to tokenize and prepare for the model one or several sequence(s) related to a table.
 
         Args:
-            table (:obj:`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use `.astype(str)` on a Pandas
+            table (`pd.DataFrame`):
+                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            queries (:obj:`str` or :obj:`List[str]`):
+            queries (`str` or `List[str]`):
                 Question or batch of questions related to a table to be encoded. Note that in case of a batch, all
                 questions must refer to the **same** table.
-            answer_coordinates (:obj:`List[Tuple]` or :obj:`List[List[Tuple]]`, `optional`):
+            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. In case only a single table-question pair
                 is provided, then the answer_coordinates must be a single list of one or more tuples. Each tuple must
                 be a (row_index, column_index) pair. The first data row (not the column header row) has index 0. The
                 first column has index 0. In case a batch of table-question pairs is provided, then the
                 answer_coordinates must be a list of lists of tuples (each list corresponding to a single
                 table-question pair).
-            answer_text (:obj:`List[str]` or :obj:`List[List[str]]`, `optional`):
+            answer_text (`List[str]` or `List[List[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. In case only a single table-question pair is
                 provided, then the answer_text must be a single list of one or more strings. Each string must be the
                 answer text of a corresponding answer coordinate. In case a batch of table-question pairs is provided,
@@ -675,22 +675,25 @@ class TapasTokenizer(PreTrainedTokenizer):
         """
         Prepare a table and a list of strings for the model.
 
-        .. warning::
-            This method is deprecated, ``__call__`` should be used instead.
+        <Tip warning={true}>
+
+        This method is deprecated, `__call__` should be used instead.
+
+        </Tip>
 
         Args:
-            table (:obj:`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use `.astype(str)` on a Pandas
+            table (`pd.DataFrame`):
+                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            queries (:obj:`List[str]`):
+            queries (`List[str]`):
                 Batch of questions related to a table to be encoded. Note that all questions must refer to the **same**
                 table.
-            answer_coordinates (:obj:`List[Tuple]` or :obj:`List[List[Tuple]]`, `optional`):
+            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. Each tuple must be a (row_index,
                 column_index) pair. The first data row (not the column header row) has index 0. The first column has
                 index 0. The answer_coordinates must be a list of lists of tuples (each list corresponding to a single
                 table-question pair).
-            answer_text (:obj:`List[str]` or :obj:`List[List[str]]`, `optional`):
+            answer_text (`List[str]` or `List[List[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. In case a batch of table-question pairs is
                 provided, then the answer_coordinates must be a list of lists of strings (each list corresponding to a
                 single table-question pair). Each string must be the answer text of a corresponding answer coordinate.
@@ -900,13 +903,13 @@ class TapasTokenizer(PreTrainedTokenizer):
         """
         Prepare a table and a string for the model. This method does not return token type IDs, attention masks, etc.
         which are necessary for the model to work correctly. Use that method if you want to build your processing on
-        your own, otherwise refer to ``__call__``.
+        your own, otherwise refer to `__call__`.
 
         Args:
-            table (:obj:`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use `.astype(str)` on a Pandas
+            table (`pd.DataFrame`):
+                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            query (:obj:`str` or :obj:`List[str]`):
+            query (`str` or `List[str]`):
                 Question related to a table to be encoded.
         """
         encoded_inputs = self.encode_plus(
@@ -953,16 +956,16 @@ class TapasTokenizer(PreTrainedTokenizer):
         Prepare a table and a string for the model.
 
         Args:
-            table (:obj:`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use `.astype(str)` on a Pandas
+            table (`pd.DataFrame`):
+                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            query (:obj:`str` or :obj:`List[str]`):
+            query (`str` or `List[str]`):
                 Question related to a table to be encoded.
-            answer_coordinates (:obj:`List[Tuple]` or :obj:`List[List[Tuple]]`, `optional`):
+            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. The answer_coordinates must be a single
                 list of one or more tuples. Each tuple must be a (row_index, column_index) pair. The first data row
                 (not the column header row) has index 0. The first column has index 0.
-            answer_text (:obj:`List[str]` or :obj:`List[List[str]]`, `optional`):
+            answer_text (`List[str]` or `List[List[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. The answer_text must be a single list of one or
                 more strings. Each string must be the answer text of a corresponding answer coordinate.
         """
@@ -1094,19 +1097,19 @@ class TapasTokenizer(PreTrainedTokenizer):
         sequences if overflowing while taking into account the special tokens.
 
         Args:
-            raw_table (:obj:`pd.DataFrame`):
+            raw_table (`pd.DataFrame`):
                 The original table before any transformation (like tokenization) was applied to it.
-            raw_query (:obj:`TextInput` or :obj:`PreTokenizedInput` or :obj:`EncodedInput`):
+            raw_query (`TextInput` or `PreTokenizedInput` or `EncodedInput`):
                 The original query before any transformation (like tokenization) was applied to it.
-            tokenized_table (:obj:`TokenizedTable`):
+            tokenized_table (`TokenizedTable`):
                 The table after tokenization.
-            query_tokens (:obj:`List[str]`):
+            query_tokens (`List[str]`):
                 The query after tokenization.
-            answer_coordinates (:obj:`List[Tuple]` or :obj:`List[List[Tuple]]`, `optional`):
+            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. The answer_coordinates must be a single
                 list of one or more tuples. Each tuple must be a (row_index, column_index) pair. The first data row
                 (not the column header row) has index 0. The first column has index 0.
-            answer_text (:obj:`List[str]` or :obj:`List[List[str]]`, `optional`):
+            answer_text (`List[str]` or `List[List[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. The answer_text must be a single list of one or
                 more strings. Each string must be the answer text of a corresponding answer coordinate.
         """
@@ -1267,22 +1270,22 @@ class TapasTokenizer(PreTrainedTokenizer):
         Truncates a sequence pair in-place following the strategy.
 
         Args:
-            query_tokens (:obj:`List[str]`):
+            query_tokens (`List[str]`):
                 List of strings corresponding to the tokenized query.
-            tokenized_table (:obj:`TokenizedTable`):
+            tokenized_table (`TokenizedTable`):
                 Tokenized table
-            num_rows (:obj:`int`):
+            num_rows (`int`):
                 Total number of table rows
-            num_columns (:obj:`int`):
+            num_columns (`int`):
                 Total number of table columns
-            max_length (:obj:`int`):
+            max_length (`int`):
                 Total maximum length.
-            truncation_strategy (:obj:`str` or :class:`~transformers.TapasTruncationStrategy`):
+            truncation_strategy (`str` or [`TapasTruncationStrategy`]):
                 Truncation strategy to use. Seeing as this method should only be called when truncating, the only
-                available strategy is the :obj:`"drop_rows_to_fit"` strategy.
+                available strategy is the `"drop_rows_to_fit"` strategy.
 
         Returns:
-            :obj:`Tuple(int, int)`: tuple containing the number of rows after truncation, and the number of tokens
+            `Tuple(int, int)`: tuple containing the number of rows after truncation, and the number of tokens
             available for each table element.
         """
         if not isinstance(truncation_strategy, TapasTruncationStrategy):
@@ -1319,8 +1322,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         Tokenizes column headers and cell texts of a table.
 
         Args:
-            table (:obj:`pd.Dataframe`):
-                Table. Returns: :obj:`TokenizedTable`: TokenizedTable object.
+            table (`pd.Dataframe`):
+                Table. Returns: `TokenizedTable`: TokenizedTable object.
         """
         tokenized_rows = []
         tokenized_row = []
@@ -1366,8 +1369,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         sequence length of the model.
 
         Args:
-            question_tokens (:obj:`List[String]`):
-                List of question tokens. Returns: :obj:`int`: the number of tokens left for the table, given the model
+            question_tokens (`List[String]`):
+                List of question tokens. Returns: `int`: the number of tokens left for the table, given the model
                 max length.
         """
         return (max_length if max_length is not None else self.model_max_length) - self._question_encoding_cost(
@@ -1887,33 +1890,32 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def convert_logits_to_predictions(self, data, logits, logits_agg=None, cell_classification_threshold=0.5):
         """
-        Converts logits of :class:`~transformers.TapasForQuestionAnswering` to actual predicted answer coordinates and
+        Converts logits of [`TapasForQuestionAnswering`] to actual predicted answer coordinates and
         optional aggregation indices.
 
-        The original implementation, on which this function is based, can be found `here
-        <https://github.com/google-research/tapas/blob/4908213eb4df7aa988573350278b44c4dbe3f71b/tapas/experiments/prediction_utils.py#L288>`__.
+        The original implementation, on which this function is based, can be found [here](https://github.com/google-research/tapas/blob/4908213eb4df7aa988573350278b44c4dbe3f71b/tapas/experiments/prediction_utils.py#L288).
 
         Args:
-            data (:obj:`dict`):
+            data (`dict`):
                 Dictionary mapping features to actual values. Should be created using
-                :class:`~transformers.TapasTokenizer`.
-            logits (:obj:`torch.Tensor` or :obj:`tf.Tensor` of shape ``(batch_size, sequence_length)``):
+                [`TapasTokenizer`].
+            logits (`torch.Tensor` or `tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Tensor containing the logits at the token level.
-            logits_agg (:obj:`torch.Tensor` or :obj:`tf.Tensor` of shape ``(batch_size, num_aggregation_labels)``, `optional`):
+            logits_agg (`torch.Tensor` or `tf.Tensor` of shape `(batch_size, num_aggregation_labels)`, *optional*):
                 Tensor containing the aggregation logits.
-            cell_classification_threshold (:obj:`float`, `optional`, defaults to 0.5):
+            cell_classification_threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to be used for cell selection. All table cells for which their probability is larger than
                 this threshold will be selected.
 
         Returns:
-            :obj:`tuple` comprising various elements depending on the inputs:
+            `tuple` comprising various elements depending on the inputs:
 
-            - predicted_answer_coordinates (``List[List[[tuple]]`` of length ``batch_size``): Predicted answer
+            - predicted_answer_coordinates (`List[List[[tuple]]` of length `batch_size`): Predicted answer
               coordinates as a list of lists of tuples. Each element in the list contains the predicted answer
               coordinates of a single example in the batch, as a list of tuples. Each tuple is a cell, i.e. (row index,
               column index).
-            - predicted_aggregation_indices (``List[int]``of length ``batch_size``, `optional`, returned when
-              ``logits_aggregation`` is provided): Predicted aggregation operator indices of the aggregation head.
+            - predicted_aggregation_indices (`List[int]`of length `batch_size`, *optional*, returned when
+              `logits_aggregation` is provided): Predicted aggregation operator indices of the aggregation head.
         """
         # converting to numpy arrays to work with PT/TF
         logits = logits.numpy()
@@ -1994,19 +1996,18 @@ class BasicTokenizer(object):
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
     Args:
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        never_split (:obj:`Iterable`, `optional`):
+        never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
-            :obj:`do_basic_tokenize=True`
-        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            `do_basic_tokenize=True`
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this `issue
-            <https://github.com/huggingface/transformers/issues/328>`__).
-        strip_accents: (:obj:`bool`, `optional`):
+            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+        strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for :obj:`lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original BERT).
     """
 
     def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
@@ -2023,9 +2024,9 @@ class BasicTokenizer(object):
         WordPieceTokenizer.
 
         Args:
-            **never_split**: (`optional`) list of str
+            never_split (`LIst[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
-                :func:`PreTrainedTokenizer.tokenize`) List of token not to split.
+                [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
@@ -2152,14 +2153,14 @@ class WordpieceTokenizer(object):
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, :obj:`input = "unaffable"` wil return as output :obj:`["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
 
         Args:
-          text: A single token or whitespace separated tokens. This should have
-            already been passed through `BasicTokenizer`.
+            text: A single token or whitespace separated tokens. This should have
+                already been passed through *BasicTokenizer*.
 
         Returns:
-          A list of wordpiece tokens.
+            A list of wordpiece tokens.
         """
 
         output_tokens = []

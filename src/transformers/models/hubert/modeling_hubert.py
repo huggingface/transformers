@@ -42,9 +42,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "HubertConfig"
 _CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 1
 
@@ -64,8 +64,8 @@ def _compute_mask_indices(
     min_masks: int = 0,
 ) -> np.ndarray:
     """
-    Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
-    ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
+    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run
     on CPU as part of the preprocessing during training.
 
     Args:
@@ -776,6 +776,7 @@ class HubertPreTrainedModel(PreTrainedModel):
 
     config_class = HubertConfig
     base_model_prefix = "hubert"
+    main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -837,59 +838,59 @@ class HubertPreTrainedModel(PreTrainedModel):
 
 
 HUBERT_START_DOCSTRING = r"""
-    Hubert was proposed in `HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units
-    <https://arxiv.org/abs/2106.07447>`__ by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia,
+    Hubert was proposed in [HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units](https://arxiv.org/abs/2106.07447) by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia,
     Ruslan Salakhutdinov, Abdelrahman Mohamed.
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.HubertConfig`): Model configuration class with all the parameters of the model.
+        config ([`HubertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
 
 HUBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
-            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
-        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
-            1]``:
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should
+            be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
+            [`Wav2Vec2Processor.__call__`] for details.
+        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            [What are attention masks?](../glossary#attention-mask)
 
-            .. warning::
-                :obj:`attention_mask` should only be passed if the corresponding processor has
-                ``config.return_attention_mask == True``. For all models whose processor has
-                ``config.return_attention_mask == False``, such as `hubert-base
-                <https://huggingface.co/facebook/hubert-base-ls960>`__, :obj:`attention_mask` should **not** be passed
-                to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
-                simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield
-                slightly different results depending on whether :obj:`input_values` is padded or not.
+            <Tip warning={true}>
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            `attention_mask` should only be passed if the corresponding processor has
+            `config.return_attention_mask == True`. For all models whose processor has
+            `config.return_attention_mask == False`, such as [hubert-base](https://huggingface.co/facebook/hubert-base-ls960), `attention_mask` should **not** be passed
+            to avoid degraded performance when doing batched inference. For such models `input_values` should
+            simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield
+            slightly different results depending on whether `input_values` is padded or not.
+
+            </Tip>
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -922,8 +923,8 @@ class HubertModel(HubertPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
-        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
-        <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -976,26 +977,27 @@ class HubertModel(HubertPreTrainedModel):
 
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import Wav2Vec2Processor, HubertModel
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
+        ```python
+        >>> from transformers import Wav2Vec2Processor, HubertModel
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
-            >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-        """
+        >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+        >>> hidden_states = model(input_values).last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1080,11 +1082,9 @@ class HubertForCTC(HubertPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_length)`, `optional`):
-            Labels for connectionist temporal classification. Note that ``target_length`` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
-            1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
-            config.vocab_size - 1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`.
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1182,7 +1182,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1198,10 +1198,9 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -44,18 +44,18 @@ XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 XLM_ROBERTA_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the
+        config ([`XLMRobertaConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
 """
 
@@ -66,7 +66,7 @@ XLM_ROBERTA_START_DOCSTRING = r"""
 )
 class XLMRobertaModel(RobertaModel):
     """
-    This class overrides :class:`~transformers.RobertaModel`. Please check the superclass for the appropriate
+    This class overrides [`RobertaModel`]. Please check the superclass for the appropriate
     documentation alongside usage examples.
     """
 
@@ -79,7 +79,7 @@ class XLMRobertaModel(RobertaModel):
 )
 class XLMRobertaForCausalLM(RobertaForCausalLM):
     """
-    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the superclass for the appropriate
+    This class overrides [`RobertaForCausalLM`]. Please check the superclass for the appropriate
     documentation alongside usage examples.
     """
 
@@ -92,7 +92,7 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
 )
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """
-    This class overrides :class:`~transformers.RobertaForMaskedLM`. Please check the superclass for the appropriate
+    This class overrides [`RobertaForMaskedLM`]. Please check the superclass for the appropriate
     documentation alongside usage examples.
     """
 
@@ -108,7 +108,7 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
 )
 class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     """
-    This class overrides :class:`~transformers.RobertaForSequenceClassification`. Please check the superclass for the
+    This class overrides [`RobertaForSequenceClassification`]. Please check the superclass for the
     appropriate documentation alongside usage examples.
     """
 
@@ -124,7 +124,7 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
 )
 class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     """
-    This class overrides :class:`~transformers.RobertaForMultipleChoice`. Please check the superclass for the
+    This class overrides [`RobertaForMultipleChoice`]. Please check the superclass for the
     appropriate documentation alongside usage examples.
     """
 
@@ -140,7 +140,7 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
 )
 class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     """
-    This class overrides :class:`~transformers.RobertaForTokenClassification`. Please check the superclass for the
+    This class overrides [`RobertaForTokenClassification`]. Please check the superclass for the
     appropriate documentation alongside usage examples.
     """
 
@@ -156,7 +156,7 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
 )
 class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
     """
-    This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check the superclass for the
+    This class overrides [`RobertaForQuestionAnswering`]. Please check the superclass for the
     appropriate documentation alongside usage examples.
     """
 
