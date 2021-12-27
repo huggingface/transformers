@@ -403,7 +403,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     ) -> FlaxPreTrainedModel:
         """
         Params:
-            vision_model_name_or_path (:obj: *str*, *optional*, defaults to *None*):
+            vision_model_name_or_path (:obj: *str*, *optional*, defaults to `None`):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.

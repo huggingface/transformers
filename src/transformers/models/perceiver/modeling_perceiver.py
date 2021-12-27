@@ -2035,7 +2035,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         config ([*PerceiverConfig*]):
             Model configuration.
         output_num_channels (`int`, *optional*):
-            The number of channels in the output. Will only be used in case *final_project* is set to *True*.
+            The number of channels in the output. Will only be used in case *final_project* is set to `True`.
         position_encoding_type (`str`, *optional*, defaults to "trainable"):
             The type of position encoding to use. Can be either "trainable", "fourier", or "none".
         output_index_dims (`int`, *optional*):
@@ -2583,7 +2583,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
 
     Returns:
       `torch.FloatTensor` of shape `(batch_size, sequence_length, n_channels)`: The Fourier position embeddings. If
-      `concat_pos` is *True* and `sine_only` is *False*, output dimensions are ordered as: [dim_1, dim_2, ..., dim_d,
+      `concat_pos` is `True` and `sine_only` is `False`, output dimensions are ordered as: [dim_1, dim_2, ..., dim_d,
       sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ..., sin(pi*f_1*dim_d), ..., sin(pi*f_K*dim_d), cos(pi*f_1*dim_1),
       ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d), ..., cos(pi*f_K*dim_d)], where dim_i is pos[:, i] and f_k is the
       kth frequency band.
