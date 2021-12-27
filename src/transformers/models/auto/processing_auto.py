@@ -159,7 +159,7 @@ class AutoProcessor:
                 processor_class = processor_class_from_name(config_dict["processor_class"])
                 return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        # Next, let's whether the processor class is saved in a tokenizer
+        # Next, let's check whether the processor class is saved in a tokenizer
         if TOKENIZER_CONFIG_FILE in model_files:
             config_dict = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
             if "processor_class" in config_dict:
