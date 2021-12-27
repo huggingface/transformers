@@ -657,7 +657,7 @@ class TFHubertSamePadLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFHubertFeatureExtractor(tf.keras.layers.Layer):
+class TFHubertFeatures(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -1114,7 +1114,7 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.feature_extractor = TFHubertFeatureExtractor(config, name="feature_extractor")
+        self.feature_extractor = TFHubertFeatures(config, name="feature_extractor")
         self.feature_projection = TFHubertFeatureProjection(config, name="feature_projection")
 
         if config.do_stable_layer_norm:

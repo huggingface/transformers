@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch Hubert model. """
 
+import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -284,8 +285,8 @@ class HubertSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->Hubert
-class HubertFeatureExtractor(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Features with Wav2Vec2->Hubert
+class HubertFeatures(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -902,7 +903,7 @@ class HubertModel(HubertPreTrainedModel):
     def __init__(self, config: HubertConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = HubertFeatureExtractor(config)
+        self.feature_extractor = HubertFeatures(config)
         self.feature_projection = HubertFeatureProjection(config)
 
         self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
@@ -1063,6 +1064,18 @@ class HubertForCTC(HubertPreTrainedModel):
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
         """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_model` method instead.",
+            FutureWarning,
+        )
+        self.hubert.feature_extractor._freeze_parameters()
+
+    def freeze_feature_model(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        will not be updated during training.
+        """
         self.hubert.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
@@ -1168,6 +1181,18 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
     def freeze_feature_extractor(self):
         """
         Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        will not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_model` method instead.",
+            FutureWarning,
+        )
+        self.hubert.feature_extractor._freeze_parameters()
+
+    def freeze_feature_model(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
         """
         self.hubert.feature_extractor._freeze_parameters()
