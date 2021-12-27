@@ -9,7 +9,7 @@ from ..file_utils import PaddingStrategy, add_end_docstrings, is_tf_available, i
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
 logger = logging.get_logger(__name__)
@@ -99,7 +99,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class QuestionAnsweringPipeline(Pipeline):
+class QuestionAnsweringPipeline(ChunkPipeline):
     """
     Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering examples](../task_summary#question-answering) for more information.
 
@@ -242,9 +242,6 @@ class QuestionAnsweringPipeline(Pipeline):
             - **end** (`int`) -- The character end index of the answer (in the tokenized version of the input).
             - **answer** (`str`) -- The answer to the question.
         """
-        if kwargs.get("batch_size", 1) > 1:
-            logger.error("Batch_size > 1 is not supported for question answering pipeline, setting it to 1.")
-            kwargs["batch_size"] = 1
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
@@ -343,11 +340,10 @@ class QuestionAnsweringPipeline(Pipeline):
                     )
                 )
 
-        split_features = []
-        for feature in features:
+        for i, feature in enumerate(features):
             fw_args = {}
             others = {}
-            model_input_names = self.tokenizer.model_input_names
+            model_input_names = self.tokenizer.model_input_names + ["p_mask"]
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
@@ -363,20 +359,15 @@ class QuestionAnsweringPipeline(Pipeline):
                         fw_args[k] = tensor.unsqueeze(0)
                 else:
                     others[k] = v
-            split_features.append({"fw_args": fw_args, "others": others})
-        return {"features": split_features, "example": example}
 
-    def _forward(self, model_inputs):
-        features = model_inputs["features"]
-        example = model_inputs["example"]
-        starts = []
-        ends = []
-        for feature in features:
-            fw_args = feature["fw_args"]
-            start, end = self.model(**fw_args)[:2]
-            starts.append(start)
-            ends.append(end)
-        return {"starts": starts, "ends": ends, "features": features, "example": example}
+            is_last = i == len(features) - 1
+            yield {"example": example, "is_last": is_last, **fw_args, **others}
+
+    def _forward(self, inputs):
+        example = inputs["example"]
+        model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        start, end = self.model(**model_inputs)[:2]
+        return {"start": start, "end": end, "example": example, **inputs}
 
     def postprocess(
         self,
@@ -387,16 +378,16 @@ class QuestionAnsweringPipeline(Pipeline):
     ):
         min_null_score = 1000000  # large and positive
         answers = []
-        example = model_outputs["example"]
-        for i, (feature_, start_, end_) in enumerate(
-            zip(model_outputs["features"], model_outputs["starts"], model_outputs["ends"])
-        ):
-            feature = feature_["others"]
-            # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
-            undesired_tokens = np.abs(np.array(feature["p_mask"]) - 1)
+        for output in model_outputs:
+            start_ = output["start"]
+            end_ = output["end"]
+            example = output["example"]
 
-            if feature_["fw_args"].get("attention_mask", None) is not None:
-                undesired_tokens = undesired_tokens & feature_["fw_args"]["attention_mask"].numpy()
+            # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
+            undesired_tokens = np.abs(np.array(output["p_mask"]) - 1)
+
+            if output.get("attention_mask", None) is not None:
+                undesired_tokens = undesired_tokens & output["attention_mask"].numpy()
 
             # Generate mask
             undesired_tokens_mask = undesired_tokens == 0.0
@@ -425,7 +416,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
                 for s, e, score in zip(starts, ends, scores):
-                    token_to_orig_map = feature["token_to_orig_map"]
+                    token_to_orig_map = output["token_to_orig_map"]
                     answers.append(
                         {
                             "score": score.item(),
@@ -441,7 +432,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
                 question_first = bool(self.tokenizer.padding_side == "right")
-                enc = feature["encoding"]
+                enc = output["encoding"]
 
                 # Sometimes the max probability token is in the middle of a word so:
                 # - we start by finding the right word containing the token with `token_to_word`
