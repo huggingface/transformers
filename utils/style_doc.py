@@ -35,7 +35,7 @@ _re_returns = re.compile("^\s*Returns?:\s*$")
 _re_doc_ignore = re.compile(r"(\.\.|#)\s*docstyle-ignore")
 
 
-DOCTEST_PROMPTS = [">>> ", "... "]
+DOCTEST_PROMPTS = [">>>", "..."]
 
 
 def is_empty_line(line):
@@ -98,7 +98,7 @@ def parse_code_example(code_lines):
     Returns:
         (List[`str`], List[`str`]): The list of code samples and the list of outputs.
     """
-    has_doctest = code_lines[0][:4] in DOCTEST_PROMPTS
+    has_doctest = code_lines[0][:3] in DOCTEST_PROMPTS
 
     code_samples = []
     outputs = []
@@ -106,19 +106,19 @@ def parse_code_example(code_lines):
     current_bit = []
 
     for line in code_lines:
-        if in_code and has_doctest and not is_empty_line(line) and line[:4] not in DOCTEST_PROMPTS:
+        if in_code and has_doctest and not is_empty_line(line) and line[:3] not in DOCTEST_PROMPTS:
             code_sample = "\n".join(current_bit)
             code_samples.append(code_sample.strip())
             in_code = False
             current_bit = []
-        elif not in_code and line[:4] in DOCTEST_PROMPTS:
+        elif not in_code and line[:3] in DOCTEST_PROMPTS:
             output = "\n".join(current_bit)
             outputs.append(output.strip())
             in_code = True
             current_bit = []
 
         # Add the line without doctest prompt
-        if line[:4] in DOCTEST_PROMPTS:
+        if line[:3] in DOCTEST_PROMPTS:
             line = line[4:]
         current_bit.append(line)
 
@@ -154,7 +154,7 @@ def format_code_example(code: str, max_len: int):
     if idx >= len(code_lines):
         return ""
     indent = find_indent(code_lines[idx])
-    has_doctest = code_lines[0][:4] in DOCTEST_PROMPTS
+    has_doctest = code_lines[0][:3] in DOCTEST_PROMPTS
 
     # Remove the initial indent for now, we will had it back after styling.
     # Note that l[indent:] works for empty lines
@@ -168,11 +168,13 @@ def format_code_example(code: str, max_len: int):
     line_length = max_len - indent
     if has_doctest:
         line_length -= 4
+    full_code = full_code.replace("===PT-TF-SPLIT===", "### PT-TF-SPLIT")
     formatted_code = black.format_str(
         full_code, mode=black.FileMode([black.TargetVersion.PY37], line_length=line_length)
     )
 
     # Let's get back the formatted code samples
+    formatted_code = formatted_code.replace("### PT-TF-SPLIT", "===PT-TF-SPLIT===")
     code_samples = formatted_code.split(delimiter)
     # We can have one output less than code samples
     if len(outputs) == len(code_samples) - 1:
@@ -184,13 +186,14 @@ def format_code_example(code: str, max_len: int):
         code_sample = code_sample.strip()
         for line in code_sample.strip().split("\n"):
             if has_doctest and not is_empty_line(line):
-                prefix = "... " if line.startswith(" ") else ">>> "
+                prefix = "... " if line.startswith(" ") or line in [")", "]", "}"] else ">>> "
             else:
                 prefix = ""
             formatted_lines.append(" " * indent + prefix + line)
 
         formatted_lines.extend([" " * indent + line for line in output.split("\n")])
-        formatted_lines.append("")
+        if not output.endswith("===PT-TF-SPLIT==="):
+            formatted_lines.append("")
 
     result = "\n".join(formatted_lines)
     return result.rstrip()
