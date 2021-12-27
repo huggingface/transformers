@@ -816,7 +816,7 @@ class TrainingArguments:
 
         if self.adafactor:
             warnings.warn(
-                "`adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim adafactor` instead",
+                "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim adafactor` instead",
                 FutureWarning,
             )
 
