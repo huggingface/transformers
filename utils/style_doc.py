@@ -129,11 +129,11 @@ def format_code_example(code: str, max_len: int):
     if idx >= len(code_lines):
         return "", ""
     indent = find_indent(code_lines[idx])
-    has_doctest = code_lines[idx][:3] in DOCTEST_PROMPTS
 
     # Remove the initial indent for now, we will had it back after styling.
     # Note that l[indent:] works for empty lines
     code_lines = [l[indent:] for l in code_lines[idx:]]
+    has_doctest = code_lines[0][:3] in DOCTEST_PROMPTS
 
     code_samples, outputs = parse_code_example(code_lines)
 
