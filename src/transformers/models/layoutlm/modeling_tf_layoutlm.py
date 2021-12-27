@@ -162,7 +162,7 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
             right_position_embeddings = tf.gather(self.x_position_embeddings, bbox[:, :, 2])
             lower_position_embeddings = tf.gather(self.y_position_embeddings, bbox[:, :, 3])
         except IndexError as e:
-            raise IndexError("The :obj:`bbox`coordinate values should be within 0-1000 range.") from e
+            raise IndexError("The `bbox`coordinate values should be within 0-1000 range.") from e
         h_position_embeddings = tf.gather(self.h_position_embeddings, bbox[:, :, 3] - bbox[:, :, 1])
         w_position_embeddings = tf.gather(self.w_position_embeddings, bbox[:, :, 2] - bbox[:, :, 0])
 

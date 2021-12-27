@@ -226,7 +226,7 @@ def torch_distributed_zero_first(local_rank: int):
 
 class DistributedSamplerWithLoop(DistributedSampler):
     """
-    Like a :obj:torch.utils.data.distributed.DistributedSampler` but loops at the end back to the beginning of the
+    Like a torch.utils.data.distributed.DistributedSampler` but loops at the end back to the beginning of the
     shuffled samples to make each process have a round multiple of batch_size samples.
 
     Args:

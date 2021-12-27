@@ -73,7 +73,7 @@ class Wav2Vec2Config(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        feat_quantizer_dropout (obj:*float*, *optional*, defaults to 0.0):
+        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for quantized feature extractor states.
         conv_dim (`Tuple[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the

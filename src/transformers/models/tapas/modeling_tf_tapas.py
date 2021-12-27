@@ -2241,7 +2241,7 @@ def _calculate_expected_result(
             Numeric values of every token. Nan for tokens which are not numeric values.
         numeric_values_scale (`tf.Tensor` of shape `(batch_size, seq_length)`):
             Scale of the numeric values of every token.
-        input_mask_float (:obj: *tf.Tensor* of shape `(batch_size, seq_length)`):
+        input_mask_float (`tf.Tensor` of shape `(batch_size, seq_length)`):
             Mask for the table, without question tokens and table headers.
         logits_aggregation (`tf.Tensor` of shape `(batch_size, num_aggregation_labels)`):
             Logits per aggregation operation.
@@ -2321,9 +2321,9 @@ def _calculate_regression_loss(
     Calculates the regression loss per example.
 
     Args:
-        answer (:obj: *tf.Tensor* of shape `(batch_size,)`):
+        answer (`tf.Tensor` of shape `(batch_size,)`):
             Answer for every example in the batch. Nan if there is no scalar answer.
-        aggregate_mask (:obj: *tf.Tensor* of shape `(batch_size,)`):
+        aggregate_mask (`tf.Tensor` of shape `(batch_size,)`):
             A mask set to 1 for examples that should use aggregation functions.
         dist_per_cell (`torch.distributions.Bernoulli`):
             Cell selection distribution for each cell.
@@ -2331,9 +2331,9 @@ def _calculate_regression_loss(
             Numeric values of every token. Nan for tokens which are not numeric values.
         numeric_values_scale (`tf.Tensor` of shape `(batch_size, seq_length)`):
             Scale of the numeric values of every token.
-        input_mask_float (:obj: *tf.Tensor* of shape `(batch_size, seq_length)`):
+        input_mask_float (`tf.Tensor` of shape `(batch_size, seq_length)`):
             Mask for the table, without question tokens and table headers.
-        logits_aggregation (:obj: *tf.Tensor* of shape `(batch_size, num_aggregation_labels)`):
+        logits_aggregation (`tf.Tensor` of shape `(batch_size, num_aggregation_labels)`):
             Logits per aggregation operation.
         config ([`TapasConfig`]):
             Model configuration class with all the parameters of the model
