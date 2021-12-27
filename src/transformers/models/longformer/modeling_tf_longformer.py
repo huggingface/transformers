@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tensorflow Longformer model. """
+"""Tensorflow Longformer model."""
 
 import warnings
 from dataclasses import dataclass
@@ -69,26 +69,28 @@ class TFLongformerBaseModelOutput(ModelOutput):
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining
-            `attention_window + 1` values). Note that the first `x` values refer to tokens with fixed positions in
-            the text, but the remaining `attention_window + 1` values refer to tokens with relative positions: the
-            attention weight of a token to itself is located at index `x + attention_window / 2` and the
-            `attention_window / 2` preceding (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
-            attention weight at the corresponding index is set to 0; the value should be accessed from the first `x`
-            attention weights. If a token has global attention, the attention weights to all other tokens in
-            `attentions` is set to 0, the values should be accessed from `global_attentions`.
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from `global_attentions`.
         global_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`, where `x`
+            is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
@@ -114,26 +116,28 @@ class TFLongformerBaseModelOutputWithPooling(ModelOutput):
             Linear layer and a Tanh activation function. The Linear layer weights are trained from the next sentence
             prediction (classification) objective during pretraining.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining
-            `attention_window + 1` values). Note that the first `x` values refer to tokens with fixed positions in
-            the text, but the remaining `attention_window + 1` values refer to tokens with relative positions: the
-            attention weight of a token to itself is located at index `x + attention_window / 2` and the
-            `attention_window / 2` preceding (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
-            attention weight at the corresponding index is set to 0; the value should be accessed from the first `x`
-            attention weights. If a token has global attention, the attention weights to all other tokens in
-            `attentions` is set to 0, the values should be accessed from `global_attentions`.
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from `global_attentions`.
         global_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`, where `x`
+            is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
@@ -158,26 +162,28 @@ class TFLongformerMaskedLMOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining
-            `attention_window + 1` values). Note that the first `x` values refer to tokens with fixed positions in
-            the text, but the remaining `attention_window + 1` values refer to tokens with relative positions: the
-            attention weight of a token to itself is located at index `x + attention_window / 2` and the
-            `attention_window / 2` preceding (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
-            attention weight at the corresponding index is set to 0; the value should be accessed from the first `x`
-            attention weights. If a token has global attention, the attention weights to all other tokens in
-            `attentions` is set to 0, the values should be accessed from `global_attentions`.
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from `global_attentions`.
         global_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`, where `x`
+            is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
@@ -204,26 +210,28 @@ class TFLongformerQuestionAnsweringModelOutput(ModelOutput):
         end_logits (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             Span-end scores (before SoftMax).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining
-            `attention_window + 1` values). Note that the first `x` values refer to tokens with fixed positions in
-            the text, but the remaining `attention_window + 1` values refer to tokens with relative positions: the
-            attention weight of a token to itself is located at index `x + attention_window / 2` and the
-            `attention_window / 2` preceding (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
-            attention weight at the corresponding index is set to 0; the value should be accessed from the first `x`
-            attention weights. If a token has global attention, the attention weights to all other tokens in
-            `attentions` is set to 0, the values should be accessed from `global_attentions`.
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from `global_attentions`.
         global_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`, where `x`
+            is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
@@ -249,26 +257,28 @@ class TFLongformerSequenceClassifierOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining
-            `attention_window + 1` values). Note that the first `x` values refer to tokens with fixed positions in
-            the text, but the remaining `attention_window + 1` values refer to tokens with relative positions: the
-            attention weight of a token to itself is located at index `x + attention_window / 2` and the
-            `attention_window / 2` preceding (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
-            attention weight at the corresponding index is set to 0; the value should be accessed from the first `x`
-            attention weights. If a token has global attention, the attention weights to all other tokens in
-            `attentions` is set to 0, the values should be accessed from `global_attentions`.
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from `global_attentions`.
         global_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`, where `x`
+            is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
@@ -295,26 +305,28 @@ class TFLongformerMultipleChoiceModelOutput(ModelOutput):
 
             Classification scores (before SoftMax).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining
-            `attention_window + 1` values). Note that the first `x` values refer to tokens with fixed positions in
-            the text, but the remaining `attention_window + 1` values refer to tokens with relative positions: the
-            attention weight of a token to itself is located at index `x + attention_window / 2` and the
-            `attention_window / 2` preceding (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
-            attention weight at the corresponding index is set to 0; the value should be accessed from the first `x`
-            attention weights. If a token has global attention, the attention weights to all other tokens in
-            `attentions` is set to 0, the values should be accessed from `global_attentions`.
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from `global_attentions`.
         global_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`, where `x`
+            is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
@@ -339,26 +351,28 @@ class TFLongformerTokenClassifierOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x + attention_window + 1)`, where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
             Local attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining
-            `attention_window + 1` values). Note that the first `x` values refer to tokens with fixed positions in
-            the text, but the remaining `attention_window + 1` values refer to tokens with relative positions: the
-            attention weight of a token to itself is located at index `x + attention_window / 2` and the
-            `attention_window / 2` preceding (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
-            attention weight at the corresponding index is set to 0; the value should be accessed from the first `x`
-            attention weights. If a token has global attention, the attention weights to all other tokens in
-            `attentions` is set to 0, the values should be accessed from `global_attentions`.
+            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+            If the attention window contains a token with global attention, the attention weight at the corresponding
+            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+            accessed from `global_attentions`.
         global_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`, where `x`
+            is the number of tokens with global attention mask.
 
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
@@ -1131,11 +1145,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         window_overlap = num_rows = 4
         ```
 
-                     (pad & diagonalize) =>
-                     [ 0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000
-                       0.0000,  -1.8348,  0.7672,  0.2986,  0.0285, 0.0000,  0.0000
-                       0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
-                       0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
+                     (pad & diagonalize) => [ 0.4983, 2.6918, -0.0071, 1.0492, 0.0000, 0.0000, 0.0000
+                       0.0000, -1.8348, 0.7672, 0.2986, 0.0285, 0.0000, 0.0000 0.0000, 0.0000, -0.7584, 0.4206,
+                       -0.0405, 0.1599, 0.0000 0.0000, 0.0000, 0.0000, 2.0514, -1.1600, 0.5372, 0.2629 ]
         """
         total_num_heads, num_chunks, window_overlap, hidden_dim = shape_list(chunked_hidden_states)
         paddings = tf.convert_to_tensor([[0, 0], [0, 0], [0, 0], [0, window_overlap + 1]])
@@ -1861,13 +1873,13 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
 
 LONGFORMER_START_DOCSTRING = r"""
 
-    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
     <Tip>
 
@@ -1876,11 +1888,11 @@ LONGFORMER_START_DOCSTRING = r"""
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
-    the tensors in the first argument of the model call function: `model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-    the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
 
     - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -1893,8 +1905,7 @@ LONGFORMER_START_DOCSTRING = r"""
     Parameters:
         config ([`LongformerConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -1903,9 +1914,8 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LongformerTokenizer`]. See
-            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
-            details.
+            Indices can be obtained using [`LongformerTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
@@ -1933,20 +1943,22 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
         token_type_ids (`tf.Tensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`tf.Tensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         inputs_embeds (`tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -1956,8 +1968,8 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
+            in eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -1971,17 +1983,17 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 class TFLongformerModel(TFLongformerPreTrainedModel):
     """
 
-    This class copies code from [`TFRobertaModel`] and overwrites standard self-attention with
-    longformer self-attention to provide the ability to process long sequences following the self-attention approach
-    described in [Longformer: the Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy,
-    Matthew E. Peters, and Arman Cohan. Longformer self-attention combines a local (sliding window) and global
-    attention to extend to long documents without the O(n^2) increase in memory and compute.
+    This class copies code from [`TFRobertaModel`] and overwrites standard self-attention with longformer
+    self-attention to provide the ability to process long sequences following the self-attention approach described in
+    [Longformer: the Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy, Matthew E. Peters, and
+    Arman Cohan. Longformer self-attention combines a local (sliding window) and global attention to extend to long
+    documents without the O(n^2) increase in memory and compute.
 
-    The self-attention module `TFLongformerSelfAttention` implemented here supports the combination of local and
-    global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive and
-    dilated attention are more relevant for autoregressive language modeling than finetuning on downstream tasks.
-    Future release will add support for autoregressive attention, but the support for dilated attention requires a
-    custom CUDA kernel to be memory and compute efficient.
+    The self-attention module `TFLongformerSelfAttention` implemented here supports the combination of local and global
+    attention but it lacks support for autoregressive attention and dilated attention. Autoregressive and dilated
+    attention are more relevant for autoregressive language modeling than finetuning on downstream tasks. Future
+    release will add support for autoregressive attention, but the support for dilated attention requires a custom CUDA
+    kernel to be memory and compute efficient.
 
     """
 
@@ -2053,7 +2065,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Longformer Model with a `language modeling` head on top. """,
+    """Longformer Model with a `language modeling` head on top.""",
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -2099,8 +2111,9 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         inputs = input_processing(
             func=self.call,
@@ -2501,8 +2514,8 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
+            where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
         inputs = input_processing(
             func=self.call,

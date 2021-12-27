@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RAG model configuration """
+""" RAG model configuration"""
 
 import copy
 
@@ -21,14 +21,12 @@ from ...file_utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""
-    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from
-    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
-    [`PretrainedConfig`] for more information.
+    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PretrainedConfig`] and
+    can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
         title_sep (`str`, *optional*, defaults to  `" / "`):
-            Separator inserted between the title and the text of the retrieved document when calling
-            [`RagRetriever`].
+            Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
         doc_sep (`str`, *optional*, defaults to  `" // "`):
             Separator inserted between the the text of the retrieved document and the original input when calling
             [`RagRetriever`].
@@ -47,8 +45,8 @@ RAG_CONFIG_DOC = r"""
         dataset_split (`str`, *optional*, defaults to `"train"`)
             Which split of the `dataset` to load.
         index_name (`str`, *optional*, defaults to `"compressed"`)
-            The index name of the index associated with the `dataset`. One can choose between `"legacy"`,
-            `"exact"` and `"compressed"`.
+            The index name of the index associated with the `dataset`. One can choose between `"legacy"`, `"exact"` and
+            `"compressed"`.
         index_path (`str`, *optional*)
             The path to the serialized faiss index on disk.
         passages_path: (`str`, *optional*):
@@ -57,8 +55,8 @@ RAG_CONFIG_DOC = r"""
         use_dummy_dataset (`bool`, *optional*, defaults to `False`)
             Whether to load a "dummy" variant of the dataset specified by `dataset`.
         label_smoothing (`float`, *optional*, defaults to 0.0):
-            Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label
-            smoothing in the loss calculation. If set to 0, no label smoothing is performed.
+            Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
+            in the loss calculation. If set to 0, no label smoothing is performed.
         do_marginalize (`bool`, *optional*, defaults to `False`):
             If `True`, the logits are marginalized over all documents by making use of
             `torch.nn.functional.log_softmax`.
@@ -174,8 +172,8 @@ class RagConfig(PretrainedConfig):
         cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
-        Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
-        configuration and decoder model configuration.
+        Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
+        decoder model configuration.
 
         Returns:
             [`EncoderDecoderConfig`]: An instance of a configuration object
@@ -184,8 +182,7 @@ class RagConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default
-        [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

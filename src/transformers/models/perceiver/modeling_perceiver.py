@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Perceiver model. """
+""" PyTorch Perceiver model."""
 
 import abc
 import math
@@ -73,15 +73,17 @@ class PerceiverModelOutput(ModelOutput):
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
-            attention softmax, used to compute the weighted average in the cross-attention heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
     """
 
     logits: torch.FloatTensor = None
@@ -100,8 +102,9 @@ class PerceiverDecoderOutput(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
             Output of the basic decoder.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
-            attention softmax, used to compute the weighted average in the cross-attention heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
     """
 
     logits: torch.FloatTensor = None
@@ -119,15 +122,17 @@ class PerceiverMaskedLMOutput(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_latents, num_latents)`. Attentions weights after the attention softmax, used to compute the weighted average in the
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_latents,
+            num_latents)`. Attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
-            attention softmax, used to compute the weighted average in the cross-attention heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -149,15 +154,17 @@ class PerceiverClassifierOutput(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the
-            attention softmax, used to compute the weighted average in the cross-attention heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -645,8 +652,7 @@ PERCEIVER_START_DOCSTRING = r"""
     Parameters:
         config ([`PerceiverConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 PERCEIVER_MODEL_START_DOCSTRING = r"""
@@ -657,8 +663,7 @@ PERCEIVER_MODEL_START_DOCSTRING = r"""
     Parameters:
         config ([`PerceiverConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
         decoder (*DecoderType*, *optional*):
             Optional decoder to use to decode the latent representation of the encoder. Examples include
             *transformers.models.perceiver.modeling_perceiver.PerceiverBasicDecoder*,
@@ -937,7 +942,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for masked language modeling. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings("""Example use of Perceiver for masked language modeling.""", PERCEIVER_START_DOCSTRING)
 class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -984,8 +989,9 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Returns:
 
@@ -1063,7 +1069,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for text classification. """, PERCEIVER_START_DOCSTRING)
+@add_start_docstrings("""Example use of Perceiver for text classification.""", PERCEIVER_START_DOCSTRING)
 class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1100,8 +1106,9 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the classification/regression loss. Indices should be in `[0, ..., config.num_labels -
+            1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If `config.num_labels >
+            1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
@@ -1179,11 +1186,10 @@ Example use of Perceiver for image classification, for tasks such as ImageNet.
 This model uses learned position embeddings. In other words, this model is not given any privileged information about
 the structure of images. As shown in the paper, this model can achieve a top-1 accuracy of 72.7 on ImageNet.
 
-[`PerceiverForImageClassificationLearned`] uses
-[`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with `prep_type="conv1x1"`)
-to preprocess the input images, and
-[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent
-representation of [`PerceiverModel`] into classification logits.
+[`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
+(with `prep_type="conv1x1"`) to preprocess the input images, and
+[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
+[`PerceiverModel`] into classification logits.
 """,
     PERCEIVER_START_DOCSTRING,
 )
@@ -1233,8 +1239,9 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
@@ -1318,11 +1325,10 @@ Example use of Perceiver for image classification, for tasks such as ImageNet.
 This model uses fixed 2D Fourier position embeddings. As shown in the paper, this model can achieve a top-1 accuracy of
 79.0 on ImageNet, and 84.5 when pre-trained on a large-scale dataset (i.e. JFT).
 
-[`PerceiverForImageClassificationLearned`] uses
-[`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with `prep_type="pixels"`)
-to preprocess the input images, and
-[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent
-representation of [`PerceiverModel`] into classification logits.
+[`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
+(with `prep_type="pixels"`) to preprocess the input images, and
+[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
+[`PerceiverModel`] into classification logits.
 """,
     PERCEIVER_START_DOCSTRING,
 )
@@ -1370,8 +1376,9 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
@@ -1454,11 +1461,10 @@ Example use of Perceiver for image classification, for tasks such as ImageNet.
 This model uses a 2D conv+maxpool preprocessing network. As shown in the paper, this model can achieve a top-1 accuracy
 of 82.1 on ImageNet.
 
-[`PerceiverForImageClassificationLearned`] uses
-[`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with `prep_type="conv"`) to
-preprocess the input images, and
-[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent
-representation of [`PerceiverModel`] into classification logits.
+[`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
+(with `prep_type="conv"`) to preprocess the input images, and
+[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
+[`PerceiverModel`] into classification logits.
 """,
     PERCEIVER_START_DOCSTRING,
 )
@@ -1507,8 +1513,9 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
@@ -1586,11 +1593,10 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
 
 @add_start_docstrings(
     """
-Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI.
-[`PerceiverForOpticalFlow`] uses
-[`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with *prep_type="patches"*) to
-preprocess the input images, and [`~models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder`]
-to decode the latent representation of [`PerceiverModel`].
+Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI. [`PerceiverForOpticalFlow`] uses
+[`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with *prep_type="patches"*) to preprocess the
+input images, and [`~models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder`] to decode the latent
+representation of [`PerceiverModel`].
 
 As input, one concatenates 2 subsequent frames along the channel dimension and extract a 3 x 3 patch around each pixel
 (leading to 3 x 3 x 3 x 2 = 54 values for each pixel). Fixed Fourier position encodings are used to encode the position
@@ -1713,27 +1719,26 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     """
 Example use of Perceiver for multimodal (video) autoencoding, for tasks such as Kinetics-700.
 
-[`PerceiverForMultimodalAutoencoding`] uses
-[`~models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor`] to preprocess the 3
-modalities: images, audio and class labels. This preprocessor uses modality-specific preprocessors to preprocess every
-modality separately, after which they are concatenated. Trainable position embeddings are used to pad each modality to
-the same number of channels to make concatenation along the time dimension possible. Next, one applies the Perceiver
-encoder.
+[`PerceiverForMultimodalAutoencoding`] uses [`~models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor`] to
+preprocess the 3 modalities: images, audio and class labels. This preprocessor uses modality-specific preprocessors to
+preprocess every modality separately, after which they are concatenated. Trainable position embeddings are used to pad
+each modality to the same number of channels to make concatenation along the time dimension possible. Next, one applies
+the Perceiver encoder.
 
-[`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] is used to decode the latent
-representation of [`PerceiverModel`]. This decoder uses each modality-specific decoder to construct
-queries. The decoder queries are created based on the inputs after preprocessing. However, autoencoding an entire video
-in a single forward pass is computationally infeasible, hence one only uses parts of the decoder queries to do
-cross-attention with the latent representation. This is determined by the subsampled indices for each modality, which
-can be provided as additional input to the forward pass of [`PerceiverForMultimodalAutoencoding`].
+[`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] is used to decode the latent representation of
+[`PerceiverModel`]. This decoder uses each modality-specific decoder to construct queries. The decoder queries are
+created based on the inputs after preprocessing. However, autoencoding an entire video in a single forward pass is
+computationally infeasible, hence one only uses parts of the decoder queries to do cross-attention with the latent
+representation. This is determined by the subsampled indices for each modality, which can be provided as additional
+input to the forward pass of [`PerceiverForMultimodalAutoencoding`].
 
-[`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] also pads the decoder queries of
-the different modalities to the same number of channels, in order to concatenate them along the time dimension. Next,
-cross-attention is performed with the latent representation of [`PerceiverModel`].
+[`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] also pads the decoder queries of the different
+modalities to the same number of channels, in order to concatenate them along the time dimension. Next, cross-attention
+is performed with the latent representation of [`PerceiverModel`].
 
-Finally, [`~models.perceiver.modeling_perceiver.PerceiverMultiModalPostprocessor`] is used to turn
-this tensor into an actual video. It first splits up the output into the different modalities, and then applies the
-respective postprocessor for each modality.
+Finally, [`~models.perceiver.modeling_perceiver.PerceiverMultiModalPostprocessor`] is used to turn this tensor into an
+actual video. It first splits up the output into the different modalities, and then applies the respective
+postprocessor for each modality.
 
 Note that, by masking the classification label during evaluation (i.e. simply providing a tensor of zeros for the
 "label" modality), this auto-encoding model becomes a Kinetics 700 video classifier.
@@ -1871,8 +1876,9 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
@@ -2576,11 +2582,11 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         Whether to use a single phase (sin) or two (sin/cos) for each frequency band.
 
     Returns:
-      `torch.FloatTensor` of shape `(batch_size, sequence_length, n_channels)`: The Fourier position
-      embeddings. If `concat_pos` is *True* and `sine_only` is *False*, output dimensions are ordered as:
-      [dim_1, dim_2, ..., dim_d, sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ..., sin(pi*f_1*dim_d), ...,
-      sin(pi*f_K*dim_d), cos(pi*f_1*dim_1), ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d), ..., cos(pi*f_K*dim_d)],
-      where dim_i is pos[:, i] and f_k is the kth frequency band.
+      `torch.FloatTensor` of shape `(batch_size, sequence_length, n_channels)`: The Fourier position embeddings. If
+      `concat_pos` is *True* and `sine_only` is *False*, output dimensions are ordered as: [dim_1, dim_2, ..., dim_d,
+      sin(pi*f_1*dim_1), ..., sin(pi*f_K*dim_1), ..., sin(pi*f_1*dim_d), ..., sin(pi*f_K*dim_d), cos(pi*f_1*dim_1),
+      ..., cos(pi*f_K*dim_1), ..., cos(pi*f_1*dim_d), ..., cos(pi*f_K*dim_d)], where dim_i is pos[:, i] and f_k is the
+      kth frequency band.
     """
 
     batch_size = pos.shape[0]

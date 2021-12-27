@@ -398,8 +398,8 @@ class DistributedTensorGatherer:
 
     def add_arrays(self, arrays):
         """
-        Add `arrays` to the internal storage, Will initialize the storage to the full size at the first arrays
-        passed so that if we're bound to get an OOM, it happens at the beginning.
+        Add `arrays` to the internal storage, Will initialize the storage to the full size at the first arrays passed
+        so that if we're bound to get an OOM, it happens at the beginning.
         """
         if arrays is None:
             return
@@ -485,8 +485,8 @@ class LabelSmoother:
 
 def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, generator=None):
     """
-    Return a list of indices so that each slice of `batch_size` consecutive indices correspond to elements of
-    similar lengths. To do this, the indices are:
+    Return a list of indices so that each slice of `batch_size` consecutive indices correspond to elements of similar
+    lengths. To do this, the indices are:
 
     - randomly permuted
     - grouped in mega-batches of size `mega_batch_mult * batch_size`
@@ -641,11 +641,10 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 class ShardSampler(Sampler):
     """
     Sampler that shards batches between several processes. Dispatches indices batch by batch: on 2 processes with batch
-    size 4, the first two batches are `[0, 1, 2, 3, 4, 5, 6, 7]` and `[8, 9, 10, 11, 12, 13, 14, 15]`, which
-    shard into `[0, 1, 2, 3]` and `[8, 9, 10, 11]` for GPU-0 and `[4, 5, 6, 7]` and `[12, 13, 14, 15]` for GPU-1.
+    size 4, the first two batches are `[0, 1, 2, 3, 4, 5, 6, 7]` and `[8, 9, 10, 11, 12, 13, 14, 15]`, which shard into
+    `[0, 1, 2, 3]` and `[8, 9, 10, 11]` for GPU-0 and `[4, 5, 6, 7]` and `[12, 13, 14, 15]` for GPU-1.
 
-    The sampler thus yields `[0, 1, 2, 3, 8, 9, 10, 11]` on GPU-0 and `[4, 5, 6, 7, 12, 13, 14, 15]` on
-    GPU-1.
+    The sampler thus yields `[0, 1, 2, 3, 8, 9, 10, 11]` on GPU-0 and `[4, 5, 6, 7, 12, 13, 14, 15]` on GPU-1.
     """
 
     def __init__(
@@ -688,26 +687,25 @@ class ShardSampler(Sampler):
 
 class IterableDatasetShard(IterableDataset):
     """
-    Wraps a PyTorch `IterableDataset` to generate samples for one of the processes only. Instances of this class
-    will always yield a number of samples that is a round multiple of the actual batch size (which is `batch_size x num_processes`). Depending on the value of the `drop_last` attribute, it will either stop the iteration at
-    the first batch that would be too small or loop with indices from the beginning.
+    Wraps a PyTorch `IterableDataset` to generate samples for one of the processes only. Instances of this class will
+    always yield a number of samples that is a round multiple of the actual batch size (which is `batch_size x
+    num_processes`). Depending on the value of the `drop_last` attribute, it will either stop the iteration at the
+    first batch that would be too small or loop with indices from the beginning.
 
-    On two processes with an iterable dataset yielding of `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]` with a batch
-    size of 2:
+    On two processes with an iterable dataset yielding of `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]` with a batch size of
+    2:
 
-    - the shard on process 0 will yield `[0, 1, 4, 5, 8, 9]` so will see batches `[0, 1]`, `[4, 5]`,
-      `[8, 9]`
-    - the shard on process 1 will yield `[2, 3, 6, 7, 10, 11]` so will see batches `[2, 3]`, `[6, 7]`,
-      `[10, 11]`
+    - the shard on process 0 will yield `[0, 1, 4, 5, 8, 9]` so will see batches `[0, 1]`, `[4, 5]`, `[8, 9]`
+    - the shard on process 1 will yield `[2, 3, 6, 7, 10, 11]` so will see batches `[2, 3]`, `[6, 7]`, `[10, 11]`
 
     <Tip warning={true}>
 
         If your IterableDataset implements some randomization that needs to be applied the same way on all processes
-        (for instance, a shuffling), you should use a `torch.Generator` in a `generator` attribute of the
-        `dataset` to generate your random numbers and call the
-        [`~trainer_pt_utils.IterableDatasetShard.set_epoch`] method of this object. It will set the
-        seed of this `generator` to `seed + epoch` on all processes before starting the iteration.
-        Alternatively, you can also implement a `set_epoch()` method in your iterable dataset to deal with this.
+        (for instance, a shuffling), you should use a `torch.Generator` in a `generator` attribute of the `dataset` to
+        generate your random numbers and call the [`~trainer_pt_utils.IterableDatasetShard.set_epoch`] method of this
+        object. It will set the seed of this `generator` to `seed + epoch` on all processes before starting the
+        iteration. Alternatively, you can also implement a `set_epoch()` method in your iterable dataset to deal with
+        this.
 
     </Tip>
 
@@ -914,23 +912,22 @@ def log_metrics(self, split, metrics):
 
     The GPU allocated and peak memory reporting is done with `torch.cuda.memory_allocated()` and
     `torch.cuda.max_memory_allocated()`. This metric reports only "deltas" for pytorch-specific allocations, as
-    `torch.cuda` memory management system doesn't track any memory allocated outside of pytorch. For example, the
-    very first cuda call typically loads CUDA kernels, which may take from 0.5 to 2GB of GPU memory.
+    `torch.cuda` memory management system doesn't track any memory allocated outside of pytorch. For example, the very
+    first cuda call typically loads CUDA kernels, which may take from 0.5 to 2GB of GPU memory.
 
-    Note that this tracker doesn't account for memory allocations outside of [`Trainer`]'s
-    `__init__`, `train`, `evaluate` and `predict` calls.
+    Note that this tracker doesn't account for memory allocations outside of [`Trainer`]'s `__init__`, `train`,
+    `evaluate` and `predict` calls.
 
     Because `evaluation` calls may happen during `train`, we can't handle nested invocations because
-    `torch.cuda.max_memory_allocated` is a single counter, so if it gets reset by a nested eval call, `train`'s
-    tracker will report incorrect info. If this [pytorch issue](https://github.com/pytorch/pytorch/issues/16266)
-    gets resolved it will be possible to change this class to be re-entrant. Until then we will only track the outer
-    level of `train`, `evaluate` and `predict` methods. Which means that if `eval` is called during `train`,
-    it's the latter that will account for its memory usage and that of the former.
+    `torch.cuda.max_memory_allocated` is a single counter, so if it gets reset by a nested eval call, `train`'s tracker
+    will report incorrect info. If this [pytorch issue](https://github.com/pytorch/pytorch/issues/16266) gets resolved
+    it will be possible to change this class to be re-entrant. Until then we will only track the outer level of
+    `train`, `evaluate` and `predict` methods. Which means that if `eval` is called during `train`, it's the latter
+    that will account for its memory usage and that of the former.
 
     This also means that if any other tool that is used along the [`Trainer`] calls
-    `torch.cuda.reset_peak_memory_stats`, the gpu peak memory stats could be invalid. And the
-    [`Trainer`] will disrupt the normal behavior of any such tools that rely on calling
-    `torch.cuda.reset_peak_memory_stats` themselves.
+    `torch.cuda.reset_peak_memory_stats`, the gpu peak memory stats could be invalid. And the [`Trainer`] will disrupt
+    the normal behavior of any such tools that rely on calling `torch.cuda.reset_peak_memory_stats` themselves.
 
     For best performance you may want to consider turning the memory profiling off for production runs.
     """
@@ -959,8 +956,8 @@ def save_metrics(self, split, metrics, combined=True):
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call
 
-    To understand the metrics please read the docstring of [`~Trainer.log_metrics`]. The only
-    difference is that raw unformatted numbers are saved in the current method.
+    To understand the metrics please read the docstring of [`~Trainer.log_metrics`]. The only difference is that raw
+    unformatted numbers are saved in the current method.
 
     """
     if not self.is_world_process_zero():

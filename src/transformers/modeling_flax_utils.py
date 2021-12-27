@@ -67,17 +67,17 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     r"""
     Base class for all models.
 
-    [`FlaxPreTrainedModel`] takes care of storing the configuration of the models and handles
-    methods for loading, downloading and saving models.
+    [`FlaxPreTrainedModel`] takes care of storing the configuration of the models and handles methods for loading,
+    downloading and saving models.
 
     Class attributes (overridden by derived classes):
 
-        - **config_class** ([`PretrainedConfig`]) -- A subclass of
-          [`PretrainedConfig`] to use as configuration class for this model architecture.
-        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in
-          derived classes of the same architecture adding modules on top of the base model.
-        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for
-          NLP models, `pixel_values` for vision models and `input_values` for speech models).
+        - **config_class** ([`PretrainedConfig`]) -- A subclass of [`PretrainedConfig`] to use as configuration class
+          for this model architecture.
+        - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in derived
+          classes of the same architecture adding modules on top of the base model.
+        - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
+          models, `pixel_values` for vision models and `input_values` for speech models).
     """
     config_class = None
     base_model_prefix = ""
@@ -183,8 +183,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point `params` to `jax.numpy.bfloat16`. This returns a new `params` tree and does not
-        cast the `params` in place.
+        Cast the floating-point `params` to `jax.numpy.bfloat16`. This returns a new `params` tree and does not cast
+        the `params` in place.
 
         This method can be used on TPU to explicitly convert the model parameters to bfloat16 precision to do full
         half-precision training or to save weights in bfloat16 for inference in order to save memory and improve speed.
@@ -193,8 +193,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             params (`Union[Dict, FrozenDict]`):
                 A `PyTree` of model parameters.
             mask (`Union[Dict, FrozenDict]`):
-                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for
-                params you want to cast, and should be `False` for those you want to skip.
+                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for params
+                you want to cast, and should be `False` for those you want to skip.
 
         Examples:
 
@@ -218,15 +218,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point `parmas` to `jax.numpy.float32`. This method can be used to explicitly convert the
-        model parameters to fp32 precision. This returns a new `params` tree and does not cast the `params` in
-        place.
+        model parameters to fp32 precision. This returns a new `params` tree and does not cast the `params` in place.
 
         Arguments:
             params (`Union[Dict, FrozenDict]`):
                 A `PyTree` of model parameters.
             mask (`Union[Dict, FrozenDict]`):
-                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for
-                params you want to cast, and should be `False` for those you want to skip
+                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for params
+                you want to cast, and should be `False` for those you want to skip
 
         Examples:
 
@@ -244,8 +243,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
         r"""
-        Cast the floating-point `parmas` to `jax.numpy.float16`. This returns a new `params` tree and does not
-        cast the `params` in place.
+        Cast the floating-point `parmas` to `jax.numpy.float16`. This returns a new `params` tree and does not cast the
+        `params` in place.
 
         This method can be used on GPU to explicitly convert the model parameters to float16 precision to do full
         half-precision training or to save weights in float16 for inference in order to save memory and improve speed.
@@ -254,8 +253,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             params (`Union[Dict, FrozenDict]`):
                 A `PyTree` of model parameters.
             mask (`Union[Dict, FrozenDict]`):
-                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for
-                params you want to cast, and should be `False` for those you want to skip
+                A `PyTree` with same structure as the `params` tree. The leaves should be booleans, `True` for params
+                you want to cast, and should be `False` for those you want to skip
 
         Examples:
 
@@ -300,15 +299,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
-                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *pt index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In this
-                      case, `from_pt` should be set to `True`.
+                    - A path or url to a *pt index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In this case,
+                      `from_pt` should be set to `True`.
             dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
-                The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
-                GPUs) and `jax.numpy.bfloat16` (on TPUs).
+                The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+                `jax.numpy.bfloat16` (on TPUs).
 
                 This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
                 specified all the computation will be performed with the given `dtype`.
@@ -316,8 +315,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 **Note that this only specifies the dtype of the computation and does not influence the dtype of model
                 parameters.**
 
-                If you wish to change the dtype of the model parameters, see
-                [`~FlaxPreTrainedModel.to_fp16`] and
+                If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
                 [`~FlaxPreTrainedModel.to_bf16`].
             model_args (sequence of positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
@@ -332,8 +330,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
                     - The model is a model provided by the library (loaded with the *model id* string of a pretrained
                       model).
-                    - The model was saved using [`~PreTrainedModel.save_pretrained`] and is reloaded
-                      by supplying the save directory.
+                    - The model was saved using [`~PreTrainedModel.save_pretrained`] and is reloaded by supplying the
+                      save directory.
                     - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
                       configuration JSON file named *config.json* is found in the directory.
             cache_dir (`Union[str, os.PathLike]`, *optional*):
@@ -353,7 +351,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             revision(`str`, *optional*, defaults to `"main"`):
@@ -369,10 +368,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                       underlying model's `__init__` method (we assume all relevant updates to the configuration have
                       already been done)
                     - If a configuration is not provided, `kwargs` will be first passed to the configuration class
-                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of
-                      `kwargs` that corresponds to a configuration attribute will be used to override said attribute
-                      with the supplied `kwargs` value. Remaining keys that do not correspond to any configuration
-                      attribute will be passed to the underlying model's `__init__` function.
+                      initialization function ([`~PretrainedConfig.from_pretrained`]). Each key of `kwargs` that
+                      corresponds to a configuration attribute will be used to override said attribute with the
+                      supplied `kwargs` value. Remaining keys that do not correspond to any configuration attribute
+                      will be passed to the underlying model's `__init__` function.
 
         Examples:
 
@@ -605,16 +604,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
                 <Tip warning={true}>
 
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with
-                `save_directory`, which requires `save_directory` to be a local clone of the repo you are
-                pushing to if it's an existing folder. Pass along `temp_dir=True` to use a temporary directory
-                instead.
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
+                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
+                folder. Pass along `temp_dir=True` to use a temporary directory instead.
 
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the
-                [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")

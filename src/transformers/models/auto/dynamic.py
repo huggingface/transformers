@@ -122,8 +122,8 @@ def get_class_from_dynamic_module(
 
     <Tip warning={true}>
 
-    Calling this function will execute the code in the module file found locally or downloaded from the Hub. It
-    should therefore only be called on trusted repos.
+    Calling this function will execute the code in the module file found locally or downloaded from the Hub. It should
+    therefore only be called on trusted repos.
 
     </Tip>
 
@@ -132,8 +132,8 @@ def get_class_from_dynamic_module(
             This can be either:
 
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-              namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced
+              under a user or organization name, like `dbmdz/bert-base-german-cased`.
             - a path to a *directory* containing a configuration file saved using the
               [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
 
@@ -150,10 +150,11 @@ def get_class_from_dynamic_module(
         resume_download (`bool`, *optional*, defaults to `False`):
             Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
         proxies (`Dict[str, str]`, *optional*):
-            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-            generated when running `transformers-cli login` (stored in `~/.huggingface`).
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
         revision(`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any

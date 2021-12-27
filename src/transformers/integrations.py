@@ -479,15 +479,17 @@ class WandbCallback(TrainerCallback):
         """
         Setup the optional Weights & Biases (*wandb*) integration.
 
-        One can subclass and override this method to customize the setup if needed. Find more information [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information
+        [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment
+        variables:
 
         Environment:
             WANDB_LOG_MODEL (`bool`, *optional*, defaults to `False`):
                 Whether or not to log model as artifact at the end of training. Use along with
                 *TrainingArguments.load_best_model_at_end* to upload best model.
             WANDB_WATCH (`str`, *optional* defaults to `"gradients"`):
-                Can be `"gradients"`, `"all"` or `"false"`. Set to `"false"` to disable gradient
-                logging or `"all"` to log gradients and parameters.
+                Can be `"gradients"`, `"all"` or `"false"`. Set to `"false"` to disable gradient logging or `"all"` to
+                log gradients and parameters.
             WANDB_PROJECT (`str`, *optional*, defaults to `"huggingface"`):
                 Set this to a custom string to store results in a different project.
             WANDB_DISABLED (`bool`, *optional*, defaults to `False`):
@@ -608,7 +610,8 @@ class CometCallback(TrainerCallback):
                 Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be "TRUE", or
                 "FALSE". Defaults to "TRUE".
 
-        For a number of configurable items in the environment, see [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
+        For a number of configurable items in the environment, see
+        [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
         """
         self._initialized = True
         log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
@@ -705,8 +708,8 @@ class MLflowCallback(TrainerCallback):
                 Whether to use MLflow .log_artifact() facility to log artifacts.
 
                 This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to *True* or *1*, will copy
-                whatever is in [`TrainingArguments`]'s `output_dir` to the local or remote
-                artifact storage. Using it without a remote storage will just copy the files to your artifact location.
+                whatever is in [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it
+                without a remote storage will just copy the files to your artifact location.
         """
         log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
         if log_artifacts in {"TRUE", "1"}:

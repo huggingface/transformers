@@ -35,8 +35,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Speech2Text feature extractor.
 
-    This feature extractor inherits from [`Speech2TextFeatureExtractor`] which contains most of the
-    main methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`Speech2TextFeatureExtractor`] which contains most of the main methods. Users
+    should refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
     mean and variance normalization to the extracted features.
@@ -147,12 +147,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`):
@@ -170,8 +170,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For Speech2TextTransoformer models, `attention_mask` should alwys be passed for batched
-                inference, to avoid subtle bugs.
+                For Speech2TextTransoformer models, `attention_mask` should alwys be passed for batched inference, to
+                avoid subtle bugs.
 
                 </Tip>
 

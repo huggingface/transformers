@@ -43,14 +43,15 @@ class DebugUnderflowOverflow:
     debug_overflow = DebugUnderflowOverflow(model)
     ```
 
-    then run the training as normal and if `nan` or `inf` gets detected in at least one of the weight, input or
-    output elements this module will throw an exception and will print `max_frames_to_save` frames that lead to this
-    event, each frame reporting
+    then run the training as normal and if `nan` or `inf` gets detected in at least one of the weight, input or output
+    elements this module will throw an exception and will print `max_frames_to_save` frames that lead to this event,
+    each frame reporting
 
     1. the fully qualified module name plus the class name whose `forward` was run
     2. the absolute min and max value of all elements for each module weights, and the inputs and output
 
-    For example, here is the header and the last few frames in detection report for `google/mt5-small` run in fp16 mixed precision :
+    For example, here is the header and the last few frames in detection report for `google/mt5-small` run in fp16
+    mixed precision :
 
     ```
     Detected inf/nan during batch_number=0
@@ -77,8 +78,8 @@ class DebugUnderflowOverflow:
     0.00e+00      inf output
     ```
 
-    You can see here, that `T5DenseGatedGeluDense.forward` resulted in output activations, whose absolute max value
-    was around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have `Dropout` which
+    You can see here, that `T5DenseGatedGeluDense.forward` resulted in output activations, whose absolute max value was
+    around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have `Dropout` which
     renormalizes the weights, after it zeroed some of the elements, which pushes the absolute max value to more than
     64K, and we get an overlow.
 
@@ -93,9 +94,9 @@ class DebugUnderflowOverflow:
     debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
     ```
 
-        To validate that you have set up this debugging feature correctly, and you intend to use it in a training that may
-        take hours to complete, first run it with normal tracing enabled for one of a few batches as explained in the next
-        section.
+        To validate that you have set up this debugging feature correctly, and you intend to use it in a training that
+        may take hours to complete, first run it with normal tracing enabled for one of a few batches as explained in
+        the next section.
 
 
         Mode 2. Specific batch absolute min/max tracing without detection
@@ -128,8 +129,8 @@ class DebugUnderflowOverflow:
 
     **Performance**:
 
-    As this module measures absolute `min`/``max` of each weight of the model on every forward it'll slow the
-    training down. Therefore remember to turn it off once the debugging needs have been met.
+    As this module measures absolute `min`/``max` of each weight of the model on every forward it'll slow the training
+    down. Therefore remember to turn it off once the debugging needs have been met.
 
     Args:
         model (`nn.Module`):

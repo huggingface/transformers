@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" AutoProcessor class. """
+""" AutoProcessor class."""
 import importlib
 from collections import OrderedDict
 
@@ -79,8 +79,8 @@ class AutoProcessor:
         r"""
         Instantiate one of the processor classes of the library from a pretrained model vocabulary.
 
-        The processor class to instantiate is selected based on the `model_type` property of the config object
-        (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible):
+        The processor class to instantiate is selected based on the `model_type` property of the config object (either
+        passed as an argument or loaded from `pretrained_model_name_or_path` if possible):
 
         List options
 
@@ -103,19 +103,20 @@ class AutoProcessor:
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final feature extractor object. If `True`,
-                then this functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a
-                dictionary consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the
-                part of `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
+                If `False`, then this function returns just the final feature extractor object. If `True`, then this
+                functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
+                consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
+                `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is

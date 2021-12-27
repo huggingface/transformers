@@ -134,8 +134,8 @@ class ModelCard:
                 - a string, the *model id* of a pretrained model card hosted inside a model repo on huggingface.co.
                   Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
                   user or organization name, like `dbmdz/bert-base-german-cased`.
-                - a path to a *directory* containing a model card file saved using the
-                  [`~ModelCard.save_pretrained`] method, e.g.: `./my_model_directory/`.
+                - a path to a *directory* containing a model card file saved using the [`~ModelCard.save_pretrained`]
+                  method, e.g.: `./my_model_directory/`.
                 - a path or url to a saved model card JSON *file*, e.g.: `./my_model_directory/modelcard.json`.
 
             cache_dir: (*optional*) string:

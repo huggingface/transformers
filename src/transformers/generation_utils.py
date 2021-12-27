@@ -62,12 +62,12 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor`
-            with each tensor of shape `(batch_size, config.vocab_size)`).
+            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each
+            tensor of shape `(batch_size, config.vocab_size)`).
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -92,17 +92,18 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor
-            of shape `(batch_size, config.vocab_size)`).
+            at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
+            `(batch_size, config.vocab_size)`).
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -131,15 +132,16 @@ class SampleDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor`
-            with each tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each
+            tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`).
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(num_return_sequences*batch_size, num_heads, generated_length, sequence_length)`.
+            `torch.FloatTensor` of shape `(num_return_sequences*batch_size, num_heads, generated_length,
+            sequence_length)`.
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(num_return_sequences*batch_size, generated_length, hidden_size)`.
@@ -161,21 +163,22 @@ class SampleEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor
-            of shape `(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
+            `(batch_size*num_return_sequences, config.vocab_size)`).
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape
             `(batch_size*num_return_sequences, num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size*num_return_sequences, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size*num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size*num_return_sequences, num_heads, generated_length, sequence_length)`.
+            `torch.FloatTensor` of shape `(batch_size*num_return_sequences, num_heads, generated_length,
+            sequence_length)`.
         cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -200,15 +203,15 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of
-            shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
+            `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -233,24 +236,26 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
-            `(batch_size*num_beams, config.vocab_size)`).
+            . `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
+            config.vocab_size)`).
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size*num_beams*num_return_sequences, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size*num_beams*num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, num_heads, generated_length, sequence_length)`.
+            `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, num_heads, generated_length,
+            sequence_length)`.
         cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -276,15 +281,15 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of
-            shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
+            `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -309,20 +314,21 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size*num_beams, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
-            shorter if all batches finished early due to the `eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
         sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
-            `(batch_size*num_beams, config.vocab_size)`).
+            . `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
+            config.vocab_size)`).
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size*num_beams, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size*num_beams, sequence_length, hidden_size)`.
         decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -352,8 +358,7 @@ BeamSampleOutput = Union[BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOu
 
 class GenerationMixin:
     """
-    A class containing all of the functions supporting generation, to be used as a mixin in
-    [`PreTrainedModel`].
+    A class containing all of the functions supporting generation, to be used as a mixin in [`PreTrainedModel`].
     """
 
     def _prepare_model_inputs(
@@ -412,8 +417,8 @@ class GenerationMixin:
         self, inputs: Optional[torch.Tensor], name: str, model_kwargs: Dict[str, torch.Tensor]
     ) -> torch.Tensor:
         """
-        If `inputs` is None and `name` is in both forward function and keyword
-        arguments, then inputs can be retrieved from name
+        If `inputs` is None and `name` is in both forward function and keyword arguments, then inputs can be retrieved
+        from name
         """
         can_retrieve_inputs = model_kwargs.get(name, None) is not None and name in set(
             inspect.signature(self.forward).parameters.keys()
@@ -426,15 +431,13 @@ class GenerationMixin:
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
         """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to prepare inputs in the
-        generate method.
+        Implement in subclasses of [`PreTrainedModel`] for custom behavior to prepare inputs in the generate method.
         """
         return {"input_ids": input_ids}
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in
-        the generate method.
+        Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
         """
         return logits
 
@@ -603,8 +606,8 @@ class GenerationMixin:
         self, top_k: int = None, top_p: float = None, temperature: float = None, num_beams: int = None
     ) -> LogitsProcessorList:
         """
-        This class returns a [`LogitsProcessorList`] list object that contains all relevant
-        [`LogitsWarper`] instances used for multinomial sampling.
+        This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
+        used for multinomial sampling.
         """
 
         # init warp parameters
@@ -644,8 +647,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList],
     ) -> LogitsProcessorList:
         """
-        This class returns a [`LogitsProcessorList`] list object that contains all relevant
-        [`LogitsProcessor`] instances used to modify the scores of the language model head.
+        This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
+        instances used to modify the scores of the language model head.
         """
         processors = LogitsProcessorList()
 
@@ -784,19 +787,20 @@ class GenerationMixin:
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         multinomial sampling, beam-search decoding, and beam-search multinomial sampling.
 
-        Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name
-        inside the [`PretrainedConfig`] of the model. The default values indicated are the default
-        values of those config.
+        Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name inside
+        the [`PretrainedConfig`] of the model. The default values indicated are the default values of those config.
 
-        Most of these parameters are explained in more detail in [this blog post](https://huggingface.co/blog/how-to-generate).
+        Most of these parameters are explained in more detail in [this blog
+        post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
 
-            inputs (`torch.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length, feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
+            inputs (`torch.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
+            feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
-                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models
-                `inputs` should of in the format of `input_ids`. For encoder-decoder models *inputs* can
-                represent any of `input_ids`, `input_values`, `input_features`, or `pixel_values`.
+                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
+                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
                 The maximum length of the sequence to be generated.
             max_new_tokens (`int`, *optional*, defaults to None):
@@ -815,10 +819,11 @@ class GenerationMixin:
             top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to 1.0):
-                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or
-                higher are kept for generation.
+                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
+                are kept for generation.
             repetition_penalty (`float`, *optional*, defaults to 1.0):
-                The parameter for repetition penalty. 1.0 means no penalty. See [this paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+                The parameter for repetition penalty. 1.0 means no penalty. See [this
+                paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             bos_token_id (`int`, *optional*):
@@ -843,9 +848,9 @@ class GenerationMixin:
                 The maximum amount of time you allow the computation to run for in seconds. generation will still
                 finish the current pass after allocated time has been passed.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for
-                tokens that are not masked, and 0 for masked tokens. If not provided, will default to a tensor the same
-                shape as `input_ids` that masks the pad token. [What are attention masks?](../glossary#attention-mask)
+                Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for tokens
+                that are not masked, and 0 for masked tokens. If not provided, will default to a tensor the same shape
+                as `input_ids` that masks the pad token. [What are attention masks?](../glossary#attention-mask)
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
             use_cache: (`bool`, *optional*, defaults to `True`):
@@ -861,10 +866,10 @@ class GenerationMixin:
             prefix_allowed_tokens_fn: (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
-                `input_ids`. It has to return a list with the allowed tokens for the next generation step
-                conditioned on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This
-                argument is useful for constrained generation conditioned on the prefix, as described in
-                [Autoregressive Entity Retrieval](https://arxiv.org/abs/2010.00904).
+                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
+                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
+                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
+                Retrieval](https://arxiv.org/abs/2010.00904).
             logits_processor (`LogitsProcessorList`, *optional*):
                  Custom logits processors that complement the default logits processors built from arguments and a
                  model's config. If a logit processor is passed that is already created with the arguments or a model's
@@ -884,9 +889,9 @@ class GenerationMixin:
             return_dict_in_generate (`bool`, *optional*, defaults to *False*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             forced_bos_token_id (`int`, *optional*):
-                The id of the token to force as the first generated token after the `decoder_start_token_id`.
-                Useful for multilingual models like [mBART](../model_doc/mbart) where the first generated token
-                needs to be the target language token.
+                The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
+                for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
+                the target language token.
             forced_eos_token_id (`int`, *optional*):
                 The id of the token to force as the last generated token when `max_length` is reached.
             remove_invalid_values (`bool`, *optional*):
@@ -896,17 +901,16 @@ class GenerationMixin:
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
 
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model. If the
-                model is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific
-                kwargs should be prefixed with *decoder_*.
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
+                is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
+                should be prefixed with *decoder_*.
 
         Return:
-            [`~file_utils.ModelOutput`] or `torch.LongTensor`: A
-            [`~file_utils.ModelOutput`] (if `return_dict_in_generate=True` or when
-            `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            [`~file_utils.ModelOutput`] or `torch.LongTensor`: A [`~file_utils.ModelOutput`] (if
+            `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
 
-                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the
-                possible [`~file_utils.ModelOutput`] types are:
+                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                [`~file_utils.ModelOutput`] types are:
 
                     - [`~generation_utils.GreedySearchDecoderOnlyOutput`],
                     - [`~generation_utils.SampleDecoderOnlyOutput`],
@@ -1285,16 +1289,15 @@ class GenerationMixin:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from
-                [`LogitsProcessor`] used to modify the prediction scores of the language modeling
-                head applied at each generation step.
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from
-                [`StoppingCriteria`] used to tell if the generation loop should stop.
+                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
+                used to tell if the generation loop should stop.
 
             max_length (`int`, *optional*, defaults to 20):
-                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of
-                generated tokens. The maximum length of the sequence to be generated.
+                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
+                tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
@@ -1312,16 +1315,14 @@ class GenerationMixin:
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
-                Additional model specific keyword arguments will be forwarded to the `forward` function of the
-                model. If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+                Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
+                If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation_utils.GreedySearchDecoderOnlyOutput`],
-            [`~generation_utils.GreedySearchEncoderDecoderOutput`] or obj:*torch.LongTensor*: A
-            `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation_utils.GreedySearchDecoderOnlyOutput`] if
-            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation_utils.GreedySearchEncoderDecoderOutput`] if
+            [`~generation_utils.GreedySearchDecoderOnlyOutput`], [`~generation_utils.GreedySearchEncoderDecoderOutput`]
+            or obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation_utils.GreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation_utils.GreedySearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -1512,19 +1513,18 @@ class GenerationMixin:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from
-                [`LogitsProcessor`] used to modify the prediction scores of the language modeling
-                head applied at each generation step.
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from
-                [`StoppingCriteria`] used to tell if the generation loop should stop.
+                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
+                used to tell if the generation loop should stop.
             logits_warper (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from
-                [`LogitsWarper`] used to warp the prediction score distribution of the language
-                modeling head applied before multinomial sampling at each generation step.
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
+                to warp the prediction score distribution of the language modeling head applied before multinomial
+                sampling at each generation step.
             max_length (`int`, *optional*, defaults to 20):
-                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of
-                generated tokens. The maximum length of the sequence to be generated.
+                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
+                tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
@@ -1542,16 +1542,14 @@ class GenerationMixin:
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model. If
-                model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
+                an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation_utils.SampleDecoderOnlyOutput`],
-            [`~generation_utils.SampleEncoderDecoderOutput`] or obj:*torch.LongTensor*: A
-            `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation_utils.SampleDecoderOnlyOutput`] if
-            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation_utils.SampleEncoderDecoderOutput`] if
+            [`~generation_utils.SampleDecoderOnlyOutput`], [`~generation_utils.SampleEncoderDecoderOutput`] or
+            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation_utils.SampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation_utils.SampleEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -1754,19 +1752,17 @@ class GenerationMixin:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             beam_scorer (`BeamScorer`):
-                An derived instance of [`BeamScorer`] that defines how beam hypotheses are
-                constructed, stored and sorted during generation. For more information, the documentation of
-                [`BeamScorer`] should be read.
+                An derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
+                sorted during generation. For more information, the documentation of [`BeamScorer`] should be read.
             logits_processor (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from
-                [`LogitsProcessor`] used to modify the prediction scores of the language modeling
-                head applied at each generation step.
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from
-                [`StoppingCriteria`] used to tell if the generation loop should stop.
+                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
+                used to tell if the generation loop should stop.
             max_length (`int`, *optional*, defaults to 20):
-                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of
-                generated tokens. The maximum length of the sequence to be generated.
+                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
+                tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
@@ -1784,16 +1780,14 @@ class GenerationMixin:
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model. If
-                model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
+                an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`generation_utilsBeamSearchDecoderOnlyOutput`],
-            [`~generation_utils.BeamSearchEncoderDecoderOutput`] or obj:*torch.LongTensor*: A
-            `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation_utils.BeamSearchDecoderOnlyOutput`] if
-            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation_utils.BeamSearchEncoderDecoderOutput`] if
+            [`generation_utilsBeamSearchDecoderOnlyOutput`], [`~generation_utils.BeamSearchEncoderDecoderOutput`] or
+            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation_utils.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation_utils.BeamSearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
 
@@ -2048,23 +2042,21 @@ class GenerationMixin:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             beam_scorer (`BeamScorer`):
-                A derived instance of [`BeamScorer`] that defines how beam hypotheses are
-                constructed, stored and sorted during generation. For more information, the documentation of
-                [`BeamScorer`] should be read.
+                A derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
+                sorted during generation. For more information, the documentation of [`BeamScorer`] should be read.
             logits_processor (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from
-                [`LogitsProcessor`] used to modify the prediction scores of the language modeling
-                head applied at each generation step.
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from
-                [`StoppingCriteria`] used to tell if the generation loop should stop.
+                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
+                used to tell if the generation loop should stop.
             logits_warper (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from
-                [`LogitsWarper`] used to warp the prediction score distribution of the language
-                modeling head applied before multinomial sampling at each generation step.
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
+                to warp the prediction score distribution of the language modeling head applied before multinomial
+                sampling at each generation step.
             max_length (`int`, *optional*, defaults to 20):
-                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of
-                generated tokens. The maximum length of the sequence to be generated.
+                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
+                tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
@@ -2082,16 +2074,14 @@ class GenerationMixin:
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model. If
-                model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
+                an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation_utils.BeamSampleDecoderOnlyOutput`],
-            [`~generation_utils.BeamSampleEncoderDecoderOutput`] or obj:*torch.LongTensor*: A
-            `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation_utils.BeamSampleDecoderOnlyOutput`] if
-            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation_utils.BeamSampleEncoderDecoderOutput`] if
+            [`~generation_utils.BeamSampleDecoderOnlyOutput`], [`~generation_utils.BeamSampleEncoderDecoderOutput`] or
+            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation_utils.BeamSampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation_utils.BeamSampleEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -2351,19 +2341,17 @@ class GenerationMixin:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             beam_scorer (`BeamScorer`):
-                An derived instance of [`BeamScorer`] that defines how beam hypotheses are
-                constructed, stored and sorted during generation. For more information, the documentation of
-                [`BeamScorer`] should be read.
+                An derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
+                sorted during generation. For more information, the documentation of [`BeamScorer`] should be read.
             logits_processor (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from
-                [`LogitsProcessor`] used to modify the prediction scores of the language modeling
-                head applied at each generation step.
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
-                An instance of [`StoppingCriteriaList`]. List of instances of class derived from
-                [`StoppingCriteria`] used to tell if the generation loop should stop.
+                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
+                used to tell if the generation loop should stop.
             max_length (`int`, *optional*, defaults to 20):
-                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of
-                generated tokens. The maximum length of the sequence to be generated.
+                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
+                tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
@@ -2386,14 +2374,11 @@ class GenerationMixin:
                 model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation_utils.BeamSearchDecoderOnlyOutput`],
-            [`~generation_utils.BeamSearchEncoderDecoderOutput`] or obj:*torch.LongTensor*: A
-            `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation_utils.BeamSearchDecoderOnlyOutput`] if
-            [`~generation_utils.BeamSearchDecoderOnlyOutput`] if
+            [`~generation_utils.BeamSearchDecoderOnlyOutput`], [`~generation_utils.BeamSearchEncoderDecoderOutput`] or
+            obj:*torch.LongTensor*: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation_utils.BeamSearchDecoderOnlyOutput`] if [`~generation_utils.BeamSearchDecoderOnlyOutput`] if
             `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation_utils.BeamSearchEncoderDecoderOutput`] if
-            `model.config.is_encoder_decoder=True`.
+            [`~generation_utils.BeamSearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
 
         Examples:
 

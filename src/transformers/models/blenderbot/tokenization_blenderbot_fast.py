@@ -48,12 +48,10 @@ class BlenderbotTokenizerFast(RobertaTokenizerFast):
     r"""
     Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`BlenderbotFast`] is nearly identical to [`RobertaTokenizerFast`] and runs
-    end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesn't add BOS token
-    to the beginning of sequences.
+    [`BlenderbotFast`] is nearly identical to [`RobertaTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece. The only difference is that it doesn't add BOS token to the beginning of sequences.
 
-    Refer to superclass [`RobertaTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`RobertaTokenizerFast`] for usage examples and documentation concerning parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

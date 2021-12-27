@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" FSMT configuration """
+""" FSMT configuration"""
 
 
 import copy
@@ -40,11 +40,11 @@ class DecoderConfig(PretrainedConfig):
 
 class FSMTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to
-    instantiate a FSMT model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to instantiate a FSMT
+    model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         langs (`List[str]`):
@@ -70,8 +70,8 @@ class FSMTConfig(PretrainedConfig):
         encoder_ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `Callable`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -102,13 +102,13 @@ class FSMTConfig(PretrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
         num_beams (`int`, *optional*, defaults to 5)
-            Number of beams for beam search that will be used by default in the `generate` method of the model. 1
-            means no beam search.
+            Number of beams for beam search that will be used by default in the `generate` method of the model. 1 means
+            no beam search.
         length_penalty (`float`, *optional*, defaults to 1)
             Exponential penalty to the length that will be used by default in the `generate` method of the model.
         early_stopping (`bool`, *optional*, defaults to `False`)
-            Flag that will be used by default in the `generate` method of the model. Whether to stop the beam
-            search when at least `num_beams` sentences are finished per batch or not.
+            Flag that will be used by default in the `generate` method of the model. Whether to stop the beam search
+            when at least `num_beams` sentences are finished per batch or not.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         forced_eos_token_id (`int`, *optional*, defaults to 2):

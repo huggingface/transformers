@@ -696,8 +696,8 @@ class CaptureStd:
         err (`bool`, *optional*, defaults to `True`): Whether to capture stderr or not.
         replay (`bool`, *optional*, defaults to `True`): Whether to replay or not.
             By default each captured stream gets replayed back on context's exit, so that one can see what the test was
-            doing. If this is a not wanted behavior and the captured data shouldn't be replayed, pass `replay=False`
-            to disable this feature.
+            doing. If this is a not wanted behavior and the captured data shouldn't be replayed, pass `replay=False` to
+            disable this feature.
 
     Examples:
 
@@ -955,14 +955,14 @@ class TestCasePlus(unittest.TestCase):
     `after=False`: the temporary dir will always be left intact at the end of the test.
 
     Note 1: In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are
-    allowed if an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the
-    filesystem will get nuked. i.e. please always pass paths that start with `./`
+    allowed if an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem
+    will get nuked. i.e. please always pass paths that start with `./`
 
     Note 2: Each test can register multiple temporary dirs and they all will get auto-removed, unless requested
     otherwise.
 
-    Feature 3: Get a copy of the `os.environ` object that sets up `PYTHONPATH` specific to the current test suite.
-    This is useful for invoking external programs from the test suite - e.g. distributed training.
+    Feature 3: Get a copy of the `os.environ` object that sets up `PYTHONPATH` specific to the current test suite. This
+    is useful for invoking external programs from the test suite - e.g. distributed training.
 
 
     ```python
@@ -1040,12 +1040,11 @@ class TestCasePlus(unittest.TestCase):
 
     def get_env(self):
         """
-        Return a copy of the `os.environ` object that sets up `PYTHONPATH` correctly, depending on the test suite
-        it's invoked from. This is useful for invoking external programs from the test suite - e.g. distributed
-        training.
+        Return a copy of the `os.environ` object that sets up `PYTHONPATH` correctly, depending on the test suite it's
+        invoked from. This is useful for invoking external programs from the test suite - e.g. distributed training.
 
-        It always inserts `./src` first, then `./tests` or `./examples` depending on the test suite type and
-        finally the preset `PYTHONPATH` if any (all full resolved paths).
+        It always inserts `./src` first, then `./tests` or `./examples` depending on the test suite type and finally
+        the preset `PYTHONPATH` if any (all full resolved paths).
 
         """
         env = os.environ.copy()
@@ -1074,15 +1073,14 @@ class TestCasePlus(unittest.TestCase):
                    - sets `before=True` if `before` is `None`
                    - sets `after=False` if `after` is `None`
             before (`bool`, *optional*):
-                If `True` and the `tmp_dir` already exists, make sure to empty it right away if `False`
-                and the `tmp_dir` already exists, any existing files will remain there.
+                If `True` and the `tmp_dir` already exists, make sure to empty it right away if `False` and the
+                `tmp_dir` already exists, any existing files will remain there.
             after (`bool`, *optional*):
-                If `True`, delete the `tmp_dir` at the end of the test if `False`, leave the
-                `tmp_dir` and its contents intact at the end of the test.
+                If `True`, delete the `tmp_dir` at the end of the test if `False`, leave the `tmp_dir` and its contents
+                intact at the end of the test.
 
         Returns:
-            tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp
-            dir
+            tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp dir
         """
         if tmp_dir is not None:
 
@@ -1141,10 +1139,8 @@ def mockenv(**kwargs):
     """
     this is a convenience wrapper, that allows this ::
 
-    @mockenv(RUN_SLOW=True, USE_TF=False)
-    def test_something():
-        run_slow = os.getenv("RUN_SLOW", False)
-        use_tf = os.getenv("USE_TF", False)
+    @mockenv(RUN_SLOW=True, USE_TF=False) def test_something():
+        run_slow = os.getenv("RUN_SLOW", False) use_tf = os.getenv("USE_TF", False)
 
     """
     return mock.patch.dict(os.environ, kwargs)
@@ -1223,9 +1219,9 @@ def pytest_terminal_summary_main(tr, id):
     - id: unique id like `tests` or `examples` that will be incorporated into the final reports filenames - this is
       needed as some jobs have multiple runs of pytest, so we can't have them overwrite each other.
 
-    NB: this functions taps into a private _pytest API and while unlikely, it could break should
-    pytest do internal changes - also it calls default internal methods of terminalreporter which
-    can be hijacked by various `pytest-` plugins and interfere.
+    NB: this functions taps into a private _pytest API and while unlikely, it could break should pytest do internal
+    changes - also it calls default internal methods of terminalreporter which can be hijacked by various `pytest-`
+    plugins and interfere.
 
     """
     from _pytest.config import create_terminal_writer
@@ -1425,8 +1421,8 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
 
 def pytest_xdist_worker_id():
     """
-    Returns an int value of worker's numerical id under `pytest-xdist`'s concurrent workers `pytest -n N` regime,
-    or 0 if `-n 1` or `pytest-xdist` isn't being used.
+    Returns an int value of worker's numerical id under `pytest-xdist`'s concurrent workers `pytest -n N` regime, or 0
+    if `-n 1` or `pytest-xdist` isn't being used.
     """
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
     worker = re.sub(r"^gw", "", worker, 0, re.M)
@@ -1437,8 +1433,8 @@ def get_torch_dist_unique_port():
     """
     Returns a port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
 
-    Under `pytest-xdist` it adds a delta number based on a worker id so that concurrent tests don't try to use the
-    same port at once.
+    Under `pytest-xdist` it adds a delta number based on a worker id so that concurrent tests don't try to use the same
+    port at once.
     """
     port = 29500
     uniq_delta = pytest_xdist_worker_id()

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CLIP model configuration """
+""" CLIP model configuration"""
 
 import copy
 
@@ -30,13 +30,13 @@ CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CLIPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPModel`]. It is used to
-    instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLIP
+    This is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate an CLIP
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -55,9 +55,9 @@ class CLIPTextConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
+            defaults to 1e-5): The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.0):
@@ -121,13 +121,13 @@ class CLIPTextConfig(PretrainedConfig):
 
 class CLIPVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPModel`]. It is used to
-    instantiate an CLIP model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLIP
+    This is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate an CLIP
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -144,9 +144,9 @@ class CLIPVisionConfig(PretrainedConfig):
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
+            defaults to 1e-5): The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -208,12 +208,11 @@ class CLIPVisionConfig(PretrainedConfig):
 
 class CLIPConfig(PretrainedConfig):
     r"""
-    [`CLIPConfig`] is the configuration class to store the configuration of a
-    [`CLIPModel`]. It is used to instantiate CLIP model according to the specified arguments,
-    defining the text model and vision model configs.
+    [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
+    CLIP model according to the specified arguments, defining the text model and vision model configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         text_config_dict (`dict`, *optional*):
@@ -259,8 +258,8 @@ class CLIPConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: CLIPTextConfig, vision_config: CLIPVisionConfig, **kwargs):
         r"""
-        Instantiate a [`CLIPConfig`] (or a derived class) from clip text model configuration and
-        clip vision model configuration.
+        Instantiate a [`CLIPConfig`] (or a derived class) from clip text model configuration and clip vision model
+        configuration.
 
         Returns:
             [`CLIPConfig`]: An instance of a configuration object
@@ -270,8 +269,7 @@ class CLIPConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default
-        [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

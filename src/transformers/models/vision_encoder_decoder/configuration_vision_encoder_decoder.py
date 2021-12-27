@@ -27,20 +27,20 @@ logger = logging.get_logger(__name__)
 class VisionEncoderDecoderConfig(PretrainedConfig):
     r"""
     [`VisionEncoderDecoderConfig`] is the configuration class to store the configuration of a
-    [`VisionEncoderDecoderModel`]. It is used to instantiate a Vision-Encoder-Text-Decoder model
-    according to the specified arguments, defining the encoder and decoder configs.
+    [`VisionEncoderDecoderModel`]. It is used to instantiate a Vision-Encoder-Text-Decoder model according to the
+    specified arguments, defining the encoder and decoder configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration
-                  object that defines the encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration
-                  object that defines the decoder config.
+                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the encoder config.
+                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the decoder config.
 
     Examples:
 
@@ -95,8 +95,8 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
         cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
-        Instantiate a [`VisionEncoderDecoderConfig`] (or a derived class) from a pre-trained encoder
-        model configuration and decoder model configuration.
+        Instantiate a [`VisionEncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
+        configuration and decoder model configuration.
 
         Returns:
             [`VisionEncoderDecoderConfig`]: An instance of a configuration object

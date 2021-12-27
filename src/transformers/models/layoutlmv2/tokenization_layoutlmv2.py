@@ -64,31 +64,31 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 Activates and controls truncation. Accepts the following values:
 
-                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument
-                  `max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
-                  if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with
-                  sequence lengths greater than the model maximum admissible input size).
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
             max_length (`int`, *optional*):
                 Controls the maximum length to use by one of the truncation/padding parameters. If left unset or set to
-                `None`, this will use the predefined model maximum length if a maximum length is required by one
-                of the truncation/padding parameters. If the model has no specific maximum input length (like XLNet)
+                `None`, this will use the predefined model maximum length if a maximum length is required by one of the
+                truncation/padding parameters. If the model has no specific maximum input length (like XLNet)
                 truncation/padding to a maximum length will be deactivated.
             stride (`int`, *optional*, defaults to 0):
                 If set to a number along with `max_length`, the overflowing tokens returned when
@@ -145,15 +145,15 @@ def subfinder(mylist, pattern):
 
 class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     r"""
-    Construct a LayoutLMv2 tokenizer. Based on WordPiece. [`LayoutLMv2Tokenizer`] can be used to
-    turn words, word-level bounding boxes and optional word labels to token-level `input_ids`,
-    `attention_mask`, `token_type_ids`, `bbox`, and optional `labels` (for token classification).
+    Construct a LayoutLMv2 tokenizer. Based on WordPiece. [`LayoutLMv2Tokenizer`] can be used to turn words, word-level
+    bounding boxes and optional word labels to token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`, and
+    optional `labels` (for token classification).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
-    [`LayoutLMv2Tokenizer`] runs end-to-end tokenization: punctuation splitting and wordpiece. It
-    also turns the word-level bounding boxes into token-level bounding boxes.
+    [`LayoutLMv2Tokenizer`] runs end-to-end tokenization: punctuation splitting and wordpiece. It also turns the
+    word-level bounding boxes into token-level bounding boxes.
 
     """
 
@@ -335,8 +335,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -536,7 +535,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-        """ """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -720,9 +718,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> List[int]:
-        """
-        ...
-        """
         encoded_inputs = self.encode_plus(
             text=text,
             text_pair=text_pair,
@@ -897,9 +892,9 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         *truncation_strategy = longest_first* or *True*, it is not possible to return overflowing tokens. Such a
         combination of arguments will raise an error.
 
-        Word-level `boxes` are turned into token-level `bbox`. If provided, word-level `word_labels` are
-        turned into token-level `labels`. The word label is used for the first token of the word, while remaining
-        tokens are labeled with -100, such that they will be ignored by the loss function.
+        Word-level `boxes` are turned into token-level `bbox`. If provided, word-level `word_labels` are turned into
+        token-level `labels`. The word label is used for the first token of the word, while remaining tokens are
+        labeled with -100, such that they will be ignored by the loss function.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -1093,8 +1088,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
         Args:
             ids (`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize`
-                and `convert_tokens_to_ids` methods.
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_tokens_to_ids` methods.
             token_boxes (`List[List[int]]`):
                 Bounding boxes of the first sequence.
             pair_ids (`List[int]`, *optional*):
@@ -1109,26 +1104,26 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 The strategy to follow for truncation. Can be:
 
-                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will
-                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
-                  sequences (or a batch of pairs) is provided.
-                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will truncate
+                  token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a
+                  batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
-                  greater than the model maximum admissible input size).
+                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths greater
+                  than the model maximum admissible input size).
             stride (`int`, *optional*, defaults to 0):
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the
-            list of overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if
-            a pair of sequences (or a batch of pairs) is provided.
+            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
+            overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if a pair
+            of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
             return ids, token_boxes, pair_ids, pair_token_boxes, labels, [], [], []
@@ -1214,7 +1209,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+            encoded_inputs:
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -1229,7 +1225,8 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         # Load from model defaults
         if return_attention_mask is None:
@@ -1299,7 +1296,8 @@ class BasicTokenizer(object):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).

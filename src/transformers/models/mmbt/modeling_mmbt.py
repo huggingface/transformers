@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch MMBT model. """
+"""PyTorch MMBT model."""
 
 
 import torch
@@ -77,17 +77,18 @@ class ModalEmbeddings(nn.Module):
 
 
 MMBT_START_DOCSTRING = r"""
-    MMBT model was proposed in [Supervised Multimodal Bitransformers for Classifying Images and Text](https://github.com/facebookresearch/mmbt) by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
+    MMBT model was proposed in [Supervised Multimodal Bitransformers for Classifying Images and
+    Text](https://github.com/facebookresearch/mmbt) by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
     It's a supervised multimodal bitransformer model that fuses information from text and other image encoders, and
     obtain state-of-the-art performance on various multimodal classification benchmark tasks.
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`MMBTConfig`]): Model configuration class with all the parameters of the model.
@@ -106,9 +107,8 @@ MMBT_INPUTS_DOCSTRING = r"""
             Encoder, the shape would be (batch_size, channels, height, width)
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. It does not expect [CLS] token to be added as it's
-            appended to the end of other modality embeddings. Indices can be obtained using
-            [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            appended to the end of other modality embeddings. Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         modal_start_tokens (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -124,7 +124,8 @@ MMBT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (*optional*) `torch.LongTensor` of shape `(batch_size, sequence_length)`:
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
@@ -134,7 +135,8 @@ MMBT_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate different portions of the non-text modality. The embeddings from these
             tokens will be summed with the respective token embeddings for the non-text modality.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         modal_position_ids (`torch.LongTensor` of shape `(batch_size, modal_sequence_length)`, *optional*):
@@ -149,9 +151,9 @@ MMBT_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
@@ -312,12 +314,15 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
 class MMBTForClassification(nn.Module):
     r"""
     **labels**: (*optional*) `torch.LongTensor` of shape `(batch_size,)`:
-        Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-        If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+        config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+        `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
     Returns: *Tuple* comprising various elements depending on the configuration (config) and inputs: **loss**:
     (*optional*, returned when `labels` is provided) `torch.FloatTensor` of shape `(1,)`: Classification (or
-    regression if config.num_labels==1) loss. **logits**: `torch.FloatTensor` of shape `(batch_size, config.num_labels)` Classification (or regression if config.num_labels==1) scores (before SoftMax).
+    regression if config.num_labels==1) loss. **logits**:
+        `torch.FloatTensor` of shape `(batch_size, config.num_labels)` Classification (or regression if
+        config.num_labels==1) scores (before SoftMax).
     **hidden_states**: (*optional*, returned when `output_hidden_states=True`) list of `torch.FloatTensor` (one for
     the output of each layer + the output of the embeddings) of shape `(batch_size, sequence_length, hidden_size)`:
     Hidden-states of the model at the output of each layer plus the initial embedding outputs. **attentions**:

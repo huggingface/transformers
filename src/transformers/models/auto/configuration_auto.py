@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Config class. """
+""" Auto Config class."""
 import importlib
 import re
 import warnings
@@ -501,9 +501,8 @@ class AutoConfig:
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 
-        The configuration class to instantiate is selected based on the `model_type` property of the config object
-        that is loaded, or when it's missing, by falling back to using pattern matching on
-        `pretrained_model_name_or_path`:
+        The configuration class to instantiate is selected based on the `model_type` property of the config object that
+        is loaded, or when it's missing, by falling back to using pattern matching on `pretrained_model_name_or_path`:
 
         List options
 
@@ -515,8 +514,8 @@ class AutoConfig:
                       huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                       namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing a configuration file saved using the
-                      [`~PretrainedConfig.save_pretrained`] method, or the
-                      [`~PreTrainedModel.save_pretrained`] method, e.g., `./my_model_directory/`.
+                      [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
+                      e.g., `./my_model_directory/`.
                     - A path or url to a saved configuration JSON *file*, e.g.,
                       `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
@@ -529,7 +528,8 @@ class AutoConfig:
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -537,13 +537,13 @@ class AutoConfig:
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.
 
-                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs*
-                is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
-                the part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
-                should only be set to `True` for repositories you trust and in which you have read the code, as it
-                will execute code present on the Hub on your local machine.
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
             kwargs(additional keyword arguments, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled

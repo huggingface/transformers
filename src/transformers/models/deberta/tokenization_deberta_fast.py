@@ -129,8 +129,8 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
     @property
     def mask_token(self) -> str:
         """
-        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
-        not having been set.
+        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
+        having been set.
 
         Deberta tokenizer has a special mask token to be used in the fill-mask pipeline. The mask token will greedily
         comprise the space before the *[MASK]*.
@@ -196,8 +196,7 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

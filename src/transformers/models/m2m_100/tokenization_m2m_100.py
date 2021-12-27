@@ -65,15 +65,15 @@ class M2M100Tokenizer(PreTrainedTokenizer):
     """
     Construct an M2M100 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
         spm_file (`str`):
-            Path to [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension)
-            that contains the vocabulary.
+            Path to [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
+            contains the vocabulary.
         src_lang (`str`, *optional*):
             A string representing the source language.
         tgt_lang (`str`, *optional*):
@@ -92,7 +92,9 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         language_codes (`str`, *optional*, defaults to `"m2m100"`):
             What language codes to use. Should be one of `"m2m100"` or `"wmt21"`.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.

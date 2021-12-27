@@ -68,9 +68,8 @@ class Index:
                 The number of docs retrieved per query.
 
         Returns:
-            `np.ndarray` of shape `(batch_size, n_docs)`: A tensor of indices of retrieved documents.
-            `np.ndarray` of shape `(batch_size, vector_size)`: A tensor of vector representations of
-            retrieved documents.
+            `np.ndarray` of shape `(batch_size, n_docs)`: A tensor of indices of retrieved documents. `np.ndarray` of
+            shape `(batch_size, vector_size)`: A tensor of vector representations of retrieved documents.
         """
         raise NotImplementedError
 
@@ -98,8 +97,7 @@ class LegacyIndex(Index):
         vector_size (`int`):
             The dimension of indexed vectors.
         index_path (`str`):
-            A path to a *directory* containing index files compatible with
-            [`~models.rag.retrieval_rag.LegacyIndex`]
+            A path to a *directory* containing index files compatible with [`~models.rag.retrieval_rag.LegacyIndex`]
     """
 
     INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
@@ -228,9 +226,9 @@ class HFIndexBase(Index):
 
 class CanonicalHFIndex(HFIndexBase):
     """
-    A wrapper around an instance of [`~datasets.Datasets`]. If `index_path` is set to `None`, we load the
-    pre-computed index available with the [`~datasets.arrow_dataset.Dataset`], otherwise, we load the index from
-    the indicated path on disk.
+    A wrapper around an instance of [`~datasets.Datasets`]. If `index_path` is set to `None`, we load the pre-computed
+    index available with the [`~datasets.arrow_dataset.Dataset`], otherwise, we load the index from the indicated path
+    on disk.
 
     Args:
         vector_size (`int`): the dimension of the passages embeddings used by the index
@@ -240,11 +238,12 @@ class CanonicalHFIndex(HFIndexBase):
         dataset_split (`str`, optional, defaults to `train`)
             Which split of the `dataset` to load.
         index_name (`str`, optional, defaults to `train`)
-            The index_name of the index associated with the `dataset`. The index loaded from `index_path` will be
-            saved under this name.
+            The index_name of the index associated with the `dataset`. The index loaded from `index_path` will be saved
+            under this name.
         index_path (`str`, optional, defaults to `None`)
             The path to the serialized faiss index on disk.
-        use_dummy_dataset (`bool`, optional, defaults to `False`): If True, use the dummy configuration of the dataset for tests.
+        use_dummy_dataset (`bool`, optional, defaults to `False`):
+            If True, use the dummy configuration of the dataset for tests.
     """
 
     def __init__(
@@ -331,8 +330,8 @@ class RagRetriever:
     Args:
         config ([`RagConfig`]):
             The configuration of the RAG model this Retriever is used with. Contains parameters indicating which
-            `Index` to build. You can load your own custom dataset with `config.index_name="custom"` or use a
-            canonical one (default) from the datasets library with `config.index_name="wiki_dpr"` for example.
+            `Index` to build. You can load your own custom dataset with `config.index_name="custom"` or use a canonical
+            one (default) from the datasets library with `config.index_name="wiki_dpr"` for example.
         question_encoder_tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that was used to tokenize the question. It is used to decode the question and then use the
             generator_tokenizer.
@@ -537,10 +536,9 @@ class RagRetriever:
         Return:
             `Tuple[np.ndarray, np.ndarray, List[dict]]`: A tuple with the following objects:
 
-            - **retrieved_doc_embeds** (`np.ndarray` of shape `(batch_size, n_docs, dim)`) -- The retrieval
-              embeddings of the retrieved docs per query.
-            - **doc_ids** (`np.ndarray` of shape `(batch_size, n_docs)`) -- The ids of the documents in the
-              index
+            - **retrieved_doc_embeds** (`np.ndarray` of shape `(batch_size, n_docs, dim)`) -- The retrieval embeddings
+              of the retrieved docs per query.
+            - **doc_ids** (`np.ndarray` of shape `(batch_size, n_docs)`) -- The ids of the documents in the index
             - **doc_dicts** (`List[dict]`): The `retrieved_doc_embeds` examples per query.
         """
 
@@ -578,8 +576,7 @@ class RagRetriever:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 
-        Returns: [`BatchEncoding`]: A [`BatchEncoding`] with the following
-        fields:
+        Returns: [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
             - **context_input_ids** -- List of token ids to be fed to a model.
 

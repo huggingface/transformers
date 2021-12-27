@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flaubert configuration, based on XLM. """
+""" Flaubert configuration, based on XLM."""
 
 from ...utils import logging
 from ..xlm.configuration_xlm import XLMConfig
@@ -30,12 +30,11 @@ FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FlaubertConfig(XLMConfig):
     """
-    This is the configuration class to store the configuration of a [`FlaubertModel`] or a
-    [`TFFlaubertModel`]. It is used to instantiate a FlauBERT model according to the specified
-    arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`FlaubertModel`] or a [`TFFlaubertModel`]. It is
+    used to instantiate a FlauBERT model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         pre_norm (`bool`, *optional*, defaults to `False`):
@@ -46,8 +45,7 @@ class FlaubertConfig(XLMConfig):
             Structured Dropout. ICLR 2020)
         vocab_size (`int`, *optional*, defaults to 30145):
             Vocabulary size of the FlauBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`FlaubertModel`] or
-            [`TFFlaubertModel`].
+            the `inputs_ids` passed when calling [`FlaubertModel`] or [`TFFlaubertModel`].
         emb_dim (`int`, *optional*, defaults to 2048):
             Dimensionality of the encoder layers and the pooler layer.
         n_layer (`int`, *optional*, defaults to 12):
@@ -72,8 +70,8 @@ class FlaubertConfig(XLMConfig):
             The number of languages the model handles. Set to 1 for monolingual models.
         use_lang_emb (`bool`, *optional*, defaults to `True`)
             Whether to use language embeddings. Some models use additional language embeddings, see [the multilingual
-            models page](http://huggingface.co/transformers/multilingual.html#xlm-language-embeddings) for
-            information on how to use them.
+            models page](http://huggingface.co/transformers/multilingual.html#xlm-language-embeddings) for information
+            on how to use them.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).

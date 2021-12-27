@@ -45,9 +45,10 @@ SPIECE_UNDERLINE = "▁"
 
 class FNetTokenizer(PreTrainedTokenizer):
     """
-    Construct an FNet tokenizer. Adapted from [`AlbertTokenizer`]. Based on [SentencePiece](https://github.com/google/sentencepiece). This tokenizer inherits from
-    [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to this
-    superclass for more information regarding those methods.
+    Construct an FNet tokenizer. Adapted from [`AlbertTokenizer`]. Based on
+    [SentencePiece](https://github.com/google/sentencepiece). This tokenizer inherits from [`PreTrainedTokenizer`]
+    which contains most of the main methods. Users should refer to this superclass for more information regarding those
+    methods.
 
     Args:
         vocab_file (`str`):
@@ -75,7 +76,9 @@ class FNetTokenizer(PreTrainedTokenizer):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
@@ -285,8 +288,7 @@ class FNetTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

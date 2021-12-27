@@ -53,10 +53,11 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class ReformerTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" Reformer tokenizer (backed by HuggingFace's *tokenizers* library). Based on [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
+    Construct a "fast" Reformer tokenizer (backed by HuggingFace's *tokenizers* library). Based on
+    [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -67,8 +68,8 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 

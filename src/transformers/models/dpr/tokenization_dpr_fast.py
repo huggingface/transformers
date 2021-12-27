@@ -92,11 +92,10 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and
-    runs end-to-end tokenization: punctuation splitting and wordpiece.
+    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -110,11 +109,10 @@ class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and
-    runs end-to-end tokenization: punctuation splitting and wordpiece.
+    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -132,18 +130,18 @@ DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "en
 
 
 CUSTOM_DPR_READER_DOCSTRING = r"""
-    Return a dictionary with the token ids of the input strings and other information to give to
-    `.decode_best_spans`. It converts the strings of a question and different passages (title and text) in a
-    sequence of IDs (integers), using the tokenizer and vocabulary. The resulting `input_ids` is a matrix of size
-    `(n_passages, sequence_length)` with the format:
+    Return a dictionary with the token ids of the input strings and other information to give to `.decode_best_spans`.
+    It converts the strings of a question and different passages (title and text) in a sequence of IDs (integers),
+    using the tokenizer and vocabulary. The resulting `input_ids` is a matrix of size `(n_passages, sequence_length)`
+    with the format:
 
     [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
     Args:
         questions (`str` or `List[str]`):
             The questions to be encoded. You can specify one question for many passages. In this case, the question
-            will be duplicated like `[questions] * n_passages`. Otherwise you have to specify as many questions as
-            in `titles` or `texts`.
+            will be duplicated like `[questions] * n_passages`. Otherwise you have to specify as many questions as in
+            `titles` or `texts`.
         titles (`str` or `List[str]`):
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (`str` or `List[str]`):
@@ -151,33 +149,33 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence if provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              if provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
         truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
             Activates and controls truncation. Accepts the following values:
 
-            - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument
-              `max_length` or to the maximum acceptable input length for the model if that argument is not
-              provided. This will truncate token by token, removing a token from the longest sequence in the pair if a
-              pair of sequences (or a batch of pairs) is provided.
-            - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided. This will only truncate
-              the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-            - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to
-              the maximum acceptable input length for the model if that argument is not provided. This will only
-              truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-            - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence
-              lengths greater than the model maximum admissible input size).
+            - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to
+              the maximum acceptable input length for the model if that argument is not provided. This will truncate
+              token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a batch
+              of pairs) is provided.
+            - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided. This will only truncate the first
+              sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+            - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided. This will only truncate the
+              second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+            - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+              greater than the model maximum admissible input size).
         max_length (`int`, *optional*):
                 Controls the maximum length to use by one of the truncation/padding parameters.
 
-                If left unset or set to `None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
         return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -272,11 +270,12 @@ class CustomDPRReaderTokenizerMixin:
         Returns: *List* of *DPRReaderOutput* sorted by descending *(relevance_score, span_score)*. Each
         *DPRReaderOutput* is a *Tuple* with:
 
-            - **span_score**: `float` that corresponds to the score given by the reader for this span compared to
-              other spans in the same passage. It corresponds to the sum of the start and end logits of the span.
+            - **span_score**: `float` that corresponds to the score given by the reader for this span compared to other
+              spans in the same passage. It corresponds to the sum of the start and end logits of the span.
             - **relevance_score**: `float` that corresponds to the score of the each passage to answer the question,
               compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
-            - **doc_id**: ``int``` the id of the passage. - ***start_index**: `int` the start index of the span (inclusive). - **end_index**: `int` the end index of the span (inclusive).
+            - **doc_id**: ``int``` the id of the passage. - ***start_index**: `int` the start index of the span
+              (inclusive). - **end_index**: `int` the end index of the span (inclusive).
 
         Examples:
 
@@ -372,12 +371,11 @@ class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     r"""
     Constructs a "fast" DPRReader tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizerFast`] and
-    runs end-to-end tokenization: punctuation splitting and wordpiece. The difference is that is has three inputs
-    strings: question, titles and texts that are combined to be fed to the [`DPRReader`] model.
+    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    punctuation splitting and wordpiece. The difference is that is has three inputs strings: question, titles and texts
+    that are combined to be fed to the [`DPRReader`] model.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
 
     """
 

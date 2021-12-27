@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" T5 model configuration """
+""" T5 model configuration"""
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -33,13 +33,13 @@ T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class T5Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Model`] or a
-    [`TFT5Model`]. It is used to instantiate a T5 model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the T5 [t5-small](https://huggingface.co/t5-small) architecture.
+    This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
+    instantiate a T5 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the T5
+    [t5-small](https://huggingface.co/t5-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
@@ -48,14 +48,14 @@ class T5Config(PretrainedConfig):
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model // num_heads`.
+            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
+            num_heads`.
         d_ff (`int`, *optional*, defaults to 2048):
             Size of the intermediate feed forward layer in each `T5Block`.
         num_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder.
         num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not
-            set.
+            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
         num_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -68,8 +68,8 @@ class T5Config(PretrainedConfig):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses
-            the `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
+            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses the
+            `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """

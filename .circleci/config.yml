@@ -848,7 +848,7 @@ jobs:
             - run: isort --check-only examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
             - run: flake8 examples tests src utils
-#            - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
+            - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
 
     check_repository_consistency:
         working_directory: ~/transformers

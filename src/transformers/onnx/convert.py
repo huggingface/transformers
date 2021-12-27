@@ -224,9 +224,7 @@ def ensure_model_and_config_inputs_match(
 ) -> Tuple[bool, List[str]]:
     """
 
-    :param model_inputs:
-    :param config_inputs:
-    :return:
+    :param model_inputs: :param config_inputs: :return:
     """
     forward_parameters = signature(model.forward).parameters
     model_inputs_set = set(model_inputs)

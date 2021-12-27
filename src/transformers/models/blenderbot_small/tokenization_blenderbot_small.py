@@ -68,8 +68,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    the superclass for more information regarding methods.
 
     Args:
         vocab_file (`str`):
@@ -202,7 +202,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Converts a sequence of tokens  in a single string."""
+        """Converts a sequence of tokens in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 

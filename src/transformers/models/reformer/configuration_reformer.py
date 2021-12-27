@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Reformer model configuration """
+""" Reformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -29,11 +29,11 @@ REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ReformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ReformerModel`]. It is used to
-    instantiate a Reformer model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`ReformerModel`]. It is used to instantiate a
+    Reformer model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         attention_head_size (`int`, *optional*, defaults to 64):
@@ -42,8 +42,8 @@ class ReformerConfig(PretrainedConfig):
             List of attention layer types in ascending order. It can be chosen between a LSHSelfAttention layer
             (`"lsh"`) and a LocalSelfAttention layer (`"local"`).
 
-            For more information on LSHSelfAttention layer, see [LSH Self Attention](reformer#lsh-self-attention). For more information on LocalSelfAttention layer, see [Local Self
-            Attention](reformer#local-self-attention).
+            For more information on LSHSelfAttention layer, see [LSH Self Attention](reformer#lsh-self-attention). For
+            more information on LocalSelfAttention layer, see [Local Self Attention](reformer#local-self-attention).
         axial_pos_embds (`bool`, *optional*, defaults to `True`):
             Whether or not to use axial position embeddings. For more information on how axial position embeddings
             work, see [Axial Position Encodings](reformer#axial-positional-encodings).
@@ -54,26 +54,29 @@ class ReformerConfig(PretrainedConfig):
             The position dims of the axial position encodings. During training, the product of the position dims has to
             be equal to the sequence length.
 
-            For more information on how axial position embeddings work, see [Axial Position Encodings](reformer#axial-positional-encodings).
+            For more information on how axial position embeddings work, see [Axial Position
+            Encodings](reformer#axial-positional-encodings).
         axial_pos_embds_dim (`List[int]`, *optional*, defaults to `[64, 192]`):
             The embedding dims of the axial position encodings. The sum of the embedding dims has to be equal to the
             hidden size.
 
-            For more information on how axial position embeddings work, see [Axial Position Encodings](reformer#axial-positional-encodings).
+            For more information on how axial position embeddings work, see [Axial Position
+            Encodings](reformer#axial-positional-encodings).
         chunk_size_lm_head (`int`, *optional*, defaults to 0):
             The chunk size of the final language model feed forward head layer. A chunk size of 0 means that the feed
             forward layer is not chunked. A chunk size of n means that the feed forward layer processes n <
             sequence_length embeddings at a time.
 
-            For more information on feed forward chunking, see [How does Feed Forward Chunking work?](../glossary#feed-forward-chunking).
+            For more information on feed forward chunking, see [How does Feed Forward Chunking
+            work?](../glossary#feed-forward-chunking).
         eos_token_id (`int`, *optional*, defaults to 2):
             The token id for the end-of-sentence token.
         feed_forward_size (`int`, *optional*, defaults to 512):
             Dimensionality of the feed_forward layer in the residual attention block.
         hash_seed (`int`, *optional*):
-            Seed that can be used to make local sensitive hashing in `LSHSelfAttention` deterministic. This should
-            only be set for testing purposed. For evaluation and training purposes `hash_seed` should be left as
-            `None` to ensure fully random rotations in local sensitive hashing scheme.
+            Seed that can be used to make local sensitive hashing in `LSHSelfAttention` deterministic. This should only
+            be set for testing purposed. For evaluation and training purposes `hash_seed` should be left as `None` to
+            ensure fully random rotations in local sensitive hashing scheme.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the feed forward layer in the residual attention
             block. If string, `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -84,20 +87,18 @@ class ReformerConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether or not to use a causal mask in addition to the `attention_mask` passed to
-            [`ReformerModel`]. When using the Reformer for causal language modeling, this argument
-            should be set to `True`.
+            Whether or not to use a causal mask in addition to the `attention_mask` passed to [`ReformerModel`]. When
+            using the Reformer for causal language modeling, this argument should be set to `True`.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         local_chunk_length (`int`, *optional*, defaults to 64):
-            Length of chunk which attends to itself in `LocalSelfAttention`. Chunking reduces memory complexity
-            from sequence length x sequence length (self attention) to chunk length x chunk length x sequence length /
-            chunk length (chunked self attention).
+            Length of chunk which attends to itself in `LocalSelfAttention`. Chunking reduces memory complexity from
+            sequence length x sequence length (self attention) to chunk length x chunk length x sequence length / chunk
+            length (chunked self attention).
         local_num_chunks_before (`int`, *optional*, defaults to 1):
             Number of previous neighbouring chunks to attend to in `LocalSelfAttention` layer to itself.
         local_num_chunks_after (`int`, *optional*, defaults to 0):
-            Number of following neighbouring chunks to attend to in `LocalSelfAttention` layer in addition to
-            itself.
+            Number of following neighbouring chunks to attend to in `LocalSelfAttention` layer in addition to itself.
         local_attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities in `LocalSelfAttention`.
         lsh_attn_chunk_length (`int`, *optional*, defaults to 64):
@@ -117,16 +118,15 @@ class ReformerConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_buckets (`int` or `List[int]`, *optional*):
             Number of buckets, the key query vectors can be "hashed into" using the locality sensitive hashing scheme.
-            Each query key vector is hashed into a hash in `1, ..., num_buckets`. The number of buckets can also
-            be factorized into a list for improved memory complexity. In this case, each query key vector is hashed
-            into a hash in `1-1, 1-2, ..., num_buckets[0]-1, ..., num_buckets[0]-num_buckets[1]` if
-            `num_buckets` is factorized into two factors. The number of buckets (or the product the factors)
-            should approximately equal sequence length / lsh_chunk_length. If `num_buckets` not set, a good value
-            is calculated on the fly.
+            Each query key vector is hashed into a hash in `1, ..., num_buckets`. The number of buckets can also be
+            factorized into a list for improved memory complexity. In this case, each query key vector is hashed into a
+            hash in `1-1, 1-2, ..., num_buckets[0]-1, ..., num_buckets[0]-num_buckets[1]` if `num_buckets` is
+            factorized into two factors. The number of buckets (or the product the factors) should approximately equal
+            sequence length / lsh_chunk_length. If `num_buckets` not set, a good value is calculated on the fly.
         num_hashes (`int`, *optional*, defaults to 1):
             Number of hashing rounds (e.g., number of random rotations) in Local Sensitive Hashing scheme. The higher
-            `num_hashes`, the more accurate the `LSHSelfAttention` becomes, but also the more memory and time
-            intensive the hashing becomes.
+            `num_hashes`, the more accurate the `LSHSelfAttention` becomes, but also the more memory and time intensive
+            the hashing becomes.
         pad_token_id (`int`, *optional*, defaults to 0):
             The token id for the padding token.
         vocab_size (`int`, *optional*, defaults to 320):\

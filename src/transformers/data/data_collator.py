@@ -219,12 +219,12 @@ class DataCollatorWithPadding:
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence if provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              if provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -271,12 +271,12 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence if provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              if provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -526,12 +526,12 @@ class DataCollatorForSeq2Seq:
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence is provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              is provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -612,9 +612,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
         mlm (`bool`, *optional*, defaults to `True`):
-            Whether or not to use masked language modeling. If set to `False`, the labels are the same as the
-            inputs with the padding tokens ignored (by setting them to -100). Otherwise, the labels are -100 for
-            non-masked tokens and the value to predict for the masked token.
+            Whether or not to use masked language modeling. If set to `False`, the labels are the same as the inputs
+            with the padding tokens ignored (by setting them to -100). Otherwise, the labels are -100 for non-masked
+            tokens and the value to predict for the masked token.
         mlm_probability (`float`, *optional*, defaults to 0.15):
             The probability with which to (randomly) mask tokens in the input, when `mlm` is set to `True`.
         pad_to_multiple_of (`int`, *optional*):
@@ -625,9 +625,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     <Tip>
 
     For best performance, this data collator should be used with a dataset having items that are dictionaries or
-    BatchEncoding, with the `"special_tokens_mask"` key, as returned by a
-    [`PreTrainedTokenizer`] or a [`PreTrainedTokenizerFast`] with the
-    argument `return_special_tokens_mask=True`.
+    BatchEncoding, with the `"special_tokens_mask"` key, as returned by a [`PreTrainedTokenizer`] or a
+    [`PreTrainedTokenizerFast`] with the argument `return_special_tokens_mask=True`.
 
     </Tip>"""
 
@@ -852,10 +851,9 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
     <Tip>
 
-    This collator relies on details of the implementation of subword tokenization by
-    [`BertTokenizer`], specifically that subword tokens are prefixed with *##*. For tokenizers
-    that do not adhere to this scheme, this collator will produce an output that is roughly equivalent to
-    [`.DataCollatorForLanguageModeling`].
+    This collator relies on details of the implementation of subword tokenization by [`BertTokenizer`], specifically
+    that subword tokens are prefixed with *##*. For tokenizers that do not adhere to this scheme, this collator will
+    produce an output that is roughly equivalent to [`.DataCollatorForLanguageModeling`].
 
     </Tip>"""
 
@@ -1234,13 +1232,13 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
             0. Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
-            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be
-               masked)
+            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
             2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be
                masked
-            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length - span_length]` and mask tokens `start_index:start_index + span_length`
-            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in
-               the sequence to be processed), repeat from Step 1.
+            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length -
+               span_length]` and mask tokens `start_index:start_index + span_length`
+            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the
+               sequence to be processed), repeat from Step 1.
         """
         import torch
 
@@ -1331,13 +1329,13 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
             0. Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
-            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be
-               masked)
+            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
             2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be
                masked
-            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length - span_length]` and mask tokens `start_index:start_index + span_length`
-            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in
-               the sequence to be processed), repeat from Step 1.
+            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length -
+               span_length]` and mask tokens `start_index:start_index + span_length`
+            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the
+               sequence to be processed), repeat from Step 1.
         """
         from random import randint
 
@@ -1439,13 +1437,13 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
             0. Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
-            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be
-               masked)
+            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
             2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be
                masked
-            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length - span_length]` and mask tokens `start_index:start_index + span_length`
-            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in
-               the sequence to be processed), repeat from Step 1.
+            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length -
+               span_length]` and mask tokens `start_index:start_index + span_length`
+            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the
+               sequence to be processed), repeat from Step 1.
         """
         from random import randint
 
