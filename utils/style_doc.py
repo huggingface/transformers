@@ -26,9 +26,9 @@ import black
 
 BLACK_AVOID_PATTERNS = {
     "===PT-TF-SPLIT===": "### PT-TF-SPLIT",
-    "{processor_class}": "ProcessorClass",
-    "{model_class}": "ModelClass",
-    "{object_class}": "ObjectClass",
+    "{processor_class}": "FakeProcessorClass",
+    "{model_class}": "FakeModelClass",
+    "{object_class}": "FakeObjectClass",
 }
 
 
