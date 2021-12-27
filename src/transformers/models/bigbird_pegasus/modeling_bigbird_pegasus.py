@@ -2861,7 +2861,6 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with BartDecoderWrapper->BigBirdPegasusDecoderWrapper, BartForCausalLM->BigBirdPegasusForCausalLM, BartPreTrainedModel->BigBirdPegasusPreTrainedModel, BartTokenizer->PegasusTokenizer, 'facebook/bart-large'->"google/bigbird-pegasus-large-arxiv"
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
