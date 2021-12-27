@@ -454,7 +454,7 @@ Implications
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Transformers Models based on the `BERT (Bidirectional Encoder Representations from Transformers)
-<https://huggingface.co/bert-base-uncased>`_ architecture, or its variants such as `distilBERT
+<https://huggingface.co/docs/transformers/master/model_doc/bert>`_ architecture, or its variants such as `distilBERT
 <https://huggingface.co/docs/transformers/master/model_doc/distilbert>`_ and `roBERTa
 <https://huggingface.co/docs/transformers/master/model_doc/roberta>`_ will run best on Inf1 for non-generative tasks
 such as Extractive Question Answering, Sequence Classification, Token Classification. Alternatively, text generation
