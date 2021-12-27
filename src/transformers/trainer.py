@@ -2004,9 +2004,6 @@ class Trainer:
                     )
                     self.deepspeed.save_checkpoint(output_dir)
 
-            # save a deepspeed checkpoint as well (this is very fast)
-            self.deepspeed.save_checkpoint(output_dir)
-
         elif self.args.should_save:
             self._save(output_dir)
 
