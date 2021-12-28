@@ -655,7 +655,7 @@ class TFWav2Vec2SamePadLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFWav2Vec2FeatureExtractor(tf.keras.layers.Layer):
+class TFWav2Vec2FeatureEncoder(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -1107,7 +1107,7 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.feature_extractor = TFWav2Vec2FeatureExtractor(config, name="feature_extractor")
+        self.feature_extractor = TFWav2Vec2FeatureEncoder(config, name="feature_extractor")
         self.feature_projection = TFWav2Vec2FeatureProjection(config, name="feature_projection")
 
         if config.do_stable_layer_norm:

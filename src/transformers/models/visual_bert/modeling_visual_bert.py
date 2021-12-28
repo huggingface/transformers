@@ -84,7 +84,7 @@ class VisualBertEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-        # For Visual Features
+        # For Visual FeatureEncoder
         # Token type and position embedding for image features
         self.visual_token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.visual_position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -1571,7 +1571,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         )
         selected_positions = sequence_output.gather(1, expanded_region_to_phrase_positions)
 
-        # Visual Features = batch x visual_feature_length x dim
+        # Visual FeatureEncoder = batch x visual_feature_length x dim
         # This will need separate image and visual masks.
         visual_features = sequence_output[:, attention_mask.size(1) :]
 

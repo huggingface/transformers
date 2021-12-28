@@ -352,8 +352,8 @@ class UniSpeechSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Features with Wav2Vec2->UniSpeech
-class UniSpeechFeatures(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->UniSpeech
+class UniSpeechFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -981,7 +981,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UniSpeechEncoder, UniSpeechEncoderStableLayerNorm, UniSpeechFeatures)):
+        if isinstance(module, (UniSpeechEncoder, UniSpeechEncoderStableLayerNorm, UniSpeechFeatureEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -1050,7 +1050,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = UniSpeechFeatures(config)
+        self.feature_extractor = UniSpeechFeatureEncoder(config)
         self.feature_projection = UniSpeechFeatureProjection(config)
 
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
@@ -1199,12 +1199,12 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
-            "Please use the equivalent `freeze_feature_model` method instead.",
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
         self.unispeech.feature_extractor._freeze_parameters()
 
-    def freeze_feature_model(self):
+    def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
@@ -1376,12 +1376,12 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
-            "Please use the equivalent `freeze_feature_model` method instead.",
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
         self.unispeech.feature_extractor._freeze_parameters()
 
-    def freeze_feature_model(self):
+    def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
@@ -1497,12 +1497,12 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
-            "Please use the equivalent `freeze_feature_model` method instead.",
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
         self.unispeech.feature_extractor._freeze_parameters()
 
-    def freeze_feature_model(self):
+    def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.

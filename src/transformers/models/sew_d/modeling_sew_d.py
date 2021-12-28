@@ -388,8 +388,8 @@ class SEWDUpsampling(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Features with Wav2Vec2->SEWD
-class SEWDFeatures(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->SEWD
+class SEWDFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -1334,7 +1334,7 @@ class SEWDModel(SEWDPreTrainedModel):
     def __init__(self, config: SEWDConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = SEWDFeatures(config)
+        self.feature_extractor = SEWDFeatureEncoder(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.feature_layer_norm_eps)
 
         self.project_features = config.conv_dim[-1] != config.hidden_size
@@ -1485,12 +1485,12 @@ class SEWDForCTC(SEWDPreTrainedModel):
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
-            "Please use the equivalent `freeze_feature_model` method instead.",
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
         self.sew_d.feature_extractor._freeze_parameters()
 
-    def freeze_feature_model(self):
+    def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
@@ -1606,12 +1606,12 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
-            "Please use the equivalent `freeze_feature_model` method instead.",
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
         self.sew_d.feature_extractor._freeze_parameters()
 
-    def freeze_feature_model(self):
+    def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature extractor so that its parameter
         will not be updated during training.
