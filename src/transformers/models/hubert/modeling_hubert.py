@@ -987,10 +987,12 @@ class HubertModel(HubertPreTrainedModel):
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
         >>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
+
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
         ...     batch["speech"] = speech
         ...     return batch
+
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)

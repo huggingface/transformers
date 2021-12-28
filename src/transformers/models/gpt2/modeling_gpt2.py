@@ -631,12 +631,13 @@ PARALLELIZE_DOCSTRING = r"""
 
     ```python
     # Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
-    model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
-    device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-
-              1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-              2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-              3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
+    model = GPT2LMHeadModel.from_pretrained("gpt2-xl")
+    device_map = {
+        0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+        1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+        3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47],
+    }
     model.parallelize(device_map)
     ```
 """
@@ -647,14 +648,15 @@ DEPARALLELIZE_DOCSTRING = r"""
 
     ```python
     # On a 4 GPU machine with gpt2-large:
-    model = GPT2LMHeadModel.from_pretrained('gpt2-large')
-    device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
-
-                1: [8, 9, 10, 11, 12, 13, 14, 15],
-                2: [16, 17, 18, 19, 20, 21, 22, 23],
-                3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
-    model.parallelize(device_map) # Splits the model across several devices
-    model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    model = GPT2LMHeadModel.from_pretrained("gpt2-large")
+    device_map = {
+        0: [0, 1, 2, 3, 4, 5, 6, 7],
+        1: [8, 9, 10, 11, 12, 13, 14, 15],
+        2: [16, 17, 18, 19, 20, 21, 22, 23],
+        3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35],
+    }
+    model.parallelize(device_map)  # Splits the model across several devices
+    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
     ```
 """
 
@@ -1224,13 +1226,15 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         >>> import torch
         >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+        >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
 
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+        >>> embedding_layer = model.resize_token_embeddings(
+        ...     len(tokenizer)
+        >>> )  # Update the model embeddings with the new vocabulary size
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoded_choices = [tokenizer.encode(s) for s in choices]

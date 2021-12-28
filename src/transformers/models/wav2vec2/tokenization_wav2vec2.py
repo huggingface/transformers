@@ -298,11 +298,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         ```python
         # Let's see how to increase the vocabulary of Bert model and tokenizer
-        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained('facebook/wav2vec2-base-960h')
-        model = Wav2Vec2ForCTC.from_pretrained('facebook/wav2vec2-base-960h')
+        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+        model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
-        num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-        print('We have added', num_added_toks, 'tokens')
+        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
+        print("We have added", num_added_toks, "tokens")
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""

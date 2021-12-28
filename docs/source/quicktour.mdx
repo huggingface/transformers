@@ -82,8 +82,7 @@ The pipeline downloads and caches a default [pretrained model](https://huggingfa
 For more than one sentence, pass a list of sentences to the [`pipeline`] which returns a list of dictionaries:
 
 ```py
->>> results = classifier(["We are very happy to show you the 🤗 Transformers library.",
-...            "We hope you don't hate it."])
+>>> results = classifier(["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."])
 >>> for result in results:
 ...     print(f"label: {result["label"]}, with score: {round(result["score"], 4)}")
 label: POSITIVE, with score: 0.9998
@@ -204,7 +203,7 @@ Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addit
 ...     padding=True,
 ...     truncation=True,
 ...     max_length=512,
-...     return_tensors="pt"
+...     return_tensors="pt",
 ... )
 ===PT-TF-SPLIT===
 >>> tf_batch = tokenizer(
@@ -212,7 +211,7 @@ Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addit
 ...     padding=True,
 ...     truncation=True,
 ...     max_length=512,
-...     return_tensors="tf"
+...     return_tensors="tf",
 ... )
 ```
 

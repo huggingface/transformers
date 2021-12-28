@@ -1417,10 +1417,12 @@ class TFHubertModel(TFHubertPreTrainedModel):
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
         >>> model = TFHubertModel.from_pretrained("facebook/hubert-base-960h")
 
+
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
         ...     batch["speech"] = speech
         ...     return batch
+
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
@@ -1528,16 +1530,19 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
         >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-base-960h")
 
+
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
         ...     batch["speech"] = speech
         ...     return batch
 
+
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values # Batch size 1
-        >>> logits = model(input_values).logits >>> predicted_ids = tf.argmax(logits, axis=-1)
+        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
+        >>> logits = model(input_values).logits
+        >>> predicted_ids = tf.argmax(logits, axis=-1)
 
         >>> transcription = processor.decode(predicted_ids[0])
 

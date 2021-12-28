@@ -1082,8 +1082,8 @@ class BertForPreTraining(BertPreTrainedModel):
         >>> from transformers import BertTokenizer, BertForPreTraining
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = BertForPreTraining.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = BertForPreTraining.from_pretrained("bert-base-uncased")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1208,10 +1208,10 @@ class BertLMHeadModel(BertPreTrainedModel):
         >>> from transformers import BertTokenizer, BertLMHeadModel, BertConfig
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
         >>> config = BertConfig.from_pretrained("bert-base-cased")
         >>> config.is_decoder = True
-        >>> model = BertLMHeadModel.from_pretrained('bert-base-cased', config=config)
+        >>> model = BertLMHeadModel.from_pretrained("bert-base-cased", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1436,16 +1436,16 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> from transformers import BertTokenizer, BertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = BertForNextSentencePrediction.from_pretrained("bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
 
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```
         """
 

@@ -101,6 +101,7 @@ from transformers import pipeline
 
 pipe = pipeline("text-classification")
 
+
 def data():
     while True:
         # This could come from a dataset, a database, a queue or HTTP request
@@ -109,6 +110,7 @@ def data():
         # to use multiple threads to preprocess data. You can still have 1 thread that
         # does the preprocessing while the main runs the big inference
         yield "This is a test"
+
 
 for out in pipe(data()):
     print(out)
@@ -125,10 +127,10 @@ All pipelines can use batching. This will work
 whenever the pipeline uses its streaming ability (so when passing lists or `Dataset` or `generator`).
 
 ```python
-from transformers import pipeline                                                   
+from transformers import pipeline
 from transformers.pipelines.base import KeyDataset
 import datasets
-import tqdm                                                                         
+import tqdm
 
 dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
 pipe = pipeline("text-classification", device=0)
@@ -149,28 +151,28 @@ Example where it's mostly a speedup:
 </Tip>
 
 ```python
-from transformers import pipeline                                                   
-from torch.utils.data import Dataset                                                
-import tqdm                                                                         
+from transformers import pipeline
+from torch.utils.data import Dataset
+import tqdm
 
 
-pipe = pipeline("text-classification", device=0)                                    
+pipe = pipeline("text-classification", device=0)
 
 
-class MyDataset(Dataset):                                                           
-    def __len__(self):                                                              
-        return 5000                                                                 
+class MyDataset(Dataset):
+    def __len__(self):
+        return 5000
 
-    def __getitem__(self, i):                                                       
-        return "This is a test"                                                     
+    def __getitem__(self, i):
+        return "This is a test"
 
 
-dataset = MyDataset()   
+dataset = MyDataset()
 
 for batch_size in [1, 8, 64, 256]:
-    print("-" * 30)                                                                     
-    print(f"Streaming batch_size={batch_size}")    
-    for out in tqdm.tqdm(pipe(dataset, batch_size=batch_size), total=len(dataset)):              
+    print("-" * 30)
+    print(f"Streaming batch_size={batch_size}")
+    for out in tqdm.tqdm(pipe(dataset, batch_size=batch_size), total=len(dataset)):
         pass
 ```
 
@@ -194,15 +196,15 @@ Streaming batch_size=256
 Example where it's most a slowdown:
 
 ```python
-class MyDataset(Dataset):                                                           
-    def __len__(self):                                                              
-        return 5000                                                                 
+class MyDataset(Dataset):
+    def __len__(self):
+        return 5000
 
-    def __getitem__(self, i):                                                       
-        if i % 64 == 0:                                                          
-            n = 100                                                              
-        else:                                                                    
-            n = 1                                                                
+    def __getitem__(self, i):
+        if i % 64 == 0:
+            n = 100
+        else:
+            n = 1
         return "This is a test" * n
 ```
 
@@ -298,10 +300,11 @@ If you want to try simply you can:
 
 ```python
 class MyPipeline(TextClassificationPipeline):
-    def postprocess(...):
-        ...
+    def postprocess():
+        # Your code goes here
         scores = scores * 100
-        ...
+        # And here
+
 
 my_pipeline = MyPipeline(model=model, tokenizer=tokenizer, ...)
 # or if you use *pipeline* function, then:

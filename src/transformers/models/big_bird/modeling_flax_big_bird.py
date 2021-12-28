@@ -1644,8 +1644,8 @@ FLAX_BIG_BIRD_FOR_PRETRAINING_DOCSTRING = """
     ```python
     >>> from transformers import BigBirdTokenizer, FlaxBigBirdForPreTraining
 
-    >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
-    >>> model = FlaxBigBirdForPreTraining.from_pretrained('google/bigbird-roberta-base')
+    >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+    >>> model = FlaxBigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
     >>> outputs = model(**inputs)

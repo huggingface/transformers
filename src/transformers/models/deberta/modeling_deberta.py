@@ -90,10 +90,10 @@ class XSoftmax(torch.autograd.Function):
     >>> from transformers.models.deberta.modeling_deberta import XSoftmax
 
     >>> # Make a tensor
-    >>> x = torch.randn([4,20,100])
+    >>> x = torch.randn([4, 20, 100])
 
     >>> # Create a mask
-    >>> mask = (x>0).int()
+    >>> mask = (x > 0).int()
 
     >>> # Specify the dimension to apply softmax
     >>> dim = -1
