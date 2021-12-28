@@ -57,7 +57,8 @@ pip install tensorflow
 
 ```py
 >>> from transformers import pipeline
->>> classifier = pipeline('sentiment-analysis')
+
+>>> classifier = pipeline("sentiment-analysis")
 ```
 
 When typing this command for the first time, a pretrained model and its tokenizer are downloaded and cached. We will
@@ -67,7 +68,7 @@ make them readable. For instance:
 
 
 ```py
->>> classifier('We are very happy to show you the 🤗 Transformers library.')
+>>> classifier("We are very happy to show you the 🤗 Transformers library.")
 [{'label': 'POSITIVE', 'score': 0.9998}]
 ```
 
@@ -75,8 +76,7 @@ That's encouraging! You can use it on a list of sentences, which will be preproc
 a list of dictionaries like this one:
 
 ```py
->>> results = classifier(["We are very happy to show you the 🤗 Transformers library.",
-...            "We hope you don't hate it."])
+>>> results = classifier(["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."])
 >>> for result in results:
 ...     print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
 label: POSITIVE, with score: 0.9998
@@ -102,7 +102,7 @@ see how we can use it.
 You can directly pass the name of the model to use to [`pipeline`]:
 
 ```py
->>> classifier = pipeline('sentiment-analysis', model="nlptown/bert-base-multilingual-uncased-sentiment")
+>>> classifier = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 ```
 
 This classifier can now deal with texts in English, French, but also Dutch, German, Italian and Spanish! You can also
@@ -125,13 +125,13 @@ any other model from the model hub):
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
->>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
+>>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 ===PT-TF-SPLIT===
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> # This model only exists in PyTorch, so we use the _from_pt_ flag to import that model in TensorFlow.
 >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
->>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
+>>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 ```
 
 If you don't find a model that has been pretrained on some data similar to yours, you will need to fine-tune a
@@ -150,11 +150,13 @@ As we saw, the model and tokenizer are created using the `from_pretrained` metho
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
 >>> model_name = "distilbert-base-uncased-finetuned-sst-2-english"
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ===PT-TF-SPLIT===
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+
 >>> model_name = "distilbert-base-uncased-finetuned-sst-2-english"
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -199,7 +201,7 @@ and get tensors back. You can specify all of that to the tokenizer:
 ...     padding=True,
 ...     truncation=True,
 ...     max_length=512,
-...     return_tensors="pt"
+...     return_tensors="pt",
 ... )
 ===PT-TF-SPLIT===
 >>> tf_batch = tokenizer(
@@ -207,7 +209,7 @@ and get tensors back. You can specify all of that to the tokenizer:
 ...     padding=True,
 ...     truncation=True,
 ...     max_length=512,
-...     return_tensors="tf"
+...     return_tensors="tf",
 ... )
 ```
 
@@ -267,9 +269,11 @@ Let's apply the SoftMax activation to get predictions.
 
 ```py
 >>> from torch import nn
+
 >>> pt_predictions = nn.functional.softmax(pt_outputs.logits, dim=-1)
 ===PT-TF-SPLIT===
 >>> import tensorflow as tf
+
 >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
 ```
 
@@ -291,13 +295,15 @@ attribute:
 
 ```py
 >>> import torch
->>> pt_outputs = pt_model(**pt_batch, labels = torch.tensor([1, 0]))
+
+>>> pt_outputs = pt_model(**pt_batch, labels=torch.tensor([1, 0]))
 >>> print(pt_outputs)
 SequenceClassifierOutput(loss=tensor(0.3167, grad_fn=<NllLossBackward>), logits=tensor([[-4.0833,  4.3364],
         [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
 ===PT-TF-SPLIT===
 >>> import tensorflow as tf
->>> tf_outputs = tf_model(tf_batch, labels = tf.constant([1, 0]))
+
+>>> tf_outputs = tf_model(tf_batch, labels=tf.constant([1, 0]))
 >>> print(tf_outputs)
 TFSequenceClassifierOutput(loss=<tf.Tensor: shape=(2,), dtype=float32, numpy=array([2.2051e-04, 6.3326e-01], dtype=float32)>, logits=<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
 array([[-4.0833 ,  4.3364  ],
@@ -317,11 +323,11 @@ case the attributes not set (that have `None` values) are ignored.
 Once your model is fine-tuned, you can save it with its tokenizer in the following way:
 
 ```py
->>> pt_save_directory = './pt_save_pretrained'
+>>> pt_save_directory = "./pt_save_pretrained"
 >>> tokenizer.save_pretrained(pt_save_directory)
 >>> pt_model.save_pretrained(pt_save_directory)
 ===PT-TF-SPLIT===
->>> tf_save_directory = './tf_save_pretrained'
+>>> tf_save_directory = "./tf_save_pretrained"
 >>> tokenizer.save_pretrained(tf_save_directory)
 >>> tf_model.save_pretrained(tf_save_directory)
 ```
@@ -343,10 +349,12 @@ Then, use the corresponding Auto class to load it like this:
 
 ```py
 >>> from transformers import AutoModel
+
 >>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
 >>> pt_model = AutoModel.from_pretrained(tf_save_directory, from_tf=True)
 ===PT-TF-SPLIT===
 >>> from transformers import TFAutoModel
+
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> tf_model = TFAutoModel.from_pretrained(pt_save_directory, from_pt=True)
 ```
@@ -356,11 +364,11 @@ Lastly, you can also ask the model to return all hidden states and all attention
 
 ```py
 >>> pt_outputs = pt_model(**pt_batch, output_hidden_states=True, output_attentions=True)
->>> all_hidden_states  = pt_outputs.hidden_states 
+>>> all_hidden_states = pt_outputs.hidden_states
 >>> all_attentions = pt_outputs.attentions
 ===PT-TF-SPLIT===
 >>> tf_outputs = tf_model(tf_batch, output_hidden_states=True, output_attentions=True)
->>> all_hidden_states =  tf_outputs.hidden_states
+>>> all_hidden_states = tf_outputs.hidden_states
 >>> all_attentions = tf_outputs.attentions
 ```
 
@@ -376,11 +384,13 @@ directly instantiate model and tokenizer without the auto magic:
 
 ```py
 >>> from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+
 >>> model_name = "distilbert-base-uncased-finetuned-sst-2-english"
 >>> model = DistilBertForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = DistilBertTokenizer.from_pretrained(model_name)
 ===PT-TF-SPLIT===
 >>> from transformers import DistilBertTokenizer, TFDistilBertForSequenceClassification
+
 >>> model_name = "distilbert-base-uncased-finetuned-sst-2-english"
 >>> model = TFDistilBertForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = DistilBertTokenizer.from_pretrained(model_name)
@@ -401,13 +411,15 @@ the model from scratch. Therefore, we instantiate the model from a configuration
 
 ```py
 >>> from transformers import DistilBertConfig, DistilBertTokenizer, DistilBertForSequenceClassification
->>> config = DistilBertConfig(n_heads=8, dim=512, hidden_dim=4*512)
->>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+
+>>> config = DistilBertConfig(n_heads=8, dim=512, hidden_dim=4 * 512)
+>>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 >>> model = DistilBertForSequenceClassification(config)
 ===PT-TF-SPLIT===
 >>> from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForSequenceClassification
->>> config = DistilBertConfig(n_heads=8, dim=512, hidden_dim=4*512)
->>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+
+>>> config = DistilBertConfig(n_heads=8, dim=512, hidden_dim=4 * 512)
+>>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 >>> model = TFDistilBertForSequenceClassification(config)
 ```
 
@@ -419,11 +431,13 @@ configuration appropriately:
 
 ```py
 >>> from transformers import DistilBertConfig, DistilBertTokenizer, DistilBertForSequenceClassification
+
 >>> model_name = "distilbert-base-uncased"
 >>> model = DistilBertForSequenceClassification.from_pretrained(model_name, num_labels=10)
 >>> tokenizer = DistilBertTokenizer.from_pretrained(model_name)
 ===PT-TF-SPLIT===
 >>> from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForSequenceClassification
+
 >>> model_name = "distilbert-base-uncased"
 >>> model = TFDistilBertForSequenceClassification.from_pretrained(model_name, num_labels=10)
 >>> tokenizer = DistilBertTokenizer.from_pretrained(model_name)

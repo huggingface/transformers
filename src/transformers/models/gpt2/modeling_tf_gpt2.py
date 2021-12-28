@@ -1033,13 +1033,15 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import GPT2Tokenizer, TFGPT2DoubleHeadsModel
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = TFGPT2DoubleHeadsModel.from_pretrained('gpt2')
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> model = TFGPT2DoubleHeadsModel.from_pretrained("gpt2")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+        >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
 
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+        >>> embedding_layer = model.resize_token_embeddings(
+        ...     len(tokenizer)
+        >>> )  # Update the model embeddings with the new vocabulary size
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoded_choices = [tokenizer.encode(s) for s in choices]

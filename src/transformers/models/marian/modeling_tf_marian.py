@@ -562,10 +562,11 @@ MARIAN_GENERATION_EXAMPLE = r"""
         ```python
         >>> from transformers import MarianTokenizer, TFMarianMTModel
         >>> from typing import List
-        >>> src = 'fr'  # source language
-        >>> trg = 'en'  # target language
+
+        >>> src = "fr"  # source language
+        >>> trg = "en"  # target language
         >>> sample_text = "où est l'arrêt de bus ?"
-        >>> model_name = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+        >>> model_name = f"Helsinki-NLP/opus-mt-{src}-{trg}"
 
         >>> model = TFMarianMTModel.from_pretrained(model_name)
         >>> tokenizer = MarianTokenizer.from_pretrained(model_name)

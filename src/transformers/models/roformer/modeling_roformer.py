@@ -1131,10 +1131,10 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
         >>> from transformers import RoFormerTokenizer, RoFormerForCausalLM, RoFormerConfig
         >>> import torch
 
-        >>> tokenizer = RoFormerTokenizer.from_pretrained('junnyu/roformer_chinese_base')
+        >>> tokenizer = RoFormerTokenizer.from_pretrained("junnyu/roformer_chinese_base")
         >>> config = RoFormerConfig.from_pretrained("junnyu/roformer_chinese_base")
         >>> config.is_decoder = True
-        >>> model = RoFormerForCausalLM.from_pretrained('junnyu/roformer_chinese_base', config=config)
+        >>> model = RoFormerForCausalLM.from_pretrained("junnyu/roformer_chinese_base", config=config)
 
         >>> inputs = tokenizer("今天天气非常好。", return_tensors="pt")
         >>> outputs = model(**inputs)

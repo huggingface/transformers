@@ -488,15 +488,20 @@ class PretrainedConfig(PushToHubMixin):
         ```python
         # We can't instantiate directly the base class *PretrainedConfig* so let's show the examples on a
         # derived class: BertConfig
-        config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from huggingface.co and cache.
-        config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using *save_pretrained('./test/saved_model/')*
-        config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
-        config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+        config = BertConfig.from_pretrained(
+            "bert-base-uncased"
+        )  # Download configuration from huggingface.co and cache.
+        config = BertConfig.from_pretrained(
+            "./test/saved_model/"
+        )  # E.g. config (or model) was saved using *save_pretrained('./test/saved_model/')*
+        config = BertConfig.from_pretrained("./test/saved_model/my_configuration.json")
+        config = BertConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
         assert config.output_attentions == True
-        config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True,
-                                                   foo=False, return_unused_kwargs=True)
+        config, unused_kwargs = BertConfig.from_pretrained(
+            "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        )
         assert config.output_attentions == True
-        assert unused_kwargs == {'foo': False}
+        assert unused_kwargs == {"foo": False}
         ```"""
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:

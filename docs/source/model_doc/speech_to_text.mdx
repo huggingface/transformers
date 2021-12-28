@@ -52,10 +52,12 @@ be installed as follows: `apt install libsndfile1-dev`
 >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
 >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
+
 >>> def map_to_array(batch):
 ...     speech, _ = sf.read(batch["file"])
 ...     batch["speech"] = speech
 ...     return batch
+
 
 >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> ds = ds.map(map_to_array)
@@ -83,16 +85,22 @@ be installed as follows: `apt install libsndfile1-dev`
 >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
+
 >>> def map_to_array(batch):
 ...     speech, _ = sf.read(batch["file"])
 ...     batch["speech"] = speech
 ...     return batch
 
+
 >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> ds = ds.map(map_to_array)
 
 >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
->>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask], forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"])
+>>> generated_ids = model.generate(
+...     input_ids=inputs["input_features"],
+...     attention_mask=inputs["attention_mask"],
+...     forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"],
+... )
 
 >>> translation = processor.batch_decode(generated_ids)
 ```

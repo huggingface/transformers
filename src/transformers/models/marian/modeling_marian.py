@@ -531,10 +531,11 @@ MARIAN_GENERATION_EXAMPLE = r"""
         ```python
         >>> from transformers import MarianTokenizer, MarianMTModel
         >>> from typing import List
-        >>> src = 'fr'  # source language
-        >>> trg = 'en'  # target language
+
+        >>> src = "fr"  # source language
+        >>> trg = "en"  # target language
         >>> sample_text = "où est l'arrêt de bus ?"
-        >>> model_name = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+        >>> model_name = f"Helsinki-NLP/opus-mt-{src}-{trg}"
 
         >>> model = MarianMTModel.from_pretrained(model_name)
         >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
@@ -1132,12 +1133,17 @@ class MarianModel(MarianPreTrainedModel):
         ```python
         >>> from transformers import MarianTokenizer, MarianModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-        >>> model = MarianModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+        >>> model = MarianModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
-        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-        >>> decoder_input_ids = tokenizer("<pad> Studien haben gezeigt dass es hilfreich ist einen Hund zu besitzen",
-        ... return_tensors="pt", add_special_tokens=False).input_ids  # Batch size 1
+        >>> input_ids = tokenizer(
+        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+        >>> ).input_ids  # Batch size 1
+        >>> decoder_input_ids = tokenizer(
+        ...     "<pad> Studien haben gezeigt dass es hilfreich ist einen Hund zu besitzen",
+        ...     return_tensors="pt",
+        ...     add_special_tokens=False,
+        >>> ).input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
@@ -1513,8 +1519,8 @@ class MarianForCausalLM(MarianPreTrainedModel):
         ```python
         >>> from transformers import MarianTokenizer, MarianForCausalLM
 
-        >>> tokenizer = MarianTokenizer.from_pretrained('facebook/bart-large')
-        >>> model = MarianForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+        >>> tokenizer = MarianTokenizer.from_pretrained("facebook/bart-large")
+        >>> model = MarianForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
