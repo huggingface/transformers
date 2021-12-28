@@ -49,8 +49,8 @@ class HerbertTokenizer(XLMTokenizer):
 
     - Such pretokenized input is BPE subtokenized
 
-    This tokenizer inherits from [`XLMTokenizer`] which contains most of the methods. Users should
-    refer to the superclass for more information regarding methods.
+    This tokenizer inherits from [`XLMTokenizer`] which contains most of the methods. Users should refer to the
+    superclass for more information regarding methods.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
