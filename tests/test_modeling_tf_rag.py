@@ -44,7 +44,7 @@ TOLERANCE = 1e-3
 def require_retrieval(test_case):
     """
     Decorator marking a test that requires a set of dependencies necessary for pefrorm retrieval with
-    :class:`~transformers.RagRetriever`.
+    [`RagRetriever`].
 
     These tests are skipped when respective libraries are not installed.
 
