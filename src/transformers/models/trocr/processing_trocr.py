@@ -30,9 +30,8 @@ class TrOCRProcessor:
     r"""
     Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
 
-    [`TrOCRProcessor`] offers all the functionalities of [`AutoFeatureExtractor`]
-    and [`RobertaTokenizer`, `XLMRobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and
-    [`~TrOCRProcessor.decode`] for more information.
+    [`TrOCRProcessor`] offers all the functionalities of [`AutoFeatureExtractor`] and [`RobertaTokenizer`, `XLMRobertaTokenizer`]. See the
+    [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for more information.
 
     Args:
         feature_extractor ([`AutoFeatureExtractor`]):
