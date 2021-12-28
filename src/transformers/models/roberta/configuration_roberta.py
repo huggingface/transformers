@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RoBERTa configuration """
+""" RoBERTa configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -36,16 +36,15 @@ ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RobertaConfig(BertConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RobertaModel`] or a
-    [`TFRobertaModel`]. It is used to instantiate a RoBERTa model according to the specified
-    arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`RobertaModel`] or a [`TFRobertaModel`]. It is
+    used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
 
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
-    The [`RobertaConfig`] class directly inherits [`BertConfig`]. It reuses the
-    same defaults. Please check the parent class for more information.
+    The [`RobertaConfig`] class directly inherits [`BertConfig`]. It reuses the same defaults. Please check the parent
+    class for more information.
 
     Examples:
 

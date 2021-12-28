@@ -37,8 +37,8 @@ class ClassificationFunction(ExplicitEnum):
         function_to_apply (`str`, *optional*, defaults to `"default"`):
             The function to apply to the model outputs in order to retrieve the scores. Accepts four different values:
 
-            - `"default"`: if the model has a single label, will apply the sigmoid function on the output. If the
-              model has several labels, will apply the softmax function on the output.
+            - `"default"`: if the model has a single label, will apply the sigmoid function on the output. If the model
+              has several labels, will apply the softmax function on the output.
             - `"sigmoid"`: Applies the sigmoid function on the output.
             - `"softmax"`: Applies the softmax function on the output.
             - `"none"`: Does not apply any function on the output.
@@ -49,15 +49,15 @@ class TextClassificationPipeline(Pipeline):
     Text classification pipeline using any `ModelForSequenceClassification`. See the [sequence classification
     examples](../task_summary#sequence-classification) for more information.
 
-    This text classification pipeline can currently be loaded from [`pipeline`] using the following
-    task identifier: `"sentiment-analysis"` (for classifying sequences according to positive or negative
-    sentiments).
+    This text classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"sentiment-analysis"` (for classifying sequences according to positive or negative sentiments).
 
-    If multiple classification labels are available (`model.config.num_labels >= 2`), the pipeline will run a
-    softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
+    If multiple classification labels are available (`model.config.num_labels >= 2`), the pipeline will run a softmax
+    over the results. If there is a single label, the pipeline will run a sigmoid over the result.
 
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task. See
-    the up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-classification).
+    the up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=text-classification).
     """
 
     return_all_scores = False

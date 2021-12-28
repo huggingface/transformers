@@ -348,7 +348,8 @@ def convert(
         output: The path where the ONNX graph will be stored
         opset: The actual version of the ONNX operator set to use
         tokenizer: The name of the model to load for the pipeline, default to the model's name if not provided
-        use_external_format: Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
+        use_external_format:
+            Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
         pipeline_name: The kind of pipeline to instantiate (ner, question-answering, etc.)
         model_kwargs: Keyword arguments to be forwarded to the model constructor
 

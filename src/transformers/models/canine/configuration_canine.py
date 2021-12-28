@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CANINE model configuration """
+""" CANINE model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,12 +28,13 @@ CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CanineConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CanineModel`]. It is used to
-    instantiate an CANINE model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CANINE [google/canine-s](https://huggingface.co/google/canine-s) architecture.
+    This is the configuration class to store the configuration of a [`CanineModel`]. It is used to instantiate an
+    CANINE model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the CANINE
+    [google/canine-s](https://huggingface.co/google/canine-s) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -46,8 +47,8 @@ class CanineConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoders.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoders, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):

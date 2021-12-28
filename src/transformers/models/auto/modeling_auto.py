@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class. """
+""" Auto Model class."""
 
 import warnings
 from collections import OrderedDict
@@ -218,6 +218,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("xlnet", "XLNetLMHeadModel"),
         ("xlm", "XLMWithLMHeadModel"),
+        ("electra", "ElectraForCausalLM"),
         ("ctrl", "CTRLLMHeadModel"),
         ("reformer", "ReformerModelWithLMHead"),
         ("bert-generation", "BertGenerationDecoder"),

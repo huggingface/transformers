@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLNet configuration """
+""" XLNet configuration"""
 
 import warnings
 
@@ -31,19 +31,18 @@ XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class XLNetConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`XLNetModel`] or a
-    [`TFXLNetModel`]. It is used to instantiate a XLNet model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the [xlnet-large-cased](https://huggingface.co/xlnet-large-cased) architecture.
+    This is the configuration class to store the configuration of a [`XLNetModel`] or a [`TFXLNetModel`]. It is used to
+    instantiate a XLNet model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the
+    [xlnet-large-cased](https://huggingface.co/xlnet-large-cased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the XLNet model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`XLNetModel`] or
-            [`TFXLNetModel`].
+            `inputs_ids` passed when calling [`XLNetModel`] or [`TFXLNetModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         n_layer (`int`, *optional*, defaults to 24):
@@ -53,8 +52,8 @@ class XLNetConfig(PretrainedConfig):
         d_inner (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         ff_activation (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the If string, `"gelu"`, `"relu"`,
-            `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the If string, `"gelu"`, `"relu"`, `"silu"` and
+            `"gelu_new"` are supported.
         untie_r (`bool`, *optional*, defaults to `True`):
             Whether or not to untie relative position biases
         attn_type (`str`, *optional*, defaults to `"bi"`):
@@ -67,12 +66,13 @@ class XLNetConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         mem_len (`int` or `None`, *optional*):
             The number of tokens to cache. The key/value pairs that have already been pre-computed in a previous
-            forward pass won't be re-computed. See the [quickstart](https://huggingface.co/transformers/quickstart.html#using-the-past) for more information.
+            forward pass won't be re-computed. See the
+            [quickstart](https://huggingface.co/transformers/quickstart.html#using-the-past) for more information.
         reuse_len (`int`, *optional*):
             The number of tokens in the current batch to be cached and reused in the future.
         bi_data (`bool`, *optional*, defaults to `False`):
-            Whether or not to use bidirectional input pipeline. Usually set to `True` during pretraining and
-            `False` during finetuning.
+            Whether or not to use bidirectional input pipeline. Usually set to `True` during pretraining and `False`
+            during finetuning.
         clamp_len (`int`, *optional*, defaults to -1):
             Clamp all relative distances larger than clamp_len. Setting this attribute to -1 means no clamping.
         same_length (`bool`, *optional*, defaults to `False`):
@@ -114,10 +114,12 @@ class XLNetConfig(PretrainedConfig):
 
             <Tip>
 
-            For pretraining, it is recommended to set `use_mems_train` to `True`. For fine-tuning, it is
-            recommended to set `use_mems_train` to `False` as discussed [here](https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587). If `use_mems_train` is set
-            to `True`, one has to make sure that the train batches are correctly pre-processed, *e.g.*
-            `batch_1 = [[This line is], [This is the]]` and `batch_2 = [[ the first line], [ second line]]` and that all batches are of equal size.
+            For pretraining, it is recommended to set `use_mems_train` to `True`. For fine-tuning, it is recommended to
+            set `use_mems_train` to `False` as discussed
+            [here](https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587). If `use_mems_train` is set to
+            `True`, one has to make sure that the train batches are correctly pre-processed, *e.g.* `batch_1 = [[This
+            line is], [This is the]]` and `batch_2 = [[ the first line], [ second line]]` and that all batches are of
+            equal size.
 
             </Tip>
 
