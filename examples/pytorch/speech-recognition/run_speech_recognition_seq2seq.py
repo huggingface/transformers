@@ -91,8 +91,8 @@ class ModelArguments:
             "with private models)."
         },
     )
-    freeze_feature_extractor: Optional[bool] = field(
-        default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+    freeze_feature_encoder: bool = field(
+        default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
 
 
@@ -102,7 +102,7 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    dataset_name: Optional[str] = field(
+    dataset_name: str = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
     dataset_config_name: Optional[str] = field(
@@ -133,24 +133,24 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    audio_column_name: Optional[str] = field(
+    audio_column_name: str = field(
         default="audio",
         metadata={"help": "The name of the dataset column containing the audio data. Defaults to 'audio'"},
     )
-    text_column_name: Optional[str] = field(
+    text_column_name: str = field(
         default="text",
         metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
     )
-    max_duration_in_seconds: Optional[float] = field(
+    max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
             "help": "Truncate audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
         },
     )
-    min_duration_in_seconds: Optional[float] = field(
+    min_duration_in_seconds: float = field(
         default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
-    preprocessing_only: Optional[bool] = field(
+    preprocessing_only: bool = field(
         default=False,
         metadata={
             "help": "Whether to only do data preprocessing and skip training. "
@@ -159,19 +159,19 @@ class DataTrainingArguments:
             "so that the cached datasets can consequently be loaded in distributed training"
         },
     )
-    train_split_name: Optional[str] = field(
+    train_split_name: str = field(
         default="train",
         metadata={
             "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
         },
     )
-    eval_split_name: Optional[str] = field(
+    eval_split_name: str = field(
         default="test",
         metadata={
             "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
         },
     )
-    do_lower_case: Optional[bool] = field(
+    do_lower_case: bool = field(
         default=True,
         metadata={"help": "Whether the target text should be lower cased."},
     )
@@ -335,8 +335,8 @@ def main():
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
-    if model_args.freeze_feature_extractor:
-        model.freeze_feature_extractor()
+    if model_args.freeze_feature_encoder:
+        model.freeze_feature_encoder()
 
     # 6. Resample speech dataset if necassary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate

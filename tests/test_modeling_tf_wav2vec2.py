@@ -194,7 +194,7 @@ class TFWav2Vec2ModelTester:
         model = TFWav2Vec2ForCTC(config)
 
         # freeze feature encoder
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
         input_values = input_values[:3]
 
