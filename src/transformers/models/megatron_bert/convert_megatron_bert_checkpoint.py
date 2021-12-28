@@ -16,6 +16,18 @@
 
 ####################################################################################################
 
+#
+# Note: If when running this conversion script you're getting an exception:
+#     ModuleNotFoundError: No module named 'megatron.model.enums'
+# you need to tell python where to find the clone of Megatron-LM, e.g.:
+#
+# cd /tmp
+# git clone https://github.com/NVIDIA/Megatron-LM
+# PYTHONPATH=/tmp/Megatron-LM python src/transformers/models/megatron_bert/convert_megatron_bert_checkpoint.py ...
+#
+# if you already have it cloned elsewhere, simply adjust the path to the existing path
+#
+
 import argparse
 import json
 import os
