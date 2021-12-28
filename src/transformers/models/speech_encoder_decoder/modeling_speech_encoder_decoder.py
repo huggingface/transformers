@@ -265,12 +265,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
 
-    def freeze_feature_extractor(self):
+    def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor of the speech encoder so
+        Calling this function will disable the gradient computation for the feature encoder of the speech encoder so
         that its parameters will not be updated during training.
         """
-        self.encoder.freeze_feature_extractor()
+        self.encoder.freeze_feature_encoder()
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
