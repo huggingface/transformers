@@ -1174,14 +1174,14 @@ class WavLMModel(WavLMPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wavlm.feature_extractor._freeze_parameters()
+        self.feature_extractor._freeze_parameters()
 
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.wavlm.feature_extractor._freeze_parameters()
+        self.feature_extractor._freeze_parameters()
 
     def _mask_hidden_states(
         self,
