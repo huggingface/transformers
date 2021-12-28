@@ -682,6 +682,17 @@ class TFWav2Vec2FeatureEncoder(tf.keras.layers.Layer):
         return hidden_states
 
 
+class TFWav2Vec2FeatureExtractor(TFWav2Vec2FeatureEncoder):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
+
+
 class TFWav2Vec2FeatureProjection(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs):
         super().__init__(**kwargs)
