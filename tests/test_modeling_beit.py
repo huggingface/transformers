@@ -435,8 +435,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
         bool_masked_pos = torch.ones((1, 196), dtype=torch.bool).to(torch_device)
 
         # forward pass
-	with torch.no_grad():
-        	outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
         logits = outputs.logits
 
         # verify the logits
@@ -459,7 +459,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-		outputs = model(**inputs)
+            outputs = model(**inputs)
         logits = outputs.logits
 
         # verify the logits
@@ -485,7 +485,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-		outputs = model(**inputs)
+            outputs = model(**inputs)
         logits = outputs.logits
 
         # verify the logits
@@ -512,7 +512,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-		outputs = model(**inputs)
+            outputs = model(**inputs)
         logits = outputs.logits
 
         # verify the logits
