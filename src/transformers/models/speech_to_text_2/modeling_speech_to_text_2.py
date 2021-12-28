@@ -859,12 +859,18 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechEncoderDecoderModel, Speech2Text2ForCausalLM, Wav2Vec2Model, Speech2Text2Config, Wav2Vec2Config
+        >>> from transformers import (
+        ...     SpeechEncoderDecoderModel,
+        ...     Speech2Text2ForCausalLM,
+        ...     Wav2Vec2Model,
+        ...     Speech2Text2Config,
+        ...     Wav2Vec2Config,
+        ... )
 
         >>> encoder = Wav2Vec2Model(Wav2Vec2Config())
         >>> decoder = Speech2Text2ForCausalLM(Speech2Text2Config())
-
         # init speech2text model
+
         >>> model = SpeechEncoderDecoderModel(encoder=encoder, decoder=decoder)
         ```"""
 

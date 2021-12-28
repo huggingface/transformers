@@ -1779,8 +1779,8 @@ class BartForCausalLM(BartPretrainedModel):
         ```python
         >>> from transformers import BartTokenizer, BartForCausalLM
 
-        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-        >>> model = BartForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+        >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
+        >>> model = BartForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -280,6 +280,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
         ```python
         >>> from transformers import TFEncoderDecoderModel
+
         >>> model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
         ```"""
 
@@ -347,8 +348,9 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
         ```python
         >>> from transformers import TFEncoderDecoderModel
+
         >>> # initialize a bert2gpt2 from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'gpt2')
+        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "gpt2")
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./bert2gpt2")
         >>> # load fine-tuned model
@@ -486,12 +488,14 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         >>> from transformers import TFEncoderDecoderModel, BertTokenizer
 
         >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-cased', 'gpt2')
+        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
         >>> # forward
-        >>> input_ids = tokenizer.encode("Hello, my dog is cute", add_special_tokens=True, return_tensors='tf')  # Batch size 1
+        >>> input_ids = tokenizer.encode(
+        ...     "Hello, my dog is cute", add_special_tokens=True, return_tensors="tf"
+        >>> )  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
         >>> # training

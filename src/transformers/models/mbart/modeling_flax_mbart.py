@@ -1046,11 +1046,11 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
 
-        >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+        >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
+        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1112,11 +1112,11 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
 
-        >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+        >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
+        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1379,11 +1379,11 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
         ```python
         >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
 
-        >>> model = FlaxMBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+        >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
+        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id

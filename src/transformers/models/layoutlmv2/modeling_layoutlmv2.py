@@ -827,8 +827,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         >>> from transformers import LayoutLMv2Processor, LayoutLMv2Model
         >>> from PIL import Image
 
-        >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
-        >>> model = LayoutLMv2Model.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
@@ -995,8 +995,8 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         >>> from PIL import Image
         >>> import torch
 
-        >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
-        >>> model = LayoutLMv2ForSequenceClassification.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> model = LayoutLMv2ForSequenceClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
@@ -1161,12 +1161,12 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification
         >>> from PIL import Image
 
-        >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased', revision="no_ocr")
-        >>> model = LayoutLMv2ForTokenClassification.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+        >>> model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
         >>> words = ["hello", "world"]
-        >>> boxes = [[1, 2, 3, 4], [5, 6, 7, 8]] # make sure to normalize your bounding boxes
+        >>> boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
         >>> word_labels = [0, 1]
 
         >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
@@ -1285,8 +1285,8 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> from PIL import Image
         >>> import torch
 
-        >>> processor = LayoutLMv2Processor.from_pretrained('microsoft/layoutlmv2-base-uncased')
-        >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
         >>> question = "what's his name?"

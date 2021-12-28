@@ -896,8 +896,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
 
         >>> encoder = ViTModel(ViTConfig())
         >>> decoder = TrOCRForCausalLM(TrOCRConfig())
-
         # init vision2text model
+
         >>> model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
         ```"""
 

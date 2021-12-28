@@ -555,24 +555,28 @@ class AutoConfig:
         >>> from transformers import AutoConfig
 
         >>> # Download configuration from huggingface.co and cache.
-        >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+        >>> config = AutoConfig.from_pretrained("bert-base-uncased")
 
         >>> # Download configuration from huggingface.co (user-uploaded) and cache.
-        >>> config = AutoConfig.from_pretrained('dbmdz/bert-base-german-cased')
+        >>> config = AutoConfig.from_pretrained("dbmdz/bert-base-german-cased")
 
         >>> # If configuration file is in a directory (e.g., was saved using *save_pretrained('./test/saved_model/')*).
-        >>> config = AutoConfig.from_pretrained('./test/bert_saved_model/')
+        >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/")
 
         >>> # Load a specific configuration file.
-        >>> config = AutoConfig.from_pretrained('./test/bert_saved_model/my_configuration.json')
+        >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/my_configuration.json")
 
         >>> # Change some config attributes when loading a pretrained config.
-        >>> config = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+        >>> config = AutoConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
         >>> config.output_attentions
         True
-        >>> config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False, return_unused_kwargs=True)
+
+        >>> config, unused_kwargs = AutoConfig.from_pretrained(
+        ...     "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        ... )
         >>> config.output_attentions
         True
+
         >>> config.unused_kwargs
         {'foo': False}
         ```"""
