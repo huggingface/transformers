@@ -709,6 +709,7 @@ class CaptureStd:
 
     # to capture stderr only with auto-replay
     import sys
+
     with CaptureStderr() as cs:
         print("Warning: ", file=sys.stderr)
     assert "Warning" in cs.err
@@ -826,7 +827,7 @@ class CaptureLogger:
     >>> logger = logging.get_logger("transformers.models.bart.tokenization_bart")
     >>> with CaptureLogger(logger) as cl:
     ...     logger.info(msg)
-    >>> assert cl.out, msg+"\n"
+    >>> assert cl.out, msg + "\n"
     ```
     """
 
@@ -858,7 +859,7 @@ def LoggingLevel(level):
 
     ```python
     with LoggingLevel(logging.INFO):
-        AutoModel.from_pretrained("gpt2") # calls logger.info() several times
+        AutoModel.from_pretrained("gpt2")  # calls logger.info() several times
     ```
     """
     orig_level = transformers_logging.get_verbosity()
@@ -878,8 +879,8 @@ def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
     Usage :
 
     ```python
-    with ExtendSysPath('/path/to/dir'):
-        mymodule = importlib.import_module('mymodule')
+    with ExtendSysPath("/path/to/dir"):
+        mymodule = importlib.import_module("mymodule")
     ```
     """
 

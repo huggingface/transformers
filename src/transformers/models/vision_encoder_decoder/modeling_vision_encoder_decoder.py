@@ -302,8 +302,11 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         ```python
         >>> from transformers import VisionEncoderDecoderModel
+
         >>> # initialize a vit-bert from a pretrained ViT and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
-        >>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained('google/vit-base-patch16-224-in21k', 'bert-base-uncased')
+        >>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "bert-base-uncased"
+        ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")
         >>> # load fine-tuned model
@@ -417,8 +420,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         >>> from PIL import Image
         >>> import torch
 
-        >>> processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
-        >>> model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
+        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
+        >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"

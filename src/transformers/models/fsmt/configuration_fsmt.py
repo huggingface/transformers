@@ -120,7 +120,7 @@ class FSMTConfig(PretrainedConfig):
     ```python
     >>> from transformers import FSMTConfig, FSMTModel
 
-    >>> config = FSMTConfig.from_pretrained('facebook/wmt19-en-ru')
+    >>> config = FSMTConfig.from_pretrained("facebook/wmt19-en-ru")
     >>> model = FSMTModel(config)
     ```"""
     model_type = "fsmt"

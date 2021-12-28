@@ -267,7 +267,7 @@ single forward pass using a dummy integer vector of input IDs as an input. Such 
 pseudocode):
 
 ```python
-model = BrandNewBertModel.load_pretrained_checkpoint(/path/to/checkpoint/)
+model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
 input_ids = [0, 4, 5, 2, 3, 7, 9]  # vector of input ids
 original_output = model.predict(input_ids)
 ```
@@ -476,6 +476,7 @@ following command should work:
 
 ```python
 from transformers import BrandNewBertModel, BrandNewBertConfig
+
 model = BrandNewBertModel(BrandNewBertConfig())
 ```
 
@@ -502,12 +503,13 @@ PyTorch, called `SimpleModel` as follows:
 ```python
 from torch import nn
 
+
 class SimpleModel(nn.Module):
     def __init__(self):
-            super().__init__()
-            self.dense = nn.Linear(10, 10)
-            self.intermediate = nn.Linear(10, 10)
-            self.layer_norm = nn.LayerNorm(10)
+        super().__init__()
+        self.dense = nn.Linear(10, 10)
+        self.intermediate = nn.Linear(10, 10)
+        self.layer_norm = nn.LayerNorm(10)
 ```
 
 Now we can create an instance of this model definition which will fill all weights: `dense`, `intermediate`,
@@ -565,7 +567,7 @@ In the conversion script, you should fill those randomly initialized weights wit
 corresponding layer in the checkpoint. *E.g.*
 
 ```python
-# retrieve matching layer weights, e.g. by 
+# retrieve matching layer weights, e.g. by
 # recursive algorithm
 layer_name = "dense"
 pretrained_weight = array_of_dense_layer
@@ -622,7 +624,7 @@ pass of the model using the original repository. Now you should write an analogo
 implementation instead of the original one. It should look as follows:
 
 ```python
-model = BrandNewBertModel.from_pretrained(/path/to/converted/checkpoint/folder)
+model = BrandNewBertModel.from_pretrained("/path/to/converted/checkpoint/folder")
 input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
 output = model(input_ids).last_hidden_states
 ```
@@ -668,7 +670,7 @@ fully comply with the required design. To make sure, the implementation is fully
 common tests should pass. The Cookiecutter should have automatically added a test file for your model, probably under
 the same `tests/test_modeling_brand_new_bert.py`. Run this test file to verify that all common tests pass:
 
-```python
+```bash
 pytest tests/test_modeling_brand_new_bert.py
 ```
 
@@ -714,7 +716,7 @@ that inputs a string and returns the `input_ids``. It could look similar to this
 
 ```python
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
-model = BrandNewBertModel.load_pretrained_checkpoint(/path/to/checkpoint/)
+model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
 input_ids = model.tokenize(input_str)
 ```
 
@@ -725,9 +727,10 @@ created. It should look similar to this:
 
 ```python
 from transformers import BrandNewBertTokenizer
+
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
 
-tokenizer = BrandNewBertTokenizer.from_pretrained(/path/to/tokenizer/folder/)
+tokenizer = BrandNewBertTokenizer.from_pretrained("/path/to/tokenizer/folder/")
 
 input_ids = tokenizer(input_str).input_ids
 ```

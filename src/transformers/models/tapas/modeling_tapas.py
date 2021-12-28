@@ -916,12 +916,13 @@ class TapasModel(TapasPreTrainedModel):
         >>> from transformers import TapasTokenizer, TapasModel
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base')
-        >>> model = TapasModel.from_pretrained('google/tapas-base')
+        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> model = TapasModel.from_pretrained("google/tapas-base")
 
-        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-        ...         'Age': ["56", "45", "59"],
-        ...         'Number of movies': ["87", "53", "69"]
+        >>> data = {
+        ...     "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        ...     "Age": ["56", "45", "59"],
+        ...     "Number of movies": ["87", "53", "69"],
         ... }
         >>> table = pd.DataFrame.from_dict(data)
         >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
@@ -1056,17 +1057,22 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         >>> from transformers import TapasTokenizer, TapasForMaskedLM
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base')
-        >>> model = TapasForMaskedLM.from_pretrained('google/tapas-base')
+        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> model = TapasForMaskedLM.from_pretrained("google/tapas-base")
 
-        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-        ...         'Age': ["56", "45", "59"],
-        ...         'Number of movies': ["87", "53", "69"]
+        >>> data = {
+        ...     "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        ...     "Age": ["56", "45", "59"],
+        ...     "Number of movies": ["87", "53", "69"],
         ... }
         >>> table = pd.DataFrame.from_dict(data)
 
-        >>> inputs = tokenizer(table=table, queries="How many [MASK] has George [MASK] played in?", return_tensors="pt")
-        >>> labels = tokenizer(table=table, queries="How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
+        >>> inputs = tokenizer(
+        ...     table=table, queries="How many [MASK] has George [MASK] played in?", return_tensors="pt"
+        ... )
+        >>> labels = tokenizer(
+        ...     table=table, queries="How many movies has George Clooney played in?", return_tensors="pt"
+        >>> )["input_ids"]
 
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits
@@ -1204,12 +1210,13 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-wtq')
-        >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq')
+        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq")
+        >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
 
-        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-        ...         'Age': ["56", "45", "59"],
-        ...         'Number of movies': ["87", "53", "69"]
+        >>> data = {
+        ...     "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        ...     "Age": ["56", "45", "59"],
+        ...     "Number of movies": ["87", "53", "69"],
         ... }
         >>> table = pd.DataFrame.from_dict(data)
         >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
@@ -1501,18 +1508,22 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         >>> import torch
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-tabfact')
-        >>> model = TapasForSequenceClassification.from_pretrained('google/tapas-base-finetuned-tabfact')
+        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-tabfact")
+        >>> model = TapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
 
-        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-        ...         'Age': ["56", "45", "59"],
-        ...         'Number of movies': ["87", "53", "69"]
+        >>> data = {
+        ...     "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+        ...     "Age": ["56", "45", "59"],
+        ...     "Number of movies": ["87", "53", "69"],
         ... }
         >>> table = pd.DataFrame.from_dict(data)
-        >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors which played in more than 60 movies"]
+        >>> queries = [
+        ...     "There is only one actor who is 45 years old",
+        ...     "There are 3 actors which played in more than 60 movies",
+        ... ]
 
         >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
-        >>> labels = torch.tensor([1, 0]) # 1 means entailed, 0 means refuted
+        >>> labels = torch.tensor([1, 0])  # 1 means entailed, 0 means refuted
 
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss

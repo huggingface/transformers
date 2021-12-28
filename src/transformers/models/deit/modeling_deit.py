@@ -492,11 +492,11 @@ class DeiTModel(DeiTPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-        >>> model = DeiTModel.from_pretrained('facebook/deit-base-distilled-patch16-224', add_pooling_layer=False)
+        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = DeiTModel.from_pretrained("facebook/deit-base-distilled-patch16-224", add_pooling_layer=False)
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -604,13 +604,13 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-        >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
+        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -737,11 +737,11 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-        >>> model = DeiTForImageClassificationWithTeacher.from_pretrained('facebook/deit-base-distilled-patch16-224')
+        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = DeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

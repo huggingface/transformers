@@ -1206,7 +1206,9 @@ class PegasusModel(PegasusPreTrainedModel):
         >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
         >>> model = PegasusModel.from_pretrained("google/pegasus-large")
 
-        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+        >>> input_ids = tokenizer(
+        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+        >>> ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -1620,8 +1622,8 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         ```python
         >>> from transformers import PegasusTokenizer, PegasusForCausalLM
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained('facebook/bart-large')
-        >>> model = PegasusForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+        >>> tokenizer = PegasusTokenizer.from_pretrained("facebook/bart-large")
+        >>> model = PegasusForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

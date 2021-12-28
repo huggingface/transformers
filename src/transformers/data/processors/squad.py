@@ -588,6 +588,7 @@ class SquadProcessor(DataProcessor):
 
         ```python
         >>> import tensorflow_datasets as tfds
+
         >>> dataset = tfds.load("squad")
 
         >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)

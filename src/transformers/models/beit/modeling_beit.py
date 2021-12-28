@@ -633,11 +633,11 @@ class BeitModel(BeitPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
-        >>> model = BeitModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+        >>> model = BeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -750,11 +750,11 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
-        >>> model = BeitForMaskedImageModeling.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+        >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -838,11 +838,11 @@ class BeitForImageClassification(BeitPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
-        >>> model = BeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224")
+        >>> model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1172,11 +1172,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-finetuned-ade-640-640')
-        >>> model = BeitForSemanticSegmentation.from_pretrained('microsoft/beit-base-finetuned-ade-640-640')
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

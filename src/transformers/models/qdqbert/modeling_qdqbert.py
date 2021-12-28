@@ -1083,10 +1083,10 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
         >>> from transformers import BertTokenizer, QDQBertLMHeadModel, QDQBertConfig
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
         >>> config = QDQBertConfig.from_pretrained("bert-base-cased")
         >>> config.is_decoder = True
-        >>> model = QDQBertLMHeadModel.from_pretrained('bert-base-cased', config=config)
+        >>> model = QDQBertLMHeadModel.from_pretrained("bert-base-cased", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1310,16 +1310,16 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
         >>> from transformers import BertTokenizer, QDQBertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = QDQBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = QDQBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
 
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```"""
 
         if "next_sentence_label" in kwargs:

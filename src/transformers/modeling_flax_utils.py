@@ -200,16 +200,21 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         ```python
         >>> from transformers import FlaxBertModel
+
         >>> # load model
-        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> # By default, the model parameters will be in fp32 precision, to cast these to bfloat16 precision
         >>> model.params = model.to_bf16(model.params)
         >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
         >>> # then pass the mask as follows
         >>> from flax import traverse_util
-        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+
+        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> flat_params = traverse_util.flatten_dict(model.params)
-        >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        >>> mask = {
+        ...     path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale"))
+        ...     for path in flat_params
+        ... }
         >>> mask = traverse_util.unflatten_dict(mask)
         >>> model.params = model.to_bf16(model.params, mask)
         ```"""
@@ -231,8 +236,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         ```python
         >>> from transformers import FlaxBertModel
+
         >>> # Download model and configuration from huggingface.co
-        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> # By default, the model params will be in fp32, to illustrate the use of this method,
         >>> # we'll first cast to fp16 and back to fp32
         >>> model.params = model.to_f16(model.params)
@@ -260,16 +266,21 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         ```python
         >>> from transformers import FlaxBertModel
+
         >>> # load model
-        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> # By default, the model params will be in fp32, to cast these to float16
         >>> model.params = model.to_fp16(model.params)
         >>> # If you want don't want to cast certain parameters (for example layer norm bias and scale)
         >>> # then pass the mask as follows
         >>> from flax import traverse_util
-        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+
+        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> flat_params = traverse_util.flatten_dict(model.params)
-        >>> mask = {path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
+        >>> mask = {
+        ...     path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale"))
+        ...     for path in flat_params
+        ... }
         >>> mask = traverse_util.unflatten_dict(mask)
         >>> model.params = model.to_fp16(model.params, mask)
         ```"""
@@ -377,13 +388,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         ```python
         >>> from transformers import BertConfig, FlaxBertModel
+
         >>> # Download model and configuration from huggingface.co and cache.
-        >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
+        >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
-        >>> model = FlaxBertModel.from_pretrained('./test/saved_model/')
+        >>> model = FlaxBertModel.from_pretrained("./test/saved_model/")
         >>> # Loading from a PyTorch checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
-        >>> config = BertConfig.from_json_file('./pt_model/config.json')
-        >>> model = FlaxBertModel.from_pretrained('./pt_model/pytorch_model.bin', from_pt=True, config=config)
+        >>> config = BertConfig.from_json_file("./pt_model/config.json")
+        >>> model = FlaxBertModel.from_pretrained("./pt_model/pytorch_model.bin", from_pt=True, config=config)
         ```"""
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)

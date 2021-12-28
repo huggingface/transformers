@@ -41,7 +41,7 @@ Examples of use:
 >>> tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
 >>> model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1")
 
->>> encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors='pt')
+>>> encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt")
 >>> outputs = model(encoded_input)
 
 >>> # HerBERT can also be loaded using AutoTokenizer and AutoModel:

@@ -451,13 +451,13 @@ class AutoTokenizer:
         >>> from transformers import AutoTokenizer
 
         >>> # Download vocabulary from huggingface.co and cache.
-        >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
         >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
-        >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+        >>> tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
 
         >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
-        >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
+        >>> tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True

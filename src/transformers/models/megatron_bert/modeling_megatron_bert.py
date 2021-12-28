@@ -1063,8 +1063,8 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         >>> from transformers import BertTokenizer, MegatronBertForPreTraining
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
-        >>> model = MegatronBertForPreTraining.from_pretrained('nvidia/megatron-bert-cased-345m')
+        >>> tokenizer = BertTokenizer.from_pretrained("nvidia/megatron-bert-cased-345m")
+        >>> model = MegatronBertForPreTraining.from_pretrained("nvidia/megatron-bert-cased-345m")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1187,8 +1187,8 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
         >>> from transformers import BertTokenizer, MegatronBertForCausalLM, MegatronBertConfig
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
-        >>> model = MegatronBertForCausalLM.from_pretrained('nvidia/megatron-bert-cased-345m', is_decoder=True)
+        >>> tokenizer = BertTokenizer.from_pretrained("nvidia/megatron-bert-cased-345m")
+        >>> model = MegatronBertForCausalLM.from_pretrained("nvidia/megatron-bert-cased-345m", is_decoder=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1413,16 +1413,16 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         >>> from transformers import BertTokenizer, MegatronBertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
-        >>> model = MegatronBertForNextSentencePrediction.from_pretrained('nvidia/megatron-bert-cased-345m')
+        >>> tokenizer = BertTokenizer.from_pretrained("nvidia/megatron-bert-cased-345m")
+        >>> model = MegatronBertForNextSentencePrediction.from_pretrained("nvidia/megatron-bert-cased-345m")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
 
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```"""
 
         if "next_sentence_label" in kwargs:

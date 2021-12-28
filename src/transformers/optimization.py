@@ -433,6 +433,7 @@ class Adafactor(Optimizer):
 
     ```python
     from transformers.optimization import Adafactor, AdafactorSchedule
+
     optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
     lr_scheduler = AdafactorSchedule(optimizer)
     trainer = Trainer(..., optimizers=(optimizer, lr_scheduler))
@@ -452,7 +453,7 @@ class Adafactor(Optimizer):
         weight_decay=0.0,
         relative_step=False,
         scale_parameter=False,
-        warmup_init=False
+        warmup_init=False,
     )
     ```"""
 

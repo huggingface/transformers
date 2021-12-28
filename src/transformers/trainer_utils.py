@@ -300,7 +300,7 @@ class TrainerMemoryTracker:
     ```python
     self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
     self._memory_tracker.start()
-    code ...
+    # code ...
     metrics = {"train_runtime": 10.5}
     self._memory_tracker.stop_and_update_metrics(metrics)
     ```

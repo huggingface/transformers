@@ -726,10 +726,24 @@ class LongformerSelfAttention(nn.Module):
         Example:
 
         ```python
-        chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
-                                 -1.8348,  0.7672,  0.2986,  0.0285,
-                                 -0.7584,  0.4206, -0.0405,  0.1599,
-                                 2.0514, -1.1600,  0.5372,  0.2629 ]
+        chunked_hidden_states: [
+            0.4983,
+            2.6918,
+            -0.0071,
+            1.0492,
+            -1.8348,
+            0.7672,
+            0.2986,
+            0.0285,
+            -0.7584,
+            0.4206,
+            -0.0405,
+            0.1599,
+            2.0514,
+            -1.1600,
+            0.5372,
+            0.2629,
+        ]
         window_overlap = num_rows = 4
         ```
 
@@ -1605,19 +1619,30 @@ class LongformerModel(LongformerPreTrainedModel):
         >>> import torch
         >>> from transformers import LongformerModel, LongformerTokenizer
 
-        >>> model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
-        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
 
-        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
         >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-        >>> attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
-        >>> global_attention_mask = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to global attention to be deactivated for all tokens
-        >>> global_attention_mask[:, [1, 4, 21,]] = 1  # Set global attention to random tokens for the sake of this example
-        ...                                     # Usually, set global attention based on the task. For example,
-        ...                                     # classification: the <s> token
-        ...                                     # QA: question tokens
-        ...                                     # LM: potentially on the beginning of sentences and paragraphs
+        >>> attention_mask = torch.ones(
+        ...     input_ids.shape, dtype=torch.long, device=input_ids.device
+        >>> )  # initialize to local attention
+        >>> global_attention_mask = torch.zeros(
+        ...     input_ids.shape, dtype=torch.long, device=input_ids.device
+        >>> )  # initialize to global attention to be deactivated for all tokens
+        >>> global_attention_mask[
+        ...     :,
+        ...     [
+        ...         1,
+        ...         4,
+        ...         21,
+        ...     ],
+        >>> ] = 1  # Set global attention to random tokens for the sake of this example
+        >>> # Usually, set global attention based on the task. For example,
+        >>> # classification: the <s> token
+        >>> # QA: question tokens
+        >>> # LM: potentially on the beginning of sentences and paragraphs
         >>> outputs = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)
         >>> sequence_output = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output
@@ -1748,14 +1773,14 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         >>> import torch
         >>> from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-        >>> model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
-        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
 
-        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
         >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
         >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
-        ...                        # check `LongformerModel.forward` for more details how to set *attention_mask*
+        >>> # check `LongformerModel.forward` for more details how to set *attention_mask*
         >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         >>> loss = outputs.loss
         >>> prediction_logits = outputs.logits
@@ -1994,8 +2019,10 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         >>> end_logits = outputs.end_logits
         >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
 
-        >>> answer_tokens = all_tokens[torch.argmax(start_logits) :torch.argmax(end_logits)+1]
-        >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
+        >>> answer_tokens = all_tokens[torch.argmax(start_logits) : torch.argmax(end_logits) + 1]
+        >>> answer = tokenizer.decode(
+        ...     tokenizer.convert_tokens_to_ids(answer_tokens)
+        >>> )  # remove space prepending space token
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

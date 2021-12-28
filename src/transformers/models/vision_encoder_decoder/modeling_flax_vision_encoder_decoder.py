@@ -397,13 +397,13 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
@@ -474,13 +474,13 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
@@ -601,16 +601,16 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # load output tokenizer
-        >>> tokenizer_output = GPT2Tokenizer.from_pretrained('gpt2')
+        >>> tokenizer_output = GPT2Tokenizer.from_pretrained("gpt2")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('vit', 'gpt2')
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
 
@@ -746,8 +746,11 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
         ```python
         >>> from transformers import FlaxVisionEncoderDecoderModel
+
         >>> # initialize a vit-gpt2 from a pretrained ViT and a pretrained GPT2 model. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained('google/vit-base-patch16-224-in21k', 'gpt2')
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
+        ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-gpt2")
         >>> # load fine-tuned model

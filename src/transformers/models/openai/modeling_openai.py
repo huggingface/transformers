@@ -675,14 +675,16 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         >>> from transformers import OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
         >>> import torch
 
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
-        >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
+        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained("openai-gpt")
+        >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
+        >>> tokenizer.add_special_tokens(
+        ...     {"cls_token": "[CLS]"}
+        >>> )  # Add a [CLS] to the vocabulary (we should train it also!)
         >>> model.resize_token_embeddings(len(tokenizer))
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        >>> mc_token_ids = torch.tensor([input_ids.size(-1)-1, input_ids.size(-1)-1]).unsqueeze(0)  # Batch size 1
+        >>> mc_token_ids = torch.tensor([input_ids.size(-1) - 1, input_ids.size(-1) - 1]).unsqueeze(0)  # Batch size 1
 
         >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
         >>> lm_logits = outputs.lm_logits

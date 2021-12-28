@@ -1310,15 +1310,19 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
+
         >>> def map_to_array(batch):
-        >>>     speech, _ = sf.read(batch["file"])
-        >>>     batch["speech"] = speech
-        >>>     return batch
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
+
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_features = processor(ds["speech"][0], sampling_rate=16000, return_tensors="pt").input_features  # Batch size 1
+        >>> input_features = processor(
+        ...     ds["speech"][0], sampling_rate=16000, return_tensors="pt"
+        >>> ).input_features  # Batch size 1
         >>> generated_ids = model.generate(input_ids=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)

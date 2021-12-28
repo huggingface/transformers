@@ -862,17 +862,17 @@ class SpecialTokensMixin:
 
         ```python
         # Let's see how to add a new classification token to GPT-2
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2Model.from_pretrained('gpt2')
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2Model.from_pretrained("gpt2")
 
-        special_tokens_dict = {'cls_token': '<CLS>'}
+        special_tokens_dict = {"cls_token": "<CLS>"}
 
         num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
-        print('We have added', num_added_toks, 'tokens')
+        print("We have added", num_added_toks, "tokens")
         # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e., the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
 
-        assert tokenizer.cls_token == '<CLS>'
+        assert tokenizer.cls_token == "<CLS>"
         ```"""
         if not special_tokens_dict:
             return 0
@@ -929,11 +929,11 @@ class SpecialTokensMixin:
 
         ```python
         # Let's see how to increase the vocabulary of Bert model and tokenizer
-        tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
-        model = BertModel.from_pretrained('bert-base-uncased')
+        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+        model = BertModel.from_pretrained("bert-base-uncased")
 
-        num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-        print('We have added', num_added_toks, 'tokens')
+        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
+        print("We have added", num_added_toks, "tokens")
         # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e., the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
@@ -1585,22 +1585,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ```python
         # We can't instantiate directly the base class *PreTrainedTokenizerBase* so let's show our examples on a derived class: BertTokenizer
         # Download vocabulary from huggingface.co and cache.
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
         # Download vocabulary from huggingface.co (user-uploaded) and cache.
-        tokenizer = BertTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+        tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
 
         # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
-        tokenizer = BertTokenizer.from_pretrained('./test/saved_model/')
+        tokenizer = BertTokenizer.from_pretrained("./test/saved_model/")
 
         # If the tokenizer uses a single vocabulary file, you can point directly to this file
-        tokenizer = BertTokenizer.from_pretrained('./test/saved_model/my_vocab.txt')
+        tokenizer = BertTokenizer.from_pretrained("./test/saved_model/my_vocab.txt")
 
         # You can link tokens to special vocabulary when instantiating
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', unk_token='<unk>')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", unk_token="<unk>")
         # You should be sure '<unk>' is in the vocabulary when doing that.
         # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
-        assert tokenizer.unk_token == '<unk>'
+        assert tokenizer.unk_token == "<unk>"
         ```"""
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)

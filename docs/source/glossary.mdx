@@ -58,6 +58,7 @@ tokenizer, which is a [WordPiece](https://arxiv.org/pdf/1609.08144.pdf) tokenize
 
 ```python
 >>> from transformers import BertTokenizer
+
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
 >>> sequence = "A Titan RTX has 24GB of VRAM"
@@ -126,6 +127,7 @@ For example, consider these two sequences:
 
 ```python
 >>> from transformers import BertTokenizer
+
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
 >>> sequence_a = "This is a short sequence."
@@ -190,6 +192,7 @@ arguments (and not a list, like before) like this:
 
 ```python
 >>> from transformers import BertTokenizer
+
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 >>> sequence_a = "HuggingFace is based in NYC"
 >>> sequence_b = "Where is HuggingFace based?"
@@ -212,7 +215,7 @@ the two types of sequence in the model.
 The tokenizer returns this mask as the "token_type_ids" entry:
 
 ```python
->>> encoded_dict['token_type_ids']
+>>> encoded_dict["token_type_ids"]
 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ```
 

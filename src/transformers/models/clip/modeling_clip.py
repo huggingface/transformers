@@ -707,11 +707,11 @@ class CLIPTextModel(CLIPPreTrainedModel):
         >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output # pooled (EOS token) states
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
         return self.text_model(
             input_ids=input_ids,
@@ -823,7 +823,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output # pooled CLS states
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
         return self.vision_model(
             pixel_values=pixel_values,
@@ -890,7 +890,7 @@ class CLIPModel(CLIPPreTrainedModel):
         >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs = self.text_model(
@@ -978,11 +978,13 @@ class CLIPModel(CLIPPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+        >>> inputs = processor(
+        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ... )
 
         >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
+        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         vision_outputs = self.vision_model(

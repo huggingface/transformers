@@ -488,40 +488,60 @@ class TFGenerationMixin:
         Examples:
 
         ```python
-        tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from huggingface.co and cache.
+        tokenizer = AutoTokenizer.from_pretrained("distilgpt2")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "distilgpt2"
+        )  # Download model and configuration from huggingface.co and cache.
         outputs = model.generate(max_length=40)  # do greedy decoding
-        print(f'Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}')
+        print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from huggingface.co and cache.
-        input_context = 'The dog'
-        input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
-        outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
-        for i in range(3): #  3 output sequences were generated
-            print(f'Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}')
+        tokenizer = AutoTokenizer.from_pretrained("openai-gpt")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "openai-gpt"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "The dog"
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5
+        )  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
+        for i in range(3):  #  3 output sequences were generated
+            print(f"Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from huggingface.co and cache.
-        input_context = 'The dog'
-        input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
-        outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True)  # generate 3 candidates using sampling
-        for i in range(3): #  3 output sequences were generated
-            print(f'Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}')
+        tokenizer = AutoTokenizer.from_pretrained("distilgpt2")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "distilgpt2"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "The dog"
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True
+        )  # generate 3 candidates using sampling
+        for i in range(3):  #  3 output sequences were generated
+            print(f"Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from huggingface.co and cache.
-        input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
-        input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
-        outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
-        print(f'Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}')
+        tokenizer = AutoTokenizer.from_pretrained("ctrl")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "ctrl"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "Legal My neighbor is"  # "Legal" is one of the control codes for ctrl
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2
+        )  # generate sequences
+        print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from huggingface.co and cache.
-        input_context = 'My cute dog'
-        bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
-        input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
-        outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "gpt2"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "My cute dog"
+        bad_words_ids = [
+            tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ["idiot", "stupid", "shut up"]
+        ]
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids
+        )  # generate sequences without allowing bad_words to be generated
         ```"""
 
         # We cannot generate if the model does not have a LM head

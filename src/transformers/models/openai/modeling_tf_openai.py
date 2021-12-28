@@ -726,18 +726,22 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
 
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained("openai-gpt")
+        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+        >>> tokenizer.add_special_tokens({"cls_token": "[CLS]"})
         >>> model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
         >>> print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> encoding = tokenizer(choices, return_tensors="tf")
         >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
-        >>> inputs["mc_token_ids"]= tf.constant([inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1])[None, :]  # Batch size 1
+        >>> inputs["mc_token_ids"] = tf.constant(
+        ...     [inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1]
+        >>> )[
+        ...     None, :
+        >>> ]  # Batch size 1
         >>> outputs = model(inputs)
         >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         ```"""

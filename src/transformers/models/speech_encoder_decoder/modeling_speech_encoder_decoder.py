@@ -330,8 +330,11 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         ```python
         >>> from transformers import SpeechEncoderDecoderModel
+
         >>> # initialize a wav2vec2bert from a pretrained Wav2Vec2 and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
-        >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained('facebook/wav2vec2-base-960h', 'bert-base-uncased')
+        >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "facebook/wav2vec2-base-960h", "bert-base-uncased"
+        ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./wav2vec2bert")
         >>> # load fine-tuned model
@@ -447,8 +450,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = Speech2Text2Processor.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
-        >>> model = SpeechEncoderDecoderModel.from_pretrained('facebook/s2t-wav2vec2-large-en-de')
+        >>> processor = Speech2Text2Processor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
+        >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 

@@ -134,10 +134,10 @@ class AutoProcessor:
         >>> from transformers import AutoProcessor
 
         >>> # Download processor from huggingface.co and cache.
-        >>> processor = AutoProcessor.from_pretrained('facebook/wav2vec2-base-960h')
+        >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
 
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> processor = AutoProcessor.from_pretrained('./test/saved_model/')
+        >>> processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True

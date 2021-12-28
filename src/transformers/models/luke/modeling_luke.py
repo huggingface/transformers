@@ -937,8 +937,8 @@ class LukeModel(LukePreTrainedModel):
 
         >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
         >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
-
         # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
+
         >>> text = "Beyoncé lives in Los Angeles."
         >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
 
@@ -946,13 +946,21 @@ class LukeModel(LukePreTrainedModel):
         >>> outputs = model(**encoding)
         >>> word_last_hidden_state = outputs.last_hidden_state
         >>> entity_last_hidden_state = outputs.entity_last_hidden_state
-
         # Input Wikipedia entities to obtain enriched contextualized representations of word tokens
-        >>> text = "Beyoncé lives in Los Angeles."
-        >>> entities = ["Beyoncé", "Los Angeles"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
-        >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
 
-        >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+        >>> text = "Beyoncé lives in Los Angeles."
+        >>> entities = [
+        ...     "Beyoncé",
+        ...     "Los Angeles",
+        >>> ]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
+        >>> entity_spans = [
+        ...     (0, 7),
+        ...     (17, 28),
+        >>> ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+
+        >>> encoding = tokenizer(
+        ...     text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt"
+        ... )
         >>> outputs = model(**encoding)
         >>> word_last_hidden_state = outputs.last_hidden_state
         >>> entity_last_hidden_state = outputs.entity_last_hidden_state
@@ -1423,7 +1431,10 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
 
         >>> text = "Beyoncé lives in Los Angeles."
-        >>> entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
+        >>> entity_spans = [
+        ...     (0, 7),
+        ...     (17, 28),
+        >>> ]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
         >>> inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
@@ -1548,8 +1559,8 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
 
         >>> text = "Beyoncé lives in Los Angeles"
-
         # List all possible entity spans in the text
+
         >>> word_start_positions = [0, 8, 14, 17, 21]  # character-based start positions of word tokens
         >>> word_end_positions = [7, 13, 16, 20, 28]  # character-based end positions of word tokens
         >>> entity_spans = []
@@ -1563,7 +1574,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         >>> predicted_class_indices = logits.argmax(-1).squeeze().tolist()
         >>> for span, predicted_class_idx in zip(entity_spans, predicted_class_indices):
         ...     if predicted_class_idx != 0:
-        ...        print(text[span[0]:span[1]], model.config.id2label[predicted_class_idx])
+        ...         print(text[span[0] : span[1]], model.config.id2label[predicted_class_idx])
         Beyoncé PER
         Los Angeles LOC
         ```"""

@@ -49,6 +49,7 @@ If you're using your own training loop or another Trainer you can accomplish the
 
 ```python
 from .debug_utils import DebugUnderflowOverflow
+
 debug_overflow = DebugUnderflowOverflow(model)
 ```
 
@@ -200,13 +201,16 @@ def _forward(self, hidden_states):
     hidden_states = self.wo(hidden_states)
     return hidden_states
 
+
 import torch
+
+
 def forward(self, hidden_states):
     if torch.is_autocast_enabled():
-         with torch.cuda.amp.autocast(enabled=False):
-             return self._forward(hidden_states)
-     else:
-         return self._forward(hidden_states)
+        with torch.cuda.amp.autocast(enabled=False):
+            return self._forward(hidden_states)
+    else:
+        return self._forward(hidden_states)
 ```
 
 Since the automatic detector only reports on inputs and outputs of full frames, once you know where to look, you may
@@ -216,8 +220,10 @@ want to analyse the intermediary stages of any specific `forward` function as we
 ```python
 from debug_utils import detect_overflow
 
+
 class T5LayerFF(nn.Module):
     [...]
+
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
         detect_overflow(forwarded_states, "after layer_norm")
@@ -237,6 +243,7 @@ its default, e.g.:
 
 ```python
 from .debug_utils import DebugUnderflowOverflow
+
 debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
 ```
 
@@ -248,7 +255,7 @@ Let's say you want to watch the absolute min and max values for all the ingredie
 batch, and only do that for batches 1 and 3. Then you instantiate this class as:
 
 ```python
-debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1,3])
+debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])
 ```
 
 And now full batches 1 and 3 will be traced using the same format as the underflow/overflow detector does.
@@ -295,5 +302,5 @@ numbers started to diverge.
 You can also specify the batch number after which to stop the training, with:
 
 ```python
-debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1,3], abort_after_batch_num=3)
+debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
 ```

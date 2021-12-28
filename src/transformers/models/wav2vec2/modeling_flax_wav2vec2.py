@@ -952,15 +952,19 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
     >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-large-lv60")
 
+
     >>> def map_to_array(batch):
-    >>>     speech, _ = sf.read(batch["file"])
-    >>>     batch["speech"] = speech
-    >>>     return batch
+    ...     speech, _ = sf.read(batch["file"])
+    ...     batch["speech"] = speech
+    ...     return batch
+
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     >>> ds = ds.map(map_to_array)
 
-    >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
+    >>> input_values = processor(
+    ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
+    >>> ).input_values  # Batch size 1
     >>> hidden_states = model(input_values).last_hidden_state
     ```
 """
@@ -1055,15 +1059,19 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
     >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
     >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
+
     >>> def map_to_array(batch):
-    >>>     speech, _ = sf.read(batch["file"])
-    >>>     batch["speech"] = speech
-    >>>     return batch
+    ...     speech, _ = sf.read(batch["file"])
+    ...     batch["speech"] = speech
+    ...     return batch
+
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     >>> ds = ds.map(map_to_array)
 
-    >>> input_values = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="np").input_values  # Batch size 1
+    >>> input_values = processor(
+    ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
+    >>> ).input_values  # Batch size 1
     >>> logits = model(input_values).logits
     >>> predicted_ids = jnp.argmax(logits, axis=-1)
 
@@ -1264,9 +1272,7 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
     >>> outputs = model(input_values, mask_time_indices=mask_time_indices)
 
     >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-    >>> cosine_sim = optax.cosine_similarity(
-    ...     outputs.projected_states, outputs.projected_quantized_states
-    ... )
+    >>> cosine_sim = optax.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states)
 
     >>> # show that cosine similarity is much higher than random
     >>> assert np.asarray(cosine_sim)[mask_time_indices].mean() > 0.5
