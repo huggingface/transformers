@@ -20,7 +20,7 @@ import argparse
 import fairseq
 import torch
 
-from transformers import (  # UniSpeechSatCTCTokenizer,; UniSpeechSatFeatureEncoder,; UniSpeechSatProcessor,
+from transformers import (
     UniSpeechSatConfig,
     UniSpeechSatForCTC,
     UniSpeechSatForPreTraining,
