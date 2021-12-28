@@ -1213,8 +1213,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
         """
         self.feature_extractor._freeze_parameters()
 
@@ -1349,8 +1349,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
@@ -1361,8 +1361,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1649,8 +1649,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
@@ -1661,8 +1661,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1769,8 +1769,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
@@ -1781,8 +1781,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1884,8 +1884,8 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
@@ -1896,8 +1896,8 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -2042,8 +2042,8 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
@@ -2054,8 +2054,8 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 

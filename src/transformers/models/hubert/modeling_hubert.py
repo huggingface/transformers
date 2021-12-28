@@ -1064,8 +1064,8 @@ class HubertForCTC(HubertPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
@@ -1076,8 +1076,8 @@ class HubertForCTC(HubertPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.hubert.feature_extractor._freeze_parameters()
 
@@ -1185,8 +1185,8 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
         """
         warnings.warn(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
@@ -1197,8 +1197,8 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.hubert.feature_extractor._freeze_parameters()
 
