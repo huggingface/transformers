@@ -1202,7 +1202,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1379,7 +1379,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1500,7 +1500,7 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

@@ -1072,7 +1072,7 @@ class HubertForCTC(HubertPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.hubert.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1193,7 +1193,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.hubert.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

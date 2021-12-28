@@ -1241,7 +1241,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech_sat.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1404,7 +1404,7 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech_sat.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1525,7 +1525,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech_sat.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1641,7 +1641,7 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech_sat.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1802,7 +1802,7 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.unispeech_sat.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

@@ -1221,7 +1221,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1369,7 +1369,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1669,7 +1669,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1789,7 +1789,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1904,7 +1904,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -2062,7 +2062,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wav2vec2.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

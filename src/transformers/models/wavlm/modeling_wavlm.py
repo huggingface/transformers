@@ -1174,7 +1174,7 @@ class WavLMModel(WavLMPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1324,7 +1324,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wavlm.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1445,7 +1445,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wavlm.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1561,7 +1561,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wavlm.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1722,7 +1722,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wavlm.feature_extractor._freeze_parameters()
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
