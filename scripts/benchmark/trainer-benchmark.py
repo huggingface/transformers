@@ -66,6 +66,7 @@
 
 
 import argparse
+import datetime
 import io
 import itertools
 import json
@@ -77,7 +78,10 @@ from pathlib import Path
 from statistics import fmean
 
 import pandas as pd
+import torch
 from tqdm import tqdm
+
+import transformers
 
 
 def get_base_cmd(args, output_dir):
@@ -98,7 +102,7 @@ def get_base_cmd(args, output_dir):
 
 def process_run_single(id, cmd, opt, output_dir, target_metric_key, metric_keys, verbose):
     # enable to debug everything but the run itself, to do it fast and see the progress
-    if 1:
+    if 0:
         import random
         from random import randint
         from time import sleep
@@ -134,6 +138,7 @@ def process_run_single(id, cmd, opt, output_dir, target_metric_key, metric_keys,
 
 
 def process_run(id, cmd, opt_key, opt, target_metric_key, report_metric_keys, repeat_times, output_dir, verbose):
+    results = []
     metrics = []
     preamble = f"{id}: {opt}"
     outcome = f"{preamble}: "
@@ -143,6 +148,7 @@ def process_run(id, cmd, opt_key, opt, target_metric_key, report_metric_keys, re
         result = single_run_metrics[target_metric_key]
         if result != -1:
             metrics.append(single_run_metrics)
+            results.append(result)
             outcome += "✓"
         else:
             outcome += "✘"
@@ -153,7 +159,7 @@ def process_run(id, cmd, opt_key, opt, target_metric_key, report_metric_keys, re
         mean_target = round(mean_metrics[target_metric_key], 2)
         results_str = f"{outcome} {mean_target}"
         if successful_runs > 1:
-            results_str += f" ({[round(x, 2) for x in mean_metrics[target_metric_key]]})"
+            results_str += f" {tuple(round(x, 2) for x in results)}"
         print(results_str)
         mean_metrics[opt_key] = opt
         return mean_metrics
@@ -163,12 +169,6 @@ def process_run(id, cmd, opt_key, opt, target_metric_key, report_metric_keys, re
 
 
 def get_versions():
-    import datetime
-
-    import torch
-
-    import transformers
-
     properties = torch.cuda.get_device_properties(torch.device("cuda"))
     return f"""
 Datetime    : {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
