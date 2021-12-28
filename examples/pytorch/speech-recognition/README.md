@@ -78,7 +78,7 @@ python run_speech_recognition_ctc.py \
 	--eval_steps="100" \
 	--layerdrop="0.0" \
 	--save_total_limit="3" \
-	--freeze_feature_extractor \
+	--freeze_feature_encoder \
 	--gradient_checkpointing \
 	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
 	--fp16 \
@@ -113,7 +113,7 @@ python -m torch.distributed.launch \
 	--logging_steps="1" \
 	--layerdrop="0.0" \
 	--save_total_limit="3" \
-	--freeze_feature_extractor \
+	--freeze_feature_encoder \
 	--gradient_checkpointing \
 	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
 	--fp16 \
@@ -304,7 +304,7 @@ python run_speech_recognition_seq2seq.py \
 	--eval_steps="400" \
 	--logging_steps="10" \
 	--save_total_limit="1" \
-	--freeze_feature_extractor \
+	--freeze_feature_encoder \
 	--gradient_checkpointing \
 	--fp16 \
 	--group_by_length \
@@ -346,7 +346,7 @@ python -m torch.distributed.launch \
 	--eval_steps="400" \
 	--logging_steps="10" \
 	--save_total_limit="1" \
-	--freeze_feature_extractor \
+	--freeze_feature_encoder \
 	--gradient_checkpointing \
 	--fp16 \
 	--group_by_length \
