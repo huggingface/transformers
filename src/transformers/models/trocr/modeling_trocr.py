@@ -770,7 +770,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The TrOCR Decoder with a language modeling head. Can be used as the decoder part of :class:`~transformers.EncoderDecoderModel` and :class:`~transformers.VisionEncoderDecoder`.",
+    "The TrOCR Decoder with a language modeling head. Can be used as the decoder part of [`EncoderDecoderModel`] and [`VisionEncoderDecoder`].",
     TROCR_START_DOCSTRING,
 )
 class TrOCRForCausalLM(TrOCRPreTrainedModel):

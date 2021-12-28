@@ -94,9 +94,9 @@ MMBT_START_DOCSTRING = r"""
         config ([`MMBTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration.
-        transformer (:class: *~nn.Module*): A text transformer that is used by MMBT.
+        transformer (`nn.Module`): A text transformer that is used by MMBT.
             It should have embeddings, encoder, and pooler attributes.
-        encoder (:class: *~nn.Module*): Encoder for the second modality.
+        encoder (`nn.Module`): Encoder for the second modality.
             It should take in a batch of modal inputs and return k, n dimension embeddings.
 """
 
