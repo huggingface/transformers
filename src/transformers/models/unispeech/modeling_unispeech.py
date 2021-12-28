@@ -1194,7 +1194,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters
         will not be updated during training.
         """
         warnings.warn(
@@ -1206,7 +1206,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.unispeech.feature_extractor._freeze_parameters()
@@ -1371,7 +1371,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         warnings.warn(
@@ -1383,7 +1383,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.unispeech.feature_extractor._freeze_parameters()
@@ -1492,7 +1492,7 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters
         will not be updated during training.
         """
         warnings.warn(
@@ -1504,7 +1504,7 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.unispeech.feature_extractor._freeze_parameters()

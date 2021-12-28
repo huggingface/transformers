@@ -1481,7 +1481,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.wav2vec2.feature_extractor.trainable = False

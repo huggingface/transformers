@@ -267,7 +267,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor of the speech encoder so
+        Calling this function will disable the gradient computation for the feature encoder of the speech encoder so
         that its parameters will not be updated during training.
         """
         self.encoder.freeze_feature_extractor()

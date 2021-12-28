@@ -1166,7 +1166,7 @@ class WavLMModel(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters
         will not be updated during training.
         """
         self.feature_extractor._freeze_parameters()
@@ -1304,7 +1304,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         warnings.warn(
@@ -1316,7 +1316,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()
@@ -1425,7 +1425,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters
         will not be updated during training.
         """
         warnings.warn(
@@ -1437,7 +1437,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()
@@ -1541,7 +1541,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         warnings.warn(
@@ -1553,7 +1553,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()
@@ -1702,7 +1702,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         warnings.warn(
@@ -1714,7 +1714,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()

@@ -1480,7 +1480,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         warnings.warn(
@@ -1492,7 +1492,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.sew_d.feature_extractor._freeze_parameters()
@@ -1601,7 +1601,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters
         will not be updated during training.
         """
         warnings.warn(
@@ -1613,7 +1613,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter
         will not be updated during training.
         """
         self.sew_d.feature_extractor._freeze_parameters()
