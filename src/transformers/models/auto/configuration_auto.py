@@ -411,8 +411,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPP
 
 def _get_class_name(model_class: Union[str, List[str]]):
     if isinstance(model_class, (list, tuple)):
-        return " or ".join([f":class:`~transformers.{c}`" for c in model_class if c is not None])
-    return f":class:`~transformers.{model_class}`"
+        return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
+    return f"[`{model_class}`]"
 
 
 def _list_model_options(indent, config_to_class=None, use_model_types=True):
@@ -420,9 +420,7 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
         raise ValueError("Using `use_model_types=False` requires a `config_to_class` dictionary.")
     if use_model_types:
         if config_to_class is None:
-            model_type_to_name = {
-                model_type: f":class:`~transformers.{config}`" for model_type, config in CONFIG_MAPPING_NAMES.items()
-            }
+            model_type_to_name = {model_type: f"[`{config}`]" for model_type, config in CONFIG_MAPPING_NAMES.items()}
         else:
             model_type_to_name = {
                 model_type: _get_class_name(model_class)
@@ -443,7 +441,7 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
             config: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING_NAMES.items()
         }
         lines = [
-            f"{indent}- :class:`~transformers.{config_name}` configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
+            f"{indent}- [`{config_name}`] configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
             for config_name in sorted(config_to_name.keys())
         ]
     return "\n".join(lines)
