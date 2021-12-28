@@ -164,7 +164,7 @@ class AutoProcessor:
         model_type = config_class_to_model_type(type(config).__name__)
 
         if getattr(config, "processor_class", None) is not None:
-            processor_class = config.processor_class
+            processor_class = processor_class_from_name(config.processor_class)
             return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         model_type = config_class_to_model_type(type(config).__name__)
