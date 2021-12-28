@@ -2218,9 +2218,9 @@ if is_flax_available():
     )
     _import_structure["models.xglm"].extend(
         [
+            "FlaxXGLMForCausalLM",
             "FlaxXGLMModel",
             "FlaxXGLMPreTrainedModel",
-            "FlaxXGLMForCausalLM",
         ]
     )
 else:

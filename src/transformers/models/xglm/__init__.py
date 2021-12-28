@@ -40,9 +40,9 @@ if is_torch_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_xglm"] = [
+        "FlaxXGLMForCausalLM",
         "FlaxXGLMModel",
         "FlaxXGLMPreTrainedModel",
-        "FlaxXGLMForCausalLM",
     ]
 
 

@@ -18,7 +18,7 @@
 import math
 import random
 from functools import partial
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -31,18 +31,12 @@ from flax.linen.attention import dot_product_attention_weights
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutputWithCrossAttentions,
 )
-from ...modeling_flax_utils import (
-    ACT2FN,
-    FlaxPreTrainedModel,
-    append_call_sample_docstring,
-    append_replace_return_docstrings,
-    overwrite_call_docstring,
-)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import logging
 from .configuration_xglm import XGLMConfig
 
@@ -105,106 +99,8 @@ XGLM_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`~XGLMTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to
-            the right for denoising pre-training following the paper.
-        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
-            also be used by default.
-
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
-        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-XGLM_ENCODE_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`~XGLMTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-XGLM_DECODE_INPUTS_DOCSTRING = r"""
-    Args:
-        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`~XGLMTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to
-            the right for denoising pre-training following the paper.
-        encoder_outputs (`tuple(tuple(jnp.ndarray)`):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
-            `attentions`) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`,
-            *optional*) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-            cross-attention of the decoder.
-        encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
-            also be used by default.
-
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
-        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
-        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
-            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -242,7 +138,6 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->XGLM
 class FlaxXGLMAttention(nn.Module):
     config: XGLMConfig
     embed_dim: int
@@ -722,6 +617,7 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
+    @add_start_docstrings_to_model_forward(XGLM_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -793,8 +689,21 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
+@add_start_docstrings(
+    "The bare XGLM Model transformer outputting raw hidden-states without any specific head on top.",
+    XGLM_START_DOCSTRING,
+)
 class FlaxXGLMModel(FlaxXGLMPreTrainedModel):
     module_class = FlaxXGLMModule
+
+
+append_call_sample_docstring(
+    FlaxXGLMModel,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxBaseModelOutputWithPastAndCrossAttentions,
+    _CONFIG_FOR_DOC,
+)
 
 
 class FlaxXGLMForCausalLMModule(nn.Module):
@@ -856,6 +765,13 @@ class FlaxXGLMForCausalLMModule(nn.Module):
         )
 
 
+@add_start_docstrings(
+    """
+    The XGLM Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
+    XGLM_START_DOCSTRING,
+)
 class FlaxXGLMForCausalLM(FlaxXGLMPreTrainedModel):
     module_class = FlaxXGLMForCausalLMModule
 
@@ -884,3 +800,12 @@ class FlaxXGLMForCausalLM(FlaxXGLMPreTrainedModel):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
+
+
+append_call_sample_docstring(
+    FlaxXGLMForCausalLM,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxCausalLMOutputWithCrossAttentions,
+    _CONFIG_FOR_DOC,
+)
