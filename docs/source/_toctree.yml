@@ -304,7 +304,7 @@
       title: Wav2Vec2Phoneme
     - local: model_doc/wavlm
       title: WavLM
-     - local: model_doc/xglm
+    - local: model_doc/xglm
       title: XGLM
     - local: model_doc/xlm
       title: XLM
