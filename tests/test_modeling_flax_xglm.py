@@ -23,11 +23,9 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flax,
     require_sentencepiece,
-    require_tokenizers,
     slow,
 )
 
-from .test_configuration_common import ConfigTester
 from .test_generation_flax_utils import FlaxGenerationTesterMixin
 from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
@@ -201,6 +199,7 @@ class FlaxXGLMModelTester:
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
+@require_sentencepiece
 @require_flax
 class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
 
@@ -230,7 +229,6 @@ class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
         model = FlaxXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         model.config.num_beams = 1
         model.config.do_sample = False
-        model.config.pad_token_id = model.config.eos_token_id
 
         jit_generate = jax.jit(model.generate)
 
@@ -239,15 +237,15 @@ class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
         expected_string = [
-            "Hello this is a long string of words. I'm going to try to explain what I mean.",
-            "Hey, I'm not sure if I'm going to be able to do",
+            "Hello this is a long string of questions, but I'm not sure if I'm",
+            "Hey, I'm a newbie to the forum and I'",
         ]
 
         self.assertListEqual(output_string, expected_string)
 
     # overwrite from common since `attention_mask` in combination
     # with `causal_mask` behaves slighly differently
-    # @is_pt_flax_cross_test
+    @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -297,7 +295,7 @@ class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
 
     # overwrite from common since `attention_mask` in combination
     # with `causal_mask` behaves slighly differently
-    # @is_pt_flax_cross_test
+    @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
