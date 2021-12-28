@@ -19,18 +19,18 @@ limitations under the License.
 ## Table of Contents
 
 - [Automatic Speech Recognition with CTC](#connectionist-temporal-classification)
-	- [Single GPU example](#single-gpu)
-	- [Multi GPU example](#multi-gpu)
-	- [Examples](#examples)
-		- [TIMIT](#timit)
-		- [Librispeech](#librispeech)
-		- [Common Voice](#common-voice)
-		- [Multilingual Librispeech](#multilingual-librispeech)
+	- [Single GPU example](#single-gpu-ctc)
+	- [Multi GPU example](#multi-gpu-ctc)
+	- [Examples](#examples-ctc)
+		- [TIMIT](#timit-ctc)
+		- [Librispeech](#librispeech-ctc)
+		- [Common Voice](#common-voice-ctc)
+		- [Multilingual Librispeech](#multilingual-librispeech-ctc)
 - [Automatic Speech Recognition with Sequence-to-Sequence](#sequence-to-sequence)
-	- [Single GPU example](#single-gpu)
-	- [Multi GPU example](#multi-gpu)
-	- [Examples](#examples)
-		- [Librispeech](#librispeech)
+	- [Single GPU example](#single-gpu-seq2seq)
+	- [Multi GPU example](#multi-gpu-seq2seq)
+	- [Examples](#examples-seq2seq)
+		- [Librispeech](#librispeech-seq2seq)
 
 ## Connectionist Temporal Classification
 
@@ -56,7 +56,7 @@ If the environment variable is not set, the training script might freeze, *i.e.*
 
 ---
 
-### Single GPU
+### Single GPU CTC
 
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using a single GPU in half-precision.
 
@@ -90,7 +90,7 @@ python run_speech_recognition_ctc.py \
 On a single V100 GPU, this script should run in *ca.* 1 hour 20 minutes and yield a CTC loss of **0.39** and word error rate
 of **0.35**.
 
-### Multi GPU
+### Multi GPU CTC
 
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
@@ -125,14 +125,14 @@ python -m torch.distributed.launch \
 On 8 V100 GPUs, this script should run in *ca.* 18 minutes and yield a CTC loss of **0.39** and word error rate
 of **0.36**.
 
-### Examples
+### Examples CTC
 
 The following tables present a couple of example runs on the most popular speech-recognition datasets. 
 The presented performances are by no means optimal as no hyper-parameter tuning was done. Nevertheless, 
 they can serve as a baseline to improve upon.
 
 
-#### TIMIT
+#### TIMIT CTC
 
 - [TIMIT](https://huggingface.co/datasets/timit_asr)
 
@@ -145,7 +145,7 @@ they can serve as a baseline to improve upon.
 | [TIMIT](https://huggingface.co/datasets/timit_asr)| -  | [ntu-spml/distilhubert](https://huggingface.co/ntu-spml/distilhubert) | 0.68 | - | 1 GPU TITAN RTX |  26min                      | [here](https://huggingface.co/patrickvonplaten/distilhubert-timit)  | [run.sh](https://huggingface.co/patrickvonplaten/distilhubert-timit/blob/main/run.sh) |
 
 
-#### Librispeech
+#### Librispeech CTC
 
 - [Librispeech](https://huggingface.co/datasets/librispeech_asr)
 
@@ -159,7 +159,7 @@ they can serve as a baseline to improve upon.
 | [Librispeech](https://huggingface.co/datasets/librispeech_asr)| `"clean"` - `"train.100"` |  [asapp/sew-mid-100k](https://huggingface.co/asapp/sew-mid-100k) | 0.167 | | 8 GPU V100 | 54min  | [here](https://huggingface.co/patrickvonplaten/sew-mid-100k-librispeech-clean-100h-ft) | [run.sh](https://huggingface.co/patrickvonplaten/sew-mid-100k-librispeech-clean-100h-ft/blob/main/run.sh) |
 
 
-#### Common Voice
+#### Common Voice CTC
 
 - [Common Voice](https://huggingface.co/datasets/common_voice)
 
@@ -175,7 +175,7 @@ they can serve as a baseline to improve upon.
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-xls-r-1b](https://huggingface.co/facebook/wav2vec2-xls-r-1b)  | 0.21 | -  | 2 GPU Titan 24 GB RAM   |  15h10            | [here](https://huggingface.co/patrickvonplaten/wav2vec2-xls-r-1b-common_voice-tr-ft)      |  [run.sh](https://huggingface.co/patrickvonplaten/wav2vec2-large-xls-r-1b-common_voice-tr-ft/blob/main/run.sh) |
 
 
-#### Multilingual Librispeech
+#### Multilingual Librispeech CTC
 
 - [Multilingual Librispeech](https://huggingface.co/datasets/multilingual_librispeech)
 
@@ -276,7 +276,7 @@ If the environment variable is not set, the training script might freeze, *i.e.*
 
 ---
 
-### Single GPU
+### Single GPU Seq2Seq
 
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using a single GPU in half-precision.
 
@@ -318,7 +318,7 @@ python run_speech_recognition_seq2seq.py \
 On a single V100 GPU, this script should run in *ca.* 5 hours and yield a 
 cross-entropy loss of **0.405** and word error rate of **0.0728**.
 
-### Multi GPU
+### Multi GPU Seq2Seq
 
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/master/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
@@ -357,9 +357,9 @@ python -m torch.distributed.launch \
 
 On 8 V100 GPUs, this script should run in *ca.* 45 minutes and yield a cross-entropy loss of **0.405** and word error rate of **0.0728**
 
-### Examples
+### Examples Seq2Seq
 
-#### Librispeech
+#### Librispeech Seq2Seq
 
 - [Librispeech](https://huggingface.co/datasets/librispeech_asr)
 
