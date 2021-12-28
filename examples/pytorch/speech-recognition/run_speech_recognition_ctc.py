@@ -78,29 +78,27 @@ class ModelArguments:
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
-    freeze_feature_extractor: Optional[bool] = field(
-        default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+    freeze_feature_encoder: bool = field(
+        default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
-    attention_dropout: Optional[float] = field(
+    attention_dropout: float = field(
         default=0.0, metadata={"help": "The dropout ratio for the attention probabilities."}
     )
-    activation_dropout: Optional[float] = field(
+    activation_dropout: float = field(
         default=0.0, metadata={"help": "The dropout ratio for activations inside the fully connected layer."}
     )
-    feat_proj_dropout: Optional[float] = field(
-        default=0.0, metadata={"help": "The dropout ratio for the projected features."}
-    )
-    hidden_dropout: Optional[float] = field(
+    feat_proj_dropout: float = field(default=0.0, metadata={"help": "The dropout ratio for the projected features."})
+    hidden_dropout: float = field(
         default=0.0,
         metadata={
             "help": "The dropout probability for all fully connected layers in the embeddings, encoder, and pooler."
         },
     )
-    final_dropout: Optional[float] = field(
+    final_dropout: float = field(
         default=0.0,
         metadata={"help": "The dropout probability for the final projection layer."},
     )
-    mask_time_prob: Optional[float] = field(
+    mask_time_prob: float = field(
         default=0.05,
         metadata={
             "help": "Probability of each feature vector along the time axis to be chosen as the start of the vector"
@@ -108,22 +106,22 @@ class ModelArguments:
             "vectors will be masked along the time axis."
         },
     )
-    mask_time_length: Optional[int] = field(
+    mask_time_length: int = field(
         default=10,
         metadata={"help": "Length of vector span to mask along the time axis."},
     )
-    mask_feature_prob: Optional[float] = field(
+    mask_feature_prob: float = field(
         default=0.0,
         metadata={
             "help": "Probability of each feature vector along the feature axis to be chosen as the start of the vector"
             "span to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature bins will be masked along the time axis."
         },
     )
-    mask_feature_length: Optional[int] = field(
+    mask_feature_length: int = field(
         default=10,
         metadata={"help": "Length of vector span to mask along the feature axis."},
     )
-    layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
+    layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_loss_reduction: Optional[str] = field(
         default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
     )
@@ -142,26 +140,26 @@ class DataTrainingArguments:
     dataset_name: str = field(
         metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_split_name: Optional[str] = field(
+    train_split_name: str = field(
         default="train+validation",
         metadata={
             "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
         },
     )
-    eval_split_name: Optional[str] = field(
+    eval_split_name: str = field(
         default="test",
         metadata={
             "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
         },
     )
-    audio_column_name: Optional[str] = field(
+    audio_column_name: str = field(
         default="audio",
         metadata={"help": "The name of the dataset column containing the audio data. Defaults to 'audio'"},
     )
-    text_column_name: Optional[str] = field(
+    text_column_name: str = field(
         default="text",
         metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
     )
@@ -190,20 +188,20 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
-    eval_metrics: Optional[List[str]] = list_field(
+    eval_metrics: List[str] = list_field(
         default=["wer"],
         metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
     )
-    max_duration_in_seconds: Optional[float] = field(
+    max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
             "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
         },
     )
-    min_duration_in_seconds: Optional[float] = field(
+    min_duration_in_seconds: float = field(
         default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
-    preprocessing_only: Optional[bool] = field(
+    preprocessing_only: bool = field(
         default=False,
         metadata={
             "help": "Whether to only do data preprocessing and skip training. "
@@ -212,22 +210,22 @@ class DataTrainingArguments:
             "so that the cached datasets can consequently be loaded in distributed training"
         },
     )
-    use_auth_token: Optional[bool] = field(
+    use_auth_token: bool = field(
         default=False,
         metadata={
             "help": "If :obj:`True`, will use the token generated when running"
             ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
         },
     )
-    unk_token: Optional[str] = field(
+    unk_token: str = field(
         default="[UNK]",
         metadata={"help": "The unk token for the tokenizer"},
     )
-    pad_token: Optional[str] = field(
+    pad_token: str = field(
         default="[PAD]",
         metadata={"help": "The padding token for the tokenizer"},
     )
-    word_delimiter_token: Optional[str] = field(
+    word_delimiter_token: str = field(
         default="|",
         metadata={"help": "The word delimiter token for the tokenizer"},
     )
@@ -545,8 +543,8 @@ def main():
     )
 
     # freeze encoder
-    if model_args.freeze_feature_extractor:
-        model.freeze_feature_extractor()
+    if model_args.freeze_feature_encoder:
+        model.freeze_feature_encoder()
 
     # 6. Now we preprocess the datasets including loading the audio, resampling and normalization
     # Thankfully, `datasets` takes care of automatically loading and resampling the audio,

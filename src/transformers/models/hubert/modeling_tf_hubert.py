@@ -659,7 +659,7 @@ class TFHubertSamePadLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFHubertFeatureExtractor(tf.keras.layers.Layer):
+class TFHubertFeatureEncoder(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -684,6 +684,17 @@ class TFHubertFeatureExtractor(tf.keras.layers.Layer):
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
         return hidden_states
+
+
+class TFHubertFeatureExtractor(TFHubertFeatureEncoder):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 class TFHubertFeatureProjection(tf.keras.layers.Layer):
@@ -1116,7 +1127,7 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.feature_extractor = TFHubertFeatureExtractor(config, name="feature_extractor")
+        self.feature_extractor = TFHubertFeatureEncoder(config, name="feature_extractor")
         self.feature_projection = TFHubertFeatureProjection(config, name="feature_projection")
 
         if config.do_stable_layer_norm:
@@ -1490,8 +1501,20 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.hubert.feature_extractor.trainable = False
 

@@ -64,24 +64,24 @@ class WavLMConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in feature extractor. One of `"group"` for group
+            The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
             normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
             convolutional layers.
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for output of the feature extractor.
+            The dropout probability for output of the feature encoder.
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for quantized feature extractor states.
+            The dropout probabilitiy for quantized feature encoder states.
         conv_dim (`Tuple[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-            feature extractor. The length of *conv_dim* defines the number of 1D convolutional layers.
+            feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
         conv_stride (`Tuple[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the feature extractor. The length
+            A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
             of *conv_stride* defines the number of convolutional layers and has to match the the length of *conv_dim*.
         conv_kernel (`Tuple[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the feature extractor. The
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
             length of *conv_kernel* defines the number of convolutional layers and has to match the the length of
             *conv_dim*.
         conv_bias (`bool`, *optional*, defaults to `False`):
@@ -96,7 +96,7 @@ class WavLMConfig(PretrainedConfig):
             True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
             False` corresponds to applying layer norm after the attention layer.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
-            Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
+            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
@@ -122,7 +122,7 @@ class WavLMConfig(PretrainedConfig):
         contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
             The temperature *kappa* in the contrastive loss.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature extractor that's used by the quantizer.
+            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
         num_negatives (`int`, *optional*, defaults to 100):
             Number of negative samples for the contrastive loss.
         codevector_dim (`int`, *optional*, defaults to 256):
