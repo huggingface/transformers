@@ -482,10 +482,11 @@ class FeatureExtractionMixin:
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
-            elif key == "_processor_class" and value is not None:
-                # make sure private name "_processor_class" is correctly
-                # saved as "processor_class"
-                dictionary["processor_class"] = value
+
+        # make sure private name "_processor_class" is correctly
+        # saved as "processor_class"
+        if dictionary.get("_processor_class", None) is not None:
+            dictionary["processor_class"] = dictionary.pop("_processor_class")
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
