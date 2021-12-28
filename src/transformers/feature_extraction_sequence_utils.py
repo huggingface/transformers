@@ -139,7 +139,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # The model's main input name, usually `input_values`, has be passed for padding
         if self.model_input_names[0] not in processed_features:
             raise ValueError(
-                "You should supply an instance of :class:`~transformers.BatchFeature` or list of :class:`~transformers.BatchFeature` to this method "
+                "You should supply an instance of `transformers.BatchFeature` or list of `transformers.BatchFeature` to this method "
                 f"that includes {self.model_input_names[0]}, but you provided {list(processed_features.keys())}"
             )
 
