@@ -190,7 +190,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 stride_right = max(stop - (i + chunk_len), 0)
                 is_last = i + step > inputs_len
 
-                yield {"is_last": is_last, "stride": (stride_left, stride_right), **processed}
+                yield {"is_last": is_last, "stride": (stop - start, stride_left, stride_right), **processed}
         else:
             processed = self.feature_extractor(
                 inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
@@ -214,12 +214,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.argmax(dim=-1)
             if stride is not None:
-                left, right = stride
-                input_n = model_inputs["input_values"].shape[-1]
-                token_n = tokens.shape[-1]
-                left_token = int(left / input_n * token_n)
-                right_token = int((input_n - right) / input_n * token_n) + 1
-                tokens = tokens[:, left_token:right_token]
+                if isinstance(stride, tuple):
+                    stride = [stride]
+
+                max_token_n = tokens.shape[-1]
+                max_input_n = max(input_n for input_n, _, _ in stride)
+                ratio = max_token_n / max_input_n
+                for i, (input_n, left, right) in enumerate(stride):
+                    token_n = int(input_n * ratio) + 1
+                    left_token = int(left / input_n * token_n)
+                    right_token = int((input_n - right) / input_n * token_n) + 1
+                    tokens[i, :left_token] = self.tokenizer.pad_token_id
+                    tokens[i, right_token:] = self.tokenizer.pad_token_id
         else:
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)

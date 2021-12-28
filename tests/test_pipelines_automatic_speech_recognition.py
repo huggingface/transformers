@@ -255,6 +255,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         n_repeats = 100
         audio = np.tile(audio, n_repeats)
-        output = speech_recognizer(audio, batch_size=2)
+        output = speech_recognizer([audio], batch_size=2)
         expected_text = "A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats
-        self.assertEqual(output, {"text": expected_text.strip()})
+        expected = [{"text": expected_text.strip()}]
+        self.assertEqual(output, expected)
