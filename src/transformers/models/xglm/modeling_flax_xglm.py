@@ -20,6 +20,8 @@ import random
 from functools import partial
 from typing import Callable, Optional, Tuple
 
+import numpy as np
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -31,13 +33,8 @@ from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
-    FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSeq2SeqLMOutput,
-    FlaxSeq2SeqModelOutput,
-    FlaxSeq2SeqQuestionAnsweringModelOutput,
-    FlaxSeq2SeqSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -219,6 +216,20 @@ XGLM_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
+def create_sinusoidal_positions(n_pos, dim, padding_idx=1):
+    half_dim = dim // 2
+    emb = math.log(10000) / (half_dim - 1)
+    emb = np.exp(np.arange(half_dim) * -emb)
+    emb = np.expand_dims(np.arange(n_pos), 1) * np.expand_dims(emb, 0)
+    emb = np.concatenate([np.sin(emb), np.cos(emb)], 1)
+    emb = np.reshape(emb, (n_pos, dim))
+
+    if padding_idx is not None:
+        emb[padding_idx, :] = 0
+
+    return jnp.array(emb)
+
+
 def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
@@ -231,6 +242,7 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention with Bart->XGLM
 class FlaxXGLMAttention(nn.Module):
     config: XGLMConfig
     embed_dim: int
@@ -368,7 +380,7 @@ class FlaxXGLMAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -396,116 +408,6 @@ class FlaxXGLMAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class FlaxXGLMEncoderLayer(nn.Module):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self) -> None:
-        self.embed_dim = self.config.d_model
-        self.self_attn = FlaxXGLMAttention(
-            config=self.config,
-            embed_dim=self.embed_dim,
-            num_heads=self.config.encoder_attention_heads,
-            dropout=self.config.attention_dropout,
-            dtype=self.dtype,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
-        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-        self.activation_fn = ACT2FN[self.config.activation_function]
-        self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
-        self.fc1 = nn.Dense(
-            self.config.encoder_ffn_dim,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-        self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
-        )
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
-
-    def __call__(
-        self,
-        hidden_states: jnp.ndarray,
-        attention_mask: jnp.ndarray,
-        output_attentions: bool = True,
-        deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
-        residual = hidden_states
-        hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
-
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class FlaxXGLMEncoderLayerCollection(nn.Module):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
-        self.layers = [
-            FlaxXGLMEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
-        ]
-        self.layerdrop = self.config.encoder_layerdrop
-
-    def __call__(
-        self,
-        hidden_states,
-        attention_mask,
-        deterministic: bool = True,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ):
-        all_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-
-        for encoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                    deterministic,
-                )
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        outputs = (hidden_states, all_hidden_states, all_attentions)
-
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
-
-        return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
-        )
-
-
 class FlaxXGLMDecoderLayer(nn.Module):
     config: XGLMConfig
     dtype: jnp.dtype = jnp.float32
@@ -515,34 +417,37 @@ class FlaxXGLMDecoderLayer(nn.Module):
         self.self_attn = FlaxXGLMAttention(
             config=self.config,
             embed_dim=self.embed_dim,
-            num_heads=self.config.decoder_attention_heads,
+            num_heads=self.config.attention_heads,
             dropout=self.config.attention_dropout,
             causal=True,
             dtype=self.dtype,
         )
+        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
         self.activation_dropout_layer = nn.Dropout(rate=self.config.activation_dropout)
 
-        self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
-        self.encoder_attn = FlaxXGLMAttention(
-            config=self.config,
-            embed_dim=self.embed_dim,
-            num_heads=self.config.decoder_attention_heads,
-            dropout=self.config.attention_dropout,
-            dtype=self.dtype,
-        )
-        self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        if self.config.add_cross_attention:
+            self.encoder_attn = FlaxXGLMAttention(
+                config=self.config,
+                embed_dim=self.embed_dim,
+                num_heads=self.config.decoder_attention_heads,
+                dropout=self.config.attention_dropout,
+                dtype=self.dtype,
+            )
+            self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
+
         self.fc1 = nn.Dense(
-            self.config.encoder_ffn_dim,
+            self.config.ffn_dim,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
-        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
+    # Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayer.__call__
     def __call__(
         self,
         hidden_states: jnp.ndarray,
@@ -554,6 +459,7 @@ class FlaxXGLMDecoderLayer(nn.Module):
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -561,13 +467,13 @@ class FlaxXGLMDecoderLayer(nn.Module):
         )
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -575,16 +481,15 @@ class FlaxXGLMDecoderLayer(nn.Module):
             )
             hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -600,9 +505,9 @@ class FlaxXGLMDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxXGLMDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
+            FlaxXGLMDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_layers)
         ]
-        self.layerdrop = self.config.decoder_layerdrop
+        self.layerdrop = self.config.layerdrop
 
     def __call__(
         self,
@@ -650,123 +555,23 @@ class FlaxXGLMDecoderLayerCollection(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        outputs = [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions]
+        outputs = (hidden_states, all_hidden_states, all_self_attns, all_cross_attentions)
+        return outputs
 
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
+        # if not return_dict:
+        #     return tuple(v for v in outputs if v is not None)
 
-        return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
-        )
-
-
-class FlaxXGLMClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    config: XGLMConfig
-    inner_dim: int
-    num_classes: int
-    pooler_dropout: float
-    dtype: jnp.dtype = jnp.float32
-
-    def setup(self):
-        self.dense = nn.Dense(
-            self.inner_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
-        )
-        self.dropout = nn.Dropout(rate=self.pooler_dropout)
-        self.out_proj = nn.Dense(
-            self.num_classes,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-
-    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool):
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = jnp.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
+        # return FlaxBaseModelOutputWithPastAndCrossAttentions(
+        #     last_hidden_state=hidden_states,
+        #     hidden_states=all_hidden_states,
+        #     attentions=all_self_attns,
+        #     cross_attentions=all_cross_attentions,
+        # )
 
 
-class FlaxXGLMEncoder(nn.Module):
+class FlaxXGLMModule(nn.Module):
     config: XGLMConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
-
-    def setup(self):
-        self.dropout_layer = nn.Dropout(rate=self.config.dropout)
-
-        embed_dim = self.config.d_model
-        self.padding_idx = self.config.pad_token_id
-        self.max_source_positions = self.config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
-
-        # XGLM is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-        self.layers = FlaxXGLMEncoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        input_shape = input_ids.shape
-        input_ids = input_ids.reshape(-1, input_shape[-1])
-
-        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        embed_pos = self.embed_positions(position_ids + self.offset)
-
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-
-        outputs = self.layers(
-            hidden_states,
-            attention_mask,
-            deterministic=deterministic,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return outputs
-
-        return FlaxBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-class FlaxXGLMDecoder(nn.Module):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -776,24 +581,29 @@ class FlaxXGLMDecoder(nn.Module):
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
 
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
-
-        # XGLM is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        self.embed_positions = nn.Embed(
-            self.config.max_position_embeddings + self.offset,
+        self.embed_tokens = nn.Embed(
+            self.config.vocab_size,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
+        # XGLM is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        # TODO: padding idx should be zero
+        self.embed_positions = create_sinusoidal_positions(
+            self.config.max_position_embeddings + self.offset, embed_dim
+        )
         self.layers = FlaxXGLMDecoderLayerCollection(self.config, self.dtype)
-        self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
+
+    def _create_pos_ids(self, input_ids, position_ids):
+        mask_ne = jnp.not_equal(input_ids, 1).astype("i4")
+        mask_eq = jnp.equal(input_ids, 1).astype("i4")
+        padding_idx = self.config.pad_token_id
+
+        position_ids = (position_ids * mask_ne - padding_idx) + (mask_eq * self.offset)
+        return position_ids
 
     def __call__(
         self,
@@ -814,11 +624,11 @@ class FlaxXGLMDecoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        positions = self.embed_positions(position_ids + self.offset)
+        # position_ids = self._create_pos_ids(input_ids, position_ids)
+        position_ids = position_ids + self.offset
+        positions = jnp.take(self.embed_positions, position_ids, axis=0)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
-
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
 
         outputs = self.layers(
@@ -833,83 +643,18 @@ class FlaxXGLMDecoder(nn.Module):
             return_dict=return_dict,
         )
 
+        last_hidden_states = outputs[0]
+        last_hidden_states = self.layer_norm(last_hidden_states)
+
         if not return_dict:
-            return outputs
+            outputs = (last_hidden_states,) + outputs[1:]
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
-        )
-
-
-class FlaxXGLMModule(nn.Module):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
-        self.shared = nn.Embed(
-            self.config.vocab_size,
-            self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-
-        self.encoder = FlaxXGLMEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-        self.decoder = FlaxXGLMDecoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
-
-    def _get_encoder_module(self):
-        return self.encoder
-
-    def _get_decoder_module(self):
-        return self.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        encoder_outputs = self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            position_ids=decoder_position_ids,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        return FlaxSeq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+            last_hidden_state=last_hidden_states,
+            hidden_states=outputs[1],
+            attentions=outputs[2],
+            cross_attentions=outputs[3],
         )
 
 
@@ -932,30 +677,29 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        # make sure initialization pass will work for FlaxXGLMForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
-        decoder_input_ids = input_ids
-        decoder_attention_mask = jnp.ones_like(input_ids)
-
-        batch_size, sequence_length = input_ids.shape
-        position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
-        decoder_position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
-
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(
-            rngs,
-            input_ids,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
-            position_ids,
-            decoder_position_ids,
-        )["params"]
+        if self.config.add_cross_attention:
+            encoder_hidden_states = jnp.zeros(input_shape + (self.config.n_embd,))
+            encoder_attention_mask = attention_mask
+            module_init_outputs = self.module.init(
+                rngs,
+                input_ids,
+                attention_mask,
+                position_ids,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                return_dict=False,
+            )
+        else:
+            module_init_outputs = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)
 
-    def init_cache(self, batch_size, max_length, encoder_outputs):
+        return module_init_outputs["params"]
+
+    def init_cache(self, batch_size, max_length):
         r"""
         Args:
             batch_size (`int`):
@@ -969,219 +713,28 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
                 encoder. Used in the cross-attention of the decoder.
         """
         # init input variables to retrieve cache
-        decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
-        decoder_attention_mask = jnp.ones_like(decoder_input_ids)
-        decoder_position_ids = jnp.broadcast_to(
-            jnp.arange(jnp.atleast_2d(decoder_input_ids).shape[-1]), decoder_input_ids.shape
-        )
-
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
-            decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
+        input_ids = jnp.ones((batch_size, max_length), dtype="i4")
+        attention_mask = jnp.ones_like(input_ids, dtype="i4")
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0),
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            decoder_position_ids=decoder_position_ids,
-            encoder_hidden_states=encoder_outputs[0],
-            init_cache=True,
-            method=_decoder_forward,  # we only need to call the decoder to init the cache
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
         return unfreeze(init_variables["cache"])
-
-    @add_start_docstrings(XGLM_ENCODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=XGLMConfig)
-    def encode(
-        self,
-        input_ids: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
-        position_ids: Optional[jnp.ndarray] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        train: bool = False,
-        params: dict = None,
-        dropout_rng: PRNGKey = None,
-    ):
-        r"""
-        Returns:
-
-        Example::
-
-            >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
-
-            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
-            >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
-
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-        if position_ids is None:
-            batch_size, sequence_length = input_ids.shape
-            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
-
-        # Handle any PRNG if needed
-        rngs = {}
-        if dropout_rng is not None:
-            rngs["dropout"] = dropout_rng
-
-        def _encoder_forward(module, input_ids, attention_mask, position_ids, **kwargs):
-            encode_module = module._get_encoder_module()
-            return encode_module(input_ids, attention_mask, position_ids, **kwargs)
-
-        return self.module.apply(
-            {"params": params or self.params},
-            input_ids=jnp.array(input_ids, dtype="i4"),
-            attention_mask=jnp.array(attention_mask, dtype="i4"),
-            position_ids=jnp.array(position_ids, dtype="i4"),
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=not train,
-            rngs=rngs,
-            method=_encoder_forward,
-        )
-
-    @add_start_docstrings(XGLM_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=XGLMConfig)
-    def decode(
-        self,
-        decoder_input_ids,
-        encoder_outputs,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
-        decoder_attention_mask: Optional[jnp.ndarray] = None,
-        decoder_position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        train: bool = False,
-        params: dict = None,
-        dropout_rng: PRNGKey = None,
-    ):
-        r"""
-        Returns:
-
-        Example::
-
-            >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
-
-            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
-            >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
-
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
-
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
-
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        encoder_hidden_states = encoder_outputs[0]
-        if encoder_attention_mask is None:
-            batch_size, sequence_length = encoder_hidden_states.shape[:2]
-            encoder_attention_mask = jnp.ones((batch_size, sequence_length))
-
-        batch_size, sequence_length = decoder_input_ids.shape
-        if decoder_attention_mask is None:
-            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
-
-        if decoder_position_ids is None:
-            if past_key_values is not None:
-                raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
-
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
-            )
-
-        # Handle any PRNG if needed
-        rngs = {}
-        if dropout_rng is not None:
-            rngs["dropout"] = dropout_rng
-
-        inputs = {"params": params or self.params}
-
-        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
-        # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
-        # it can be changed by FlaxXGLMAttention module
-        if past_key_values:
-            inputs["cache"] = past_key_values
-            mutable = ["cache"]
-        else:
-            mutable = False
-
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
-            decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
-
-        outputs = self.module.apply(
-            inputs,
-            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
-            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
-            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=jnp.array(encoder_attention_mask, dtype="i4"),
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=not train,
-            rngs=rngs,
-            mutable=mutable,
-            method=_decoder_forward,
-        )
-
-        # add updated cache to model output
-        if past_key_values is not None and return_dict:
-            outputs, past = outputs
-            outputs["past_key_values"] = unfreeze(past["cache"])
-            return outputs
-        elif past_key_values is not None and not return_dict:
-            outputs, past = outputs
-            outputs = outputs[:1] + (unfreeze(past["cache"]),) + outputs[1:]
-
-        return outputs
 
     def __call__(
         self,
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
-        decoder_input_ids: Optional[jnp.ndarray] = None,
-        decoder_attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        decoder_position_ids: Optional[jnp.ndarray] = None,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
         params: dict = None,
+        past_key_values: dict = None,
         dropout_rng: PRNGKey = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1189,6 +742,10 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if encoder_hidden_states is not None and encoder_attention_mask is None:
+            batch_size, sequence_length = encoder_hidden_states.shape[:2]
+            encoder_attention_mask = jnp.ones((batch_size, sequence_length))
 
         # prepare encoder inputs
         if attention_mask is None:
@@ -1197,529 +754,133 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
             batch_size, sequence_length = input_ids.shape
             position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
-        # prepare decoder inputs
-        if decoder_input_ids is None:
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, decoder_start_token_id=self.config.decoder_start_token_id
-            )
-        if decoder_attention_mask is None:
-            decoder_attention_mask = jnp.ones_like(decoder_input_ids)
-        if decoder_position_ids is None:
-            batch_size, sequence_length = decoder_input_ids.shape
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
-            )
-
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
 
-        return self.module.apply(
-            {"params": params or self.params},
-            input_ids=jnp.array(input_ids, dtype="i4"),
-            attention_mask=jnp.array(attention_mask, dtype="i4"),
-            position_ids=jnp.array(position_ids, dtype="i4"),
-            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
-            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
-            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=not train,
-            rngs=rngs,
-        )
-
-
-@add_start_docstrings(
-    "The bare XGLM Model transformer outputting raw hidden-states without any specific head on top.",
-    XGLM_START_DOCSTRING,
-)
-class FlaxXGLMModel(FlaxXGLMPreTrainedModel):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    module_class = FlaxXGLMModule
-
-
-append_call_sample_docstring(
-    FlaxXGLMModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
-
-
-class FlaxXGLMForConditionalGenerationModule(nn.Module):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32
-    bias_init: Callable[..., jnp.ndarray] = jax.nn.initializers.zeros
-
-    def setup(self):
-        self.model = FlaxXGLMModule(config=self.config, dtype=self.dtype)
-        self.lm_head = nn.Dense(
-            self.model.shared.num_embeddings,
-            use_bias=False,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
-        )
-        self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
-
-    def _get_encoder_module(self):
-        return self.model.encoder
-
-    def _get_decoder_module(self):
-        return self.model.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            position_ids=position_ids,
-            decoder_position_ids=decoder_position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        hidden_states = outputs[0]
-
-        if self.config.tie_word_embeddings:
-            shared_embedding = self.model.variables["params"]["shared"]["embedding"]
-            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
-        else:
-            lm_logits = self.lm_head(hidden_states)
-
-        lm_logits += self.final_logits_bias.astype(self.dtype)
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return output
-
-        return FlaxSeq2SeqLMOutput(
-            logits=lm_logits,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    "The XGLM Model with a language modeling head. Can be used for summarization.", XGLM_START_DOCSTRING
-)
-class FlaxXGLMForConditionalGeneration(FlaxXGLMPreTrainedModel):
-    module_class = FlaxXGLMForConditionalGenerationModule
-    dtype: jnp.dtype = jnp.float32
-
-    @add_start_docstrings(XGLM_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=XGLMConfig)
-    def decode(
-        self,
-        decoder_input_ids,
-        encoder_outputs,
-        encoder_attention_mask: Optional[jnp.ndarray] = None,
-        decoder_attention_mask: Optional[jnp.ndarray] = None,
-        decoder_position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        deterministic: bool = True,
-        params: dict = None,
-        dropout_rng: PRNGKey = None,
-    ):
-        r"""
-        Returns:
-
-        Example::
-
-            >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
-
-            >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
-            >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
-
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
-
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
-
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        encoder_hidden_states = encoder_outputs[0]
-        if encoder_attention_mask is None:
-            batch_size, sequence_length = encoder_hidden_states.shape[:2]
-            encoder_attention_mask = jnp.ones((batch_size, sequence_length))
-
-        batch_size, sequence_length = decoder_input_ids.shape
-        if decoder_attention_mask is None:
-            decoder_attention_mask = jnp.ones((batch_size, sequence_length))
-
-        if decoder_position_ids is None:
-            if past_key_values is not None:
-                raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
-
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
-            )
-
-        # Handle any PRNG if needed
-        rngs = {}
-        if dropout_rng is not None:
-            rngs["dropout"] = dropout_rng
-
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
-        # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
-        # it can be changed by FlaxXGLMAttention module
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPT2Attention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
         else:
             mutable = False
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
-            decoder_module = module._get_decoder_module()
-            outputs = decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
-            hidden_states = outputs[0]
-
-            if self.config.tie_word_embeddings:
-                shared_embedding = module.model.variables["params"]["shared"]["embedding"]
-                lm_logits = module.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
-            else:
-                lm_logits = module.lm_head(hidden_states)
-
-            lm_logits += module.final_logits_bias.astype(self.dtype)
-            return lm_logits, outputs
-
         outputs = self.module.apply(
             inputs,
-            decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
-            decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
-            decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            position_ids=jnp.array(position_ids, dtype="i4"),
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=jnp.array(encoder_attention_mask, dtype="i4"),
+            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            deterministic=deterministic,
+            deterministic=not train,
             rngs=rngs,
             mutable=mutable,
-            method=_decoder_forward,
         )
-
-        if past_key_values is None:
-            lm_logits, decoder_outputs = outputs
-        else:
-            (lm_logits, decoder_outputs), past = outputs
-
-        if return_dict:
-            outputs = FlaxCausalLMOutputWithCrossAttentions(
-                logits=lm_logits,
-                hidden_states=decoder_outputs.hidden_states,
-                attentions=decoder_outputs.attentions,
-                cross_attentions=decoder_outputs.cross_attentions,
-            )
-        else:
-            outputs = (lm_logits,) + decoder_outputs[1:]
 
         # add updated cache to model output
         if past_key_values is not None and return_dict:
-            outputs["past_key_values"] = unfreeze(past["cache"])
+            outputs, past_key_values = outputs
+            outputs["past_key_values"] = unfreeze(past_key_values["cache"])
             return outputs
         elif past_key_values is not None and not return_dict:
-            outputs = outputs[:1] + (unfreeze(past["cache"]),) + outputs[1:]
+            outputs, past_key_values = outputs
+            outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
 
         return outputs
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        max_length,
-        attention_mask: Optional[jnp.DeviceArray] = None,
-        decoder_attention_mask: Optional[jnp.DeviceArray] = None,
-        encoder_outputs=None,
-        **kwargs
-    ):
-        # initializing the cache
-        batch_size, seq_length = decoder_input_ids.shape
 
-        past_key_values = self.init_cache(batch_size, max_length, encoder_outputs)
+class FlaxXGLMModel(FlaxXGLMPreTrainedModel):
+    module_class = FlaxXGLMModule
+
+
+class FlaxXGLMForCausalLMModule(nn.Module):
+    config: XGLMConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        self.model = FlaxXGLMModule(self.config, self.dtype)
+        self.lm_head = nn.Dense(
+            self.config.vocab_size,
+            use_bias=False,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
+        )
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+
+        outputs = self.model(
+            input_ids,
+            attention_mask,
+            position_ids,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            deterministic=deterministic,
+            init_cache=init_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.model.variables["params"]["embed_tokens"]["embedding"]
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
+
+        if not return_dict:
+            return (lm_logits,) + outputs[1:]
+
+        return FlaxCausalLMOutputWithCrossAttentions(
+            logits=lm_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+
+class FlaxXGLMForCausalLM(FlaxXGLMPreTrainedModel):
+    module_class = FlaxXGLMForCausalLMModule
+
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+        # initializing the cache
+        batch_size, seq_length = input_ids.shape
+
+        past_key_values = self.init_cache(batch_size, max_length)
         # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
-        # But since the decoder uses a causal mask, those positions are masked anyways.
+        # But since GPT2 uses a causal mask, those positions are masked anyways.
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
-        if decoder_attention_mask is not None:
-            position_ids = decoder_attention_mask.cumsum(axis=-1) - 1
-            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, decoder_attention_mask, (0, 0))
+        if attention_mask is not None:
+            position_ids = attention_mask.cumsum(axis=-1) - 1
+            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
         else:
             position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
 
         return {
             "past_key_values": past_key_values,
-            "encoder_outputs": encoder_outputs,
-            "encoder_attention_mask": attention_mask,
-            "decoder_attention_mask": extended_attention_mask,
-            "decoder_position_ids": position_ids,
+            "attention_mask": extended_attention_mask,
+            "position_ids": position_ids,
         }
 
     def update_inputs_for_generation(self, model_outputs, model_kwargs):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
-        model_kwargs["decoder_position_ids"] = model_kwargs["decoder_position_ids"][:, -1:] + 1
+        model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
-
-
-FLAX_XGLM_CONDITIONAL_GENERATION_DOCSTRING = """
-    Returns:
-
-    Summarization example::
-
-        >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
-
-        >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
-        >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
-
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
-
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids']).sequences
-        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-
-    Mask filling example::
-
-        >>> from transformers import XGLMTokenizer, FlaxXGLMForConditionalGeneration
-        >>> tokenizer = XGLMTokenizer.from_pretrained('facebook/xglm-564M')
-        >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-        >>> model = FlaxXGLMForConditionalGeneration.from_pretrained('facebook/xglm-564M')
-        >>> input_ids = tokenizer([TXT], return_tensors='np')['input_ids']
-        >>> logits = model(input_ids).logits
-
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-        >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-        >>> values, predictions = jax.lax.top_k(probs)
-
-        >>> tokenizer.decode(predictions).split()
-"""
-
-overwrite_call_docstring(
-    FlaxXGLMForConditionalGeneration, XGLM_INPUTS_DOCSTRING + FLAX_XGLM_CONDITIONAL_GENERATION_DOCSTRING
-)
-append_replace_return_docstrings(
-    FlaxXGLMForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
-)
-
-
-class FlaxXGLMForSequenceClassificationModule(nn.Module):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32
-    num_labels: Optional[int] = None
-
-    def setup(self):
-        self.model = FlaxXGLMModule(config=self.config, dtype=self.dtype)
-        self.classification_head = FlaxXGLMClassificationHead(
-            config=self.config,
-            inner_dim=self.config.d_model,
-            num_classes=self.num_labels if self.num_labels is not None else self.config.num_labels,
-            pooler_dropout=self.config.classifier_dropout,
-        )
-
-    def _get_encoder_module(self):
-        return self.model.encoder
-
-    def _get_decoder_module(self):
-        return self.model.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            position_ids=position_ids,
-            decoder_position_ids=decoder_position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        hidden_states = outputs[0]  # last hidden state
-
-        eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
-
-        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
-        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
-            if len(jnp.unique(eos_mask.sum(1))) > 1:
-                raise ValueError("All examples must have the same number of <eos> tokens.")
-
-            if any(eos_mask.sum(1) == 0):
-                raise ValueError("There are missing <eos> tokens in input_ids")
-
-            # Ensure to keep 1 only for the last <eos> token for each example
-            eos_mask_noised = eos_mask + jnp.arange(eos_mask.shape[1]) * 1e-6
-            eos_mask = jnp.where(eos_mask_noised == eos_mask_noised.max(1).reshape(-1, 1), 1, 0)
-
-        sentence_representation = jnp.einsum("ijk, ij -> ijk", hidden_states, eos_mask).sum(1)
-        logits = self.classification_head(sentence_representation, deterministic=deterministic)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return output
-
-        return FlaxSeq2SeqSequenceClassifierOutput(
-            logits=logits,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    XGLM model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
-    tasks.
-    """,
-    XGLM_START_DOCSTRING,
-)
-class FlaxXGLMForSequenceClassification(FlaxXGLMPreTrainedModel):
-    module_class = FlaxXGLMForSequenceClassificationModule
-    dtype = jnp.float32
-
-
-append_call_sample_docstring(
-    FlaxXGLMForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxSeq2SeqSequenceClassifierOutput,
-    _CONFIG_FOR_DOC,
-)
-
-
-class FlaxXGLMForQuestionAnsweringModule(nn.Module):
-    config: XGLMConfig
-    dtype: jnp.dtype = jnp.float32
-    num_labels = 2
-
-    def setup(self):
-        self.model = FlaxXGLMModule(config=self.config, dtype=self.dtype)
-        self.qa_outputs = nn.Dense(
-            self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
-        )
-
-    def _get_encoder_module(self):
-        return self.model.encoder
-
-    def _get_decoder_module(self):
-        return self.model.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            position_ids=position_ids,
-            decoder_position_ids=decoder_position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = jnp.split(logits, logits.shape[-1], axis=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return output
-
-        return FlaxSeq2SeqQuestionAnsweringModelOutput(
-            start_logits=start_logits,
-            end_logits=end_logits,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    XGLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    XGLM_START_DOCSTRING,
-)
-class FlaxXGLMForQuestionAnswering(FlaxXGLMPreTrainedModel):
-    module_class = FlaxXGLMForQuestionAnsweringModule
-    dtype = jnp.float32
-
-
-append_call_sample_docstring(
-    FlaxXGLMForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxSeq2SeqQuestionAnsweringModelOutput,
-    _CONFIG_FOR_DOC,
-)

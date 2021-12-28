@@ -2220,6 +2220,7 @@ if is_flax_available():
         [
             "FlaxXGLMModel",
             "FlaxXGLMPreTrainedModel",
+            "FlaxXGLMForCausalLM",
         ]
     )
 else:
@@ -4042,7 +4043,7 @@ if TYPE_CHECKING:
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
         )
-        from .models.xglm import FlaxXGLMModel, FlaxXGLMPreTrainedModel
+        from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

@@ -14,337 +14,342 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
-from transformers import XGLMConfig, XGLMTokenizer, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+import transformers
+from transformers import XGLMConfig, XGLMTokenizer, is_flax_available, is_torch_available
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_flax,
+    require_sentencepiece,
+    require_tokenizers,
+    slow,
+)
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
+from .test_generation_flax_utils import FlaxGenerationTesterMixin
+from .test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
     import numpy as np
 
+    import jax
     import jax.numpy as jnp
-    from transformers import (
-        FlaxXGLMForConditionalGeneration,
-        FlaxXGLMForQuestionAnswering,
-        FlaxXGLMForSequenceClassification,
-        FlaxXGLMModel,
+    from transformers import FlaxXGLMForCausalLM, FlaxXGLMModel
+    from transformers.modeling_flax_pytorch_utils import (
+        convert_pytorch_state_dict_to_flax,
+        load_flax_weights_in_pytorch_model,
     )
+    from transformers.models.xglm.modeling_flax_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel
+
+
+if is_torch_available():
+    import torch
 
 
 @require_flax
 class FlaxXGLMModelTester:
-    config_cls = XGLMConfig
-    config_updates = {}
-    hidden_act = "gelu"
-
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=7,
         is_training=True,
-        use_labels=False,
+        use_input_mask=True,
+        use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        d_model=32,
         num_hidden_layers=5,
         num_attention_heads=4,
-        intermediate_size=37,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
+        ffn_dim=37,
+        activation_function="gelu",
+        activation_dropout=0.1,
+        attention_dropout=0.1,
+        max_position_embeddings=512,
+        initializer_range=0.02,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
+        self.use_input_mask = use_input_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
+        self.hidden_size = d_model
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.ffn_dim = ffn_dim
+        self.activation_function = activation_function
+        self.activation_dropout = activation_dropout
+        self.attention_dropout = attention_dropout
         self.max_position_embeddings = max_position_embeddings
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+        self.initializer_range = initializer_range
+        self.scope = None
+        self.bos_token_id = 0
+        self.eos_token_id = 2
+        self.pad_token_id = 1
 
-    def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size).clip(3, self.vocab_size)
-        eos_tensor = np.expand_dims(np.array([self.eos_token_id] * self.batch_size), 1)
-        input_ids = np.concatenate([input_ids, eos_tensor], axis=1)
+    def prepare_config_and_inputs(self):
+        input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length], self.vocab_size), 3, self.vocab_size)
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        config = self.config_cls(
+        config = XGLMConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            decoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
-            decoder_ffn_dim=self.intermediate_size,
-            dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_probs_dropout_prob,
+            num_layers=self.num_hidden_layers,
+            attention_heads=self.num_attention_heads,
+            ffn_dim=self.ffn_dim,
+            activation_function=self.activation_function,
+            activation_dropout=self.activation_dropout,
+            attention_dropout=self.attention_dropout,
             max_position_embeddings=self.max_position_embeddings,
-            eos_token_ids=[2],
+            initializer_range=self.initializer_range,
+            use_cache=True,
             bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.pad_token_id,
-            **self.config_updates,
         )
-        inputs_dict = prepare_xglm_inputs_dict(config, input_ids, decoder_input_ids)
+
+        return (config, input_ids, input_mask)
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    def check_use_cache_forward(self, model_class_name, config, inputs_dict):
+    def prepare_config_and_inputs_for_decoder(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
+
+    def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
         model = model_class_name(config)
 
-        encoder_outputs = model.encode(inputs_dict["input_ids"])
+        past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
+        attention_mask = jnp.ones((input_ids.shape[0], max_decoder_length), dtype="i4")
 
-        decoder_input_ids, decoder_attention_mask = (
-            inputs_dict["decoder_input_ids"],
-            inputs_dict["decoder_attention_mask"],
+        position_ids = jnp.broadcast_to(
+            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
         )
-
-        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
-        decoder_attention_mask = jnp.ones((decoder_input_ids.shape[0], max_decoder_length), dtype="i4")
-
-        decoder_position_ids = jnp.broadcast_to(
-            jnp.arange(decoder_input_ids.shape[-1] - 1)[None, :],
-            (decoder_input_ids.shape[0], decoder_input_ids.shape[-1] - 1),
-        )
-        outputs_cache = model.decode(
-            decoder_input_ids[:, :-1],
-            encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask,
+        outputs_cache = model(
+            input_ids[:, :-1],
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
-            decoder_position_ids=decoder_position_ids,
+            position_ids=position_ids,
         )
 
-        decoder_position_ids = jnp.array(decoder_input_ids.shape[0] * [[decoder_input_ids.shape[-1] - 1]], dtype="i4")
-        outputs_cache_next = model.decode(
-            decoder_input_ids[:, -1:],
-            encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask,
+        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        outputs_cache_next = model(
+            input_ids[:, -1:],
+            attention_mask=attention_mask,
             past_key_values=outputs_cache.past_key_values,
-            decoder_position_ids=decoder_position_ids,
+            position_ids=position_ids,
         )
 
-        outputs = model.decode(decoder_input_ids, encoder_outputs)
+        outputs = model(input_ids)
 
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
+    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
         model = model_class_name(config)
 
-        encoder_outputs = model.encode(inputs_dict["input_ids"])
-
-        decoder_input_ids, decoder_attention_mask = (
-            inputs_dict["decoder_input_ids"],
-            inputs_dict["decoder_attention_mask"],
-        )
-
-        decoder_attention_mask_cache = jnp.concatenate(
-            [
-                decoder_attention_mask,
-                jnp.zeros((decoder_attention_mask.shape[0], max_decoder_length - decoder_attention_mask.shape[1])),
-            ],
+        attention_mask_cache = jnp.concatenate(
+            [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
             axis=-1,
         )
 
-        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
-        decoder_position_ids = jnp.broadcast_to(
-            jnp.arange(decoder_input_ids.shape[-1] - 1)[None, :],
-            (decoder_input_ids.shape[0], decoder_input_ids.shape[-1] - 1),
+        past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
         )
 
-        outputs_cache = model.decode(
-            decoder_input_ids[:, :-1],
-            encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask_cache,
+        outputs_cache = model(
+            input_ids[:, :-1],
+            attention_mask=attention_mask_cache,
             past_key_values=past_key_values,
-            decoder_position_ids=decoder_position_ids,
+            position_ids=position_ids,
         )
-        decoder_position_ids = jnp.array(decoder_input_ids.shape[0] * [[decoder_input_ids.shape[-1] - 1]], dtype="i4")
-        outputs_cache_next = model.decode(
-            decoder_input_ids[:, -1:],
-            encoder_outputs,
+        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        outputs_cache_next = model(
+            input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
-            decoder_attention_mask=decoder_attention_mask_cache,
-            decoder_position_ids=decoder_position_ids,
+            attention_mask=attention_mask_cache,
+            position_ids=position_ids,
         )
 
-        outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
-
+        outputs = model(input_ids, attention_mask=attention_mask)
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
-
-
-def prepare_xglm_inputs_dict(
-    config,
-    input_ids,
-    decoder_input_ids,
-    attention_mask=None,
-    decoder_attention_mask=None,
-):
-    if attention_mask is None:
-        attention_mask = np.not_equal(input_ids, config.pad_token_id).astype(np.int8)
-    if decoder_attention_mask is None:
-        decoder_attention_mask = np.concatenate(
-            [
-                np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8),
-                np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id).astype(np.int8),
-            ],
-            axis=-1,
-        )
-    return {
-        "input_ids": input_ids,
-        "decoder_input_ids": decoder_input_ids,
-        "attention_mask": attention_mask,
-        "decoder_attention_mask": decoder_attention_mask,
-    }
 
 
 @require_flax
-class FlaxXGLMModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            FlaxXGLMForConditionalGeneration,
-            FlaxXGLMForQuestionAnswering,
-            FlaxXGLMForSequenceClassification,
-            FlaxXGLMModel,
-        )
-        if is_flax_available()
-        else ()
-    )
-    all_generative_model_classes = (FlaxXGLMForConditionalGeneration,) if is_flax_available() else ()
-    is_encoder_decoder = True
-    test_pruning = False
-    test_head_masking = False
-    test_onnx = False
+class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+
+    all_model_classes = (FlaxXGLMModel, FlaxXGLMForCausalLM) if is_flax_available() else ()
+    all_generative_model_classes = (FlaxXGLMForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxXGLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XGLMConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_use_cache_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            self.model_tester.check_use_cache_forward(model_class, config, inputs_dict)
+        for model_class_name in self.all_model_classes:
+            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
 
     def test_use_cache_forward_with_attn_mask(self):
+        for model_class_name in self.all_model_classes:
+            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            self.model_tester.check_use_cache_forward_with_attn_mask(
+                model_class_name, config, input_ids, attention_mask
+            )
+
+    @slow
+    def test_batch_generation(self):
+        tokenizer = XGLMTokenizer.from_pretrained("XGLM", padding_side="left")
+        inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
+
+        model = FlaxXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
+        model.config.num_beams = 1
+        model.config.do_sample = False
+        model.config.pad_token_id = model.config.eos_token_id
+
+        jit_generate = jax.jit(model.generate)
+
+        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
+
+        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+
+        expected_string = [
+            "Hello this is a long string of words. I'm going to try to explain what I mean.",
+            "Hey, I'm not sure if I'm going to be able to do",
+        ]
+
+        self.assertListEqual(output_string, expected_string)
+
+    # overwrite from common since `attention_mask` in combination
+    # with `causal_mask` behaves slighly differently
+    # @is_pt_flax_cross_test
+    def test_equivalence_pt_to_flax(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                batch_size, seq_length = pt_inputs["input_ids"].shape
+                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
+                for batch_idx, start_index in enumerate(rnd_start_indices):
+                    pt_inputs["attention_mask"][batch_idx, :start_index] = 0
+                    pt_inputs["attention_mask"][batch_idx, start_index:] = 1
+                    prepared_inputs_dict["attention_mask"][batch_idx, :start_index] = 0
+                    prepared_inputs_dict["attention_mask"][batch_idx, start_index:] = 1
+                pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+                fx_model = model_class(config, dtype=jnp.float32)
+                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_model.params = fx_state
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
+
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pt_model.save_pretrained(tmpdirname)
+                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(
+                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
+                    self.assert_almost_equals(fx_output_loaded[:, -1], pt_output[:, -1].numpy(), 4e-2)
+
+    # overwrite from common since `attention_mask` in combination
+    # with `causal_mask` behaves slighly differently
+    # @is_pt_flax_cross_test
+    def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
+            with self.subTest(model_class.__name__):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
 
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if _assert_tensors_equal(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
+                pt_model = pt_model_class(config).eval()
+                pt_model.config.use_cache = False
+                fx_model = model_class(config, dtype=jnp.float32)
 
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+                batch_size, seq_length = pt_inputs["input_ids"].shape
+                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
+                for batch_idx, start_index in enumerate(rnd_start_indices):
+                    pt_inputs["attention_mask"][batch_idx, :start_index] = 0
+                    pt_inputs["attention_mask"][batch_idx, start_index:] = 1
+                    prepared_inputs_dict["attention_mask"][batch_idx, :start_index] = 0
+                    prepared_inputs_dict["attention_mask"][batch_idx, start_index:] = 1
 
-def _long_tensor(tok_lst):
-    return np.array(tok_lst, dtype=np.int32)
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
 
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs).to_tuple()
 
-TOLERANCE = 1e-4
+                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
 
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
 
-@slow
-@require_sentencepiece
-@require_tokenizers
-@require_flax
-class FlaxXGLMModelIntegrationTest(unittest.TestCase):
-    def test_inference_no_head(self):
-        model = FlaxXGLMModel.from_pretrained("facebook/xglm-564M")
-        # change to intended input here
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_xglm_inputs_dict(model.config, input_ids, decoder_input_ids)
-        output = model(**inputs_dict)[0]
-        expected_shape = (1, 11, 1024)
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = np.array(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
-        )
-        _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
-    def test_inference_with_head(self):
-        model = FlaxXGLMForConditionalGeneration.from_pretrained("facebook/xglm-564M")
-        # change to intended input here
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_xglm_inputs_dict(model.config, input_ids, decoder_input_ids)
-        output = model(**inputs_dict)[0]
-        expected_shape = (1, 11, 1024)
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = np.array(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
-        )
-        _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+                self.assertEqual(
+                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
+                )
+                for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
+                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
 
-    def test_seq_to_seq_generation(self):
-        hf = FlaxXGLMForConditionalGeneration.from_pretrained("facebook/xglm-564M")
-        tok = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
-
-        batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
-        ]
-
-        # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
-            batch_input,
-            max_length=512,
-            padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
-            return_tensors="np",
-        )
-
-        hypotheses_batch = hf.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
-            num_beams=2,
-        )
-
-        EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
-        ]
-
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
-        assert generated == EXPECTED
+    @slow
+    def test_model_from_pretrained(self):
+        for model_class_name in self.all_model_classes:
+            model = model_class_name.from_pretrained("facebook/xglm-564M")
+            outputs = model(np.ones((1, 1)))
+            self.assertIsNotNone(outputs)
