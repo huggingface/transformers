@@ -98,13 +98,12 @@ class Wav2Vec2ProcessorWithLM:
     def save_pretrained(self, save_directory):
         """
         Save the Wav2Vec2 feature_extractor, a tokenizer object and a pyctcdecode decoder to the directory
-        `save_directory`, so that they can be re-loaded using the
-        [`~Wav2Vec2ProcessorWithLM.from_pretrained`] class method.
+        `save_directory`, so that they can be re-loaded using the [`~Wav2Vec2ProcessorWithLM.from_pretrained`] class
+        method.
 
         <Tip>
 
-        This class method is simply calling
-        [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained,`]
+        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained,`]
         [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`] and pyctcdecode's
         [`pyctcdecode.BeamSearchDecoderCTC.save_to_dir`].
 
@@ -129,9 +128,9 @@ class Wav2Vec2ProcessorWithLM:
         <Tip>
 
         This class method is simply calling Wav2Vec2FeatureExtractor's
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`],
-        Wav2Vec2CTCTokenizer's [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`],
-        and [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
+        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], Wav2Vec2CTCTokenizer's
+        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`], and
+        [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
 
         Please refer to the docstrings of the methods above for more information.
 
@@ -145,8 +144,7 @@ class Wav2Vec2ProcessorWithLM:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a feature extractor file saved using the
-                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g.,
-                  `./my_model_directory/`.
+                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             **kwargs
@@ -221,8 +219,8 @@ class Wav2Vec2ProcessorWithLM:
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Wav2Vec2ProcessorWithLM.as_target_processor`] this method forwards all its arguments to
-        Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.__call__`]. Please refer to the docstring of
-        the above two methods for more information.
+        Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.__call__`]. Please refer to the docstring of the above two
+        methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
@@ -231,8 +229,8 @@ class Wav2Vec2ProcessorWithLM:
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         [`~Wav2Vec2FeatureExtractor.pad`] and returns its output. If used in the context
         [`~Wav2Vec2ProcessorWithLM.as_target_processor`] this method forwards all its arguments to
-        Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.pad`]. Please refer to the docstring of the
-        above two methods for more information.
+        Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.pad`]. Please refer to the docstring of the above two methods
+        for more information.
         """
         return self.current_processor.pad(*args, **kwargs)
 

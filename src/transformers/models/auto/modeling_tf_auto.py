@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class. """
+""" Auto Model class."""
 
 
 import warnings
@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("clip", "TFCLIPModel"),
         ("deberta-v2", "TFDebertaV2Model"),
         ("deberta", "TFDebertaModel"),
         ("rembert", "TFRemBertModel"),
