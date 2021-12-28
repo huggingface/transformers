@@ -610,10 +610,24 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         Example:
 
         ```python
-        chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
-                                 -1.8348,  0.7672,  0.2986,  0.0285,
-                                 -0.7584,  0.4206, -0.0405,  0.1599,
-                                 2.0514, -1.1600,  0.5372,  0.2629 ]
+        chunked_hidden_states: [
+            0.4983,
+            2.6918,
+            -0.0071,
+            1.0492,
+            -1.8348,
+            0.7672,
+            0.2986,
+            0.0285,
+            -0.7584,
+            0.4206,
+            -0.0405,
+            0.1599,
+            2.0514,
+            -1.1600,
+            0.5372,
+            0.2629,
+        ]
         window_overlap = num_rows = 4
         ```
 
@@ -2382,11 +2396,12 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         ```python
         >>> from transformers import LEDTokenizer, TFLEDForConditionalGeneration
         >>> import tensorflow as tf
-        >>> mname = 'allenai/led-base-16384'
+
+        >>> mname = "allenai/led-base-16384"
         >>> tokenizer = LEDTokenizer.from_pretrained(mname)
         >>> TXT = "My friends are <mask> but they eat too many carbs."
         >>> model = TFLEDForConditionalGeneration.from_pretrained(mname)
-        >>> batch = tokenizer([TXT], return_tensors='tf')
+        >>> batch = tokenizer([TXT], return_tensors="tf")
         >>> logits = model(inputs=batch.input_ids).logits
         >>> probs = tf.nn.softmax(logits[0])
         >>> # probs[5] is associated with the mask token

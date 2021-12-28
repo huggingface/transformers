@@ -1421,9 +1421,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
 
         >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-        >>> cosine_sim = torch.cosine_similarity(
-        ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
-        ... )
+        >>> cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         >>> # show that cosine similarity is much higher than random
         >>> assert cosine_sim[mask_time_indices].mean() > 0.5
@@ -1568,10 +1566,12 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
 
+
         >>> def map_to_array(batch):
-        >>>     speech, _ = sf.read(batch["file"])
-        >>>     batch["speech"] = speech
-        >>>     return batch
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
+
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)

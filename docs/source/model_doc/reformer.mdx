@@ -134,7 +134,7 @@ easily be trained on sequences as long as 64000 tokens.
 For training, the [`ReformerModelWithLMHead`] should be used as follows:
 
 ```python
-input_ids = tokenizer.encode('This is a sentence from the training data', return_tensors='pt')
+input_ids = tokenizer.encode("This is a sentence from the training data", return_tensors="pt")
 loss = model(input_ids, labels=input_ids)[0]
 ```
 

@@ -1114,10 +1114,10 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
         >>> from transformers import FunnelTokenizer, FunnelForPreTraining
         >>> import torch
 
-        >>> tokenizer = FunnelTokenizer.from_pretrained('funnel-transformer/small')
-        >>> model = FunnelForPreTraining.from_pretrained('funnel-transformer/small')
+        >>> tokenizer = FunnelTokenizer.from_pretrained("funnel-transformer/small")
+        >>> model = FunnelForPreTraining.from_pretrained("funnel-transformer/small")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors= "pt")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> logits = model(**inputs).logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

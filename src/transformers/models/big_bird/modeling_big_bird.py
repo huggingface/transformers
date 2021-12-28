@@ -2308,8 +2308,8 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         >>> from transformers import BigBirdTokenizer, BigBirdForPreTraining
         >>> import torch
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
-        >>> model = BigBirdForPreTraining.from_pretrained('google/bigbird-roberta-base')
+        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> model = BigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2532,10 +2532,10 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         >>> from transformers import BigBirdTokenizer, BigBirdForCausalLM, BigBirdConfig
         >>> import torch
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
+        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
         >>> config = BigBirdConfig.from_pretrained("google/bigbird-roberta-base")
         >>> config.is_decoder = True
-        >>> model = BigBirdForCausalLM.from_pretrained('google/bigbird-roberta-base', config=config)
+        >>> model = BigBirdForCausalLM.from_pretrained("google/bigbird-roberta-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -1055,11 +1055,11 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, return_tensors='np')
+        >>> inputs = tokenizer(text, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1117,11 +1117,11 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, return_tensors='np')
+        >>> inputs = tokenizer(text, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1333,10 +1333,12 @@ FLAX_T5_MODEL_DOCSTRING = """
     ```python
     >>> from transformers import T5Tokenizer, FlaxT5Model
 
-    >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-    >>> model = FlaxT5Model.from_pretrained('t5-small')
+    >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    >>> model = FlaxT5Model.from_pretrained("t5-small")
 
-    >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="np").input_ids
+    >>> input_ids = tokenizer(
+    ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
+    >>> ).input_ids
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
 
     >>> # forward pass
@@ -1483,11 +1485,11 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
         >>> text = "summarize: My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, return_tensors='np')
+        >>> inputs = tokenizer(text, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1631,14 +1633,14 @@ FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
     ```python
     >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-    >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-    >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+    >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
     >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors='np')
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors="np")
 
     >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs['input_ids']).sequences
+    >>> summary_ids = model.generate(inputs["input_ids"]).sequences
     >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 """

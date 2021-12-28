@@ -939,8 +939,8 @@ class GenerationMixin:
         >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
         >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
         >>> document = (
-        ... "at least two people were killed in a suspected bomb attack on a passenger bus "
-        ... "in the strife-torn southern philippines on monday , the military said."
+        ...     "at least two people were killed in a suspected bomb attack on a passenger bus "
+        ...     "in the strife-torn southern philippines on monday , the military said."
         ... )
         >>> # encode input context
         >>> input_ids = tokenizer(document, return_tensors="pt").input_ids
@@ -1329,10 +1329,10 @@ class GenerationMixin:
 
         ```python
         >>> from transformers import (
-        ... AutoTokenizer,
-        ... AutoModelForCausalLM,
-        ... LogitsProcessorList,
-        ... MinLengthLogitsProcessor,
+        ...     AutoTokenizer,
+        ...     AutoModelForCausalLM,
+        ...     LogitsProcessorList,
+        ...     MinLengthLogitsProcessor,
         ... )
 
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -1345,9 +1345,11 @@ class GenerationMixin:
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
 
         >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList([
-        ...     MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
-        ... ])
+        >>> logits_processor = LogitsProcessorList(
+        ...     [
+        ...         MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...     ]
+        ... )
 
         >>> outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
 
@@ -1556,12 +1558,12 @@ class GenerationMixin:
 
         ```python
         >>> from transformers import (
-        ...    AutoTokenizer,
-        ...    AutoModelForCausalLM,
-        ...    LogitsProcessorList,
-        ...    MinLengthLogitsProcessor,
-        ...    TopKLogitsWarper,
-        ...    TemperatureLogitsWarper,
+        ...     AutoTokenizer,
+        ...     AutoModelForCausalLM,
+        ...     LogitsProcessorList,
+        ...     MinLengthLogitsProcessor,
+        ...     TopKLogitsWarper,
+        ...     TemperatureLogitsWarper,
         ... )
 
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -1574,14 +1576,18 @@ class GenerationMixin:
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
 
         >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList([
-        ...     MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
-        ... ])
+        >>> logits_processor = LogitsProcessorList(
+        ...     [
+        ...         MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...     ]
+        ... )
         >>> # instantiate logits processors
-        >>> logits_warper = LogitsProcessorList([
-        ...     TopKLogitsWarper(50),
-        ...     TemperatureLogitsWarper(0.7),
-        ... ])
+        >>> logits_warper = LogitsProcessorList(
+        ...     [
+        ...         TopKLogitsWarper(50),
+        ...         TemperatureLogitsWarper(0.7),
+        ...     ]
+        ... )
 
         >>> outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
 
@@ -1795,11 +1801,11 @@ class GenerationMixin:
 
         ```python
         >>> from transformers import (
-        ...    AutoTokenizer,
-        ...    AutoModelForSeq2SeqLM,
-        ...    LogitsProcessorList,
-        ...    MinLengthLogitsProcessor,
-        ...    BeamSearchScorer,
+        ...     AutoTokenizer,
+        ...     AutoModelForSeq2SeqLM,
+        ...     LogitsProcessorList,
+        ...     MinLengthLogitsProcessor,
+        ...     BeamSearchScorer,
         ... )
         >>> import torch
 
@@ -1818,7 +1824,9 @@ class GenerationMixin:
 
         >>> # add encoder_outputs to model keyword arguments
         >>> model_kwargs = {
-        ...     "encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)
+        ...     "encoder_outputs": model.get_encoder()(
+        ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
+        ...     )
         ... }
 
         >>> # instantiate beam scorer
@@ -1829,9 +1837,11 @@ class GenerationMixin:
         ... )
 
         >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList([
-        ...     MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
-        ... ])
+        >>> logits_processor = LogitsProcessorList(
+        ...     [
+        ...         MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
+        ...     ]
+        ... )
 
         >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
@@ -2112,7 +2122,9 @@ class GenerationMixin:
 
         >>> # add encoder_outputs to model keyword arguments
         >>> model_kwargs = {
-        ...     "encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)
+        ...     "encoder_outputs": model.get_encoder()(
+        ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
+        ...     )
         ... }
 
         >>> # instantiate beam scorer
@@ -2124,14 +2136,16 @@ class GenerationMixin:
         ... )
 
         >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList([
-        ...     MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)
-        ... ])
+        >>> logits_processor = LogitsProcessorList(
+        ...     [MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)]
+        ... )
         >>> # instantiate logits processors
-        >>> logits_warper = LogitsProcessorList([
-        ...     TopKLogitsWarper(50),
-        ...     TemperatureLogitsWarper(0.7),
-        ... ])
+        >>> logits_warper = LogitsProcessorList(
+        ...     [
+        ...         TopKLogitsWarper(50),
+        ...         TemperatureLogitsWarper(0.7),
+        ...     ]
+        ... )
 
         >>> outputs = model.beam_sample(
         ...     input_ids, beam_scorer, logits_processor=logits_processor, logits_warper=logits_warper, **model_kwargs
@@ -2384,12 +2398,12 @@ class GenerationMixin:
 
         ```python
         >>> from transformers import (
-        ...    AutoTokenizer,
-        ...    AutoModelForSeq2SeqLM,
-        ...    LogitsProcessorList,
-        ...    MinLengthLogitsProcessor,
-        ...    HammingDiversityLogitsProcessor,
-        ...    BeamSearchScorer,
+        ...     AutoTokenizer,
+        ...     AutoModelForSeq2SeqLM,
+        ...     LogitsProcessorList,
+        ...     MinLengthLogitsProcessor,
+        ...     HammingDiversityLogitsProcessor,
+        ...     BeamSearchScorer,
         ... )
         >>> import torch
 
@@ -2408,7 +2422,9 @@ class GenerationMixin:
 
         >>> # add encoder_outputs to model keyword arguments
         >>> model_kwargs = {
-        ...     "encoder_outputs": model.get_encoder()(encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True)
+        ...     "encoder_outputs": model.get_encoder()(
+        ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
+        ...     )
         ... }
 
         >>> # instantiate beam scorer
@@ -2417,16 +2433,20 @@ class GenerationMixin:
         ...     max_length=model.config.max_length,
         ...     num_beams=num_beams,
         ...     device=model.device,
-        ...     num_beam_groups=3
+        ...     num_beam_groups=3,
         ... )
 
         >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList([
-        ...     HammingDiversityLogitsProcessor(5.5, num_beams=6, num_beam_groups=3),
-        ...     MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
-        ... ])
+        >>> logits_processor = LogitsProcessorList(
+        ...     [
+        ...         HammingDiversityLogitsProcessor(5.5, num_beams=6, num_beam_groups=3),
+        ...         MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
+        ...     ]
+        ... )
 
-        >>> outputs = model.group_beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+        >>> outputs = model.group_beam_search(
+        ...     input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs
+        ... )
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""

@@ -468,9 +468,10 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
 
         ```python
         >>> from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
-        >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-        >>> model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+
+        >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
+        >>> model = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors="pt")["input_ids"]
         >>> embeddings = model(input_ids).pooler_output
         ```"""
 
@@ -548,9 +549,10 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
         ```python
         >>> from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
-        >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-        >>> model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+
+        >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        >>> model = DPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors="pt")["input_ids"]
         >>> embeddings = model(input_ids).pooler_output
         ```
         """
@@ -627,14 +629,15 @@ class DPRReader(DPRPretrainedReader):
 
         ```python
         >>> from transformers import DPRReader, DPRReaderTokenizer
-        >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-        >>> model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
+
+        >>> tokenizer = DPRReaderTokenizer.from_pretrained("facebook/dpr-reader-single-nq-base")
+        >>> model = DPRReader.from_pretrained("facebook/dpr-reader-single-nq-base")
         >>> encoded_inputs = tokenizer(
-        ...         questions=["What is love ?"],
-        ...         titles=["Haddaway"],
-        ...         texts=["'What Is Love' is a song recorded by the artist Haddaway"],
-        ...         return_tensors='pt'
-        ...     )
+        ...     questions=["What is love ?"],
+        ...     titles=["Haddaway"],
+        ...     texts=["'What Is Love' is a song recorded by the artist Haddaway"],
+        ...     return_tensors="pt",
+        ... )
         >>> outputs = model(**encoded_inputs)
         >>> start_logits = outputs.start_logits
         >>> end_logits = outputs.end_logits

@@ -986,11 +986,11 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained('facebook/marian-large-cnn')
-        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained("facebook/marian-large-cnn")
+        >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=64, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
 
@@ -1053,11 +1053,11 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained('facebook/marian-large-cnn')
-        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained("facebook/marian-large-cnn")
+        >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=64, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1321,11 +1321,11 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
         ```python
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-        >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=64, return_tensors='jax')
+        >>> inputs = tokenizer(text, max_length=64, return_tensors="jax")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1482,11 +1482,11 @@ FLAX_MARIAN_MT_DOCSTRING = """
     ```python
     >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-    >>> model = FlaxMarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-    >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+    >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+    >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
     >>> text = "My friends are cool but they eat too many carbs."
-    >>> input_ids = tokenizer(text, max_length=64, return_tensors='jax').input_ids
+    >>> input_ids = tokenizer(text, max_length=64, return_tensors="jax").input_ids
 
     >>> sequences = model.generate(input_ids, max_length=64, num_beams=2).sequences
 

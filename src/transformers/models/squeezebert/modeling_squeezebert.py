@@ -471,7 +471,7 @@ SQUEEZEBERT_START_DOCSTRING = r"""
 
     Hierarchy:
 
-    ```python
+    ```
     Internal class hierarchy:
     SqueezeBertModel
         SqueezeBertEncoder
@@ -483,7 +483,7 @@ SQUEEZEBERT_START_DOCSTRING = r"""
 
     Data layouts:
 
-    ```python
+    ```
     Input data is in [batch, sequence_length, hidden_size] format.
 
     Data inside the encoder is in [batch, hidden_size, sequence_length] format. But, if `output_hidden_states == True`, the data from inside the encoder is returned in [batch, sequence_length, hidden_size] format.

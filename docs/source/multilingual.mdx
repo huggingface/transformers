@@ -62,18 +62,18 @@ The different languages this model/tokenizer handles, as well as the ids of thes
 These ids should be used when passing a language parameter during a model pass. Let's define our inputs:
 
 ```py
->>> input_ids = torch.tensor([tokenizer.encode("Wikipedia was used to")]) # batch size of 1
+>>> input_ids = torch.tensor([tokenizer.encode("Wikipedia was used to")])  # batch size of 1
 ```
 
 We should now define the language embedding by using the previously defined language id. We want to create a tensor
 filled with the appropriate language ids, of the same size as input_ids. For english, the id is 0:
 
 ```py
->>> language_id = tokenizer.lang2id['en']  # 0
+>>> language_id = tokenizer.lang2id["en"]  # 0
 >>> langs = torch.tensor([language_id] * input_ids.shape[1])  # torch.tensor([0, 0, 0, ..., 0])
 
 >>> # We reshape it to be of size (batch_size, sequence_length)
->>> langs = langs.view(1, -1) # is now of shape [1, sequence_length] (we have a batch size of 1)
+>>> langs = langs.view(1, -1)  # is now of shape [1, sequence_length] (we have a batch size of 1)
 ```
 
 You can then feed it all as input to your model:

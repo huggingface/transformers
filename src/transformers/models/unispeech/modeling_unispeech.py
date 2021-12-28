@@ -1270,9 +1270,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
 
         >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-        >>> cosine_sim = torch.cosine_similarity(
-        ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
-        ... )
+        >>> cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         >>> # show that cosine similarity is much higher than random
         >>> assert cosine_sim[mask_time_indices].mean() > 0.5

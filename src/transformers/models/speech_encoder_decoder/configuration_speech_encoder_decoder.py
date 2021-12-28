@@ -58,17 +58,17 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> config_encoder = model.config.encoder
-    >>> config_decoder  = model.config.decoder
+    >>> config_decoder = model.config.decoder
     >>> # set decoder config to causal lm
     >>> config_decoder.is_decoder = True
     >>> config_decoder.add_cross_attention = True
 
     >>> # Saving the model, including its configuration
-    >>> model.save_pretrained('my-model')
+    >>> model.save_pretrained("my-model")
 
     >>> # loading model and config from pretrained folder
-    >>> encoder_decoder_config = SpeechEncoderDecoderConfig.from_pretrained('my-model')
-    >>> model = SpeechEncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
+    >>> encoder_decoder_config = SpeechEncoderDecoderConfig.from_pretrained("my-model")
+    >>> model = SpeechEncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
     model_type = "speech-encoder-decoder"
     is_composition = True

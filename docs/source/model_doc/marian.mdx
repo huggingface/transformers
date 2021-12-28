@@ -65,13 +65,14 @@ require 3 character language codes:
 
 ```python
 >>> from transformers import MarianMTModel, MarianTokenizer
->>> src_text = [
-...     '>>fra<< this is a sentence in english that we want to translate to french',
-...     '>>por<< This should go to portuguese',
-...     '>>esp<< And this to Spanish'
->>> ]
 
->>> model_name = 'Helsinki-NLP/opus-mt-en-roa'
+>>> src_text = [
+...     ">>fra<< this is a sentence in english that we want to translate to french",
+...     ">>por<< This should go to portuguese",
+...     ">>esp<< And this to Spanish",
+... ]
+
+>>> model_name = "Helsinki-NLP/opus-mt-en-roa"
 >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
 >>> print(tokenizer.supported_language_codes)
 ['>>zlm_Latn<<', '>>mfe<<', '>>hat<<', '>>pap<<', '>>ast<<', '>>cat<<', '>>ind<<', '>>glg<<', '>>wln<<', '>>spa<<', '>>fra<<', '>>ron<<', '>>por<<', '>>ita<<', '>>oci<<', '>>arg<<', '>>min<<']
@@ -88,11 +89,12 @@ Here is the code to see all available pretrained models on the hub:
 
 ```python
 from huggingface_hub import list_models
+
 model_list = list_models()
 org = "Helsinki-NLP"
 model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
-suffix = [x.split('/')[1] for x in model_ids]
-old_style_multi_models = [f'{org}/{s}' for s in suffix if s != s.lower()]
+suffix = [x.split("/")[1] for x in model_ids]
+old_style_multi_models = [f"{org}/{s}" for s in suffix if s != s.lower()]
 ```
 
 ## Old Style Multi-Lingual Models
@@ -100,7 +102,7 @@ old_style_multi_models = [f'{org}/{s}' for s in suffix if s != s.lower()]
 These are the old style multi-lingual models ported from the OPUS-MT-Train repo: and the members of each language
 group:
 
-```python
+```python no-style
 ['Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU',
  'Helsinki-NLP/opus-mt-ROMANCE-en',
  'Helsinki-NLP/opus-mt-SCANDINAVIA-SCANDINAVIA',
@@ -129,13 +131,14 @@ Example of translating english to many romance languages, using old-style 2 char
 
 ```python
 >>> from transformers import MarianMTModel, MarianTokenizer
->>> src_text = [
-...     '>>fr<< this is a sentence in english that we want to translate to french',
-...     '>>pt<< This should go to portuguese',
-...     '>>es<< And this to Spanish'
->>> ]
 
->>> model_name = 'Helsinki-NLP/opus-mt-en-ROMANCE'
+>>> src_text = [
+...     ">>fr<< this is a sentence in english that we want to translate to french",
+...     ">>pt<< This should go to portuguese",
+...     ">>es<< And this to Spanish",
+... ]
+
+>>> model_name = "Helsinki-NLP/opus-mt-en-ROMANCE"
 >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
 
 >>> model = MarianMTModel.from_pretrained(model_name)

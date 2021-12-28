@@ -1038,8 +1038,8 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-        >>> model = TFMobileBertForPreTraining.from_pretrained('google/mobilebert-uncased')
+        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> model = TFMobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
         >>> prediction_scores, seq_relationship_scores = outputs[:2]
@@ -1250,14 +1250,14 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
         >>> import tensorflow as tf
         >>> from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-        >>> model = TFMobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
+        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> model = TFMobileBertForNextSentencePrediction.from_pretrained("google/mobilebert-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
 
-        >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
+        >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
         ```"""
         inputs = input_processing(
             func=self.call,

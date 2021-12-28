@@ -1776,8 +1776,8 @@ class MBartForCausalLM(MBartPreTrainedModel):
         ```python
         >>> from transformers import MBartTokenizer, MBartForCausalLM
 
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/bart-large')
-        >>> model = MBartForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/bart-large")
+        >>> model = MBartForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -276,10 +276,18 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
         ```python
         >>> from transformers import RagRetriever, TFRagModel
+
         >>> # initialize a RAG from two pretrained models.
-        >>> model = TFRagModel.from_pretrained_question_encoder_generator('facebook/dpr-question_encoder-single-nq-base', 't5-small')
+        >>> model = TFRagModel.from_pretrained_question_encoder_generator(
+        ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
+        ... )
         >>> # alternatively, initialize from pytorch pretrained models can also be done
-        >>> model = TFRagModel.from_pretrained_question_encoder_generator('facebook/dpr-question_encoder-single-nq-base', "facebook/bart-base", generator_from_pt=True, question_encoder_from_pt=True)
+        >>> model = TFRagModel.from_pretrained_question_encoder_generator(
+        ...     "facebook/dpr-question_encoder-single-nq-base",
+        ...     "facebook/bart-base",
+        ...     generator_from_pt=True,
+        ...     question_encoder_from_pt=True,
+        ... )
 
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./rag")
@@ -555,11 +563,15 @@ class TFRagModel(TFRagPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
-        >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-base", index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
+        ... )
         >>> # initialize with RagRetriever to do everything in one forward call
         >>> model = TFRagModel.from_pretrained("facebook/rag-token-base", retriever=retriever, from_pt=True)
 
-        >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf")
+        >>> input_dict = tokenizer.prepare_seq2seq_batch(
+        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
+        ... )
         >>> input_ids = input_dict["input_ids"]
         >>> outputs = model(input_ids)
         ```"""
@@ -930,11 +942,15 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         >>> from transformers import RagTokenizer, RagRetriever, TFRagTokenForGeneration
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
-        >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True
+        ... )
         >>> # initialize with RagRetriever to do everything in one forward call
         >>> model = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever, from_pt=True)
 
-        >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf")
+        >>> input_dict = tokenizer.prepare_seq2seq_batch(
+        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
+        ... )
         >>> outputs = model(input_dict, output_retrieved=True)
 
         >>> # or use retriever separately
@@ -943,12 +959,27 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         >>> question_hidden_states = model.question_encoder(input_ids)[0]
         >>> # 2. Retrieve
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
-        >>> doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=1), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=1)
+        >>> doc_scores = tf.squeeze(
+        ...     tf.matmul(
+        ...         tf.expand_dims(question_hidden_states, axis=1), docs_dict["retrieved_doc_embeds"], transpose_b=True
+        ...     ),
+        ...     axis=1,
+        ... )
         >>> # 3. Forward to generator
-        >>> outputs = model(inputs=None, context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
+        >>> outputs = model(
+        ...     inputs=None,
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ...     decoder_input_ids=input_dict["labels"],
+        ... )
 
         >>> # or directly generate
-        >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
+        >>> generated = model.generate(
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ... )
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
@@ -1519,11 +1550,17 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         >>> from transformers import RagTokenizer, RagRetriever, TFRagSequenceForGeneration
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-        >>> retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+        ... )
         >>> # initialize with RagRetriever to do everything in one forward call
-        >>> model = TFRagRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever, from_pt=True)
+        >>> model = TFRagRagSequenceForGeneration.from_pretrained(
+        ...     "facebook/rag-sequence-nq", retriever=retriever, from_pt=True
+        ... )
 
-        >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf")
+        >>> input_dict = tokenizer.prepare_seq2seq_batch(
+        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
+        ... )
         >>> outputs = model(input_dict, output_retrieved=True)
 
         >>> # or use retriever separately
@@ -1532,12 +1569,27 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         >>> question_hidden_states = model.question_encoder(input_ids)[0]
         >>> # 2. Retrieve
         >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
-        >>> doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=1), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=1)
+        >>> doc_scores = tf.squeeze(
+        ...     tf.matmul(
+        ...         tf.expand_dims(question_hidden_states, axis=1), docs_dict["retrieved_doc_embeds"], transpose_b=True
+        ...     ),
+        ...     axis=1,
+        ... )
         >>> # 3. Forward to generator
-        >>> outputs = model(inputs=None, context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
+        >>> outputs = model(
+        ...     inputs=None,
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ...     decoder_input_ids=input_dict["labels"],
+        ... )
 
         >>> # or directly generate
-        >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
+        >>> generated = model.generate(
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ... )
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 

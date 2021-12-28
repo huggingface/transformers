@@ -295,11 +295,12 @@ If you're using only 1 GPU, here is how you'd have to adjust your training code 
 # DeepSpeed requires a distributed environment even when only one process is used.
 # This emulates a launcher in the notebook
 import os
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '9994' # modify if RuntimeError: Address already in use
-os.environ['RANK'] = "0"
-os.environ['LOCAL_RANK'] = "0"
-os.environ['WORLD_SIZE'] = "1"
+
+os.environ["MASTER_ADDR"] = "localhost"
+os.environ["MASTER_PORT"] = "9994"  # modify if RuntimeError: Address already in use
+os.environ["RANK"] = "0"
+os.environ["LOCAL_RANK"] = "0"
+os.environ["WORLD_SIZE"] = "1"
 
 # Now proceed as normal, plus pass the deepspeed config file
 training_args = TrainingArguments(..., deepspeed="ds_config_zero3.json")
@@ -316,7 +317,7 @@ at the beginning of this section.
 If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated
 cell with:
 
-```python
+```python no-style
 %%bash
 cat <<'EOT' > ds_config_zero3.json
 {
@@ -382,14 +383,14 @@ EOT
 If the training script is in a normal file and not in the notebook cells, you can launch `deepspeed` normally via
 shell from a cell. For example, to use `run_translation.py` you would launch it with:
 
-```python
+```python no-style
 !git clone https://github.com/huggingface/transformers
 !cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
 ```
 
 or with `%%bash` magic, where you can write a multi-line code for the shell program to run:
 
-```python
+```python no-style
 %%bash
 
 git clone https://github.com/huggingface/transformers
@@ -512,7 +513,7 @@ TrainingArguments(..., deepspeed="/path/to/ds_config.json")
 or:
 
 ```python
-ds_config_dict=dict(scheduler=scheduler_params, optimizer=optimizer_params)
+ds_config_dict = dict(scheduler=scheduler_params, optimizer=optimizer_params)
 TrainingArguments(..., deepspeed=ds_config_dict)
 ```
 
@@ -1430,6 +1431,7 @@ If you have saved at least one checkpoint, and you want to use the latest one, y
 ```python
 from transformers.trainer_utils import get_last_checkpoint
 from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+
 checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
@@ -1439,6 +1441,7 @@ checkpoint), then you can finish the training by first saving the final model ex
 
 ```python
 from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+
 checkpoint_dir = os.path.join(trainer.args.output_dir, "checkpoint-final")
 trainer.deepspeed.save_checkpoint(checkpoint_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
@@ -1461,7 +1464,8 @@ these yourself as is shown in the following example:
 
 ```python
 from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
-state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_dir) # already on cpu
+
+state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_dir)  # already on cpu
 model = model.cpu()
 model.load_state_dict(state_dict)
 ```
@@ -1529,9 +1533,10 @@ context manager (which is also a function decorator), like so:
 ```python
 from transformers import T5ForConditionalGeneration, T5Config
 import deepspeed
+
 with deepspeed.zero.Init():
-   config = T5Config.from_pretrained("t5-small")
-   model = T5ForConditionalGeneration(config)
+    config = T5Config.from_pretrained("t5-small")
+    model = T5ForConditionalGeneration(config)
 ```
 
 As you can see this gives you a randomly initialized model.
@@ -1544,6 +1549,7 @@ section. Thus you must create the [`TrainingArguments`] object **before** callin
 
 ```python
 from transformers import AutoModel, Trainer, TrainingArguments
+
 training_args = TrainingArguments(..., deepspeed=ds_config)
 model = AutoModel.from_pretrained("t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
@@ -1574,7 +1580,7 @@ limitations.
 Also under ZeRO-3, if you write your own code and run into a model parameter weight that looks like:
 
 ```python
-tensor([1.], device='cuda:0', dtype=torch.float16, requires_grad=True)
+tensor([1.0], device="cuda:0", dtype=torch.float16, requires_grad=True)
 ```
 
 stress on `tensor([1.])`, or if you get an error where it says the parameter is of size `1`, instead of some much
@@ -1715,9 +1721,9 @@ For example for a pretrained model:
 from transformers.deepspeed import HfDeepSpeedConfig
 from transformers import AutoModel, deepspeed
 
-ds_config = { ... } # deepspeed config object or path to the file
+ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model
-dschf = HfDeepSpeedConfig(ds_config) # keep this object alive
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 model = AutoModel.from_pretrained("gpt2")
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
@@ -1728,9 +1734,9 @@ or for non-pretrained model:
 from transformers.deepspeed import HfDeepSpeedConfig
 from transformers import AutoModel, AutoConfig, deepspeed
 
-ds_config = { ... } # deepspeed config object or path to the file
+ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model
-dschf = HfDeepSpeedConfig(ds_config) # keep this object alive
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 config = AutoConfig.from_pretrained("gpt2")
 model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)

@@ -34,7 +34,7 @@ One can directly plug in the weights of LayoutXLM into a LayoutLMv2 model, like 
 ```python
 from transformers import LayoutLMv2Model
 
-model = LayoutLMv2Model.from_pretrained('microsoft/layoutxlm-base')
+model = LayoutLMv2Model.from_pretrained("microsoft/layoutxlm-base")
 ```
 
 Note that LayoutXLM has its own tokenizer, based on
@@ -44,7 +44,7 @@ follows:
 ```python
 from transformers import LayoutXLMTokenizer
 
-tokenizer = LayoutXLMTokenizer.from_pretrained('microsoft/layoutxlm-base')
+tokenizer = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
 ```
 
 Similar to LayoutLMv2, you can use [`LayoutXLMProcessor`] (which internally applies

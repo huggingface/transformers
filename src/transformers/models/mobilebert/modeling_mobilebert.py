@@ -962,7 +962,9 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
+        ...     0
+        >>> )  # Batch size 1
         >>> outputs = model(input_ids)
 
         >>> prediction_logits = outputs.prediction_logits
@@ -1147,12 +1149,12 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         >>> from transformers import MobileBertTokenizer, MobileBertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-        >>> model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
+        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> model = MobileBertForNextSentencePrediction.from_pretrained("google/mobilebert-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
 
         >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
         >>> loss = outputs.loss

@@ -69,8 +69,9 @@ Let's demonstrate this process with GPT-2.
 
 ```python
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
-device = 'cuda'
-model_id = 'gpt2-large'
+
+device = "cuda"
+model_id = "gpt2-large"
 model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
 tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
 ```
@@ -81,8 +82,9 @@ dataset in memory.
 
 ```python
 from datasets import load_dataset
-test = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
-encodings = tokenizer('\n\n'.join(test['text']), return_tensors='pt')
+
+test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+encodings = tokenizer("\n\n".join(test["text"]), return_tensors="pt")
 ```
 
 With 🤗 Transformers, we can simply pass the `input_ids` as the `labels` to our model, and the average negative
@@ -104,10 +106,10 @@ nlls = []
 for i in tqdm(range(0, encodings.input_ids.size(1), stride)):
     begin_loc = max(i + stride - max_length, 0)
     end_loc = min(i + stride, encodings.input_ids.size(1))
-    trg_len = end_loc - i    # may be different from stride on last loop
-    input_ids = encodings.input_ids[:,begin_loc:end_loc].to(device)
+    trg_len = end_loc - i  # may be different from stride on last loop
+    input_ids = encodings.input_ids[:, begin_loc:end_loc].to(device)
     target_ids = input_ids.clone()
-    target_ids[:,:-trg_len] = -100
+    target_ids[:, :-trg_len] = -100
 
     with torch.no_grad():
         outputs = model(input_ids, labels=target_ids)

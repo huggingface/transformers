@@ -1292,8 +1292,8 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         >>> from transformers import ProphetNetTokenizer, ProphetNetEncoder
         >>> import torch
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-        >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone')
+        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> model = ProphetNetEncoder.from_pretrained("patrickvonplaten/prophetnet-large-uncased-standalone")
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
@@ -1469,8 +1469,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         >>> from transformers import ProphetNetTokenizer, ProphetNetDecoder
         >>> import torch
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-        >>> model = ProphetNetDecoder.from_pretrained('microsoft/prophetnet-large-uncased', add_cross_attention=False)
+        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> model = ProphetNetDecoder.from_pretrained("microsoft/prophetnet-large-uncased", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1809,10 +1809,12 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         ```python
         >>> from transformers import ProphetNetTokenizer, ProphetNetModel
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-        >>> model = ProphetNetModel.from_pretrained('microsoft/prophetnet-large-uncased')
+        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> model = ProphetNetModel.from_pretrained("microsoft/prophetnet-large-uncased")
 
-        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+        >>> input_ids = tokenizer(
+        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+        >>> ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -1929,10 +1931,12 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         ```python
         >>> from transformers import ProphetNetTokenizer, ProphetNetForConditionalGeneration
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-        >>> model = ProphetNetForConditionalGeneration.from_pretrained('microsoft/prophetnet-large-uncased')
+        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased")
 
-        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+        >>> input_ids = tokenizer(
+        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+        >>> ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -2173,8 +2177,8 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         >>> from transformers import ProphetNetTokenizer, ProphetNetForCausalLM
         >>> import torch
 
-        >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-        >>> model = ProphetNetForCausalLM.from_pretrained('microsoft/prophetnet-large-uncased')
+        >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> model = ProphetNetForCausalLM.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2185,17 +2189,21 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         >>> from transformers import BertTokenizer, EncoderDecoderModel, ProphetNetTokenizer
         >>> import torch
 
-        >>> tokenizer_enc = BertTokenizer.from_pretrained('bert-large-uncased')
-        >>> tokenizer_dec = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "microsoft/prophetnet-large-uncased")
+        >>> tokenizer_enc = BertTokenizer.from_pretrained("bert-large-uncased")
+        >>> tokenizer_dec = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
+        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "bert-large-uncased", "microsoft/prophetnet-large-uncased"
+        ... )
 
         >>> ARTICLE = (
-        ... "the us state department said wednesday it had received no "
-        ... "formal word from bolivia that it was expelling the us ambassador there "
-        ... "but said the charges made against him are `` baseless ."
+        ...     "the us state department said wednesday it had received no "
+        ...     "formal word from bolivia that it was expelling the us ambassador there "
+        ...     "but said the charges made against him are `` baseless ."
         ... )
         >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
-        >>> labels = tokenizer_dec("us rejects charges against its ambassador in bolivia", return_tensors="pt").input_ids
+        >>> labels = tokenizer_dec(
+        ...     "us rejects charges against its ambassador in bolivia", return_tensors="pt"
+        >>> ).input_ids
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:])
 
         >>> loss = outputs.loss

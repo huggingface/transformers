@@ -34,6 +34,7 @@ class TFMT5Model(TFT5Model):
 
     ```python
     >>> from transformers import TFMT5Model, T5Tokenizer
+
     >>> model = TFMT5Model.from_pretrained("google/mt5-small")
     >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
@@ -58,6 +59,7 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
 
     ```python
     >>> from transformers import TFMT5ForConditionalGeneration, T5Tokenizer
+
     >>> model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
     >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
@@ -66,7 +68,7 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(summary, return_tensors="tf")
 
-    >>> outputs = model(**inputs,labels=labels["input_ids"])
+    >>> outputs = model(**inputs, labels=labels["input_ids"])
     >>> loss = outputs.loss
     ```"""
 
@@ -83,6 +85,7 @@ class TFMT5EncoderModel(TFT5EncoderModel):
 
     ```python
     >>> from transformers import TFMT5EncoderModel, T5Tokenizer
+
     >>> model = TFMT5EncoderModel.from_pretrained("google/mt5-small")
     >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."

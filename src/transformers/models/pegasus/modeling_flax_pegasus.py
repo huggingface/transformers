@@ -994,11 +994,11 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1060,11 +1060,11 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1329,11 +1329,11 @@ class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
         ```python
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id

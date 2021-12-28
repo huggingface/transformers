@@ -109,6 +109,7 @@ This export can now be used in the ONNX inference runtime:
 import onnxruntime as ort
 
 from transformers import BertTokenizerFast
+
 tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
 
 ort_session = ort.InferenceSession("onnx/bert-base-cased/model.onnx")
@@ -382,7 +383,7 @@ tokenized_text = enc.tokenize(text)
 
 # Masking one of the input tokens
 masked_index = 8
-tokenized_text[masked_index] = '[MASK]'
+tokenized_text[masked_index] = "[MASK]"
 indexed_tokens = enc.convert_tokens_to_ids(tokenized_text)
 segments_ids = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]
 
@@ -393,8 +394,14 @@ dummy_input = [tokens_tensor, segments_tensors]
 
 # Initializing the model with the torchscript flag
 # Flag set to True even though it is not necessary as this model does not have an LM Head.
-config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-    num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072, torchscript=True)
+config = BertConfig(
+    vocab_size_or_config_json_file=32000,
+    hidden_size=768,
+    num_hidden_layers=12,
+    num_attention_heads=12,
+    intermediate_size=3072,
+    torchscript=True,
+)
 
 # Instantiating the model
 model = BertModel(config)

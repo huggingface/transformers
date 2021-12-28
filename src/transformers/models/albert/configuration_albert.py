@@ -90,15 +90,16 @@ class AlbertConfig(PretrainedConfig):
 
     ```python
     >>> from transformers import AlbertConfig, AlbertModel
+
     >>> # Initializing an ALBERT-xxlarge style configuration
     >>> albert_xxlarge_configuration = AlbertConfig()
 
     >>> # Initializing an ALBERT-base style configuration
     >>> albert_base_configuration = AlbertConfig(
-    ...      hidden_size=768,
-    ...      num_attention_heads=12,
-    ...      intermediate_size=3072,
-    ...  )
+    ...     hidden_size=768,
+    ...     num_attention_heads=12,
+    ...     intermediate_size=3072,
+    ... )
 
     >>> # Initializing a model from the ALBERT-base style configuration
     >>> model = AlbertModel(albert_xxlarge_configuration)
