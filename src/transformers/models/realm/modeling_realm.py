@@ -1830,12 +1830,20 @@ class RealmForOpenQA(RealmPreTrainedModel):
         self.searcher.save_pretrained(save_directory)
         self.reader.save_pretrained(save_directory)
 
-    def retrieve(self, input_ids, **kwargs):
-        output = self.searcher(input_ids, return_dict=True, **kwargs)
+    def retrieve(self, question):
+        question_ids = self.tokenizer(
+            [question], 
+            padding=True, 
+            truncation=True, 
+            max_length=self.config.searcher_seq_len,
+            return_tensors="pt",
+        ).to(self.searcher.device)
+
+        output = self.searcher(**question_ids, return_dict=True)
         return output
 
-    def read(self, searcher_output, question, answers):
-        def block_has_answer(concat_inputs, answers):
+    def read(self, searcher_output, question, answer_ids):
+        def block_has_answer(concat_inputs, answer_ids):
             """check if retrieved_blocks has answers."""
             has_answers = []
             start_pos = []
@@ -1843,32 +1851,17 @@ class RealmForOpenQA(RealmPreTrainedModel):
             max_answers = 0
 
             for input_id in concat_inputs.input_ids:
-                pass_sep = False
-                answer_pos = 0
-                start = -1
                 start_pos.append([])
                 end_pos.append([])
-                for answer in answers:
-                    for idx, id in enumerate(input_id):
-                        if id == self.tokenizer.sep_token_id:
-                            pass_sep = True
-                        if not pass_sep:
-                            continue
-                        if answer[answer_pos] == id:
-                            if start == -1:
-                                start = idx
-                            if answer_pos == len(answer) - 1:
-                                start_pos[-1].append(start)
-                                end_pos[-1].append(idx)
-                                answer_pos = 0
-                                start = -1
-                                break
-                            else:
-                                answer_pos += 1
-                        else:
-                            answer_pos = 0
-                            start = -1
-
+                input_id = input_id.tolist()
+                sep_idx = input_id.index(self.tokenizer.sep_token_id)
+                for answer in answer_ids:
+                    for idx in range(sep_idx, len(input_id)):
+                        if answer[0] == input_id[idx]:
+                            if input_id[idx: idx + len(answer)] == answer:
+                                start_pos[-1].append(idx)
+                                end_pos[-1].append(idx + len(answer)-1)
+        
                 if len(start_pos[-1]) == 0:
                     has_answers.append(False)
                 else:
@@ -1878,17 +1871,15 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
             # Pad -1 to max_answers
             for start_pos_, end_pos_ in zip(start_pos, end_pos):
-                while len(start_pos_) < max_answers:
-                    start_pos_.append(-1)
-                while len(end_pos_) < max_answers:
-                    end_pos_.append(-1)
-
-            assert len(has_answers) == len(start_pos) == len(end_pos)
+                if len(start_pos_) < max_answers:
+                    padded = [-1] * (max_answers - len(start_pos_))
+                    start_pos_ += padded
+                    end_pos_ += padded
 
             return (
-                torch.tensor(has_answers, dtype=torch.bool, device=concat_inputs.input_ids.device),
-                torch.tensor(start_pos, dtype=torch.int64, device=concat_inputs.input_ids.device),
-                torch.tensor(end_pos, dtype=torch.int64, device=concat_inputs.input_ids.device),
+                torch.tensor(has_answers, dtype=torch.bool),
+                torch.tensor(start_pos, dtype=torch.int64),
+                torch.tensor(end_pos, dtype=torch.int64),
             )
 
         text = []
@@ -1899,12 +1890,15 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         concat_inputs = self.tokenizer(
             text, text_pair, padding=True, truncation=True, max_length=self.config.reader_seq_len, return_tensors="pt"
-        )
+        ).to(self.reader.device)
 
-        if answers is not None:
+        if answer_ids is not None:
             has_answers, start_positions, end_positions = block_has_answer(
-                concat_inputs.to(searcher_output.retrieved_logits.device), answers
+                concat_inputs, answer_ids
             )
+            has_answers = has_answers.to(self.reader.device)
+            start_positions = start_positions.to(self.reader.device)
+            end_positions = end_positions.to(self.reader.device)
         else:
             has_answers, start_positions, end_positions = (None, None, None)
 
@@ -1948,15 +1942,11 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        question_ids = self.tokenizer(
-            [question], padding=True, truncation=True, max_length=self.config.searcher_seq_len, return_tensors="pt"
-        )
-
-        searcher_output = self.retrieve(**question_ids)
+        searcher_output = self.retrieve(question)
 
         reader_output, predicted_answer = self.read(searcher_output, question, answer_ids)
 
-        if return_dict:
+        if not return_dict:
             return searcher_output, reader_output, predicted_answer
 
         return RealmForOpenQAOutput(
