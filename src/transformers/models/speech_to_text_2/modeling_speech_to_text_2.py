@@ -737,7 +737,7 @@ class Speech2Text2DecoderWrapper(Speech2Text2PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The Speech2Text2 Decoder with a language modeling head. Can be used as the decoder part of :class:`~transformers.EncoderDecoderModel` and :class:`~transformers.SpeechEncoderDecoder`.",
+    "The Speech2Text2 Decoder with a language modeling head. Can be used as the decoder part of [`EncoderDecoderModel`] and [`SpeechEncoderDecoder`].",
     SPEECH_TO_TEXT_2_START_DOCSTRING,
 )
 class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):

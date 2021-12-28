@@ -84,7 +84,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
 def require_retrieval(test_case):
     """
     Decorator marking a test that requires a set of dependencies necessary for pefrorm retrieval with
-    :class:`~transformers.RagRetriever`.
+    [`RagRetriever`].
 
     These tests are skipped when respective libraries are not installed.
 
