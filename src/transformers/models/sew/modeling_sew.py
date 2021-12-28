@@ -15,6 +15,7 @@
 """ PyTorch SEW model."""
 
 import math
+import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -301,8 +302,8 @@ class SEWUpsampling(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->SEW
-class SEWFeatureExtractor(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->SEW
+class SEWFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -351,6 +352,17 @@ class SEWFeatureExtractor(nn.Module):
                 hidden_states = conv_layer(hidden_states)
 
         return hidden_states
+
+
+class SEWFeatureExtractor(SEWFeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->SEW
@@ -712,7 +724,7 @@ class SEWPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (SEWEncoder, SEWFeatureExtractor)):
+        if isinstance(module, (SEWEncoder, SEWFeatureEncoder)):
             module.gradient_checkpointing = value
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
@@ -797,7 +809,7 @@ class SEWModel(SEWPreTrainedModel):
     def __init__(self, config: SEWConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = SEWFeatureExtractor(config)
+        self.feature_extractor = SEWFeatureEncoder(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
 
         self.project_features = config.conv_dim[-1] != config.hidden_size
@@ -943,8 +955,20 @@ class SEWForCTC(SEWPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.sew.feature_extractor._freeze_parameters()
 
@@ -1052,8 +1076,20 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.sew.feature_extractor._freeze_parameters()
 
