@@ -354,6 +354,17 @@ class SEWFeatureEncoder(nn.Module):
         return hidden_states
 
 
+class SEWFeatureExtractor(SEWFeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
+
+
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->SEW
 class SEWAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""

@@ -1489,7 +1489,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.wav2vec2.feature_extractor.trainable = False
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

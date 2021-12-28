@@ -1498,7 +1498,7 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
-        self.hubert.feature_extractor.trainable = False
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """

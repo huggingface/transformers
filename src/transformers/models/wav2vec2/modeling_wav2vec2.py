@@ -484,6 +484,17 @@ class Wav2Vec2FeatureEncoder(nn.Module):
         return hidden_states
 
 
+class Wav2Vec2FeatureExtractor(Wav2Vec2FeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
+
+
 class Wav2Vec2FeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
