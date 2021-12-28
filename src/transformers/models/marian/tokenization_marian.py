@@ -102,15 +102,17 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import MarianTokenizer
-    >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-    >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
+
+    >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+    >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
     >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
     >>> inputs["labels"] = labels["input_ids"]
     # keys  [input_ids, attention_mask, labels].
-    >>> outputs = model(**inputs) should work
+
+    >>> outputs = model(**inputs)  # should work
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES

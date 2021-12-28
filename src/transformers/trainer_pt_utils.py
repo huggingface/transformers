@@ -870,7 +870,7 @@ def log_metrics(self, split, metrics):
 
     Now when this method is run, you will see a report that will include: :
 
-    ```python
+    ```
     init_mem_cpu_alloc_delta   =     1301MB
     init_mem_cpu_peaked_delta  =      154MB
     init_mem_gpu_alloc_delta   =      230MB

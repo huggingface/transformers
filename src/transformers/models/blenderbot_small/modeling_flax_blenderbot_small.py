@@ -994,11 +994,11 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
-        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M')
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot_small-90M')
+        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1062,11 +1062,11 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
-        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M')
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot_small-90M')
+        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
@@ -1331,11 +1331,11 @@ class FlaxBlenderbotSmallForConditionalGeneration(FlaxBlenderbotSmallPreTrainedM
         ```python
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
-        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M')
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot_small-90M')
+        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
         >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id

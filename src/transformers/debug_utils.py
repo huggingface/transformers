@@ -107,7 +107,7 @@ class DebugUnderflowOverflow:
     given batch, and only do that for batches 1 and 3. Then you instantiate this class as :
 
     ```python
-    debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1,3])
+    debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])
     ```
 
     And now full batches 1 and 3 will be traced using the same format as explained above. Batches are 0-indexed.
@@ -121,7 +121,7 @@ class DebugUnderflowOverflow:
     You can also specify the batch number after which to stop the training, with :
 
     ```python
-    debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1,3], abort_after_batch_num=3)
+    debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
     ```
 
     This feature is mainly useful in the tracing mode, but you can use it for any mode.

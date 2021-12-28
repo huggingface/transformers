@@ -275,7 +275,7 @@ class FNetTokenizer(PreTrainedTokenizer):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. An FNet sequence
         pair mask has the following format: :
 
-        ```python
+        ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence | second sequence |
         ```
 

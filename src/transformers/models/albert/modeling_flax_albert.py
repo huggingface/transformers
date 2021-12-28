@@ -748,8 +748,8 @@ FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
     ```python
     >>> from transformers import AlbertTokenizer, FlaxAlbertForPreTraining
 
-    >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-    >>> model = FlaxAlbertForPreTraining.from_pretrained('albert-base-v2')
+    >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+    >>> model = FlaxAlbertForPreTraining.from_pretrained("albert-base-v2")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
     >>> outputs = model(**inputs)

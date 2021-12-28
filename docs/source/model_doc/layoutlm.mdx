@@ -53,12 +53,12 @@ Tips:
 
 ```python
 def normalize_bbox(bbox, width, height):
-     return [
-         int(1000 * (bbox[0] / width)),
-         int(1000 * (bbox[1] / height)),
-         int(1000 * (bbox[2] / width)),
-         int(1000 * (bbox[3] / height)),
-     ]
+    return [
+        int(1000 * (bbox[0] / width)),
+        int(1000 * (bbox[1] / height)),
+        int(1000 * (bbox[2] / width)),
+        int(1000 * (bbox[3] / height)),
+    ]
 ```
 
 Here, `width` and `height` correspond to the width and height of the original document in which the token

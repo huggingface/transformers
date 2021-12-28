@@ -46,8 +46,8 @@ class XLMProphetNetEncoder(ProphetNetEncoder):
     >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetEncoder
     >>> import torch
 
-    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-    >>> model = XLMProphetNetEncoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone')
+    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
+    >>> model = XLMProphetNetEncoder.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
     >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> outputs = model(**inputs)
@@ -69,8 +69,10 @@ class XLMProphetNetDecoder(ProphetNetDecoder):
     >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetDecoder
     >>> import torch
 
-    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-    >>> model = XLMProphetNetDecoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone', add_cross_attention=False)
+    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
+    >>> model = XLMProphetNetDecoder.from_pretrained(
+    ...     "patrickvonplaten/xprophetnet-large-uncased-standalone", add_cross_attention=False
+    ... )
     >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> outputs = model(**inputs)
@@ -91,10 +93,12 @@ class XLMProphetNetModel(ProphetNetModel):
     ```python
     >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetModel
 
-    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-    >>> model = XLMProphetNetModel.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
+    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
+    >>> model = XLMProphetNetModel.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
 
-    >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+    >>> input_ids = tokenizer(
+    ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+    >>> ).input_ids  # Batch size 1
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
     >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -115,10 +119,12 @@ class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
     ```python
     >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetForConditionalGeneration
 
-    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-    >>> model =  XLMProphetNetForConditionalGeneration.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
+    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
+    >>> model = XLMProphetNetForConditionalGeneration.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
 
-    >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+    >>> input_ids = tokenizer(
+    ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
+    >>> ).input_ids  # Batch size 1
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
     >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
@@ -140,8 +146,8 @@ class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
     >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetForCausalLM
     >>> import torch
 
-    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-    >>> model = XLMProphetNetForCausalLM.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
+    >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
+    >>> model = XLMProphetNetForCausalLM.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
     >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> outputs = model(**inputs)
@@ -152,14 +158,16 @@ class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
     >>> from transformers import EncoderDecoderModel, XLMProphetNetTokenizer, XLMRobertaTokenizer
     >>> import torch
 
-    >>> tokenizer_enc = XLMRobertaTokenizer.from_pretrained('xlm-roberta-large')
-    >>> tokenizer_dec = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-    >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("xlm-roberta-large", 'microsoft/xprophetnet-large-wiki100-cased')
+    >>> tokenizer_enc = XLMRobertaTokenizer.from_pretrained("xlm-roberta-large")
+    >>> tokenizer_dec = XLMProphetNetTokenizer.from_pretrained("microsoft/xprophetnet-large-wiki100-cased")
+    >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+    ...     "xlm-roberta-large", "microsoft/xprophetnet-large-wiki100-cased"
+    ... )
 
     >>> ARTICLE = (
-    ... "the us state department said wednesday it had received no "
-    ... "formal word from bolivia that it was expelling the us ambassador there "
-    ... "but said the charges made against him are `` baseless ."
+    ...     "the us state department said wednesday it had received no "
+    ...     "formal word from bolivia that it was expelling the us ambassador there "
+    ...     "but said the charges made against him are `` baseless ."
     ... )
     >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
     >>> labels = tokenizer_dec("us rejects charges against its ambassador in bolivia", return_tensors="pt").input_ids
