@@ -1197,7 +1197,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.feature_extractor = Wav2Vec2FeatureExtractor(config)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        # model only needs masking vector if mask prob is > 0.0
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
@@ -1208,6 +1210,13 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameters
+        will not be updated during training.
+        """
+        self.feature_extractor._freeze_parameters()
 
     def _mask_hidden_states(
         self,
