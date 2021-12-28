@@ -181,6 +181,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
+    supports_gradient_checkpointing = True
 
     def __init__(
         self,
@@ -247,6 +248,11 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        # call both encoder and decoder function on gradient checkpointing
+        self.encoder._set_gradient_checkpointing(module, value=value)
+        self.decoder._set_gradient_checkpointing(module, value=value)
+
     def get_encoder(self):
         return self.encoder
 
@@ -258,6 +264,13 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor of the speech encoder so
+        that its parameters will not be updated during training.
+        """
+        self.encoder.freeze_feature_extractor()
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
@@ -367,7 +380,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_encoder:
-                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
+                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path, **kwargs_encoder)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
@@ -378,7 +391,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
                 kwargs_encoder["config"] = encoder_config
 
-            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args)
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
@@ -389,7 +402,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_decoder:
-                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
@@ -411,7 +424,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path)
 
         # instantiate config with corresponding kwargs
         config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
