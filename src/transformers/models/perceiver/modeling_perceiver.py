@@ -174,6 +174,39 @@ class PerceiverClassifierOutput(ModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@dataclass
+class PerceiverTokenClassifierOutput(ModelOutput):
+    """
+    Args:
+    Base class for Perceiver's outputs of token classification models.
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
+            Classification loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Classification scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+        when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when
+        `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or
+        when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class PerceiverEmbeddings(nn.Module):
     """Construct the latent embeddings."""
 
@@ -1179,6 +1212,120 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return PerceiverClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+
+@add_start_docstrings(
+    """Example use of Perceiver for token classification tasks, such as named-entity recognition (NER).""",
+    PERCEIVER_START_DOCSTRING,
+)
+class PerceiverForTokenClassification(PerceiverPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        text_preprocessor = PerceiverTextPreprocessor(config)
+
+        trainable_position_encoding_kwargs_decoder = dict(
+            num_channels=text_preprocessor.num_channels, index_dims=config.max_position_embeddings
+        )
+
+        self.perceiver = PerceiverModel(
+            config,
+            input_preprocessor=text_preprocessor,
+            decoder=PerceiverBasicDecoder(
+                config,
+                output_num_channels=config.d_latents,
+                output_index_dims=config.max_position_embeddings,  # we need to define the seq_len of the inputs beforehand
+                num_channels=text_preprocessor.num_channels,
+                qk_channels=8 * 32,
+                v_channels=text_preprocessor.num_channels,
+                num_heads=8,
+                use_query_residual=False,
+                final_project=False,
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
+            ),
+        )
+        self.classifier = nn.Linear(text_preprocessor.num_channels, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=PerceiverTokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+        input_ids=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import PerceiverTokenizer, PerceiverForTokenClassification
+
+        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> model = PerceiverForTokenClassification.from_pretrained("deepmind/language-perceiver")
+
+        >>> text = "hello world"
+        >>> inputs = tokenizer(text, return_tensors="pt").input_ids
+        >>> outputs = model(inputs=inputs)
+        >>> logits = outputs.logits
+        ```"""
+        if inputs is not None and input_ids is not None:
+            raise ValueError("You cannot use both `inputs` and `input_ids`")
+        elif inputs is None and input_ids is not None:
+            inputs = input_ids
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        logits = outputs.logits if return_dict else outputs[0]
+        logits = self.classifier(logits)
+        
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)
+                active_labels = torch.where(
+                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                )
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return PerceiverTokenClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

@@ -51,6 +51,7 @@ if is_torch_available():
         PerceiverForMultimodalAutoencoding,
         PerceiverForOpticalFlow,
         PerceiverForSequenceClassification,
+        PerceiverForTokenClassification,
         PerceiverModel,
         PerceiverTokenizer,
     )
@@ -141,7 +142,11 @@ class PerceiverModelTester:
         if model_class is None or model_class.__name__ == "PerceiverModel":
             inputs = floats_tensor([self.batch_size, self.seq_length, config.d_model], self.vocab_size)
             return config, inputs, input_mask, sequence_labels, token_labels
-        elif model_class.__name__ in ["PerceiverForMaskedLM", "PerceiverForSequenceClassification"]:
+        elif model_class.__name__ in [
+            "PerceiverForMaskedLM",
+            "PerceiverForSequenceClassification",
+            "PerceiverForTokenClassification",
+        ]:
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
             # input mask is only relevant for text inputs
             if self.use_input_mask:
@@ -212,6 +217,13 @@ class PerceiverModelTester:
         result = model(inputs, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
+    def create_and_check_for_token_classification(self, config, inputs, input_mask, sequence_labels, token_labels):
+        model = PerceiverForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs, attention_mask=input_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def create_and_check_for_image_classification_learned(
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
@@ -266,6 +278,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             PerceiverForOpticalFlow,
             PerceiverForMultimodalAutoencoding,
             PerceiverForSequenceClassification,
+            PerceiverForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -318,6 +331,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class=PerceiverForSequenceClassification)
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class=PerceiverForTokenClassification)
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     def test_for_image_classification_learned(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(

@@ -449,6 +449,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("perceiver", "PerceiverForTokenClassification"),
         ("nystromformer", "NystromformerForTokenClassification"),
         ("qdqbert", "QDQBertForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
