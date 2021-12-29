@@ -131,7 +131,7 @@ class Trie:
         # This is used by the lookahead which needs to skip over
         # some text where the full match exceeded the place in the initial
         # for loop
-        skip = None
+        skip = 0
         # Main loop, Giving this algorithm O(n) complexity
         for current, current_char in enumerate(text):
             if skip and current < skip:
@@ -175,6 +175,11 @@ class Trie:
                             lookahead_index = current
                             end = current
                         next_char = text[lookahead_index] if lookahead_index < len(text) else None
+                        if "" in looktrie_pointer:
+                            start = lookstart
+                            end = lookahead_index
+                            skip = lookahead_index
+
                         while next_char in looktrie_pointer:
                             looktrie_pointer = looktrie_pointer[next_char]
                             lookahead_index += 1
@@ -190,6 +195,10 @@ class Trie:
                         # End lookahead
 
                     # Storing and resetting
+                    if offsets and start < offsets[-1]:
+                        import ipdb
+
+                        ipdb.set_trace()
                     offsets.append(start)
                     offsets.append(end)
                     reset = True
@@ -219,7 +228,7 @@ class Trie:
 
             # If this character is a starting character within the trie
             # start keeping track of this partial match.
-            if current_char in self.data:
+            if current >= skip and current_char in self.data:
                 states[current] = self.data[current_char]
 
         # We have a cut at the end with states.
