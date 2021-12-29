@@ -27,6 +27,10 @@
 #
 # if you already have it cloned elsewhere, simply adjust the path to the existing path
 #
+# If the training was done using a Megatron-LM fork, e.g.,
+# https://github.com/microsoft/Megatron-DeepSpeed/ then chances are that you need to have that one
+# in your path, i.e., /path/to/Megatron-DeepSpeed/
+#
 
 import argparse
 import os
