@@ -1940,7 +1940,6 @@ class RealmForOpenQA(RealmPreTrainedModel):
         )
 
         reader_output, predicted_answer = output, answer
-        import ipdb; ipdb.set_trace()
 
         # this will by handled by the retriever decode method
 

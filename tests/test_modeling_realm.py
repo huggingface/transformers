@@ -486,7 +486,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
         )
 
         question = "Who is the pioneer in modern computer science?"
-        searcher_output, reader_output, predicted_answer = model(question)
+        predicted_answer = model(question).predicted_answer
 
         self.assertEqual(predicted_answer, "alan mathison turing")
 
