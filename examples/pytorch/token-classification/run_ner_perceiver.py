@@ -8,20 +8,26 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
-import torch
-import transformers
 from datasets import ClassLabel, load_dataset, load_metric
-from torch.nn import CrossEntropyLoss
+
+import transformers
 from transformers import (
+    AutoConfig,
     DataCollatorForTokenClassification,
     HfArgumentParser,
+    PerceiverForTokenClassification,
+    PerceiverTokenizer,
     Trainer,
     TrainingArguments,
     set_seed,
-    PerceiverConfig,
-    PerceiverTokenizer,
-    PerceiverForTokenClassification,
 )
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version
+
+
+check_min_version("4.15.0")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -32,15 +38,11 @@ class ModelArguments:
 
     model_name_or_path: str = field(
         default="deepmind/language-perceiver",
-        metadata={
-            "help": "Path to pretrained model or model identifier from huggingface.co/models"
-        },
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
-        },
+        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
     d_latents: Optional[int] = field(
         default=1280,
@@ -62,18 +64,14 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    task_name: Optional[str] = field(
-        default="ner", metadata={"help": "The name of the task (ner, pos...)."}
-    )
+    task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
     dataset_name: Optional[str] = field(
         default=None,
         metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "The configuration name of the dataset to use (via the datasets library)."
-        },
+        metadata={"help": "The configuration name of the dataset to use (via the datasets library)."},
     )
     train_file: Optional[str] = field(
         default=None,
@@ -81,15 +79,11 @@ class DataTrainingArguments:
     )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."
-        },
+        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
     )
     test_file: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "An optional input test data file to predict on (a csv or JSON file)."
-        },
+        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
     )
     overwrite_cache: bool = field(
         default=False,
@@ -130,20 +124,12 @@ class DataTrainingArguments:
     )
     return_entity_level_metrics: bool = field(
         default=True,
-        metadata={
-            "help": "Whether to return all the entity levels during evaluation or just the overall ones."
-        },
+        metadata={"help": "Whether to return all the entity levels during evaluation or just the overall ones."},
     )
 
     def __post_init__(self):
-        if (
-            self.dataset_name is None
-            and self.train_file is None
-            and self.validation_file is None
-        ):
-            raise ValueError(
-                "Need either a dataset name or a training/validation file."
-            )
+        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
+            raise ValueError("Need either a dataset name or a training/validation file.")
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
@@ -165,25 +151,17 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
-    )
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(
-            json_file=os.path.abspath(sys.argv[1])
-        )
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if (
-        os.path.isdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
@@ -202,9 +180,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(
-        logging.INFO if is_main_process(training_args.local_rank) else logging.WARN
-    )
+    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -254,9 +230,7 @@ def main():
         features = datasets["validation"].features
     text_column_name = "tokens" if "tokens" in column_names else column_names[0]
     label_column_name = (
-        f"{data_args.task_name}_tags"
-        if f"{data_args.task_name}_tags" in column_names
-        else column_names[1]
+        f"{data_args.task_name}_tags" if f"{data_args.task_name}_tags" in column_names else column_names[1]
     )
 
     # In the event the labels are not a `Sequence[ClassLabel]`, we will need to go through the dataset to get the
@@ -278,12 +252,21 @@ def main():
         label_to_id = {l: i for i, l in enumerate(label_list)}
     num_labels = len(label_list)
 
-    # Define tokenizer and model
-    tokenizer = PerceiverTokenizer(
-        cache_dir=model_args.cache_dir, model_max_length=model_args.model_max_length
+    # Define tokenizer, config, and model
+    tokenizer = PerceiverTokenizer.from_pretrained(model_args.model_name_or_path)
+    config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path,
+        num_labels=num_labels,
+        label2id=label_to_id,
+        id2label={i: l for l, i in label_to_id.items()},
+        finetuning_task=data_args.task_name,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    model = PerceiverForTokenClassification.from_pretrained(model_name_or_path)
+    model = PerceiverForTokenClassification.from_pretrained(model_args.model_name_or_path, config=config)
+
     model.main_input_name = "input_ids"
 
     # Preprocessing the dataset
@@ -370,9 +353,7 @@ def main():
         )
 
     # Data collator
-    data_collator = DataCollatorForTokenClassification(
-        tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None
-    )
+    data_collator = DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
 
     # Metrics
     metric = load_metric("seqeval")
@@ -434,9 +415,7 @@ def main():
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         max_train_samples = (
-            data_args.max_train_samples
-            if data_args.max_train_samples is not None
-            else len(train_dataset)
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
         )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
@@ -450,11 +429,7 @@ def main():
 
         metrics = trainer.evaluate()
 
-        max_val_samples = (
-            data_args.max_val_samples
-            if data_args.max_val_samples is not None
-            else len(eval_dataset)
-        )
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
         metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
         trainer.log_metrics("eval", metrics)
@@ -477,9 +452,7 @@ def main():
         trainer.save_metrics("test", metrics)
 
         # Save predictions
-        output_test_predictions_file = os.path.join(
-            training_args.output_dir, "test_predictions.txt"
-        )
+        output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
         if trainer.is_world_process_zero():
             with open(output_test_predictions_file, "w") as writer:
                 for prediction in true_predictions:
