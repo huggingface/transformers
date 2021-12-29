@@ -195,10 +195,6 @@ class Trie:
                         # End lookahead
 
                     # Storing and resetting
-                    if offsets and start < offsets[-1]:
-                        import ipdb
-
-                        ipdb.set_trace()
                     offsets.append(start)
                     offsets.append(end)
                     reset = True
