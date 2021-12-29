@@ -1673,9 +1673,9 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
 class RealmSearcher(RealmPreTrainedModel):
 
     def __init__(self, config, block_records_path):
+        # TODO(PVP) - this class has to be removed
         super().__init__(config)
         self.embedder = RealmEmbedder(config)
-        self.searcher = None
         self.block_records = convert_tfrecord_to_np(
             block_records_path=block_records_path,
             num_block_records=config.num_block_records,
@@ -1691,80 +1691,6 @@ class RealmSearcher(RealmPreTrainedModel):
         )
         self.init_weights()
 
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Returns:
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if self.training:
-            beam_size = self.config.searcher_beam_size
-        else:
-            beam_size = self.config.reader_beam_size
-
-        self.searcher = BruteForceSearcher(
-            db=self.block_emb,
-            num_neighbors=beam_size,
-        )
-
-        if (input_ids is not None and input_ids.shape[0] != 1) or (
-            inputs_embeds is not None and inputs_embeds.shape[0] != 1
-        ):
-            raise ValueError("The batch_size of the inputs must be 1.")
-
-        question_outputs = self.embedder(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        # [1, projection_size]
-        question_projection = question_outputs[0]
-
-        # [1, searcher_beam_size]
-        retrieved_block_ids = self.searcher.search_batched(question_projection)
-
-        # [searcher_beam_size]
-        retrieved_block_ids = retrieved_block_ids.squeeze()
-
-        # [searcher_beam_size]
-        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
-
-        # [searcher_beam_size, projection_size]
-        retrieved_block_emb = torch.index_select(
-            self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device)
-        )
-
-        # [searcher_beam_size]
-        retrieved_logits = torch.einsum(
-            "D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device)
-        )
-
-        if not return_dict:
-            return (retrieved_logits, retrieved_blocks, retrieved_block_ids)
-
-        return RealmSearcherOutput(
-            retrieved_logits=retrieved_logits,
-            retrieved_blocks=retrieved_blocks,
-            retrieved_block_ids=retrieved_block_ids,
-        )
-
 
 @add_start_docstrings(
     "A wrapper of `RealmSearcher` and `RealmReader` providing end-to-end open domain question answering.",
@@ -1777,9 +1703,20 @@ class RealmForOpenQA(RealmPreTrainedModel):
         self.tokenizer = tokenizer
 
         self.embedder = searcher.embedder
+        self.block_records = searcher.block_records
         self.block_emb = searcher.block_emb
 
-        self.init_weights()
+#        if self.training:
+#            beam_size = self.config.searcher_beam_size
+#        else:
+        beam_size = self.config.reader_beam_size
+
+        self.retriever = BruteForceSearcher(
+            db=self.block_emb,
+            num_neighbors=beam_size,
+        )
+        
+        # TODO(PVP) - init should be here
 
     @classmethod
     def from_pretrained(
@@ -1806,6 +1743,70 @@ class RealmForOpenQA(RealmPreTrainedModel):
     def save_pretrained(self, save_directory):
         self.searcher.save_pretrained(save_directory)
         self.reader.save_pretrained(save_directory)
+
+    def search(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is not None and input_ids.shape[0] != 1) or (
+            inputs_embeds is not None and inputs_embeds.shape[0] != 1
+        ):
+            raise ValueError("The batch_size of the inputs must be 1.")
+
+        question_outputs = self.embedder(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        # [1, projection_size]
+        question_projection = question_outputs[0]
+
+        # [1, searcher_beam_size]
+        retrieved_block_ids = self.retriever.search_batched(question_projection)
+
+        # [searcher_beam_size]
+        retrieved_block_ids = retrieved_block_ids.squeeze()
+
+        # [searcher_beam_size]
+        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
+
+        # [searcher_beam_size, projection_size]
+        retrieved_block_emb = torch.index_select(
+            self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device)
+        )
+
+        # [searcher_beam_size]
+        retrieved_logits = torch.einsum(
+            "D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device)
+        )
+
+        if not return_dict:
+            return (retrieved_logits, retrieved_blocks, retrieved_block_ids)
+
+        return RealmSearcherOutput(
+            retrieved_logits=retrieved_logits,
+            retrieved_blocks=retrieved_blocks,
+            retrieved_block_ids=retrieved_block_ids,
+        )
 
     def block_has_answer(self, concat_inputs, answer_ids):
         """check if retrieved_blocks has answers."""
@@ -1877,7 +1878,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
             return_tensors="pt",
         ).to(self.device)
 
-        searcher_output = self.searcher(**question_ids, return_dict=True)
+        searcher_output = self.search(**question_ids, return_dict=True)
 
         text = []
         text_pair = []
