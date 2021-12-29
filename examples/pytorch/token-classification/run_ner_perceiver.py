@@ -44,17 +44,16 @@ class ModelArguments:
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
-    d_latents: Optional[int] = field(
-        default=1280,
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    d_model: Optional[int] = field(
-        default=768,
-    )
-    max_position_embeddings: Optional[int] = field(
-        default=2048,
-    )
-    model_max_length: Optional[int] = field(
-        default=2048,
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
+        },
     )
 
 
