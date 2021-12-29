@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -451,17 +451,16 @@ class FlaxXGLMDecoderLayerCollection(nn.Module):
             all_hidden_states += (hidden_states,)
 
         outputs = (hidden_states, all_hidden_states, all_self_attns, all_cross_attentions)
-        return outputs
 
-        # if not return_dict:
-        #     return tuple(v for v in outputs if v is not None)
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
 
-        # return FlaxBaseModelOutputWithPastAndCrossAttentions(
-        #     last_hidden_state=hidden_states,
-        #     hidden_states=all_hidden_states,
-        #     attentions=all_self_attns,
-        #     cross_attentions=all_cross_attentions,
-        # )
+        return FlaxBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
+        )
 
 
 class FlaxXGLMModule(nn.Module):
@@ -485,20 +484,11 @@ class FlaxXGLMModule(nn.Module):
         # XGLM is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
-        # TODO: padding idx should be zero
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings + self.offset, embed_dim
         )
         self.layers = FlaxXGLMDecoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
-
-    def _create_pos_ids(self, input_ids, position_ids):
-        mask_ne = jnp.not_equal(input_ids, 1).astype("i4")
-        mask_eq = jnp.equal(input_ids, 1).astype("i4")
-        padding_idx = self.config.pad_token_id
-
-        position_ids = (position_ids * mask_ne - padding_idx) + (mask_eq * self.offset)
-        return position_ids
 
     def __call__(
         self,
@@ -519,7 +509,6 @@ class FlaxXGLMModule(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # embed positions
-        # position_ids = self._create_pos_ids(input_ids, position_ids)
         position_ids = position_ids + self.offset
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
 
@@ -547,9 +536,9 @@ class FlaxXGLMModule(nn.Module):
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
-            hidden_states=outputs[1],
-            attentions=outputs[2],
-            cross_attentions=outputs[3],
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
