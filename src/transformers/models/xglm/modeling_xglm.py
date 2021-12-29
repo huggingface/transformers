@@ -833,6 +833,15 @@ class XGLMModel(XGLMPreTrainedModel):
     XGLM_START_DOCSTRING,
 )
 class XGLMForCausalLM(XGLMPreTrainedModel):
+    base_model_prefix = "model"
+    _keys_to_ignore_on_load_missing = [
+        r"model.embed_positions.weights",
+        r"lm_head.weight",
+    ]
+    _keys_to_ignore_on_save = [
+        r"model.embed_positions.weights",
+    ]
+
     def __init__(self, config):
         super().__init__(config)
         self.model = XGLMModel(config)
