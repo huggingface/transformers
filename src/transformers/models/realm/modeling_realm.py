@@ -1490,129 +1490,6 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The searcher of REALM outputting relevance score (before softmax) and corresponding document blocks.",
-    REALM_START_DOCSTRING,
-)
-class RealmSearcher(RealmPreTrainedModel):
-    r"""
-    Args:
-        block_records_path (`str`):
-            Block records path.
-    """
-
-    def __init__(self, config, block_records_path):
-        super().__init__(config)
-        self.embedder = RealmEmbedder(config)
-        self.searcher = None
-        self.block_records = convert_tfrecord_to_np(
-            block_records_path=block_records_path,
-            num_block_records=config.num_block_records,
-        )
-        self.register_buffer(
-            "block_emb",
-            torch.zeros(()).new_empty(
-                size=(config.num_block_records, config.retriever_proj_size),
-                dtype=torch.float32,
-                device=torch.device("cpu"),
-            ),
-        )
-        if config.use_scann:
-            try:
-                import scann  # noqa: F401
-            except ImportError:
-                raise ImportError(
-                    "RealmSearcher requires ScaNN to retrieve documents from the corpus."
-                    "Please install it through `pip install scann`."
-                )
-        self.init_weights()
-
-    @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("1, searcher_seq_len"))
-    @replace_return_docstrings(output_type=RealmSearcherOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Returns:
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if (input_ids is not None and input_ids.shape[0] != 1) or (
-            inputs_embeds is not None and inputs_embeds.shape[0] != 1
-        ):
-            raise ValueError("The batch_size of the inputs must be 1.")
-
-        if self.training:
-            beam_size = self.config.searcher_beam_size
-        else:
-            beam_size = self.config.reader_beam_size
-
-        if self.config.use_scann and self.block_emb.device != torch.device("cpu"):
-            self.block_emb = self.block_emb.cpu()
-        if self.searcher is None:
-            if self.config.use_scann:
-                self.searcher = ScaNNSearcher(
-                    db=self.block_emb,
-                    num_neighbors=beam_size,
-                )
-            else:
-                self.searcher = BruteForceSearcher(
-                    db=self.block_emb,
-                    num_neighbors=beam_size,
-                )
-
-        question_outputs = self.embedder(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        # [1, projection_size]
-        question_projection = question_outputs[0]
-
-        # [1, searcher_beam_size]
-        retrieved_block_ids = self.searcher.search_batched(question_projection)
-
-        # [searcher_beam_size]
-        retrieved_block_ids = retrieved_block_ids.squeeze()
-
-        # [searcher_beam_size]
-        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
-
-        # [searcher_beam_size, projection_size]
-        retrieved_block_emb = torch.index_select(
-            self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device)
-        )
-
-        # [searcher_beam_size]
-        retrieved_logits = torch.einsum(
-            "D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device)
-        )
-
-        if not return_dict:
-            return (retrieved_logits, retrieved_blocks, retrieved_block_ids)
-
-        return RealmSearcherOutput(
-            retrieved_logits=retrieved_logits,
-            retrieved_blocks=retrieved_blocks,
-            retrieved_block_ids=retrieved_block_ids,
-        )
-
-
-@add_start_docstrings(
     "The reader of REALM.",
     REALM_START_DOCSTRING,
 )
@@ -1793,7 +1670,7 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
 """
 
 
-class RealmSearcherWrapper(RealmPreTrainedModel):
+class RealmSearcher(RealmPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
@@ -1806,6 +1683,7 @@ class RealmSearcherWrapper(RealmPreTrainedModel):
                 device=torch.device("cpu"),
             ),
         )
+        self.init_weights()
 
 
 @add_start_docstrings(
@@ -1825,33 +1703,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
             block_records_path=block_records_path,
             num_block_records=config.num_block_records,
         )
-        if config.use_scann:
-            try:
-                import scann  # noqa: F401
-            except ImportError:
-                raise ImportError(
-                    "RealmSearcher requires ScaNN to retrieve documents from the corpus."
-                    "Please install it through `pip install scann`."
-                )
 
-#        if self.training:
-#            beam_size = self.config.searcher_beam_size
-#        else:
-        beam_size = self.config.reader_beam_size
-
-        if self.config.use_scann and self.block_emb.device != torch.device("cpu"):
-            self.block_emb = self.block_emb.cpu()
-
-        if self.config.use_scann:
-            self.retriever = ScaNNSearcher(
-                db=self.block_emb,
-                num_neighbors=beam_size,
-            )
-        else:
-            self.retriever = BruteForceSearcher(
-                db=self.block_emb,
-                num_neighbors=beam_size,
-            )
         self.init_weights()
 
     @classmethod
@@ -1869,7 +1721,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         """
         config = kwargs.pop("config", None) or RealmConfig.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
-        searcher = RealmSearcherWrapper.from_pretrained(
+        searcher = RealmSearcher.from_pretrained(
             searcher_pretrained_name_or_path, config=config, **kwargs
         )
         reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, config=config, **kwargs)
@@ -1935,6 +1787,16 @@ class RealmForOpenQA(RealmPreTrainedModel):
         Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if self.training:
+            beam_size = self.config.searcher_beam_size
+        else:
+            beam_size = self.config.reader_beam_size
+
+        self.retriever = BruteForceSearcher(
+            db=self.block_emb,
+            num_neighbors=beam_size,
+        )
 
         if (input_ids is not None and input_ids.shape[0] != 1) or (
             inputs_embeds is not None and inputs_embeds.shape[0] != 1
