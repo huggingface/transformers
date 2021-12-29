@@ -125,8 +125,9 @@ class DistilBertModelTester(object):
         model = DistilBertModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, input_mask)
-        result = model(input_ids)
+        with torch.no_grad():
+            result = model(input_ids, input_mask)
+            result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_distilbert_for_masked_lm(
@@ -135,7 +136,8 @@ class DistilBertModelTester(object):
         model = DistilBertForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_distilbert_for_question_answering(
@@ -144,9 +146,10 @@ class DistilBertModelTester(object):
         model = DistilBertForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels
-        )
+        with torch.no_grad():
+            result = model(
+                input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels
+            )
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
@@ -157,7 +160,8 @@ class DistilBertModelTester(object):
         model = DistilBertForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_distilbert_for_token_classification(
@@ -167,8 +171,8 @@ class DistilBertModelTester(object):
         model = DistilBertForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_distilbert_for_multiple_choice(
@@ -180,11 +184,12 @@ class DistilBertModelTester(object):
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            labels=choice_labels,
-        )
+        with torch.no_grad():
+            result = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                labels=choice_labels,
+            )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
@@ -261,7 +266,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
             # BertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == DistilBertForMultipleChoice:
-                return
+                continue
 
             config.torchscript = True
             model = model_class(config=config)
@@ -284,7 +289,8 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
         model = DistilBertModel.from_pretrained("distilbert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
