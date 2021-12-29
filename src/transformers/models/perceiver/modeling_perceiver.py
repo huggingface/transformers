@@ -1306,7 +1306,7 @@ class PerceiverForTokenClassification(PerceiverPreTrainedModel):
 
         logits = outputs.logits if return_dict else outputs[0]
         logits = self.classifier(logits)
-        
+
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
