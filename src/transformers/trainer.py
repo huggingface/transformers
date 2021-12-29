@@ -844,6 +844,7 @@ class Trainer:
             elif self.args.optim == "adamw_torch":
                 from torch.optim import AdamW
 
+                optimizer_cls = AdamW
                 optimizer_kwargs.update(adam_kwargs)
             elif self.args.optim == "apex_fused_adam":
                 try:
