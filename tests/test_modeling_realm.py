@@ -477,10 +477,12 @@ class RealmModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_open_qa(self):
         # TODO: TF record dataset
+        config = RealmConfig(use_scann=False)
         model = RealmForOpenQA.from_pretrained(
             r"qqaatw/realm-orqa-nq-searcher",
             r"qqaatw/realm-orqa-nq-reader",
             BLOCK_RECORDS_PATH,
+            config=config,
         )
 
         question = "Who is the pioneer in modern computer science?"
