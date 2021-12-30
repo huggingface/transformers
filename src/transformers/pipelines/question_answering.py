@@ -34,8 +34,8 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
     QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped to
     internal [`SquadExample`].
 
-    QuestionAnsweringArgumentHandler manages all the possible to create a [`SquadExample`] from the
-    command-line supplied arguments.
+    QuestionAnsweringArgumentHandler manages all the possible to create a [`SquadExample`] from the command-line
+    supplied arguments.
     """
 
     def normalize(self, item):
@@ -101,13 +101,15 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class QuestionAnsweringPipeline(ChunkPipeline):
     """
-    Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering examples](../task_summary#question-answering) for more information.
+    Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering
+    examples](../task_summary#question-answering) for more information.
 
-    This question answering pipeline can currently be loaded from [`pipeline`] using the following
-    task identifier: `"question-answering"`.
+    This question answering pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"question-answering"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a question answering task. See the
-    up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=question-answering).
+    up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=question-answering).
     """
 
     default_input_names = "question,context"
@@ -143,8 +145,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
-        QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method
-        encapsulate all the logic for converting question(s) and context(s) to [`SquadExample`].
+        QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method encapsulate all the
+        logic for converting question(s) and context(s) to [`SquadExample`].
 
         We currently support extractive question answering.
 
@@ -153,8 +155,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             context (`str` or `List[str]`): The context(s) in which we will look for the answer.
 
         Returns:
-            One or a list of [`SquadExample`]: The corresponding [`SquadExample`]
-            grouping question and context.
+            One or a list of [`SquadExample`]: The corresponding [`SquadExample`] grouping question and context.
         """
         if isinstance(question, list):
             return [SquadExample(None, q, c, None, None, None) for q, c in zip(question, context)]
@@ -207,11 +208,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             args ([`SquadExample`] or a list of [`SquadExample`]):
                 One or several [`SquadExample`] containing the question and context.
             X ([`SquadExample`] or a list of [`SquadExample`], *optional*):
-                One or several [`SquadExample`] containing the question and context (will be treated
-                the same way as if passed as the first positional argument).
+                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
+                passed as the first positional argument).
             data ([`SquadExample`] or a list of [`SquadExample`], *optional*):
-                One or several [`SquadExample`] containing the question and context (will be treated
-                the same way as if passed as the first positional argument).
+                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
+                passed as the first positional argument).
             question (`str` or `List[str]`):
                 One or several question(s) (must be used in conjunction with the `context` argument).
             context (`str` or `List[str]`):
@@ -237,8 +238,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **score** (`float`) -- The probability associated to the answer.
-            - **start** (`int`) -- The character start index of the answer (in the tokenized version of the
-              input).
+            - **start** (`int`) -- The character start index of the answer (in the tokenized version of the input).
             - **end** (`int`) -- The character end index of the answer (in the tokenized version of the input).
             - **answer** (`str`) -- The answer to the question.
         """

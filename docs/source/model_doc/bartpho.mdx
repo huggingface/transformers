@@ -44,6 +44,7 @@ Example of use:
 
 >>> # With TensorFlow 2.0+:
 >>> from transformers import TFAutoModel
+
 >>> bartpho = TFAutoModel.from_pretrained("vinai/bartpho-syllable")
 >>> input_ids = tokenizer(line, return_tensors="tf")
 >>> features = bartpho(**input_ids)
@@ -58,9 +59,10 @@ Tips:
 
 ```python
 >>> from transformers import MBartForConditionalGeneration
+
 >>> bartpho = MBartForConditionalGeneration.from_pretrained("vinai/bartpho-syllable")
->>> TXT = 'Chúng tôi là <mask> nghiên cứu viên.'
->>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
+>>> TXT = "Chúng tôi là <mask> nghiên cứu viên."
+>>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
 >>> logits = bartpho(input_ids).logits
 >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
 >>> probs = logits[0, masked_index].softmax(dim=0)

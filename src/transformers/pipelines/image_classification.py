@@ -19,13 +19,14 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageClassificationPipeline(Pipeline):
     """
-    Image classification pipeline using any `AutoModelForImageClassification`. This pipeline predicts the class of
-    an image.
+    Image classification pipeline using any `AutoModelForImageClassification`. This pipeline predicts the class of an
+    image.
 
-    This image classification pipeline can currently be loaded from [`pipeline`] using the following
-    task identifier: `"image-classification"`.
+    This image classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"image-classification"`.
 
-    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-classification).
+    See the list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=image-classification).
     """
 
     def __init__(self, *args, **kwargs):

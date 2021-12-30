@@ -534,14 +534,14 @@ class XLMTokenizer(PreTrainedTokenizer):
     - Moses preprocessing and tokenization for most supported languages.
     - Language specific tokenization for Chinese (Jieba), Japanese (KyTea) and Thai (PyThaiNLP).
     - Optionally lowercases and normalizes all inputs text.
-    - The arguments `special_tokens` and the function `set_special_tokens`, can be used to add additional symbols
-      (like "__classify__") to a vocabulary.
-    - The `lang2id` attribute maps the languages supported by the model with their IDs if provided (automatically
-      set for pretrained vocabularies).
+    - The arguments `special_tokens` and the function `set_special_tokens`, can be used to add additional symbols (like
+      "__classify__") to a vocabulary.
+    - The `lang2id` attribute maps the languages supported by the model with their IDs if provided (automatically set
+      for pretrained vocabularies).
     - The `id2lang` attributes does reverse mapping if provided (automatically set for pretrained vocabularies).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -767,11 +767,8 @@ class XLMTokenizer(PreTrainedTokenizer):
 
             ::
 
-                git clone git@github.com:neubig/kytea.git && cd kytea
-                autoreconf -i
-                ./configure --prefix=$HOME/local
-                make && make install
-                pip install kytea
+                git clone git@github.com:neubig/kytea.git && cd kytea autoreconf -i ./configure --prefix=$HOME/local
+                make && make install pip install kytea
 
             - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
             - Install with `pip install jieba`
@@ -938,8 +935,7 @@ class XLMTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

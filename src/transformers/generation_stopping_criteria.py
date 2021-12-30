@@ -14,9 +14,8 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
@@ -41,8 +40,8 @@ class StoppingCriteria(ABC):
 
 class MaxLengthCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever the full generated number of tokens exceeds `max_length`.
-    Keep in mind for decoder-only type of transformers, this will include the initial prompted tokens.
+    This class can be used to stop generation whenever the full generated number of tokens exceeds `max_length`. Keep
+    in mind for decoder-only type of transformers, this will include the initial prompted tokens.
 
     Args:
         max_length (`int`):
@@ -59,9 +58,9 @@ class MaxLengthCriteria(StoppingCriteria):
 
 class MaxNewTokensCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever the generated number of tokens exceeds `max_new_tokens`.
-    Keep in mind for decoder-only type of transformers, this will **not** include the initial prompted tokens. This is
-    very close to `MaxLengthCriteria` but ignores the number of initial tokens.
+    This class can be used to stop generation whenever the generated number of tokens exceeds `max_new_tokens`. Keep in
+    mind for decoder-only type of transformers, this will **not** include the initial prompted tokens. This is very
+    close to `MaxLengthCriteria` but ignores the number of initial tokens.
 
     Args:
         start_length (`int`):

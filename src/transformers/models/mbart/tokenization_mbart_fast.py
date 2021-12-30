@@ -82,11 +82,12 @@ FAIRSEQ_LANGUAGE_CODES = [
 
 class MBartTokenizerFast(XLMRobertaTokenizerFast):
     """
-    Construct a "fast" MBART tokenizer (backed by HuggingFace's *tokenizers* library). Based on [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
+    Construct a "fast" MBART tokenizer (backed by HuggingFace's *tokenizers* library). Based on
+    [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
 
-    [`MBartTokenizerFast`] is a subclass of [`XLMRobertaTokenizerFast`]. Refer to
-    superclass [`XLMRobertaTokenizerFast`] for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    [`MBartTokenizerFast`] is a subclass of [`XLMRobertaTokenizerFast`]. Refer to superclass
+    [`XLMRobertaTokenizerFast`] for usage examples and documentation concerning the initialization parameters and other
+    methods.
 
     The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
@@ -95,10 +96,13 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
 
     ```python
     >>> from transformers import MBartTokenizerFast
-    >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+
+    >>> tokenizer = MBartTokenizerFast.from_pretrained(
+    ...     "facebook/mbart-large-en-ro", src_lang="en_XX", tgt_lang="ro_RO"
+    ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
+    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
     >>> inputs["labels"] = labels["input_ids"]

@@ -215,3 +215,20 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "Ein Mann sagte zu dem Universum, Sir, ich bin da."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_speech_to_text_leveraged(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-2-bart-base",
+            feature_extractor="patrickvonplaten/wav2vec2-2-bart-base",
+            tokenizer=AutoTokenizer.from_pretrained("patrickvonplaten/wav2vec2-2-bart-base"),
+            framework="pt",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
