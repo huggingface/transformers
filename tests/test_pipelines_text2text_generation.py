@@ -56,7 +56,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             num_return_sequences=num_return_sequences,
             num_beams=num_return_sequences,
         )
-        tagret_outputs = [
+        target_outputs = [
             {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide"},
             {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide"},
             {"generated_text": ""},
