@@ -40,7 +40,6 @@ if is_torch_available():
         "NystromformerLayer",
         "NystromformerModel",
         "NystromformerPreTrainedModel",
-        "load_tf_weights_in_nystromformer",
     ]
 
 
@@ -62,7 +61,6 @@ if TYPE_CHECKING:
             NystromformerLayer,
             NystromformerModel,
             NystromformerPreTrainedModel,
-            load_tf_weights_in_nystromformer,
         )
 
 

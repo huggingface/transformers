@@ -66,7 +66,7 @@ class NystromformerEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -156,6 +156,13 @@ class NystromformerSelfAttention(nn.Module):
             config, "position_embedding_type", "absolute"
         )
 
+        if self.conv_kernel_size is not None:
+            self.conv = nn.Conv2d(
+                in_channels = self.num_attention_heads, out_channels = self.num_attention_heads,
+                kernel_size = (self.conv_kernel_size, 1), padding = (self.conv_kernel_size // 2, 0),
+                bias = False,
+                groups = self.num_attention_heads)
+
     def iterative_inv(self, mat, n_iter=6):
         I = torch.eye(mat.size(-1), device=mat.device)
         K = mat
@@ -183,8 +190,6 @@ class NystromformerSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
@@ -204,6 +209,7 @@ class NystromformerSelfAttention(nn.Module):
                 attention_scores = attention_scores + attention_mask
 
             attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+            context_layer = torch.matmul(attention_probs, value_layer)
 
         else:
             Q_landmarks = query_layer.reshape(
@@ -232,9 +238,11 @@ class NystromformerSelfAttention(nn.Module):
 
             kernel_3 = nn.functional.softmax(attention_scores, dim=-1)
             attention_probs = torch.matmul(kernel_1, self.iterative_inv(kernel_2))
-            value_layer = torch.matmul(kernel_3, value_layer)
+            new_value_layer = torch.matmul(kernel_3, value_layer)
+            context_layer = torch.matmul(attention_probs, new_value_layer)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        if self.conv_kernel_size is not None:
+            context_layer += self.conv(value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -294,7 +302,6 @@ class NystromformerAttention(nn.Module):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -733,8 +740,6 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -755,8 +760,6 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

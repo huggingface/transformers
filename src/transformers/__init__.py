@@ -1138,7 +1138,6 @@ if is_torch_available():
             "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
-            "load_tf_weights_in_nystromformer",
         ]
     )
     _import_structure["models.openai"].extend(
@@ -3014,7 +3013,6 @@ if TYPE_CHECKING:
             NystromformerLayer,
             NystromformerModel,
             NystromformerPreTrainedModel,
-            load_tf_weights_in_nystromformer,
         )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
