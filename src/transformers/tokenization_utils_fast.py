@@ -352,8 +352,22 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if _truncation is not None:
                 self._tokenizer.no_truncation()
         else:
-            target = {"max_length": max_length, "stride": stride, "strategy": truncation_strategy.value}
-            if _truncation != target:
+            target = {
+                "max_length": max_length,
+                "stride": stride,
+                "strategy": truncation_strategy.value,
+            }
+
+            # _truncation might contain more keys that the target `transformers`
+            # supports. Use only the target keys to trigger `enable_truncation`.
+            # This should enable this code to works on various `tokenizers`
+            # targets.
+            if _truncation is None:
+                current = None
+            else:
+                current = {k: _truncation.get(k, None) for k in target}
+
+            if current != target:
                 self._tokenizer.enable_truncation(**target)
 
         if padding_strategy == PaddingStrategy.DO_NOT_PAD:
