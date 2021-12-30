@@ -4,6 +4,9 @@
 #
 # This tool can be used to run and compare multiple dimensions of the HF Trainers args
 #
+# It then prints a report once in github format with all the information that needs to be shared
+# with others and second time in a console-friendly format, so it's easier to use for tuning things up.
+#
 # The main idea is:
 #
 #     ./trainer-benchmark.py --base-cmd '<cmd args that don't change>' \
@@ -24,49 +27,54 @@
 #
 # and print the results. This is just a cartesian product - and more than 2 dimensions can be used.
 #
-# In a simpler way the same can be accomplished as:
+# If you want to rely on defaults, this:
+#    --variations '--tf32 0|--tf32 1' '--fp16 0|--fp16 1|--bf16 1'
+# is identical to this:
+#    --variations '--tf32 0|--tf32 1' '|--fp16|--bf16'
 #
-#     --variations '|--tf32' '|--fp16|--bf16'
-#
-# the leading empty variation is valid variation.
+# the leading empty variation in the 2nd dimension is a valid variation.
 #
 # So here we get the following 6 variations:
 #
-#    1.
-#    2. --fp16
-#    3. --bf16
-#    4. --tf32
-#    5. --tf32 --fp16
-#    6. --tf32 --bf16
+#    1. --tf32 0
+#    2. --tf32 0 --fp16
+#    3. --tf32 0 --bf16
+#    4. --tf32 1
+#    5. --tf32 1 --fp16
+#    6. --tf32 1 --bf16
 #
+# In this particular case we don't know what the default tf32 setting is as it's normally
+# pytorch-version dependent). That's why it's best to do an explicit setting of each variation:
+#    `--tf32 0|--tf32 1`
 #
 # Here is a full example of a train:
 #
-#     CUDA_VISIBLE_DEVICES=0 ./scripts/benchmark/trainer-benchmark.py \
-#     --base-cmd ' \
-#     examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --output_dir output_dir \
-#     --do_train --label_smoothing 0.1 --logging_strategy no --save_strategy no --per_device_train_batch_size 8 \
-#     --max_source_length 512 --max_target_length 512 --num_train_epochs 1 --overwrite_output_dir \
-#     --source_lang en --target_lang ro --dataset_name wmt16 --dataset_config "ro-en" \
-#     --source_prefix "translate English to Romanian: "  --warmup_steps 50 \
-#     --max_train_samples 5000 --dataloader_num_workers 2 \
-#     ' \
-#     --variations '--tf32 0|--tf32 1' '--fp16 0|--fp16 1|--bf16 1' \
-#     --base-variation '--tf32 0 --fp16 0' \
-#     --target-metric-key train_samples_per_second --repeat-times 1
+# CUDA_VISIBLE_DEVICES=0 python ./scripts/benchmark/trainer-benchmark.py \
+# --base-cmd \
+# ' examples/pytorch/translation/run_translation.py --model_name_or_path t5-small \
+# --output_dir output_dir --do_train --label_smoothing 0.1 --logging_strategy no \
+# --save_strategy no --per_device_train_batch_size 32 --max_source_length 512 \
+# --max_target_length 512 --num_train_epochs 1 --overwrite_output_dir \
+# --source_lang en --target_lang ro --dataset_name wmt16 --dataset_config "ro-en" \
+# --source_prefix "translate English to Romanian: " --warmup_steps 50 \
+# --max_train_samples 20000 --dataloader_num_workers 2 ' \
+# --target-metric-key train_samples_per_second --repeat-times 1 --variations \
+# '|--fp16|--bf16' '--tf32 0|--tf32 1' --report-metric-keys train_loss \
+# --repeat-times 1 --base-variation '--tf32 0'
 #
 # and here is a possible output:
-# # XXX: outdated!
-#     *** Results: train_samples_per_second
 #
-#     |    Variations     | Result |   %   |
-#     | ----------------- | ------ | ----- |
-#     | --tf32 0 --fp16 0 |  31.95 |  100% |
-#     | --tf32 0 --fp16 1 |  47.88 |  149% |
-#     | --tf32 0 --bf16 1 |  35.04 |  109% |
-#     | --tf32 1 --fp16 0 |  35.47 |  111% |
-#     | --tf32 1 --fp16 1 |  47.82 |  149% |
-#     | --tf32 1 --bf16 1 |  35.11 |  109% |
+#    | Variation       |     Train |   Diff |   Train |
+#    |                 |   samples |      % |    loss |
+#    |                 |       per |        |         |
+#    |                 |    second |        |         |
+#    |:----------------|----------:|-------:|--------:|
+#    | --tf32 0        |    286.07 |    100 |    2.51 |
+#    | --tf32 1        |    342.82 |    120 |    2.51 |
+#    | --fp16 --tf32 0 |    422.07 |    148 |    2.51 |
+#    | --fp16 --tf32 1 |    423.18 |    148 |    2.51 |
+#    | --bf16 --tf32 0 |    415.93 |    145 |    2.52 |
+#    | --bf16 --tf32 1 |    418.51 |    146 |    2.52 |
 #
 # So you can quickly compare the different outcomes.
 #
@@ -78,15 +86,18 @@
 # the baseline, e.g., to change to another entry use: --base-variation '--tf32 1 --fp16 0'
 #
 # --target-metric-key is there to tell the program which metrics to compare - the different metric keys are
-# inside output_dir/all_results.json. e.g., to measure eval performance instead of train use
-# --target-metric-key eval_samples_per_second
-
+# inside output_dir/all_results.json. e.g., to measure eval performance instead of train use:
+#    --target-metric-key eval_samples_per_second
+# but of course you will need to adjust the --base-cmd value in the example to perform evaluation as
+# well (as currently it doesn't)
+#
 
 import argparse
 import datetime
 import io
 import itertools
 import json
+import math
 import os
 import platform
 import re
@@ -101,6 +112,9 @@ import torch
 from tqdm import tqdm
 
 import transformers
+
+
+nan = float("nan")
 
 
 class Tee:
@@ -178,12 +192,12 @@ def process_run_single(id, cmd, variation, output_dir, target_metric_key, metric
     # enable to debug everything but the run itself, to do it fast and see the progress
     if 0:
         import random
-        from random import randint
         from time import sleep
 
         sleep(0)
         return dict(
-            {k: randint(1, 30) for k in metric_keys}, **{target_metric_key: random.choice([-1, 10, 100, 55, 222])}
+            {k: random.uniform(0, 100) for k in metric_keys},
+            **{target_metric_key: random.choice([nan, 10.31, 100.2, 55.6666, 222.22222222])},
         )
 
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -202,7 +216,7 @@ def process_run_single(id, cmd, variation, output_dir, target_metric_key, metric
     if result.returncode != 0:
         if verbose:
             print("failed")
-        return {target_metric_key: -1}
+        return {target_metric_key: nan}
 
     with io.open(f"{output_dir}/all_results.json", "r", encoding="utf-8") as f:
         metrics = json.load(f)
@@ -233,26 +247,25 @@ def process_run(
             id, cmd, variation, output_dir, target_metric_key, metric_keys, verbose
         )
         result = single_run_metrics[target_metric_key]
-        if result != -1:
+        if not math.isnan(result):
             metrics.append(single_run_metrics)
             results.append(result)
             outcome += "✓"
         else:
             outcome += "✘"
     outcome = f"\33[2K\r{outcome}"
-    successful_runs = len(metrics)
-    if successful_runs > 0:
-        mean_metrics = {k: fmean([metrics[i][k] for i in range(successful_runs)]) for k in metrics[0].keys()}
+    if len(metrics) > 0:
+        mean_metrics = {k: fmean([x[k] for x in metrics]) for k in metrics[0].keys()}
         mean_target = round(mean_metrics[target_metric_key], 2)
         results_str = f"{outcome} {mean_target}"
-        if successful_runs > 1:
+        if len(metrics) > 1:
             results_str += f" {tuple(round(x, 2) for x in results)}"
         print(results_str)
         mean_metrics[variation_key] = variation
         return mean_metrics
     else:
         print(outcome)
-        return {variation_key: variation, target_metric_key: -1}
+        return {variation_key: variation, target_metric_key: nan}
 
 
 def get_versions():
@@ -271,31 +284,28 @@ Hardware:
 """
 
 
-def process_results(results, target_metric_key, report_metric_keys, base_variation, table_format, output_dir):
+def process_results(results, target_metric_key, report_metric_keys, base_variation, output_dir):
 
     df = pd.DataFrame(results)
     variation_key = "variation"
     diff_key = "diff_%"
 
-    sentinel_value = -1
+    sentinel_value = nan
     if base_variation is not None and len(df[df[variation_key] == base_variation]):
-        # this may still return -1
+        # this may still return nan
         sentinel_value = df.loc[df[variation_key] == base_variation][target_metric_key].item()
-    if sentinel_value == -1:
+    if math.isnan(sentinel_value):
         # as a fallback, use the minimal value as the sentinel
-        sentinel_value = df.loc[df[target_metric_key] != -1][target_metric_key].min()
+        sentinel_value = df.loc[df[target_metric_key] != nan][target_metric_key].min()
 
-    # create diff column
-    if sentinel_value != -1:
+    # create diff column if possible
+    if not math.isnan(sentinel_value):
         df[diff_key] = df.apply(
-            lambda r: round(100 * r[target_metric_key] / sentinel_value) if r[target_metric_key] != -1 else "✘",
+            lambda r: round(100 * r[target_metric_key] / sentinel_value)
+            if not math.isnan(r[target_metric_key])
+            else 0,
             axis="columns",
         )
-
-    # deal with failed runs
-    df[target_metric_key] = df.apply(
-        lambda r: r[target_metric_key] if r[target_metric_key] != -1 else "✘", axis="columns"
-    )
 
     # re-order columns
     cols = [variation_key, target_metric_key, diff_key, *report_metric_keys]
@@ -305,12 +315,20 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
     df = df.rename(str.capitalize, axis="columns")
 
     # make the cols as narrow as possible
-    linebreak = "<br>" if table_format == "github" else "\n"
-    df = df.rename(lambda c: c.replace("_", linebreak), axis="columns")
+    df_github = df.rename(lambda c: c.replace("_", "<br>"), axis="columns")
+    df_console = df.rename(lambda c: c.replace("_", "\n"), axis="columns")
 
-    print("", "*** Results:", df.to_markdown(index=False), get_versions(), sep="\n\n")
+    report = ["", "Copy between the cut-here-lines and paste as is to github or a forum"]
+    report += ["----------8<-----------------8<--------"]
+    report += ["*** Results:", df_github.to_markdown(index=False, floatfmt=".2f")]
+    report += ["```"]
+    report += ["*** Setup:", get_versions()]
+    report += ["*** The benchmark command line was:", get_orig_cmd()]
+    report += ["```"]
+    report += ["----------8<-----------------8<--------"]
+    report += ["*** Results (console):", df_console.to_markdown(index=False, floatfmt=".2f")]
 
-    print("The benchmark command line was:", get_orig_cmd(), sep="\n\n")
+    print("\n\n".join(report))
 
 
 def main():
@@ -354,14 +372,6 @@ def main():
         default=1,
         type=int,
         help="How many times to re-run each variation - an average will be reported",
-    )
-    # table_format_choices
-    parser.add_argument(
-        "--table-format",
-        default="console",
-        type=str,
-        choices=["github", "console"],
-        help="Format the results table to render best in the destination use",
     )
     parser.add_argument(
         "--verbose",
@@ -415,9 +425,7 @@ def main():
             )
         )
 
-    process_results(
-        results, args.target_metric_key, report_metric_keys, args.base_variation, args.table_format, output_dir
-    )
+    process_results(results, args.target_metric_key, report_metric_keys, args.base_variation, output_dir)
 
 
 if __name__ == "__main__":
