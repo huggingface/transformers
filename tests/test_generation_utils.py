@@ -1889,11 +1889,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sequences.shape, (2, 5))
 
     def test_generate_encoder_outputs_attention_mask(self):
-        # article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        # tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        # model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=5).to(
-        #     torch_device
-        # )
         input_values = floats_tensor((2, 250)).to(torch_device)
         attention_mask = torch.ones_like(input_values)
         model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
