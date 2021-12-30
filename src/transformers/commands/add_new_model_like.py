@@ -341,9 +341,14 @@ def duplicate_module(
         # Special cases
         if "PRETRAINED_CONFIG_ARCHIVE_MAP = {" in obj:
             # docstyle-ignore
-            obj = f"{new_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP = " + "{" + f"""
+            obj = (
+                f"{new_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP = "
+                + "{"
+                + f"""
     "{new_model_patterns.checkpoint}": "https://huggingface.co/{new_model_patterns.checkpoint}/resolve/main/config.json",
-""" + "}\n"
+"""
+                + "}\n"
+            )
             new_objects.append(obj)
             continue
         elif "PRETRAINED_MODEL_ARCHIVE_LIST = [" in obj:
