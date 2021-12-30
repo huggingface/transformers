@@ -50,6 +50,19 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         outputs = generator("Something there", do_sample=False)
         self.assertEqual(outputs, [{"generated_text": ""}])
 
+        num_return_sequences = 3
+        outputs = generator(
+            "Something there",
+            num_return_sequences=num_return_sequences,
+            num_beams=num_return_sequences,
+        )
+        target_outputs = [
+            {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide"},
+            {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide"},
+            {"generated_text": ""},
+        ]
+        self.assertEqual(outputs, target_outputs)
+
     @require_tf
     def test_small_model_tf(self):
         generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="tf")
