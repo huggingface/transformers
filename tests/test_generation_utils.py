@@ -1904,8 +1904,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         encoder_outputs = encoder(input_values)
 
         output_sequences_no_mask = model.generate(encoder_outputs=encoder_outputs).cpu()
-        output_sequences_with_mask = model.generate(
-            encoder_outputs=encoder_outputs, attention_mask=attention_mask
-        ).cpu()
+        output_sequences_with_mask = model.generate(encoder_outputs=encoder_outputs, attention_mask=attention_mask)
+        output_sequences_with_mask = output_sequences_with_mask.cpu()
 
         self.assertListEqual(output_sequences_no_mask.tolist(), output_sequences_with_mask.tolist())

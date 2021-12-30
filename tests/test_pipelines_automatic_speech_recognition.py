@@ -219,7 +219,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_torchaudio
-    def test_wav2vec2_2_bart(self):
+    def test_speech_to_text_leveraged(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="patrickvonplaten/wav2vec2-2-bart-base",
