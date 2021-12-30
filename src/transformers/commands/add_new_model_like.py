@@ -798,8 +798,7 @@ def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, ad
     # 4. Add model to auto classes
     add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
 
-    # 5. Add doc file
-    files_to_adapt = model_files["doc_files"]
+    # 5. TODO Add doc file
 
 
 def add_new_model_like_command_factory(args: Namespace):
