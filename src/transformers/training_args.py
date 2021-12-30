@@ -347,7 +347,7 @@ class TrainingArguments:
         optim (`str`, *optional*, defaults to `adamw_hf`):
             The optimizer to use: adamw_hf, adamw_torch, apex_fused_adam, or adafactor.
         adafactor (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the [`Adafactor`] optimizer instead of [`AdamW`].
+            This argument is deprecated. Use `optim` instead.
         group_by_length (`bool`, *optional*, defaults to `False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
