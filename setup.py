@@ -257,9 +257,8 @@ extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
-extras["speech"] = (
-    deps_list("torchaudio") + extras["audio"]
-)  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
+# `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
+extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
