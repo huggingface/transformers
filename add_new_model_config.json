@@ -1,0 +1,19 @@
+{
+    "add_copied_from": true,
+    "old_model_type": "gpt2",
+    "new_model_patterns": {
+        "model_name": "GPT-New new",
+        "checkpoint": "huggingface/gpt-new-base",
+        "model_type": "gpt-new-new",
+        "model_lower_cased": "gpt_new_new",
+        "model_camel_cased": "GPTNewNew",
+        "model_upper_cased": "GPT_NEW_NEW",
+        "config_class": "GPTNewNewConfig",
+        "tokenizer_class": "GPT2Tokenizer"
+    },
+    "frameworks": [
+        "pt",
+        "tf",
+        "flax"
+    ]
+}
