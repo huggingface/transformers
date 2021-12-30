@@ -73,6 +73,7 @@ class OptimizerOptions(Enum):
     """
     Stores the acceptable string identifiers for optimizers.
     """
+
     ADAMW_HF = "adamw_hf"
     ADAMW_TORCH = "adamw_torch"
     APEX_FUSED_ADAM = "apex_fused_adam"
