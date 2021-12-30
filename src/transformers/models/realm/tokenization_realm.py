@@ -106,8 +106,7 @@ class RealmTokenizer(BertTokenizer):
 
         >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
         >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
-        ```
-"""
+        ```"""
 
         # Always using a fixed sequence length to encode in order to stack candidates into a batch.
         kwargs["padding"] = PaddingStrategy.MAX_LENGTH

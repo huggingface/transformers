@@ -45,7 +45,7 @@ from .configuration_realm import RealmConfig
 from .utils_realm import BruteForceSearcher, ScaNNSearcher, convert_tfrecord_to_np
 
 
-T = TypeVar('T', bound='Module')
+T = TypeVar("T", bound="Module")
 logger = logging.get_logger(__name__)
 _BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
 _EMBEDDER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-embedder"
@@ -1670,7 +1670,6 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
 
 
 class RealmSearcher(RealmPreTrainedModel):
-
     def __init__(self, config):
         # TODO(PVP) - this class has to be removed
         super().__init__(config)
@@ -1698,7 +1697,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         self.block_emb = searcher.block_emb
         self.retriever = retriever
 
-#        self.init_weights()
+    #        self.init_weights()
 
     @property
     def beam_size(self):
@@ -1707,9 +1706,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         return self.config.reader_beam_size
 
     @classmethod
-    def from_pretrained(
-        cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, retriever, **kwargs
-    ):
+    def from_pretrained(cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, retriever, **kwargs):
         """
         Args:
             searcher_pretrained_name_or_path (`str`):
@@ -1719,9 +1716,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         """
         config = kwargs.pop("config", None) or RealmConfig.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
-        searcher = RealmSearcher.from_pretrained(
-            searcher_pretrained_name_or_path, config=config, **kwargs
-        )
+        searcher = RealmSearcher.from_pretrained(searcher_pretrained_name_or_path, config=config, **kwargs)
         reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, config=config, **kwargs)
         return cls(config, searcher, reader, retriever)
 
@@ -1755,7 +1750,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
         if input_ids is not None and input_ids.shape[0] != 1:
             raise ValueError("The batch_size of the inputs must be 1.")
 
-        question_outputs = self.embedder(input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask, return_dict=True)
+        question_outputs = self.embedder(
+            input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask, return_dict=True
+        )
 
         # [1, projection_size]
         question_projection = question_outputs[0]
@@ -1794,7 +1791,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
             return_dict=True,
         )
 
-        predicted_answer_ids = concat_inputs.input_ids[reader_output.block_idx][reader_output.start_pos : reader_output.end_pos + 1]
+        predicted_answer_ids = concat_inputs.input_ids[reader_output.block_idx][
+            reader_output.start_pos : reader_output.end_pos + 1
+        ]
 
         if not return_dict:
             return answer_ids, searcher_output, reader_output

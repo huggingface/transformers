@@ -42,7 +42,7 @@ class ScaNNSearcher:
     def search_batched(self, question_projection):
         retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
         # Must return cpu tensor for subsequent numpy operations
-#        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
+        #        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
         return retrieved_block_ids.astype("int64")
 
 

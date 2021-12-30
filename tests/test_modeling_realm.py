@@ -537,9 +537,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
     def test_inference_retriever(self):
         num_candidates = 2
 
-        model = RealmScorer.from_pretrained(
-            "qqaatw/realm-cc-news-pretrained-retriever", num_candidates=num_candidates
-        )
+        model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever", num_candidates=num_candidates)
 
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         candidate_input_ids = torch.tensor([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]])

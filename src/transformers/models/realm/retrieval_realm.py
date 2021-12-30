@@ -15,7 +15,7 @@
 """Realm Retriever model implementation."""
 import numpy as np
 
-#from ...tokenization_utils_base import BatchEncoding
+# from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 
 
@@ -57,7 +57,7 @@ class ScaNNSearcher:
     def search_batched(self, question_projection):
         retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
         # Must return cpu tensor for subsequent numpy operations
-#        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
+        #        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
         return retrieved_block_ids.astype("int64")
 
 
@@ -71,7 +71,7 @@ class RealmRetriever:
         )
         self.tokenizer = tokenizer
 
-#    ) -> BatchEncoding:
+    #    ) -> BatchEncoding:
     def __call__(self, retrieved_block_ids, question_input_ids, answer_ids, return_tensors="pt"):
         retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
 
@@ -108,7 +108,7 @@ class RealmRetriever:
             for answer in answer_ids:
                 for idx in range(sep_idx, len(input_id)):
                     if answer[0] == input_id[idx]:
-                        if input_id[idx: idx + len(answer)] == answer:
+                        if input_id[idx : idx + len(answer)] == answer:
                             start_pos[-1].append(idx)
                             end_pos[-1].append(idx + len(answer) - 1)
 
