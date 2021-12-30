@@ -827,6 +827,6 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
     def run(self):
         create_new_model_like(
             model_type=self.old_model_type,
-            new_model_patterns=self.new_model_patterns,
+            new_model_patterns=self.model_patterns,
             add_copied_from=self.add_copied_from,
         )
