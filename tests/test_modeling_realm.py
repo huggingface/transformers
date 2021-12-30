@@ -487,13 +487,22 @@ class RealmModelIntegrationTest(unittest.TestCase):
             r"qqaatw/realm-orqa-nq-searcher",
             r"qqaatw/realm-orqa-nq-reader",
             retriever,
-            BLOCK_RECORDS_PATH,
             config=config,
         )
 
         question = "Who is the pioneer in modern computer science?"
-        predicted_answer = model(question).predicted_answer
 
+        question = tokenizer(
+            [question],
+            padding=True,
+            truncation=True,
+            max_length=model.config.searcher_seq_len,
+            return_tensors="pt",
+        ).to(model.device)
+
+        predicted_answer_ids = model(**question).predicted_answer
+
+        predicted_answer = tokenizer.decode(predicted_answer_ids)
         self.assertEqual(predicted_answer, "alan mathison turing")
 
     @slow

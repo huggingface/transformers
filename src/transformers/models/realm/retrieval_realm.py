@@ -72,8 +72,10 @@ class RealmRetriever:
         self.tokenizer = tokenizer
 
 #    ) -> BatchEncoding:
-    def __call__(self, retrieved_block_ids, question, answer_ids, return_tensors="pt"):
+    def __call__(self, retrieved_block_ids, question_input_ids, answer_ids, return_tensors="pt"):
         retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
+
+        question = self.tokenizer.decode(question_input_ids[0], skip_special_tokens=True)
 
         text = []
         text_pair = []
@@ -88,10 +90,9 @@ class RealmRetriever:
 
         # concat inputs should come from the retriever here
         if answer_ids is not None:
-            return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_inputs_tensors,)
+            return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_tensors,)
         else:
             return (None, None, None, concat_inputs_tensors)
-
 
     def block_has_answer(self, concat_inputs, answer_ids):
         """check if retrieved_blocks has answers."""
