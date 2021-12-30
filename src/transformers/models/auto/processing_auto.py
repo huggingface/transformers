@@ -20,6 +20,7 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_list_of_files
+from ...tokenization_utils import TOKENIZER_CONFIG_FILE
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -28,6 +29,7 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .tokenization_auto import get_tokenizer_config
 
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
@@ -151,8 +153,16 @@ class AutoProcessor:
         # strip to file name
         model_files = [f.split("/")[-1] for f in model_files]
 
+        # Let's start by checking whether the processor class is saved in a feature extractor
         if FEATURE_EXTRACTOR_NAME in model_files:
             config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+            if "processor_class" in config_dict:
+                processor_class = processor_class_from_name(config_dict["processor_class"])
+                return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        # Next, let's check whether the processor class is saved in a tokenizer
+        if TOKENIZER_CONFIG_FILE in model_files:
+            config_dict = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
             if "processor_class" in config_dict:
                 processor_class = processor_class_from_name(config_dict["processor_class"])
                 return processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
