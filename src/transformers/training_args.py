@@ -335,7 +335,7 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str`, *optional*, defaults to `adamw_hf`):
-            The optimizer to use: adamw_hf, adamw_torch, adafactor, or apex_fused_adam.
+            The optimizer to use: adamw_hf, adamw_torch, apex_fused_adam, or adafactor.
         adafactor (`bool`, *optional*, defaults to `False`):
             Whether or not to use the [`Adafactor`] optimizer instead of [`AdamW`].
         group_by_length (`bool`, *optional*, defaults to `False`):
@@ -656,7 +656,7 @@ class TrainingArguments:
     )
     optim: str = field(
         default="adamw_hf",
-        metadata={"help": "The optimizer to use: adamw_hf, adamw_torch, adafactor, or apex_fused_adam."},
+        metadata={"help": "The optimizer to use: adamw_hf, adamw_torch, apex_fused_adam or adafactor"},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
