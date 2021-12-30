@@ -117,12 +117,17 @@ def parse_module_content(content: str):
     objects = []
     current_object = []
     lines = content.split("\n")
-    
+    # Black will try to restyle the \"\"\" in the next list into """ and then the doc-styler is going to believe
+    # every code sample is a docstring...
+    # fmt: off
+    end_markers = [")", "]", "}", '\"\"\"']
+    # fmt: on
+
     for line in lines:
         # End of an object
         if not is_empty_line(line) and find_indent(line) == 0 and len(current_object) > 0:
             # Closing parts should be included in current object
-            if line in [")", "]", "}", '\"\"\"']:
+            if line in end_markers:
                 current_object.append(line)
                 objects.append("\n".join(current_object))
                 current_object = []
