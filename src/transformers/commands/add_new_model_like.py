@@ -340,7 +340,7 @@ def duplicate_module(
     for obj in objects:
         # Special cases
         if "PRETRAINED_CONFIG_ARCHIVE_MAP = {" in obj:
-            # doc-style ignore
+            # docstyle-ignore
             obj = f"{new_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP = " + "{" + f"""
     "{new_model_patterns.checkpoint}": "https://huggingface.co/{new_model_patterns.checkpoint}/resolve/main/config.json",
 """ + "}\n"
@@ -353,7 +353,7 @@ def duplicate_module(
                 prefix = "FLAX_"
             else:
                 prefix = ""
-            # doc-style ignore
+            # docstyle-ignore
             obj = f"""{prefix}{new_model_patterns.model_upper_cased}_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "{new_model_patterns.checkpoint}",
     # See all {new_model_patterns.model_name} models at https://huggingface.co/models?filter={new_model_patterns.model_type}
