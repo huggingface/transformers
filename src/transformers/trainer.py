@@ -833,7 +833,7 @@ class Trainer:
 
             # TODO the following code is a good candidate for PEP 622 once Python 3.10 becomes the
             #  minimum required version. See, https://www.python.org/dev/peps/pep-0622/
-            if (self.args.adafactor and self.args.optim == "adamw_hf") or self.args.optim == "adafactor":
+            if self.args.optim == "adafactor":
                 optimizer_cls = Adafactor
                 optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
             elif self.args.optim == "adamw_hf":
