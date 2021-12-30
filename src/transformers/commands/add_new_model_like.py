@@ -117,9 +117,10 @@ def parse_module_content(content: str):
     objects = []
     current_object = []
     lines = content.split("\n")
-    # Black will try to restyle the \"\"\" in the next list into """ and then the doc-styler is going to believe
-    # every code sample is a docstring...
     # fmt: off
+    # Black will try to restyle the \"\"\" in the next list into triple quotes and then the doc-styler is going to
+    # believe every code sample is a docstring...
+
     end_markers = [")", "]", "}", '\"\"\"']
     # fmt: on
 
