@@ -420,13 +420,10 @@ def get_model_files(model_type):
     """
     module_name = auto_module.configuration_auto.model_type_to_module_name(model_type)
 
-    transformers_path = Path(auto_module.__path__[0]).parent.parent
-    repo_path = transformers_path.parent.parent
-
-    model_module = transformers_path / "models" / module_name
+    model_module = TRANSFORMERS_PATH / "models" / module_name
     model_files = list(model_module.glob("*.py"))
 
-    doc_file = repo_path / "models" / "docs" / "source" / f"{model_type}.mdx"
+    doc_file = REPO_PATH / "models" / "docs" / "source" / f"{model_type}.mdx"
 
     # Basic pattern for test files
     test_files = [
@@ -436,7 +433,7 @@ def get_model_files(model_type):
         f"test_tokenization_{module_name}.py",
     ]
     # Add the test directory
-    test_files = [repo_path / "tests" / f for f in test_files]
+    test_files = [REPO_PATH / "tests" / f for f in test_files]
     # Filter by existing files
     test_files = [f for f in test_files if f.exists()]
 
@@ -592,8 +589,7 @@ def clean_tokenization_in_init(init_file):
 
 
 def add_model_to_main_init(old_model_patterns, new_model_patterns, with_tokenizer=True):
-    transformers_path = Path(auto_module.__path__[0]).parent.parent
-    with open(transformers_path / "__init__.py", "r", encoding="utf-8") as f:
+    with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
 
     lines = content.split("\n")
@@ -624,13 +620,12 @@ def add_model_to_main_init(old_model_patterns, new_model_patterns, with_tokenize
             new_lines.append(lines[idx])
             idx += 1
 
-    with open(transformers_path / "__init__.py", "w", encoding="utf-8") as f:
+    with open(TRANSFORMERS_PATH / "__init__.py", "w", encoding="utf-8") as f:
         f.write("\n".join(new_lines))
 
 
 def insert_tokenizer_in_auto_module(old_model_patterns, new_model_patterns):
-    transformers_path = Path(auto_module.__path__[0]).parent.parent
-    with open(transformers_path / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
+    with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
         content = f.read()
 
     lines = content.split("\n")
@@ -662,7 +657,7 @@ def insert_tokenizer_in_auto_module(old_model_patterns, new_model_patterns):
     new_block = new_block.replace(old_model_patterns.tokenizer_class, new_model_patterns.tokenizer_class)
 
     new_lines = lines[:idx] + [new_block] + lines[idx:]
-    with open(transformers_path / "models" / "auto" / "tokenization_auto.py", "w", encoding="utf-8") as f:
+    with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "w", encoding="utf-8") as f:
         f.write("\n".join(new_lines))
 
 
@@ -679,7 +674,6 @@ AUTO_CLASSES_PATTERNS = {
 
 
 def add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes):
-    transformers_path = Path(auto_module.__path__[0]).parent.parent
 
     for file in AUTO_CLASSES_PATTERNS:
         # Extend patterns with all model classes if necessary
@@ -699,7 +693,7 @@ def add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_clas
 
         # Loop through all patterns.
         for pattern in new_patterns:
-            file_name = transformers_path / "models" / "auto" / file
+            file_name = TRANSFORMERS_PATH / "models" / "auto" / file
             old_model_line = pattern
             new_model_line = pattern
             for attr in ["model_type", "model_name", "config_class"]:
@@ -740,12 +734,9 @@ def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, ad
     keep_old_tokenizer = old_model_patterns.tokenizer_class == new_model_patterns.tokenizer_class
     model_classes = model_info["model_classes"]
 
-    transformers_path = Path(auto_module.__path__[0]).parent.parent
-    repo_path = transformers_path.parent.parent
-
     # 1. We create the module for our new model.
     old_module_name = model_files["module_name"]
-    module_folder = transformers_path / "models" / new_model_patterns.model_lower_cased
+    module_folder = TRANSFORMERS_PATH / "models" / new_model_patterns.model_lower_cased
     os.makedirs(module_folder, exist_ok=True)
 
     files_to_adapt = model_files["model_files"]
@@ -771,7 +762,7 @@ def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, ad
 
     # 2. We add our new model to the models init and the main init
     add_content_to_file(
-        transformers_path / "models" / "__init__.py",
+        TRANSFORMERS_PATH / "models" / "__init__.py",
         f"    {new_model_patterns.model_lower_cased},",
         add_after=f"    {old_module_name},",
         exact_match=True,
