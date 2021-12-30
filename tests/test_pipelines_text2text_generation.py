@@ -61,7 +61,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide"},
             {"generated_text": ""},
         ]
-        self.assertEqual(outputs, tagret_outputs)
+        self.assertEqual(outputs, target_outputs)
 
     @require_tf
     def test_small_model_tf(self):
