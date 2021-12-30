@@ -1553,7 +1553,13 @@ class Trainer:
             if self.args.local_rank != -1:
                 torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
             else:
-                torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
+                try:
+                    torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
+                except Exception as e:
+                    logger.infor(
+                        f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
+                        "\nThis won't yield the same results as if the training had not been interrupted."
+                    )
         if is_torch_tpu_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
 
