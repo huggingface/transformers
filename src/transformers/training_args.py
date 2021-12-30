@@ -69,6 +69,16 @@ def default_logdir() -> str:
     return os.path.join("runs", current_time + "_" + socket.gethostname())
 
 
+class OptimizerOptions(Enum):
+    """
+    Stores the acceptable string identifiers for optimizers.
+    """
+    ADAMW_HF = "adamw_hf"
+    ADAMW_TORCH = "adamw_torch"
+    APEX_FUSED_ADAM = "apex_fused_adam"
+    ADAFACTOR = "adafactor"
+
+
 @dataclass
 class TrainingArguments:
     """
@@ -655,8 +665,8 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     optim: str = field(
-        default="adamw_hf",
-        metadata={"help": "The optimizer to use: adamw_hf, adamw_torch, apex_fused_adam or adafactor"},
+        default=OptimizerOptions.ADAMW_HF.value,
+        metadata={"help": f'The optimizer to use: {", ".join([e.value for e in OptimizerOptions])}'},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
