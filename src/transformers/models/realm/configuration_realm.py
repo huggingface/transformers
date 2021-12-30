@@ -35,7 +35,7 @@ class RealmConfig(PretrainedConfig):
     This is the configuration class to store the configuration of
 
     1. [`RealmEmbedder`]
-    2. [`RealmRetriever`]
+    2. [`RealmScorer`]
     3. [`RealmKnowledgeAugEncoder`]
     4. [`RealmSearcher`]
     5. [`RealmReader`]
@@ -53,7 +53,7 @@ class RealmConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the REALM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`RealmEmbedder`],
-            [`RealmRetriever`], [`RealmKnowledgeAugEncoder`],
+            [`RealmScorer`], [`RealmKnowledgeAugEncoder`],
             [`RealmSearcher`], or [`RealmReader`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
@@ -64,7 +64,7 @@ class RealmConfig(PretrainedConfig):
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_candidates (`int`, *optional*, defaults to 8):
-            Number of candidates inputted to the RealmRetriever or RealmKnowledgeAugEncoder.
+            Number of candidates inputted to the RealmScorer or RealmKnowledgeAugEncoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_new"`):
@@ -79,7 +79,7 @@ class RealmConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
             The vocabulary size of the `token_type_ids` passed when calling [`RealmEmbedder`],
-            [`RealmRetriever`], [`RealmKnowledgeAugEncoder`],
+            [`RealmScorer`], [`RealmKnowledgeAugEncoder`],
             [`RealmSearcher`], or [`RealmReader`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

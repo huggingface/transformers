@@ -18,7 +18,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TypeVar
 
 import numpy as np
 import torch
@@ -47,6 +47,7 @@ from .configuration_realm import RealmConfig
 from .utils_realm import BruteForceSearcher, ScaNNSearcher, convert_tfrecord_to_np
 
 
+T = TypeVar('T', bound='Module')
 logger = logging.get_logger(__name__)
 _BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
 _EMBEDDER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-embedder"
@@ -814,9 +815,9 @@ class RealmEmbedderOutput(ModelOutput):
 
 
 @dataclass
-class RealmRetrieverOutput(ModelOutput):
+class RealmScorerOutput(ModelOutput):
     """
-    Outputs of RealmRetriever models.
+    Outputs of RealmScorer models.
 
     Args:
         relevance_score (`torch.FloatTensor` of shape `(batch_size, config.num_candidates)`):
@@ -967,7 +968,7 @@ class RealmOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-class RealmRetrieverProjection(nn.Module):
+class RealmScorerProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.predictions = RealmLMPredictionHead(config)
@@ -1159,7 +1160,7 @@ class RealmEmbedder(RealmPreTrainedModel):
         super().__init__(config)
 
         self.bert = RealmBertModel(self.config)
-        self.cls = RealmRetrieverProjection(self.config)
+        self.cls = RealmScorerProjection(self.config)
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -1219,7 +1220,7 @@ class RealmEmbedder(RealmPreTrainedModel):
     "The retriever of REALM outputting relevance score representing the score of document candidates (before softmax).",
     REALM_START_DOCSTRING,
 )
-class RealmRetriever(RealmPreTrainedModel):
+class RealmScorer(RealmPreTrainedModel):
     r"""
     Args:
         query_embedder ([`RealmEmbedder`]):
@@ -1236,7 +1237,7 @@ class RealmRetriever(RealmPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=RealmRetrieverOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RealmScorerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1333,7 +1334,7 @@ class RealmRetriever(RealmPreTrainedModel):
         if not return_dict:
             return relevance_score, query_score, candidate_score
 
-        return RealmRetrieverOutput(
+        return RealmScorerOutput(
             relevance_score=relevance_score, query_score=query_score, candidate_score=candidate_score
         )
 
@@ -1382,7 +1383,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     ):
         r"""
         relevance_score (`torch.FloatTensor` of shape `(batch_size, num_candidates)`, *optional*):
-            Relevance score derived from RealmRetriever, must be specified if you want to compute the masked language
+            Relevance score derived from RealmScorer, must be specified if you want to compute the masked language
             modeling loss.
 
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1676,10 +1677,10 @@ class RealmSearcher(RealmPreTrainedModel):
         # TODO(PVP) - this class has to be removed
         super().__init__(config)
         self.embedder = RealmEmbedder(config)
-        self.block_records = convert_tfrecord_to_np(
-            block_records_path=block_records_path,
-            num_block_records=config.num_block_records,
-        )
+#        self.block_records = convert_tfrecord_to_np(
+#            block_records_path=block_records_path,
+#            num_block_records=config.num_block_records,
+#        )
 
         self.register_buffer(
             "block_emb",
@@ -1697,30 +1698,26 @@ class RealmSearcher(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmForOpenQA(RealmPreTrainedModel):
-    def __init__(self, config, searcher, reader, tokenizer):
+    def __init__(self, config, searcher, reader, tokenizer, retriever):
         super().__init__(config)
-        self.reader = reader
-        self.tokenizer = tokenizer
-
         self.embedder = searcher.embedder
-        self.block_records = searcher.block_records
+        self.reader = reader
+#        self.block_records = searcher.block_records
         self.block_emb = searcher.block_emb
+        self.tokenizer = tokenizer
+        self.retriever = retriever
 
-#        if self.training:
-#            beam_size = self.config.searcher_beam_size
-#        else:
-        beam_size = self.config.reader_beam_size
+#        self.init_weights()
 
-        self.retriever = BruteForceSearcher(
-            db=self.block_emb,
-            num_neighbors=beam_size,
-        )
-        
-        # TODO(PVP) - init should be here
+    @property
+    def beam_size(self):
+        if self.training:
+            return self.config.searcher_beam_size
+        return self.config.reader_beam_size
 
     @classmethod
     def from_pretrained(
-        cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, block_records_path, **kwargs
+        cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, retriever, block_records_path, **kwargs
     ):
         """
         Args:
@@ -1738,75 +1735,11 @@ class RealmForOpenQA(RealmPreTrainedModel):
         )
         reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, config=config, **kwargs)
         tokenizer = RealmTokenizer.from_pretrained(searcher_pretrained_name_or_path)
-        return cls(config, searcher, reader, tokenizer)
+        return cls(config, searcher, reader, tokenizer, retriever)
 
     def save_pretrained(self, save_directory):
         self.searcher.save_pretrained(save_directory)
         self.reader.save_pretrained(save_directory)
-
-    def search(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Returns:
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if (input_ids is not None and input_ids.shape[0] != 1) or (
-            inputs_embeds is not None and inputs_embeds.shape[0] != 1
-        ):
-            raise ValueError("The batch_size of the inputs must be 1.")
-
-        question_outputs = self.embedder(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        # [1, projection_size]
-        question_projection = question_outputs[0]
-
-        # [1, searcher_beam_size]
-        retrieved_block_ids = self.retriever.search_batched(question_projection)
-
-        # [searcher_beam_size]
-        retrieved_block_ids = retrieved_block_ids.squeeze()
-
-        # [searcher_beam_size]
-        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
-
-        # [searcher_beam_size, projection_size]
-        retrieved_block_emb = torch.index_select(
-            self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device)
-        )
-
-        # [searcher_beam_size]
-        retrieved_logits = torch.einsum(
-            "D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device)
-        )
-
-        if not return_dict:
-            return (retrieved_logits, retrieved_blocks, retrieved_block_ids)
-
-        return RealmSearcherOutput(
-            retrieved_logits=retrieved_logits,
-            retrieved_blocks=retrieved_blocks,
-            retrieved_block_ids=retrieved_block_ids,
-        )
 
     def block_has_answer(self, concat_inputs, answer_ids):
         """check if retrieved_blocks has answers."""
@@ -1870,6 +1803,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # TODO(PVP) move out - tokenizer!
         question_ids = self.tokenizer(
             [question],
             padding=True,
@@ -1878,54 +1812,62 @@ class RealmForOpenQA(RealmPreTrainedModel):
             return_tensors="pt",
         ).to(self.device)
 
-        searcher_output = self.search(**question_ids, return_dict=True)
+        if question_ids.input_ids is not None and question_ids.input_ids.shape[0] != 1:
+            raise ValueError("The batch_size of the inputs must be 1.")
 
-        text = []
-        text_pair = []
-        for retrieved_block in searcher_output.retrieved_blocks:
-            text.append(question)
-            text_pair.append(retrieved_block.decode())
+        question_outputs = self.embedder(**question_ids, return_dict=True)
 
-        concat_inputs = self.tokenizer(
-            text, text_pair, padding=True, truncation=True, max_length=self.config.reader_seq_len, return_tensors="pt"
-        ).to(self.reader.device)
+        # [1, projection_size]
+        question_projection = question_outputs[0]
+        # [1, searcher_beam_size]
 
-        # concat inputs should come from the retriever here
-        if answer_ids is not None:
-            has_answers, start_positions, end_positions = self.block_has_answer(
-                concat_inputs, answer_ids
-            )
-            has_answers = has_answers.to(self.reader.device)
-            start_positions = start_positions.to(self.reader.device)
-            end_positions = end_positions.to(self.reader.device)
-        else:
-            has_answers, start_positions, end_positions = (None, None, None)
+        batch_scores = torch.einsum("BD,QD->QB", self.block_emb, question_projection)
+        _, retrieved_block_ids = torch.topk(batch_scores, k=self.beam_size, dim=-1)
+        retrieved_block_ids = retrieved_block_ids.squeeze().cpu()
+
+        # Must return cpu tensor for subsequent numpy operations
+        # [searcher_beam_size]
+        # [searcher_beam_size]
+        has_answers, start_pos, end_pos, concat_inputs = self.retriever(retrieved_block_ids, question, answer_ids)
+
+        if has_answers is not None:
+            has_answers = torch.tensor(has_answers, dtype=torch.bool, device=self.reader.device)
+            start_pos = torch.tensor(start_pos, dtype=torch.long, device=self.reader.device)
+            end_pos = torch.tensor(end_pos, dtype=torch.long, device=self.reader.device)
+
+        # TODO(PVP) - keep
+        # [searcher_beam_size, projection_size]
+        retrieved_block_emb = torch.index_select(
+            self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device)
+        )
+        # [searcher_beam_size]
+        retrieved_logits = torch.einsum(
+            "D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device)
+        )
 
         output = self.reader(
             input_ids=concat_inputs.input_ids[0 : self.config.reader_beam_size],
             attention_mask=concat_inputs.attention_mask[0 : self.config.reader_beam_size],
             token_type_ids=concat_inputs.token_type_ids[0 : self.config.reader_beam_size],
-            relevance_score=searcher_output.retrieved_logits,
+            relevance_score=retrieved_logits,
             has_answers=has_answers,
-            start_positions=start_positions,
-            end_positions=end_positions,
+            start_positions=start_pos,
+            end_positions=end_pos,
             return_dict=True,
         )
 
-        # this will by handled by the retriever decode method
+        # TODO(PVP) - tokenizer! move out
         answer = self.tokenizer.decode(
             concat_inputs.input_ids[output.block_idx][output.start_pos : output.end_pos + 1]
         )
 
         reader_output, predicted_answer = output, answer
 
-        # this will by handled by the retriever decode method
-
         if not return_dict:
-            return searcher_output, reader_output, predicted_answer
+            return {}, reader_output, predicted_answer
 
         return RealmForOpenQAOutput(
-            searcher_output=searcher_output,
+            searcher_output={},
             reader_output=reader_output,
             predicted_answer=predicted_answer,
         )

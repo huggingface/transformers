@@ -33,8 +33,9 @@ if is_torch_available():
         RealmForOpenQA,
         RealmKnowledgeAugEncoder,
         RealmReader,
-        RealmRetriever,
+        RealmScorer,
         RealmSearcher,
+        RealmTokenizer,
     )
 
 # Direct download link
@@ -282,7 +283,7 @@ class RealmModelTester:
         token_labels,
         choice_labels,
     ):
-        model = RealmRetriever(config=config)
+        model = RealmScorer(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -349,9 +350,9 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         (
             RealmEmbedder,
             RealmKnowledgeAugEncoder,
-            # RealmRetriever is excluded from common tests as it is a container model
+            # RealmScorer is excluded from common tests as it is a container model
             # consisting of two RealmEmbedders & simple inner product calculation.
-            # RealmRetriever
+            # RealmScorer
         )
         if is_torch_available()
         else ()
@@ -429,7 +430,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_retriever_from_pretrained(self):
-        model = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever")
+        model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever")
         self.assertIsNotNone(model)
 
     @slow
@@ -477,10 +478,15 @@ class RealmModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_open_qa(self):
         # TODO: TF record dataset
+        from transformers.models.realm.retrieval_realm import RealmRetriever
+
         config = RealmConfig(use_scann=False)
+        tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-searcher")
+        retriever = RealmRetriever(config, tokenizer, BLOCK_RECORDS_PATH)
         model = RealmForOpenQA.from_pretrained(
             r"qqaatw/realm-orqa-nq-searcher",
             r"qqaatw/realm-orqa-nq-reader",
+            retriever,
             BLOCK_RECORDS_PATH,
             config=config,
         )
@@ -522,7 +528,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
     def test_inference_retriever(self):
         num_candidates = 2
 
-        model = RealmRetriever.from_pretrained(
+        model = RealmScorer.from_pretrained(
             "qqaatw/realm-cc-news-pretrained-retriever", num_candidates=num_candidates
         )
 

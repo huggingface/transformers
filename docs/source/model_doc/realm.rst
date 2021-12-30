@@ -61,10 +61,10 @@ RealmEmbedder
     :members: forward
 
 
-RealmRetriever
+RealmScorer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.RealmRetriever
+.. autoclass:: transformers.RealmScorer
     :members: forward
 
 

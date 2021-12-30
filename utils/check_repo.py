@@ -75,7 +75,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
     "RealmBertModel",  # Building part of bigger (tested) model.
     "RealmReader",  # Not regular model.
-    "RealmRetriever",  # Not regular model.
+    "RealmScorer",  # Not regular model.
     "RealmSearcher",  # Not regular model.
     "RealmForOpenQA",  # Not regular model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
@@ -136,7 +136,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RagTokenForGeneration",
     "RealmEmbedder",
     "RealmForOpenQA",
-    "RealmRetriever",
+    "RealmScorer",
     "RealmReader",
     "RealmSearcher",
     "TFDPRReader",

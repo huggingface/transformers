@@ -12,118 +12,117 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""RAG Retriever model implementation."""
-
-import os
-import pickle
-import time
-from typing import Iterable, List, Optional, Tuple
-
+"""Realm Retriever model implementation."""
 import numpy as np
 
-from ...file_utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url, requires_backends
-from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding
+#from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
-from .configuration_rag import RagConfig
-from .tokenization_rag import RagTokenizer
-
-
-if is_datasets_available():
-    from datasets import Dataset, load_dataset, load_from_disk
-
-if is_faiss_available():
-    import faiss
 
 
 logger = logging.get_logger(__name__)
 
 
-LEGACY_INDEX_PATH = "https://storage.googleapis.com/huggingface-nlp/datasets/wiki_dpr/"
+def convert_tfrecord_to_np(block_records_path, num_block_records):
+    import tensorflow.compat.v1 as tf
 
+    blocks_dataset = tf.data.TFRecordDataset(block_records_path, buffer_size=512 * 1024 * 1024)
+    blocks_dataset = blocks_dataset.batch(num_block_records, drop_remainder=True)
+    np_record = next(blocks_dataset.take(1).as_numpy_iterator())
+
+    return np_record
+
+
+class ScaNNSearcher:
+    def __init__(
+        self,
+        db,
+        num_neighbors,
+        dimensions_per_block=2,
+        num_leaves=1000,
+        num_leaves_to_search=100,
+        training_sample_size=100000,
+    ):
+        """Build scann searcher."""
+
+        from scann.scann_ops.py.scann_ops_pybind import builder as Builder
+
+        builder = Builder(db=db, num_neighbors=num_neighbors, distance_measure="dot_product")
+        builder = builder.tree(
+            num_leaves=num_leaves, num_leaves_to_search=num_leaves_to_search, training_sample_size=training_sample_size
+        )
+        builder = builder.score_ah(dimensions_per_block=dimensions_per_block)
+
+        self.searcher = builder.build()
+
+    def search_batched(self, question_projection):
+        retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
+        # Must return cpu tensor for subsequent numpy operations
+#        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
+        return retrieved_block_ids.astype("int64")
 
 
 class RealmRetriever:
-
-    def __init__(self, config, tokenizer, index=None):
+    def __init__(self, config, tokenizer, block_records_path):
         super().__init__()
+        self.config = config
+        self.block_records = convert_tfrecord_to_np(
+            block_records_path=block_records_path,
+            num_block_records=config.num_block_records,
+        )
         self.tokenizer = tokenizer
-        self.index
 
-    @classmethod
-    def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        config = kwargs.pop("config", None) or RealmConfig.from_pretrained(retriever_name_or_path, **kwargs)
-        tokenizer = RealmTokenizer.from_pretrained(retriever_name_or_path, config=config)
+#    ) -> BatchEncoding:
+    def __call__(self, retrieved_block_ids, question, answer_ids, return_tensors="pt"):
+        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
 
-        # logic to load tf.records (should probs put it in `datasets`)
-        index = None
+        text = []
+        text_pair = []
+        for retrieved_block in retrieved_blocks:
+            text.append(question)
+            text_pair.append(retrieved_block.decode())
 
-        return cls(
-            config,
-            tokenizer=tokenizer,
-            index=index,
+        concat_inputs = self.tokenizer(
+            text, text_pair, padding=True, truncation=True, max_length=self.config.reader_seq_len
         )
+        concat_inputs_tensors = concat_inputs.convert_to_tensors(return_tensors)
 
-    def save_pretrained(self, save_directory):
-        # save index here
-
-        self.config.save_pretrained(save_directory)
-        self.tokenizer.save_pretrained(save_directory)
-
-    def __call__(
-        self,
-        question_input_ids: List[List[int]],
-        question_hidden_states: np.ndarray,
-        prefix=None,
-        n_docs=None,
-        return_tensors=None,
-    ) -> BatchEncoding:
-
-        n_docs = n_docs if n_docs is not None else self.n_docs
-        prefix = prefix if prefix is not None else self.config.generator.prefix
-        retrieved_doc_embeds, doc_ids, docs = self.retrieve(question_hidden_states, n_docs)
-
-        input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
-        context_input_ids, context_attention_mask = self.postprocess_docs(
-            docs, input_strings, prefix, n_docs, return_tensors=return_tensors
-        )
-
-        if self.return_tokenized_docs:
-            retrived_doc_text = []
-            retrived_doc_title = []
-
-            for b_idx in range(len(docs)):
-                for doc_idx in range(n_docs):
-                    retrived_doc_text.append(docs[b_idx]["text"][doc_idx])
-                    retrived_doc_title.append(docs[b_idx]["title"][doc_idx])
-
-            tokenized_docs = self.ctx_encoder_tokenizer(
-                retrived_doc_title,
-                retrived_doc_text,
-                truncation=True,
-                padding="longest",
-                return_tensors=return_tensors,
-            )
-
-            return BatchEncoding(
-                {
-                    "context_input_ids": context_input_ids,
-                    "context_attention_mask": context_attention_mask,
-                    "retrieved_doc_embeds": retrieved_doc_embeds,
-                    "doc_ids": doc_ids,
-                    "tokenized_doc_ids": tokenized_docs["input_ids"],
-                    "tokenized_doc_attention_mask": tokenized_docs["attention_mask"],
-                },
-                tensor_type=return_tensors,
-            )
-
+        # concat inputs should come from the retriever here
+        if answer_ids is not None:
+            return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_inputs_tensors,)
         else:
-            return BatchEncoding(
-                {
-                    "context_input_ids": context_input_ids,
-                    "context_attention_mask": context_attention_mask,
-                    "retrieved_doc_embeds": retrieved_doc_embeds,
-                    "doc_ids": doc_ids,
-                },
-                tensor_type=return_tensors,
-            )
+            return (None, None, None, concat_inputs_tensors)
+
+
+    def block_has_answer(self, concat_inputs, answer_ids):
+        """check if retrieved_blocks has answers."""
+        has_answers = []
+        start_pos = []
+        end_pos = []
+        max_answers = 0
+
+        for input_id in concat_inputs.input_ids:
+            start_pos.append([])
+            end_pos.append([])
+            sep_idx = input_id.index(self.tokenizer.sep_token_id)
+            for answer in answer_ids:
+                for idx in range(sep_idx, len(input_id)):
+                    if answer[0] == input_id[idx]:
+                        if input_id[idx: idx + len(answer)] == answer:
+                            start_pos[-1].append(idx)
+                            end_pos[-1].append(idx + len(answer) - 1)
+
+            if len(start_pos[-1]) == 0:
+                has_answers.append(False)
+            else:
+                has_answers.append(True)
+                if len(start_pos[-1]) > max_answers:
+                    max_answers = len(start_pos[-1])
+
+        # Pad -1 to max_answers
+        for start_pos_, end_pos_ in zip(start_pos, end_pos):
+            if len(start_pos_) < max_answers:
+                padded = [-1] * (max_answers - len(start_pos_))
+                start_pos_ += padded
+                end_pos_ += padded
+
+        return has_answers, start_pos, end_pos

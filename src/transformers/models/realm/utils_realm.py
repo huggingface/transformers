@@ -17,19 +17,6 @@
 import torch
 
 
-class BruteForceSearcher:
-    def __init__(self, db, num_neighbors):
-        """Build brute force searcher."""
-        self.db = db
-        self.num_neighbors = num_neighbors
-
-    def search_batched(self, question_projection):
-        batch_scores = torch.einsum("BD,QD->QB", self.db, question_projection)
-        _, retrieved_block_ids = torch.topk(batch_scores, k=self.num_neighbors, dim=-1)
-        # Must return cpu tensor for subsequent numpy operations
-        return retrieved_block_ids.cpu()
-
-
 class ScaNNSearcher:
     def __init__(
         self,
@@ -55,11 +42,24 @@ class ScaNNSearcher:
     def search_batched(self, question_projection):
         retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
         # Must return cpu tensor for subsequent numpy operations
-        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
+#        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
+        return retrieved_block_ids.astype("int64")
+
+
+class BruteForceSearcher:
+    def __init__(self, db, num_neighbors):
+        """Build brute force searcher."""
+        self.db = db
+        self.num_neighbors = num_neighbors
+
+    def search_batched(self, question_projection):
+        batch_scores = torch.einsum("BD,QD->QB", self.db, question_projection)
+        _, retrieved_block_ids = torch.topk(batch_scores, k=self.num_neighbors, dim=-1)
+        # Must return cpu tensor for subsequent numpy operations
+        return retrieved_block_ids.cpu()
 
 
 def convert_tfrecord_to_np(block_records_path, num_block_records):
-
     import tensorflow.compat.v1 as tf
 
     blocks_dataset = tf.data.TFRecordDataset(block_records_path, buffer_size=512 * 1024 * 1024)

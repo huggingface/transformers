@@ -34,7 +34,7 @@ if is_torch_available():
         "RealmKnowledgeAugEncoder",
         "RealmPreTrainedModel",
         "RealmReader",
-        "RealmRetriever",
+        "RealmScorer",
         "RealmSearcher",
         "load_tf_weights_in_realm",
     ]
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
             RealmKnowledgeAugEncoder,
             RealmPreTrainedModel,
             RealmReader,
-            RealmRetriever,
+            RealmScorer,
             RealmSearcher,
             load_tf_weights_in_realm,
         )
