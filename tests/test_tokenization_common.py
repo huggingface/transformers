@@ -3687,6 +3687,13 @@ class TrieTest(unittest.TestCase):
         trie.add("C")
         self.assertEqual(trie.split("ABC"), ["AB", "C"])
 
+    def test_trie_skip(self):
+        trie = Trie()
+        trie.add("ABC")
+        trie.add("B")
+        trie.add("CD")
+        self.assertEqual(trie.split("ABCD"), ["ABC", "D"])
+
     def test_cut_text_hardening(self):
         # Even if the offsets are wrong, we necessarily output correct string
         # parts.
