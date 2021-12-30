@@ -821,8 +821,6 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-            if self.args.adafactor and self.args.optim not in {"adamw_hf", "adafactor"}:
-                raise ValueError(f"You passed the --adafactor flag and optimizer {self.args.optim}.")
 
             optimizer_kwargs = {"lr": self.args.learning_rate}
 
