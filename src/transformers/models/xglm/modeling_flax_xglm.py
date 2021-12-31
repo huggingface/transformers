@@ -149,9 +149,12 @@ class FlaxXGLMAttention(nn.Module):
 
     def setup(self) -> None:
         self.head_dim = self.embed_dim // self.num_heads
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} "
+                "and `num_heads`: {self.num_heads})."
+            )
 
         dense = partial(
             nn.Dense,
@@ -201,7 +204,8 @@ class FlaxXGLMAttention(nn.Module):
             cached_value.value = value
             num_updated_cache_vectors = query.shape[1]
             cache_index.value = cache_index.value + num_updated_cache_vectors
-            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
+            # causal mask for cached decoder self-attention: our single query position should only attend
+            # to those key positions that have already been generated and cached, not the remaining zero elements.
             pad_mask = jnp.broadcast_to(
                 jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
                 tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
@@ -591,11 +595,6 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
             max_length (`int`):
                 maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
                 cache.
-            encoder_outputs (`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
-                `encoder_outputs` consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
-                `attentions`). `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*)
-                is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-                cross-attention of the decoder.
         """
         # init input variables to retrieve cache
         input_ids = jnp.ones((batch_size, max_length), dtype="i4")
@@ -645,7 +644,9 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPT2Attention module
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
+        # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
+        # changed by FlaxXGLMAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
