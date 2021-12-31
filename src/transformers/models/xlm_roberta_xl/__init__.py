@@ -23,9 +23,9 @@ from ...file_utils import _LazyModule, is_torch_available
 
 _import_structure = {
     "configuration_xlm_roberta_xl": [
-        "XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "XLMRobertaConfig",
-        "XLMRobertaOnnxConfig",
+        "XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XLMRobertaXLConfig",
+        "XLMRobertaXLOnnxConfig",
     ],
 }
 
