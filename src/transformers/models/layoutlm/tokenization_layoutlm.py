@@ -47,11 +47,10 @@ class LayoutLMTokenizer(BertTokenizer):
     r"""
     Constructs a LayoutLM tokenizer.
 
-    :class:`~transformers.LayoutLMTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
+    [`LayoutLMTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting +
+    wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

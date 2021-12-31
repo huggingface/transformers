@@ -40,114 +40,120 @@ logger = logging.get_logger(__name__)
 
 CLIP_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
-    and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.CLIPConfig`): Model configuration class with all the parameters of the model.
+        config ([`CLIPConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
-            model weights.
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 CLIP_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are position IDs?](../glossary#position-ids)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 CLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
+        pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
-            details.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 CLIP_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
+            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.CLIPFeatureExtractor`. See :meth:`transformers.CLIPFeatureExtractor.__call__` for
-            details.
-        return_loss (:obj:`bool`, `optional`):
+            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+        return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -155,22 +161,22 @@ CLIP_INPUTS_DOCSTRING = r"""
 class FlaxCLIPOutput(ModelOutput):
     """
     Args:
-        logits_per_image:(:obj:`jnp.ndarray` of shape :obj:`(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between :obj:`image_embeds` and :obj:`text_embeds`. This represents the
-            image-text similarity scores.
-        logits_per_text:(:obj:`jnp.ndarray` of shape :obj:`(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between :obj:`text_embeds` and :obj:`image_embeds`. This represents the
-            text-image similarity scores.
-        text_embeds(:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`):
+        logits_per_image:(`jnp.ndarray` of shape `(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            similarity scores.
+        logits_per_text:(`jnp.ndarray` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+            similarity scores.
+        text_embeds(`jnp.ndarray` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.FlaxCLIPTextModel`.
-        image_embeds(:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`):
+            [`FlaxCLIPTextModel`].
+        image_embeds(`jnp.ndarray` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
-            :class:`~transformers.FlaxCLIPVisionModel`.
-        text_model_output(:obj:`FlaxBaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.FlaxCLIPTextModel`.
-        vision_model_output(:obj:`FlaxBaseModelOutputWithPooling`):
-            The output of the :class:`~transformers.FlaxCLIPVisionModel`.
+            [`FlaxCLIPVisionModel`].
+        text_model_output(`FlaxBaseModelOutputWithPooling`):
+            The output of the [`FlaxCLIPTextModel`].
+        vision_model_output(`FlaxBaseModelOutputWithPooling`):
+            The output of the [`FlaxCLIPVisionModel`].
     """
 
     logits_per_image: jnp.ndarray = None
@@ -262,18 +268,10 @@ class FlaxCLIPAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.dropout = self.config.attention_dropout
 
-        self.k_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.v_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.q_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
-        self.out_proj = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
+        self.k_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.v_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.q_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.out_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
 
         self.causal = isinstance(self.config, CLIPTextConfig)
         if self.causal:
@@ -354,11 +352,9 @@ class FlaxCLIPMLP(nn.Module):
         self.fc1 = nn.Dense(
             self.config.intermediate_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.01),
         )
-        self.fc2 = nn.Dense(
-            self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01, dtype=self.dtype)
-        )
+        self.fc2 = nn.Dense(self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
 
     def __call__(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -521,7 +517,7 @@ class FlaxCLIPTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
+        # text_embeds.shape = [batch_size, sequence_length, transformer.width]
         # take features from the EOS embedding (eos_token_id is the highest number in each sequence)
         pooled_output = last_hidden_state[jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)]
 
@@ -651,6 +647,7 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
 
 class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
     config_class = CLIPVisionConfig
+    main_input_name = "pixel_values"
     module_class: nn.Module = None
 
     def __init__(
@@ -795,30 +792,30 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.CLIPTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
+                Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
-                `What are input IDs? <../glossary.html#input-ids>`__
+                [What are input IDs?](../glossary#input-ids)
 
         Returns:
-            text_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPTextModel`.
+            text_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The text embeddings obtained by applying
+            the projection layer to the pooled output of [`FlaxCLIPTextModel`].
 
-        Examples::
+        Examples:
 
-            >>> from transformers import CLIPTokenizer, FlaxCLIPModel
+        ```python
+        >>> from transformers import CLIPTokenizer, FlaxCLIPModel
 
-            >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="np")
-            >>> text_features = model.get_text_features(**inputs)
-        """
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="np")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
@@ -856,31 +853,31 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
     ):
         r"""
         Args:
-            pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
+            pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
-                using :class:`~transformers.CLIPFeatureExtractor`. See
-                :meth:`transformers.CLIPFeatureExtractor.__call__` for details.
+                using [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
 
         Returns:
-            image_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The image embeddings obtained
-            by applying the projection layer to the pooled output of :class:`~transformers.FlaxCLIPVisionModel`
+            image_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`FlaxCLIPVisionModel`]
 
-        Examples::
+        Examples:
 
-            >>> from PIL import Image
-            >>> import requests
-            >>> from transformers import CLIPProcessor, FlaxCLIPModel
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import CLIPProcessor, FlaxCLIPModel
 
-            >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> inputs = processor(images=image, return_tensors="np")
+        >>> inputs = processor(images=image, return_tensors="np")
 
-            >>> image_features = model.get_image_features(**inputs)
-        """
+        >>> image_features = model.get_image_features(**inputs)
+        ```"""
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
         # Handle any PRNG if needed
@@ -938,18 +935,20 @@ class FlaxCLIPTextModel(FlaxCLIPTextPreTrainedModel):
 FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import CLIPTokenizer, FlaxCLIPTextModel
+    ```python
+    >>> from transformers import CLIPTokenizer, FlaxCLIPTextModel
 
-        >>> model = FlaxCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    >>> model = FlaxCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+    >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"],  padding=True, return_tensors="np")
+    >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="np")
 
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooler_output = outputs.pooler_output # pooled (EOS token) states
+    >>> outputs = model(**inputs)
+    >>> last_hidden_state = outputs.last_hidden_state
+    >>> pooler_output = outputs.pooler_output  # pooled (EOS token) states
+    ```
 """
 
 overwrite_call_docstring(FlaxCLIPTextModel, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_DOCSTRING)
@@ -989,23 +988,25 @@ class FlaxCLIPVisionModel(FlaxCLIPVisionPreTrainedModel):
 FLAX_CLIP_VISION_MODEL_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import CLIPProcessor, FlaxCLIPVisionModel
+    ```python
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import CLIPProcessor, FlaxCLIPVisionModel
 
-        >>> model = FlaxCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    >>> model = FlaxCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+    >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="np")
+    >>> inputs = processor(images=image, return_tensors="np")
 
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooler_output = outputs.pooler_output # pooled CLS states
+    >>> outputs = model(**inputs)
+    >>> last_hidden_state = outputs.last_hidden_state
+    >>> pooler_output = outputs.pooler_output  # pooled CLS states
+    ```
 """
 
 overwrite_call_docstring(FlaxCLIPVisionModel, CLIP_VISION_INPUTS_DOCSTRING + FLAX_CLIP_VISION_MODEL_DOCSTRING)
@@ -1032,18 +1033,18 @@ class FlaxCLIPModule(nn.Module):
         self.visual_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
         self.text_projection = nn.Dense(
             self.projection_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(0.02, dtype=self.dtype),
+            kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
 
         self.logit_scale = self.param(
-            "logit_scale", lambda _, shape: jnp.ones(shape, dtype=self.dtype) * self.config.logit_scale_init_value, []
+            "logit_scale", lambda _, shape: jnp.ones(shape) * self.config.logit_scale_init_value, []
         )
 
     def __call__(
@@ -1113,24 +1114,28 @@ class FlaxCLIPModel(FlaxCLIPPreTrainedModel):
 FLAX_CLIP_MODEL_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> import jax
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import CLIPProcessor, FlaxCLIPModel
+    ```python
+    >>> import jax
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import CLIPProcessor, FlaxCLIPModel
 
-        >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="np", padding=True)
+    >>> inputs = processor(
+    ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="np", padding=True
+    ... )
 
-        >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-        >>> probs = jax.nn.softmax(logits_per_image, axis=1) # we can take the softmax to get the label probabilities
+    >>> outputs = model(**inputs)
+    >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+    >>> probs = jax.nn.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
+    ```
 """
 
 overwrite_call_docstring(FlaxCLIPModel, CLIP_INPUTS_DOCSTRING + FLAX_CLIP_MODEL_DOCSTRING)

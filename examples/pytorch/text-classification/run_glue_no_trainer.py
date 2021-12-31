@@ -330,12 +330,13 @@ def main():
                 result["labels"] = examples["label"]
         return result
 
-    processed_datasets = raw_datasets.map(
-        preprocess_function,
-        batched=True,
-        remove_columns=raw_datasets["train"].column_names,
-        desc="Running tokenizer on dataset",
-    )
+    with accelerator.main_process_first():
+        processed_datasets = raw_datasets.map(
+            preprocess_function,
+            batched=True,
+            remove_columns=raw_datasets["train"].column_names,
+            desc="Running tokenizer on dataset",
+        )
 
     train_dataset = processed_datasets["train"]
     eval_dataset = processed_datasets["validation_matched" if args.task_name == "mnli" else "validation"]
@@ -452,7 +453,9 @@ def main():
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(commit_message=f"Training in progress epoch {epoch}", blocking=False)
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                )
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -461,7 +464,7 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training")
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set

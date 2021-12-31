@@ -25,7 +25,14 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_torch_gpu,
+    slow,
+)
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -38,8 +45,13 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
+        return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
+
+    def run_pipeline_test(self, token_classifier, _):
+        model = token_classifier.model
+        tokenizer = token_classifier.tokenizer
 
         outputs = token_classifier("A simple string")
         self.assertIsInstance(outputs, list)
@@ -245,6 +257,19 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 {"entity_group": "ORG", "score": 0.542, "word": "Farc", "start": 110, "end": 114},
             ],
         )
+
+    @require_torch_gpu
+    @slow
+    def test_gpu(self):
+        sentence = "This is dummy sentence"
+        ner = pipeline(
+            "token-classification",
+            device=0,
+            aggregation_strategy=AggregationStrategy.SIMPLE,
+        )
+
+        output = ner(sentence)
+        self.assertEqual(nested_simplify(output), [])
 
     @require_torch
     @slow
@@ -557,14 +582,14 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_tf
     def test_tf_only(self):
-        model_name = "Narsil/small"  # This model only has a TensorFlow version
+        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
         # We test that if we don't specificy framework='tf', it gets detected automatically
         token_classifier = pipeline(task="ner", model=model_name)
         self.assertEqual(token_classifier.framework, "tf")
 
     @require_tf
     def test_small_model_tf(self):
-        model_name = "Narsil/small2"
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
@@ -577,8 +602,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_no_offset_tokenizer(self):
-        model_name = "Narsil/small2"
-        tokenizer = AutoTokenizer.from_pretrained("Narsil/small2", use_fast=False)
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
         token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
@@ -591,7 +616,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_small_model_pt(self):
-        model_name = "Narsil/small2"
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
@@ -599,6 +624,28 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             [
                 {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
                 {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", ignore_labels=["O", "I-MISC"]
+        )
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [],
+        )
+
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        # Overload offset_mapping
+        outputs = token_classifier(
+            "This is a test !", offset_mapping=[(0, 0), (0, 1), (0, 2), (0, 0), (0, 0), (0, 0), (0, 0)]
+        )
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 1},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
             ],
         )
 

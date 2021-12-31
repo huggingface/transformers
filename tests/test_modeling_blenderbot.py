@@ -137,6 +137,11 @@ class BlenderbotModelTester:
             pad_token_id=self.pad_token_id,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.max_position_embeddings = 100
+        return config
+
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict

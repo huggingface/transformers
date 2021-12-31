@@ -252,7 +252,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
     "modelcard.py": "test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
-    "modeling_tf_utils.py": "test_modeling_tf_common.py",
+    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_modeling_tf_core.py"],
     "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
     "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
     "models/auto/modeling_flax_auto.py": "test_flax_auto.py",
@@ -264,7 +264,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "models/blenderbot_small/tokenization_blenderbot_small.py": "test_tokenization_small_blenderbot.py",
     "models/blenderbot_small/tokenization_blenderbot_small_fast.py": "test_tokenization_small_blenderbot.py",
     "models/gpt2/modeling_gpt2.py": ["test_modeling_gpt2.py", "test_modeling_megatron_gpt2.py"],
-    "pipelines/base.py": "test_pipelines_common.py",
+    "pipelines/base.py": "test_pipelines_*.py",
     "pipelines/text2text_generation.py": [
         "test_pipelines_text2text_generation.py",
         "test_pipelines_summarization.py",
@@ -281,6 +281,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "test_trainer_distributed.py",
         "test_trainer_tpu.py",
     ],
+    "train_pt_utils.py": "test_trainer_utils.py",
     "utils/versions.py": "test_versions_utils.py",
 }
 
@@ -336,6 +337,7 @@ def module_to_test_file(module_fname):
 # launched separately.
 EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/test_doc_samples.py",  # Doc tests
+    "tests/test_pipelines_common.py",  # Actually checked by the pipeline based file
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
@@ -429,6 +431,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
             # Example files are tested separately
             elif f.startswith("examples/pytorch"):
                 test_files_to_run.append("examples/pytorch/test_examples.py")
+            elif f.startswith("examples/flax"):
+                test_files_to_run.append("examples/flax/test_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:
@@ -442,8 +446,10 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if os.path.isfile(f) or os.path.isdir(f)]
         if filters is not None:
+            filtered_files = []
             for filter in filters:
-                test_files_to_run = [f for f in test_files_to_run if f.startswith(filter)]
+                filtered_files.extend([f for f in test_files_to_run if f.startswith(filter)])
+            test_files_to_run = filtered_files
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:

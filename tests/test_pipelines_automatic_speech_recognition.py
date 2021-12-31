@@ -14,11 +14,22 @@
 
 import unittest
 
+import numpy as np
 import pytest
+from datasets import load_dataset
 
-from transformers import AutoFeatureExtractor, AutoTokenizer, Speech2TextForConditionalGeneration, Wav2Vec2ForCTC
+from transformers import (
+    MODEL_FOR_CTC_MAPPING,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    AutoFeatureExtractor,
+    AutoTokenizer,
+    Speech2TextForConditionalGeneration,
+    Wav2Vec2ForCTC,
+)
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.testing_utils import is_pipeline_test, require_datasets, require_torch, require_torchaudio, slow
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_torchaudio, slow
+
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 # We can't use this mixin because it assumes TF support.
@@ -26,15 +37,42 @@ from transformers.testing_utils import is_pipeline_test, require_datasets, requi
 
 
 @is_pipeline_test
-class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
+class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = {
+        k: v
+        for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
+        + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
+    }
+
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if tokenizer is None:
+            # Side effect of no Fast Tokenizer class for these model, so skipping
+            # But the slow tokenizer test should still run as they're quite small
+            self.skipTest("No tokenizer available")
+            return
+            # return None, None
+
+        speech_recognizer = AutomaticSpeechRecognitionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+
+        # test with a raw waveform
+        audio = np.zeros((34000,))
+        audio2 = np.zeros((14000,))
+        return speech_recognizer, [audio, audio2]
+
+    def run_pipeline_test(self, speech_recognizer, examples):
+        audio = np.zeros((34000,))
+        outputs = speech_recognizer(audio)
+        self.assertEqual(outputs, {"text": ANY(str)})
+
     @require_torch
     @slow
     def test_pt_defaults(self):
         pipeline("automatic-speech-recognition", framework="pt")
 
     @require_torch
-    def test_torch_small(self):
-        import numpy as np
+    def test_small_model_pt(self):
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -46,6 +84,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
+    @require_tf
+    def test_small_model_tf(self):
+        self.skipTest("Tensorflow not supported yet.")
+
     @require_torch
     def test_torch_small_no_tokenizer_files(self):
         # test that model without tokenizer file cannot be loaded
@@ -56,11 +98,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 framework="pt",
             )
 
-    @require_datasets
     @require_torch
     @slow
     def test_torch_large(self):
-        import numpy as np
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -72,14 +112,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": ""})
 
-        from datasets import load_dataset
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
-    @require_datasets
     @require_torch
     @slow
     def test_torch_speech_encoder_decoder(self):
@@ -90,19 +127,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             framework="pt",
         )
 
-        from datasets import load_dataset
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": 'Ein Mann sagte zum Universum : " Sir, ich existiert! "'})
 
     @slow
     @require_torch
-    @require_datasets
     def test_simple_wav2vec2(self):
-        import numpy as np
-        from datasets import load_dataset
 
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
@@ -114,7 +146,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = asr(waveform)
         self.assertEqual(output, {"text": ""})
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = asr(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
@@ -128,10 +160,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     @require_torchaudio
-    @require_datasets
     def test_simple_s2t(self):
-        import numpy as np
-        from datasets import load_dataset
 
         model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-mustc-en-it-st")
         tokenizer = AutoTokenizer.from_pretrained("facebook/s2t-small-mustc-en-it-st")
@@ -144,7 +173,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = asr(waveform)
         self.assertEqual(output, {"text": "(Applausi)"})
 
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = asr(filename)
         self.assertEqual(output, {"text": "Un uomo disse all'universo: \"Signore, io esisto."})
@@ -154,3 +183,52 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             data = f.read()
         output = asr(data)
         self.assertEqual(output, {"text": "Un uomo disse all'universo: \"Signore, io esisto."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_xls_r_to_en(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-xls-r-1b-21-to-en",
+            feature_extractor="facebook/wav2vec2-xls-r-1b-21-to-en",
+            framework="pt",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "A man said to the universe: “Sir, I exist."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_xls_r_from_en(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-xls-r-1b-en-to-15",
+            feature_extractor="facebook/wav2vec2-xls-r-1b-en-to-15",
+            framework="pt",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "Ein Mann sagte zu dem Universum, Sir, ich bin da."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_speech_to_text_leveraged(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-2-bart-base",
+            feature_extractor="patrickvonplaten/wav2vec2-2-bart-base",
+            tokenizer=AutoTokenizer.from_pretrained("patrickvonplaten/wav2vec2-2-bart-base"),
+            framework="pt",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "a man said to the universe sir i exist"})

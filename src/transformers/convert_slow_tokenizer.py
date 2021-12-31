@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Utilities to convert slow tokenizers in their fast tokenizers counterparts.
+Utilities to convert slow tokenizers in their fast tokenizers counterparts.
 
-    All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
-    allow to make our dependency on SentencePiece optional.
+All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
+allow to make our dependency on SentencePiece optional.
 """
 
 from typing import Dict, List, Tuple
@@ -526,18 +526,6 @@ class AlbertConverter(SpmConverter):
         )
 
 
-class FNetConverter(SpmConverter):
-    def post_processor(self):
-        return processors.TemplateProcessing(
-            single="[CLS]:0 $A:0 [SEP]:0",
-            pair="[CLS]:0 $A:0 [SEP]:0 $B:1 [SEP]:1",
-            special_tokens=[
-                ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
-                ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
-            ],
-        )
-
-
 class BarthezConverter(SpmConverter):
     def unk_id(self, proto):
         unk_id = 3
@@ -893,12 +881,42 @@ class LayoutLMv2Converter(Converter):
         return tokenizer
 
 
+class BlenderbotConverter(Converter):
+    def converted(self) -> Tokenizer:
+        ot = self.original_tokenizer
+        vocab = ot.encoder
+        merges = list(ot.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"$A:0 {ot.eos_token}:0",
+            special_tokens=[
+                (ot.eos_token, ot.eos_token_id),
+            ],
+        )
+
+        return tokenizer
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
     "BarthezTokenizer": BarthezConverter,
     "BertTokenizer": BertConverter,
     "BigBirdTokenizer": BigBirdConverter,
+    "BlenderbotTokenizer": BlenderbotConverter,
     "CamembertTokenizer": CamembertConverter,
     "CLIPTokenizer": CLIPConverter,
     "ConvBertTokenizer": BertConverter,
@@ -908,12 +926,13 @@ SLOW_TO_FAST_CONVERTERS = {
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
     "ElectraTokenizer": BertConverter,
-    "FNetTokenizer": FNetConverter,
+    "FNetTokenizer": AlbertConverter,
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
     "LayoutLMv2Tokenizer": BertConverter,
+    "LayoutXLMTokenizer": XLMRobertaConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
@@ -941,13 +960,13 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
-        transformer_tokenizer (:class:`~transformers.tokenization_utils_base.PreTrainedTokenizer`):
+        transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
-            :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`.
+            [`~tokenization_utils_base.PreTrainedTokenizerFast`].
 
     Return:
-        A instance of :class:`~tokenizers.Tokenizer` to be used as the backend tokenizer of a
-        :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`
+        A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
+        [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__

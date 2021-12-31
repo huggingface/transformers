@@ -22,31 +22,6 @@ It will either run on a datasets hosted on our hub or with your own text files f
 
 The following example fine-tunes BERT on CoNLL-2003:
 
-To begin with it is recommended to create a model repository to save the trained model and logs.
-Here we call the model `"bert-ner-conll2003-test"`, but you can change the model name as you like.
-
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create bert-ner-conll2003-test
-```
-
-Next we clone the model repository to add the tokenizer and model files.
-
-```
-git clone https://huggingface.co/<your-username>/bert-ner-conll2003-test
-```
-
-Great, we have set up our model repository. During training, we will automatically
-push the training logs and model weights to the repo.
-
-Next, let's add a symbolic link to the `run_flax_ner.py`.
-
-```bash
-export MODEL_DIR="./bert-ner-conll2003-test"
-ln -s ~/transformers/examples/flax/token-classification/run_flax_ner.py run_flax_ner.py
-```
 
 ```bash
 python run_flax_ner.py \
@@ -56,7 +31,7 @@ python run_flax_ner.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
-  --output_dir ${MODEL_DIR} \
+  --output_dir ./bert-ner-conll2003 \
   --eval_steps 300 \
   --push_to_hub
 ```

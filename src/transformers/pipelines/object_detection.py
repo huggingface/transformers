@@ -1,7 +1,4 @@
-import os
 from typing import Any, Dict, List, Union
-
-import requests
 
 from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
 from ..utils import logging
@@ -9,7 +6,8 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
-    from PIL import Image
+    from ..image_utils import load_image
+
 
 if is_torch_available():
     import torch
@@ -26,14 +24,13 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ObjectDetectionPipeline(Pipeline):
     """
-    Object detection pipeline using any :obj:`AutoModelForObjectDetection`. This pipeline predicts bounding boxes of
-    objects and their classes.
+    Object detection pipeline using any `AutoModelForObjectDetection`. This pipeline predicts bounding boxes of objects
+    and their classes.
 
-    This object detection pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
-    identifier: :obj:`"object-detection"`.
+    This object detection pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"object-detection"`.
 
-    See the list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=object-detection>`__.
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=object-detection).
     """
 
     def __init__(self, *args, **kwargs):
@@ -44,28 +41,6 @@ class ObjectDetectionPipeline(Pipeline):
 
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_OBJECT_DETECTION_MAPPING)
-
-    @staticmethod
-    def load_image(image: Union[str, "Image.Image"]):
-        if isinstance(image, str):
-            if image.startswith("http://") or image.startswith("https://"):
-                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
-                # like http_huggingface_co.png
-                image = Image.open(requests.get(image, stream=True).raw)
-            elif os.path.isfile(image):
-                image = Image.open(image)
-            else:
-                raise ValueError(
-                    f"Incorrect path or url, URLs must start with `http://` or `https://`, and {image} is not a valid path"
-                )
-        elif isinstance(image, Image.Image):
-            pass
-        else:
-            raise ValueError(
-                "Incorrect format used for image. Should be a URL linking to an image, a local path, or a PIL image."
-            )
-        image = image.convert("RGB")
-        return image
 
     def _sanitize_parameters(self, **kwargs):
         postprocess_kwargs = {}
@@ -78,7 +53,7 @@ class ObjectDetectionPipeline(Pipeline):
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            images (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image` or :obj:`List[PIL.Image]`):
+            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -87,7 +62,7 @@ class ObjectDetectionPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            threshold (:obj:`float`, `optional`, defaults to 0.9):
+            threshold (`float`, *optional*, defaults to 0.9):
                 The probability necessary to make a prediction.
 
         Return:
@@ -97,15 +72,15 @@ class ObjectDetectionPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The class label identified by the model.
-            - **score** (:obj:`float`) -- The score attributed by the model for that label.
-            - **box** (:obj:`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
+            - **label** (`str`) -- The class label identified by the model.
+            - **score** (`float`) -- The score attributed by the model for that label.
+            - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
 
         return super().__call__(*args, **kwargs)
 
     def preprocess(self, image):
-        image = self.load_image(image)
+        image = load_image(image)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.feature_extractor(images=[image], return_tensors="pt")
         inputs["target_size"] = target_size
@@ -114,11 +89,12 @@ class ObjectDetectionPipeline(Pipeline):
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
         outputs = self.model(**model_inputs)
-        model_outputs = {"outputs": outputs, "target_size": target_size}
+        model_outputs = outputs.__class__({"target_size": target_size, **outputs})
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9):
-        raw_annotations = self.feature_extractor.post_process(model_outputs["outputs"], model_outputs["target_size"])
+        target_size = model_outputs["target_size"]
+        raw_annotations = self.feature_extractor.post_process(model_outputs, target_size)
         raw_annotation = raw_annotations[0]
         keep = raw_annotation["scores"] > threshold
         scores = raw_annotation["scores"][keep]
@@ -143,10 +119,10 @@ class ObjectDetectionPipeline(Pipeline):
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 
         Args:
-            box (torch.Tensor): Tensor containing the coordinates in corners format.
+            box (`torch.Tensor`): Tensor containing the coordinates in corners format.
 
         Returns:
-            bbox (Dict[str, int]): Dict containing the coordinates in corners format.
+            bbox (`Dict[str, int]`): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
             raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")

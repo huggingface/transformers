@@ -141,3 +141,14 @@ class CopyCheckTester(unittest.TestCase):
 
         # Check whether the number of models is equal to README.md after conversion.
         self.assertTrue(num_models_equal)
+
+        link_changed_md_list = "1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (from Google Research and the Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut."
+        link_unchanged_md_list = "1. **[ALBERT](https://huggingface.co/transformers/master/model_doc/albert.html)** (来自 Google Research and the Toyota Technological Institute at Chicago) 伴随论文 [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut 发布。\n"
+        converted_md_list_sample = "1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (来自 Google Research and the Toyota Technological Institute at Chicago) 伴随论文 [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut 发布。\n"
+
+        num_models_equal, converted_md_list = check_copies.convert_to_localized_md(
+            link_changed_md_list, link_unchanged_md_list, localized_readme["format_model_list"]
+        )
+
+        # Check if the model link is synchronized.
+        self.assertEqual(converted_md_list, converted_md_list_sample)

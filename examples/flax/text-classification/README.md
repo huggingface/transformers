@@ -21,47 +21,15 @@ limitations under the License.
 Based on the script [`run_flax_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/flax/text-classification/run_flax_glue.py).
 
 Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
-Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models).
-
-To begin with it is recommended to create a model repository to save the trained model and logs.
-Here we call the model `"bert-glue-mrpc-test"`, but you can change the model name as you like.
-
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create bert-glue-mrpc-test
-```
-
-Next we clone the model repository to add the tokenizer and model files.
-
-```
-git clone https://huggingface.co/<your-username>/bert-glue-mrpc-test
-```
-
-To ensure that all tensorboard traces will be uploaded correctly, we need to 
-track them. You can run the following command inside your model repo to do so.
-
-```
-cd bert-glue-mrpc-test
-git lfs track "*tfevents*"
-```
-
-Great, we have set up our model repository. During training, we will automatically
-push the training logs and model weights to the repo.
-
-Next, let's add a symbolic link to the `run_flax_glue.py`.
-
-```bash
-export TASK_NAME=mrpc
-export MODEL_DIR="./bert-glue-mrpc-test"
-ln -s ~/transformers/examples/flax/text-classification/run_flax_glue.py run_flax_glue.py
-```
-
+Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models)  and can also be used for a 
+dataset hosted on our [hub](https://huggingface.co/datasets) or your own data in a csv or a JSON file (the script might need some tweaks in that case, 
+refer to the comments inside for help).
 
 GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
 
 ```bash
+export TASK_NAME=mrpc
+
 python run_flax_glue.py \
   --model_name_or_path bert-base-cased \
   --task_name ${TASK_NAME} \
@@ -69,7 +37,7 @@ python run_flax_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
-  --output_dir ${MODEL_DIR} \
+  --output_dir ./$TASK_NAME/ \
   --push_to_hub
 ```
 

@@ -56,9 +56,8 @@ class BartTokenizer(RobertaTokenizer):
     r"""
     Construct a BART tokenizer.
 
-    :class:`~transformers.BartTokenizer` is identical to :class:`~transformers.RobertaTokenizer`. Refer to superclass
-    :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning the initialization
-    parameters and other methods.
+    [`BartTokenizer`] is identical to [`RobertaTokenizer`]. Refer to superclass [`RobertaTokenizer`] for usage examples
+    and documentation concerning the initialization parameters and other methods.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

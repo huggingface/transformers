@@ -9,44 +9,50 @@ class FeatureExtractionPipeline(Pipeline):
     Feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
 
-    This feature extraction pipeline can currently be loaded from :func:`~transformers.pipeline` using the task
-    identifier: :obj:`"feature-extraction"`.
+    This feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
+    `"feature-extraction"`.
 
     All models may be used for this pipeline. See a list of all models, including community-contributed models on
-    `huggingface.co/models <https://huggingface.co/models>`__.
+    [huggingface.co/models](https://huggingface.co/models).
 
     Arguments:
-        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
-            TensorFlow.
-        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+        tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            :class:`~transformers.PreTrainedTokenizer`.
-        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`):
+            [`PreTrainedTokenizer`].
+        modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
-        framework (:obj:`str`, `optional`):
-            The framework to use, either :obj:`"pt"` for PyTorch or :obj:`"tf"` for TensorFlow. The specified framework
-            must be installed.
+        framework (`str`, *optional*):
+            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
+            installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
-            is provided.
-        task (:obj:`str`, defaults to :obj:`""`):
+            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
+            provided.
+        task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
-        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`):
+        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
-        device (:obj:`int`, `optional`, defaults to -1):
+        device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id.
     """
 
-    def _sanitize_parameters(self, **kwargs):
-        return {}, {}, {}
+    def _sanitize_parameters(self, truncation=None, **kwargs):
+        preprocess_params = {}
+        if truncation is not None:
+            preprocess_params["truncation"] = truncation
+        return preprocess_params, {}, {}
 
-    def preprocess(self, inputs) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, truncation=None) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
+        if truncation is None:
+            kwargs = {}
+        else:
+            kwargs = {"truncation": truncation}
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -65,9 +71,9 @@ class FeatureExtractionPipeline(Pipeline):
         Extract the features of the input(s).
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`): One or several texts (or one list of texts) to get the features of.
+            args (`str` or `List[str]`): One or several texts (or one list of texts) to get the features of.
 
         Return:
-            A nested list of :obj:`float`: The features computed by the model.
+            A nested list of `float`: The features computed by the model.
         """
         return super().__call__(*args, **kwargs)
