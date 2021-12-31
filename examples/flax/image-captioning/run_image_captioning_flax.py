@@ -46,13 +46,12 @@ from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import Repository
 from transformers import (
-    CONFIG_MAPPING,
     FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
     FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
     AutoTokenizer,
-    FlaxAutoModelForVision2Seq,
+    FlaxVisionEncoderDecoderModel,
     HfArgumentParser,
     is_tensorboard_available,
 )
@@ -171,13 +170,6 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    model_name_or_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
-        },
-    )
     encoder_model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
@@ -191,26 +183,6 @@ class ModelArguments:
             "help": "The decoder model checkpoint for weights initialization."
             "Don't set if you want to train a decoder model from scratch."
         },
-    )
-    model_type: Optional[str] = field(
-        default="vision-encoder-decoder",
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
-    )
-    encoder_model_type: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "If training from scratch, pass a vision encoder model type from the library. For example, 'vit'"
-        },
-    )
-    decoder_model_type: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "If training from scratch, pass a decoder model type from the list: "
-            + ", ".join(DECODER_MODEL_TYPES)
-        },
-    )
-    config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
     encoder_config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained encoder config name or path if not the same as encoder_model_name"}
@@ -494,228 +466,86 @@ def main():
 
     # Load pretrained model and tokenizer
 
-    encoder_cache_dir, decoder_cache_dir = None, None
-    if model_args.cache_dir:
-        encoder_cache_dir = os.path.join(model_args.cache_dir, "encoder")
-        decoder_cache_dir = os.path.join(model_args.cache_dir, "decoder")
-
-    # Use explicit specified config
-    if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
-    # Use pretrained model's config
-    elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
-    # Use specified `model_type` (default to `vision-encoder-decoder`)
+    # Use explicit specified encoder config
+    if model_args.encoder_config_name:
+        encoder_config = AutoConfig.from_pretrained(model_args.encoder_config_name, cache_dir=model_args.cache_dir)
+    # Use pretrained encoder model's config
+    elif model_args.encoder_model_name_or_path:
+        encoder_config = AutoConfig.from_pretrained(
+            model_args.encoder_model_name_or_path, cache_dir=model_args.cache_dir
+        )
     else:
+        raise ValueError("Encoder Config: Either a pretrained config or a model location for encoder is required.")
 
-        if model_args.model_type not in MODEL_TYPES:
-            raise ValueError(
-                f"Unrecognized model identifier: {model_args.model_type}. Should contain one of {', '.join(MODEL_TYPES)}."
-            )
-        config_class = CONFIG_MAPPING[model_args.model_type]
+    # Use explicit specified decoder config
+    if model_args.decoder_config_name:
+        decoder_config = AutoConfig.from_pretrained(model_args.decoder_config_name, cache_dir=model_args.cache_dir)
+    # Use pretrained decoder model's config
+    elif model_args.decoder_model_name_or_path:
+        decoder_config = AutoConfig.from_pretrained(
+            model_args.decoder_model_name_or_path, cache_dir=model_args.cache_dir
+        )
+    else:
+        raise ValueError("Decoder Config: Either a pretrained config or a model location for decoder is required.")
+    # necessary for `from_encoder_decoder_pretrained` when `decoder_config` is passed
+    decoder_config.is_decoder = True
+    decoder_config.add_cross_attention = True
 
-        # Deal with encoder-decoder models that require specifying encoder/decoder
-        if hasattr(config_class, "from_encoder_decoder_configs"):
+    model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        encoder_pretrained_model_name_or_path=model_args.encoder_model_name_or_path,
+        decoder_pretrained_model_name_or_path=model_args.decoder_model_name_or_path,
+        encoder_config=encoder_config,
+        decoder_config=decoder_config,
+        encoder_seed=training_args.seed,
+        decoder_seed=training_args.seed,
+        encoder_dtype=getattr(jnp, model_args.dtype),
+        decoder_dtype=getattr(jnp, model_args.dtype),
+    )
 
-            # Use explicit specified encoder config
-            if model_args.encoder_config_name:
-                encoder_config = AutoConfig.from_pretrained(
-                    model_args.encoder_config_name, cache_dir=encoder_cache_dir
-                )
-            # Use pretrained encoder model's config
-            elif model_args.encoder_model_name_or_path:
-                encoder_config = AutoConfig.from_pretrained(
-                    model_args.encoder_model_name_or_path, cache_dir=encoder_cache_dir
-                )
-            # Use specified encoder model type
-            elif model_args.encoder_model_type:
-                encoder_config = AutoConfig.for_model(model_args.encoder_model_type)
-                logger.warning("You are instantiating a new config instance from scratch for the encoder.")
-            else:
-                raise ValueError(
-                    "Encoder Config: if pretrained config or model location is not provided, `encoder_model_type` is required."
-                )
-
-            # Use explicit specified decoder config
-            if model_args.decoder_config_name:
-                decoder_config = AutoConfig.from_pretrained(
-                    model_args.decoder_config_name, cache_dir=decoder_cache_dir
-                )
-            # Use pretrained decoder model's config
-            elif model_args.decoder_model_name_or_path:
-                decoder_config = AutoConfig.from_pretrained(
-                    model_args.decoder_model_name_or_path, cache_dir=decoder_cache_dir
-                )
-            # Use specified decoder model type
-            elif model_args.decoder_model_type:
-                decoder_config = AutoConfig.for_model(model_args.decoder_model_type)
-                logger.warning("You are instantiating a new config instance from scratch for the decoder.")
-            else:
-                raise ValueError(
-                    "Decoder Config: if pretrained config or model location is not provided, `decoder_model_type` is required."
-                )
-
-            logger.info("Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config")
-            decoder_config.is_decoder = True
-            decoder_config.add_cross_attention = True
-
-            config = config_class.from_encoder_decoder_configs(encoder_config, decoder_config)
-        # For self-contained model
-        else:
-            config = config_class()
-            logger.warning("You are instantiating a new config instance from scratch.")
-
-    decoder_start_token_id = getattr(config, "decoder_start_token_id", None)
-    if not decoder_start_token_id and getattr(config, "decoder", None):
-        decoder_start_token_id = getattr(config.decoder, "decoder_start_token_id", None)
-    bos_token_id = getattr(config, "bos_token_id", None)
-    if not bos_token_id and getattr(config, "decoder", None):
-        bos_token_id = getattr(config.decoder, "bos_token_id", None)
-    eos_token_id = getattr(config, "eos_token_id", None)
-    if not eos_token_id and getattr(config, "decoder", None):
-        eos_token_id = getattr(config.decoder, "eos_token_id", None)
-    pad_token_id = getattr(config, "pad_token_id", None)
-    if not pad_token_id and getattr(config, "decoder", None):
-        pad_token_id = getattr(config.decoder, "pad_token_id", None)
-
+    # GPT2 only has bos/eos tokens but not decoder_start/pad tokens
+    decoder_start_token_id = decoder_config.decoder_start_token_id
+    pad_token_id = decoder_config.pad_token_id
     if decoder_start_token_id is None:
-        decoder_start_token_id = bos_token_id
+        decoder_start_token_id = decoder_config.bos_token_id
     if pad_token_id is None:
-        pad_token_id = eos_token_id
+        pad_token_id = decoder_config.eos_token_id
 
-    if getattr(config, "decoder", None):
-        config.decoder.decoder_start_token_id = decoder_start_token_id
-        config.decoder.bos_token_id = bos_token_id
-        config.decoder.eos_token_id = eos_token_id
-        config.decoder.pad_token_id = pad_token_id
+    # This is necessary to make Flax's generate() work
+    model.config.eos_token_id = decoder_config.eos_token_id
+    model.config.decoder_start_token_id = decoder_start_token_id
+    model.config.pad_token_id = pad_token_id
 
-    # Set `encoder-decoder` (top-level) specific config (not always necessary, but can avoid generate() error sometimes)
-    config.decoder_start_token_id = decoder_start_token_id
-    config.bos_token_id = bos_token_id
-    config.eos_token_id = eos_token_id
-    config.pad_token_id = pad_token_id
-
-    if model_args.model_name_or_path:
-        model = FlaxAutoModelForVision2Seq.from_pretrained(
-            model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
-        )
-    else:
-        # model_class = FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING[config.__class__]
-        model = FlaxAutoModelForVision2Seq.from_config(
-            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
-        )
-        model_class = model.__class__
-
-        # encoder_class = FlaxAutoModel
-        # decoder_class = FlaxAutoModelForCausalLM
-        module = model.module.bind(model.params)
-        encoder_class_name = type(module.encoder).__name__.replace("Module", "Model")
-        decoder_class_name = type(module.decoder).__name__.replace("Module", "Model")
-        encoder_class = getattr(transformers, encoder_class_name, None)
-        decoder_class = getattr(transformers, decoder_class_name, None)
-
-        if hasattr(model_class, "from_encoder_decoder_pretrained"):
-
-            if model_args.encoder_model_name_or_path:
-                encoder = encoder_class.from_pretrained(
-                    model_args.encoder_model_name_or_path,
-                    config=config.encoder,
-                    seed=training_args.seed,
-                    dtype=getattr(jnp, model_args.dtype),
-                )
-            else:
-                encoder = encoder_class(
-                    config=config.encoder, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
-                )
-                logger.warning("You are instantiating a new model instance from scratch for the encoder.")
-
-            if model_args.decoder_model_name_or_path:
-                decoder = decoder_class.from_pretrained(
-                    model_args.decoder_model_name_or_path,
-                    config=config.decoder,
-                    seed=training_args.seed,
-                    dtype=getattr(jnp, model_args.dtype),
-                )
-            else:
-                decoder = decoder_class(
-                    config=config.decoder, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
-                )
-                logger.warning("You are instantiating a new model instance from scratch for the decoder.")
-
-            model = model_class.from_encoder_decoder_pretrained(
-                model_args.encoder_model_name_or_path,
-                model_args.decoder_model_name_or_path,
-                encoder_model=encoder,
-                decoder_model=decoder,
-                encoder_config=config.encoder,
-                decoder_config=config.decoder,
-                encoder_seed=training_args.seed,
-                decoder_seed=training_args.seed,
-                encoder_dtype=getattr(jnp, model_args.dtype),
-                decoder_dtype=getattr(jnp, model_args.dtype),
-            )
-
-            # Set `encoder-decoder` (top-level) specific config (not always necessary, but can avoid generate() error sometimes)
-            model.config.decoder_start_token_id = decoder_start_token_id
-            model.config.bos_token_id = bos_token_id
-            model.config.eos_token_id = eos_token_id
-            model.config.pad_token_id = pad_token_id
-
-        else:
-            logger.warning("You are instantiating a new model instance from scratch.")
-
-    feature_extractor = None
     if model_args.feature_extractor_name:
         feature_extractor = AutoFeatureExtractor.from_pretrained(
             model_args.feature_extractor_name,
             cache_dir=model_args.cache_dir,
         )
-    elif model_args.model_name_or_path:
-        try:
-            feature_extractor = AutoFeatureExtractor.from_pretrained(
-                model_args.model_name_or_path, cache_dir=model_args.cache_dir
-            )
-        except ValueError as e:
-            logger.warning(e)
-    # Check encoder
-    if not feature_extractor:
-        if model_args.encoder_model_name_or_path:
-            feature_extractor = AutoFeatureExtractor.from_pretrained(
-                model_args.encoder_model_name_or_path, cache_dir=model_args.cache_dir
-            )
-        else:
-            raise ValueError(
-                "You are instantiating a new feature extractor from scratch. This is not supported by this script."
-                "You can do it from another script, save it, and load it from here, using --feature_extractor_name."
-            )
+    elif model_args.encoder_model_name_or_path:
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
+            model_args.encoder_model_name_or_path, cache_dir=model_args.cache_dir
+        )
+    else:
+        raise ValueError(
+            "You are instantiating a new feature extractor from scratch. This is not supported by this script."
+            "You can do it from another script, save it, and load it from here, using --feature_extractor_name."
+        )
 
-    tokenizer = None
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
-    elif model_args.model_name_or_path:
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(
-                model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-            )
-        except ValueError as e:
-            logger.warning(e)
-
-    # Check decoder
-    if not tokenizer:
-        if model_args.decoder_model_name_or_path:
-            tokenizer = AutoTokenizer.from_pretrained(
-                model_args.decoder_model_name_or_path,
-                cache_dir=model_args.cache_dir,
-                use_fast=model_args.use_fast_tokenizer,
-            )
-        else:
-            raise ValueError(
-                "You are instantiating a new tokenizer from scratch. This is not supported by this script."
-                "You can do it from another script, save it, and load it from here, using --tokenizer_name."
-            )
-    tokenizer.pad_token = tokenizer.convert_ids_to_tokens(config.pad_token_id)
+    elif model_args.decoder_model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.decoder_model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+        )
+    else:
+        raise ValueError(
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+        )
+    tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
@@ -790,7 +620,7 @@ def main():
 
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
-            labels["input_ids"], config.pad_token_id, config.decoder_start_token_id
+            labels["input_ids"], model.config.pad_token_id, model.config.decoder_start_token_id
         )
         model_inputs["decoder_input_ids"] = np.asarray(decoder_input_ids)
 
@@ -849,9 +679,9 @@ def main():
         {
             "pixel_values": datasets.Array3D(
                 shape=(
-                    getattr(config.encoder, "num_channels", 3),
-                    config.encoder.image_size,
-                    config.encoder.image_size,
+                    getattr(model.config.encoder, "num_channels", 3),
+                    model.config.encoder.image_size,
+                    model.config.encoder.image_size,
                 ),
                 dtype="float32",
             ),
@@ -1404,15 +1234,15 @@ def main():
                 state, train_metric = p_train_step(state, batch)
                 train_metrics.append(train_metric)
                 train_time += time.time() - batch_start
-
                 time_per_step = train_time / cur_step
-                _train_metric = unreplicate(train_metric)
-                desc = f"Epoch... ({epoch + 1}/{num_epochs} | Step: {cur_step} | Loss: {_train_metric['loss']} | Learning Rate: {_train_metric['learning_rate']} | Time per step: {time_per_step})"
-                epochs.desc = desc
-                epochs.write(desc)
 
                 # log and save info
                 if training_args.logging_steps > 0 and cur_step % training_args.logging_steps == 0:
+
+                    _train_metric = unreplicate(train_metric)
+                    desc = f"Epoch... ({epoch + 1}/{num_epochs} | Step: {cur_step} | Loss: {_train_metric['loss']} | Learning Rate: {_train_metric['learning_rate']} | Time per step: {time_per_step})"
+                    epochs.desc = desc
+                    epochs.write(desc)
 
                     logger.info(desc)
 
