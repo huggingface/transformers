@@ -44,9 +44,6 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
-    "XGLMEncoder",  # Building part of bigger (tested) model.
-    "XGLMDecoder",  # Building part of bigger (tested) model.
-    "XGLMDecoderWrapper",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
     "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
