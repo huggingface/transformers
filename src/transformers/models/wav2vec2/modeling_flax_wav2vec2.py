@@ -395,7 +395,7 @@ class FlaxConvLayersCollection(nn.Module):
         return hidden_states
 
 
-class FlaxWav2Vec2FeatureExtractor(nn.Module):
+class FlaxWav2Vec2FeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     config: Wav2Vec2Config
@@ -849,7 +849,7 @@ class FlaxWav2Vec2Module(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.feature_extractor = FlaxWav2Vec2FeatureExtractor(self.config, dtype=self.dtype)
+        self.feature_extractor = FlaxWav2Vec2FeatureEncoder(self.config, dtype=self.dtype)
         self.feature_projection = FlaxWav2Vec2FeatureProjection(self.config, dtype=self.dtype)
         self.masked_spec_embed = self.param(
             "masked_spec_embed", jax.nn.initializers.uniform(), (self.config.hidden_size,)

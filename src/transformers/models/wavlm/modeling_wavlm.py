@@ -15,6 +15,7 @@
 """ PyTorch WavLM model."""
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -352,8 +353,8 @@ class WavLMSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->WavLM
-class WavLMFeatureExtractor(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->WavLM
+class WavLMFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -402,6 +403,17 @@ class WavLMFeatureExtractor(nn.Module):
                 hidden_states = conv_layer(hidden_states)
 
         return hidden_states
+
+
+class WavLMFeatureExtractor(WavLMFeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->WavLM
@@ -1077,7 +1089,7 @@ class WavLMPreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (WavLMEncoder, WavLMEncoderStableLayerNorm, WavLMFeatureExtractor)):
+        if isinstance(module, (WavLMEncoder, WavLMEncoderStableLayerNorm, WavLMFeatureEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -1146,10 +1158,12 @@ class WavLMModel(WavLMPreTrainedModel):
     def __init__(self, config: WavLMConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = WavLMFeatureExtractor(config)
+        self.feature_extractor = WavLMFeatureEncoder(config)
         self.feature_projection = WavLMFeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        # model only needs masking vector if mask prob is > 0.0
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = WavLMEncoderStableLayerNorm(config)
@@ -1160,6 +1174,25 @@ class WavLMModel(WavLMPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.feature_extractor._freeze_parameters()
 
     def _mask_hidden_states(
         self,
@@ -1294,8 +1327,20 @@ class WavLMForCTC(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()
 
@@ -1403,8 +1448,20 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()
 
@@ -1507,8 +1564,20 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()
 
@@ -1656,8 +1725,20 @@ class WavLMForXVector(WavLMPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wavlm.feature_extractor._freeze_parameters()
 

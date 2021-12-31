@@ -19,6 +19,7 @@ import warnings
 from contextlib import contextmanager
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ..auto.tokenization_auto import AutoTokenizer
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
@@ -44,7 +45,7 @@ class Wav2Vec2Processor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, PreTrainedTokenizer):
+        if not isinstance(tokenizer, (PreTrainedTokenizer, PreTrainedTokenizerFast)):
             raise ValueError(
                 f"`tokenizer` has to be of type {PreTrainedTokenizer.__class__}, but is {type(tokenizer)}"
             )
@@ -71,8 +72,10 @@ class Wav2Vec2Processor:
                 Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
                 be created if it does not exist).
         """
-
+        self.feature_extractor._set_processor_class(self.__class__.__name__)
         self.feature_extractor.save_pretrained(save_directory)
+
+        self.tokenizer._set_processor_class(self.__class__.__name__)
         self.tokenizer.save_pretrained(save_directory)
 
     @classmethod

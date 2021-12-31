@@ -202,6 +202,8 @@ class FeatureExtractionMixin:
 
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
+        # Pop "processor_class" as it should be saved as private attribute
+        self._processor_class = kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -209,6 +211,10 @@ class FeatureExtractionMixin:
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
+
+    def _set_processor_class(self, processor_class: str):
+        """Sets processor class as an attribute."""
+        self._processor_class = processor_class
 
     @classmethod
     def from_pretrained(
@@ -480,6 +486,11 @@ class FeatureExtractionMixin:
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
+
+        # make sure private name "_processor_class" is correctly
+        # saved as "processor_class"
+        if dictionary.get("_processor_class", None) is not None:
+            dictionary["processor_class"] = dictionary.pop("_processor_class")
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

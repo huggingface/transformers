@@ -1019,8 +1019,10 @@ class GenerationMixin:
         model_kwargs["output_hidden_states"] = output_hidden_states
         model_kwargs["use_cache"] = use_cache
 
-        has_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
-        if model_kwargs.get("attention_mask", None) is None and has_attention_mask:
+        accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
+
+        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 inputs_tensor, pad_token_id, eos_token_id
             )

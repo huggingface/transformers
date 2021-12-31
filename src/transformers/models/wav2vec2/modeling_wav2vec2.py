@@ -431,7 +431,7 @@ class Wav2Vec2SamePadLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2FeatureExtractor(nn.Module):
+class Wav2Vec2FeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -482,6 +482,17 @@ class Wav2Vec2FeatureExtractor(nn.Module):
                 hidden_states = conv_layer(hidden_states)
 
         return hidden_states
+
+
+class Wav2Vec2FeatureExtractor(Wav2Vec2FeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 class Wav2Vec2FeatureProjection(nn.Module):
@@ -1125,7 +1136,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureExtractor)):
+        if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -1194,10 +1205,12 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = Wav2Vec2FeatureExtractor(config)
+        self.feature_extractor = Wav2Vec2FeatureEncoder(config)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        # model only needs masking vector if mask prob is > 0.0
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
@@ -1208,6 +1221,25 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.feature_extractor._freeze_parameters()
 
     def _mask_hidden_states(
         self,
@@ -1340,8 +1372,20 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1628,8 +1672,20 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1736,8 +1792,20 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1839,8 +1907,20 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1985,8 +2065,20 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
