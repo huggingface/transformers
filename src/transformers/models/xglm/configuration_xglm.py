@@ -28,7 +28,7 @@ XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class XGLMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~XGLMModel`]. It is used to instantiate an XGLM
+    This is the configuration class to store the configuration of a [`XGLMModel`]. It is used to instantiate an XGLM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the XGLM
     [facebook/xglm-564M](https://huggingface.co/facebook/xglm-564M) architecture.
@@ -40,7 +40,7 @@ class XGLMConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256008):
             Vocabulary size of the XGLM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~XGLMModel`] or [`~FlaxXGLMModel`].
+            `inputs_ids` passed when calling [`XGLMModel`] or [`FlaxXGLMModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimension of the layers and the pooler layer.
         num_layers (`int`, *optional*, defaults to 24):
@@ -68,7 +68,8 @@ class XGLMConfig(PretrainedConfig):
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        Example:
+
+    Example:
 
     ```python
     >>> from transformers import XGLMModel, XGLMConfig
