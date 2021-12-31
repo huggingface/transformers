@@ -52,16 +52,6 @@ if is_torch_available():
         "XLMRobertaForTokenClassification",
         "XLMRobertaModel",
     ]
-    _import_structure["modeling_xlm_roberta_xl"] = [
-        "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "XLMRobertaXLModel",
-        "XLMRobertaXLForCausalLM",
-        "XLMRobertaXLForMaskedLM",
-        "XLMRobertaXLForSequenceClassification",
-        "XLMRobertaXLForMultipleChoice",
-        "XLMRobertaXLForTokenClassification",
-        "XLMRobertaXLForQuestionAnswering",
-    ]
 
 if is_tf_available():
     _import_structure["modeling_tf_xlm_roberta"] = [
@@ -98,16 +88,6 @@ if TYPE_CHECKING:
             XLMRobertaForSequenceClassification,
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
-        )
-        from .modeling_xlm_roberta_xl import (
-            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XLMRobertaXLModel,
-            XLMRobertaXLForCausalLM,
-            XLMRobertaXLForMaskedLM,
-            XLMRobertaXLForSequenceClassification,
-            XLMRobertaXLForMultipleChoice,
-            XLMRobertaXLForTokenClassification,
-            XLMRobertaXLForQuestionAnswering,
         )
 
     if is_tf_available():

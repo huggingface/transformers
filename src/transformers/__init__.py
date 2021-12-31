@@ -1226,6 +1226,7 @@ if is_torch_available():
     _import_structure["models.xlm_roberta"].extend(
         [
             "XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
             "XLMRobertaForCausalLM",
             "XLMRobertaForMaskedLM",
             "XLMRobertaForMultipleChoice",
@@ -1233,15 +1234,13 @@ if is_torch_available():
             "XLMRobertaForSequenceClassification",
             "XLMRobertaForTokenClassification",
             "XLMRobertaModel",
-            "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "XLMRobertaXLModel",
             "XLMRobertaXLForCausalLM",
             "XLMRobertaXLForMaskedLM",
-            "XLMRobertaXLForSequenceClassification",
             "XLMRobertaXLForMultipleChoice",
-            "XLMRobertaXLForTokenClassification",
             "XLMRobertaXLForQuestionAnswering",
-
+            "XLMRobertaXLForSequenceClassification",
+            "XLMRobertaXLForTokenClassification",
+            "XLMRobertaXLModel",
         ]
     )
 
@@ -2897,6 +2896,7 @@ if TYPE_CHECKING:
         )
         from .models.xlm_roberta import (
             XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMRobertaForCausalLM,
             XLMRobertaForMaskedLM,
             XLMRobertaForMultipleChoice,
@@ -2904,14 +2904,13 @@ if TYPE_CHECKING:
             XLMRobertaForSequenceClassification,
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
-            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XLMRobertaXLModel,
             XLMRobertaXLForCausalLM,
             XLMRobertaXLForMaskedLM,
-            XLMRobertaXLForSequenceClassification,
             XLMRobertaXLForMultipleChoice,
-            XLMRobertaXLForTokenClassification,
             XLMRobertaXLForQuestionAnswering,
+            XLMRobertaXLForSequenceClassification,
+            XLMRobertaXLForTokenClassification,
+            XLMRobertaXLModel,
         )
         from .models.xlnet import (
             XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,

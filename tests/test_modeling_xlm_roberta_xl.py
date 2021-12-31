@@ -26,8 +26,6 @@ if is_torch_available():
     from transformers import XLMRobertaXLModel
 
 
-@require_sentencepiece
-@require_tokenizers
 @require_torch
 class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
@@ -54,7 +52,7 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
 
         expected_output_shape = torch.Size((1, 12, 4096))  # batch_size, sequence_length, embedding_vector_dim
         expected_output_values_last_dim = torch.tensor(
-            [[0.0046,  0.0146,  0.0227,  0.0126,  0.0219,  0.0175, -0.0101,  0.0006, 0.0124,  0.0209, -0.0063,  0.0096]]
+            [[0.0046, 0.0146, 0.0227, 0.0126, 0.0219, 0.0175, -0.0101, 0.0006, 0.0124, 0.0209, -0.0063, 0.0096]]
         )
 
         output = model(input_ids)["last_hidden_state"].detach()

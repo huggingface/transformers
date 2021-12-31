@@ -31,8 +31,9 @@ from transformers.models.bert.modeling_bert import (
     BertSelfAttention,
     BertSelfOutput,
 )
-from transformers.utils import logging
 from transformers.models.roberta.modeling_roberta import RobertaAttention
+from transformers.utils import logging
+
 
 if version.parse(fairseq.__version__) < version.parse("1.0.0a"):
     raise Exception("requires fairseq >= 1.0.0a")
@@ -44,7 +45,7 @@ SAMPLE_TEXT = "Hello world! cécé herlolip"
 
 
 def convert_xlm_roberta_xl_checkpoint_to_pytorch(
-        roberta_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
+    roberta_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
 ):
     """
     Copy/paste/tweak roberta's weights to our BERT structure.
@@ -78,7 +79,6 @@ def convert_xlm_roberta_xl_checkpoint_to_pytorch(
         model.roberta.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c RoBERTa doesn't use them.
 
-
     model.roberta.encoder.LayerNorm.weight = roberta_sent_encoder.layer_norm.weight
     model.roberta.encoder.LayerNorm.bias = roberta_sent_encoder.layer_norm.bias
 
@@ -94,10 +94,10 @@ def convert_xlm_roberta_xl_checkpoint_to_pytorch(
         # self attention
         self_attn: BertSelfAttention = layer.attention.self
         assert (
-                roberta_layer.self_attn.k_proj.weight.data.shape
-                == roberta_layer.self_attn.q_proj.weight.data.shape
-                == roberta_layer.self_attn.v_proj.weight.data.shape
-                == torch.Size((config.hidden_size, config.hidden_size))
+            roberta_layer.self_attn.k_proj.weight.data.shape
+            == roberta_layer.self_attn.q_proj.weight.data.shape
+            == roberta_layer.self_attn.v_proj.weight.data.shape
+            == torch.Size((config.hidden_size, config.hidden_size))
         )
 
         self_attn.query.weight.data = roberta_layer.self_attn.q_proj.weight
