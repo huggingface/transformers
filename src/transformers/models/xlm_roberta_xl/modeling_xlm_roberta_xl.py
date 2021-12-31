@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch XLM RoBERTa xl,xxl model. """
+"""PyTorch XLM RoBERTa xl,xxl model."""
 
 import math
 
@@ -847,7 +847,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top for CLM fine-tuning. """,
+    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top for CLM fine-tuning.""",
     XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
@@ -924,10 +924,11 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
         ```python
         >>> from transformers import RobertaTokenizer, RobertaForCausalLM, RobertaConfig
         >>> import torch
-        >>> tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+
+        >>> tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
         >>> config = RobertaConfig.from_pretrained("roberta-base")
         >>> config.is_decoder = True
-        >>> model = RobertaForCausalLM.from_pretrained('roberta-base', config=config)
+        >>> model = RobertaForCausalLM.from_pretrained("roberta-base", config=config)
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> prediction_logits = outputs.logits
@@ -997,7 +998,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top. """, XLM_ROBERTA_XL_START_DOCSTRING
+    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top.""", XLM_ROBERTA_XL_START_DOCSTRING
 )
 class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]

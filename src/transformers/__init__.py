@@ -1404,7 +1404,6 @@ if is_torch_available():
     _import_structure["models.xlm_roberta"].extend(
         [
             "XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
             "XLMRobertaForCausalLM",
             "XLMRobertaForMaskedLM",
             "XLMRobertaForMultipleChoice",
@@ -1412,6 +1411,11 @@ if is_torch_available():
             "XLMRobertaForSequenceClassification",
             "XLMRobertaForTokenClassification",
             "XLMRobertaModel",
+        ]
+    )
+    _import_structure["models.xlm_roberta_xl"].extend(
+        [
+            "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
             "XLMRobertaXLForCausalLM",
             "XLMRobertaXLForMaskedLM",
             "XLMRobertaXLForMultipleChoice",
@@ -1421,7 +1425,6 @@ if is_torch_available():
             "XLMRobertaXLModel",
         ]
     )
-
     _import_structure["models.xlnet"].extend(
         [
             "XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3268,7 +3271,6 @@ if TYPE_CHECKING:
         )
         from .models.xlm_roberta import (
             XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMRobertaForCausalLM,
             XLMRobertaForMaskedLM,
             XLMRobertaForMultipleChoice,
@@ -3276,6 +3278,9 @@ if TYPE_CHECKING:
             XLMRobertaForSequenceClassification,
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
+        )
+        from .models.xlm_roberta_xl import (
+            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMRobertaXLForCausalLM,
             XLMRobertaXLForMaskedLM,
             XLMRobertaXLForMultipleChoice,
