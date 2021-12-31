@@ -1726,7 +1726,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_adam_hf(self):
         from transformers.optimization import AdamW
 
-        args = TrainingArguments(optim=OptimizerNames.ADAMW_HF.value, output_dir="None", learning_rate=0.3)
+        args = TrainingArguments(optim=OptimizerNames.ADAM_HF.value, output_dir="None", learning_rate=0.3)
 
         mandatory_params = {
             "betas": (args.adam_beta1, args.adam_beta2),
@@ -1739,7 +1739,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_adam_torch(self):
         from torch.optim import AdamW
 
-        args = TrainingArguments(optim=OptimizerNames.ADAMW_TORCH.value, output_dir="None", learning_rate=0.3)
+        args = TrainingArguments(optim=OptimizerNames.ADAM_TORCH.value, output_dir="None", learning_rate=0.3)
 
         mandatory_params = {
             "betas": (args.adam_beta1, args.adam_beta2),
@@ -1750,7 +1750,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         self.check_optim(args, mandatory_params, AdamW)
 
     def test_fused_adam(self):
-        args = TrainingArguments(optim=OptimizerNames.APEX_FUSED_ADAM.value, output_dir="None", learning_rate=0.3)
+        args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None", learning_rate=0.3)
 
         mandatory_params = {
             "betas": (args.adam_beta1, args.adam_beta2),
@@ -1768,7 +1768,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             self.check_optim(args, mandatory_params, mock.optimizers.FusedAdam)
 
     def test_fused_adam_no_apex(self):
-        args = TrainingArguments(optim=OptimizerNames.APEX_FUSED_ADAM.value, output_dir="None")
+        args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None")
 
         # Pretend that apex does not exist, even if installed.
         with patch.dict("sys.modules", {"apex": None}):

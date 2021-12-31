@@ -74,9 +74,9 @@ class OptimizerNames(Enum):
     Stores the acceptable string identifiers for optimizers.
     """
 
-    ADAMW_HF = "adamw_hf"
-    ADAMW_TORCH = "adamw_torch"
-    APEX_FUSED_ADAM = "apex_fused_adam"
+    ADAM_HF = "adam_hf"
+    ADAM_TORCH = "adam_torch"
+    ADAM_APEX_FUSED = "adam_apex_fused"
     ADAFACTOR = "adafactor"
 
 
@@ -339,7 +339,7 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str`, *optional*, defaults to `adamw_hf`):
-            The optimizer to use: adamw_hf, adamw_torch, apex_fused_adam, or adafactor.
+            The optimizer to use: adam_hf, adam_torch, adam_apex_fused, or adafactor.
         adafactor (`bool`, *optional*, defaults to `False`):
             This argument is deprecated. Use `--optim adafactor` instead.
         group_by_length (`bool`, *optional*, defaults to `False`):
@@ -655,7 +655,7 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     optim: str = field(
-        default=OptimizerNames.ADAMW_HF.value,
+        default=OptimizerNames.ADAM_HF.value,
         metadata={"help": "The optimizer to use.", "choices": [e.value for e in OptimizerNames]},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
