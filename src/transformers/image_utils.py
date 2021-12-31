@@ -87,8 +87,8 @@ class ImageFeatureExtractionMixin:
 
     def to_pil_image(self, image, rescale=None):
         """
-        Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last
-        axis if needed.
+        Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
+        needed.
 
         Args:
             image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor`):
@@ -125,8 +125,7 @@ class ImageFeatureExtractionMixin:
                 The image to convert to a NumPy array.
             rescale (`bool`, *optional*):
                 Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Will
-                default to `True` if the image is a PIL Image or an array/tensor of integers, `False`
-                otherwise.
+                default to `True` if the image is a PIL Image or an array/tensor of integers, `False` otherwise.
             channel_first (`bool`, *optional*, defaults to `True`):
                 Whether or not to permute the dimensions of the image to put the channel dimension first.
         """
@@ -151,8 +150,8 @@ class ImageFeatureExtractionMixin:
 
     def normalize(self, image, mean, std):
         """
-        Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of
-        `image` to a NumPy array if it's a PIL Image.
+        Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of `image` to a NumPy array
+        if it's a PIL Image.
 
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
@@ -210,8 +209,8 @@ class ImageFeatureExtractionMixin:
 
     def center_crop(self, image, size):
         """
-        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to
-        the size given, it will be padded (so the returned result has the size asked).
+        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to the
+        size given, it will be padded (so the returned result has the size asked).
 
         Args:
             image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):

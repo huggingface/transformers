@@ -182,19 +182,18 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py facebook/w
 
 FSMT_START_DOCSTRING = r"""
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`FSMTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 
 """
 FSMT_GENERATION_EXAMPLE = r"""
@@ -202,16 +201,13 @@ FSMT_GENERATION_EXAMPLE = r"""
 
         from transformers import FSMTTokenizer, FSMTForConditionalGeneration
 
-        mname = "facebook/wmt19-ru-en"
-        model = FSMTForConditionalGeneration.from_pretrained(mname)
-        tokenizer = FSMTTokenizer.from_pretrained(mname)
+        mname = "facebook/wmt19-ru-en" model = FSMTForConditionalGeneration.from_pretrained(mname) tokenizer =
+        FSMTTokenizer.from_pretrained(mname)
 
-        src_text = "Машинное обучение - это здорово, не так ли?"
-        input_ids = tokenizer.encode(src_text, return_tensors='pt')
-        outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
-        for i, output in enumerate(outputs):
-            decoded = tokenizer.decode(output, skip_special_tokens=True)
-            print(f"{i}: {decoded})
+        src_text = "Машинное обучение - это здорово, не так ли?" input_ids = tokenizer.encode(src_text,
+        return_tensors='pt') outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3) for i, output in
+        enumerate(outputs):
+            decoded = tokenizer.decode(output, skip_special_tokens=True) print(f"{i}: {decoded})
          # 1: Machine learning is great, isn't it? ...
 
 """
@@ -221,9 +217,8 @@ FSMT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            IIndices can be obtained using [`FSTMTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            IIndices can be obtained using [`FSTMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -236,18 +231,16 @@ FSMT_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FSMTTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`FSMTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
+            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
-            also be used by default.
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -261,24 +254,24 @@ FSMT_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0, 1]`:
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
         encoder_outputs (`Tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
-            `attentions`) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a
-            sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
-            the decoder.
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden-states at
+            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`Tuple(torch.FloatTensor)` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -445,8 +438,7 @@ class EncoderLayer(nn.Module):
 
 class FSMTEncoder(nn.Module):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`EncoderLayer`].
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`EncoderLayer`].
 
     Args:
         config: FSMTConfig
@@ -491,8 +483,8 @@ class FSMTEncoder(nn.Module):
             BaseModelOutput or Tuple comprised of:
 
                 - **x** (`torch.Tensor`): the last encoder layer's output of shape *(src_len, batch, embed_dim)*
-                - **encoder_states** (`Tuple(torch.FloatTensor`)): all intermediate hidden states of shape
-                  *(src_len, batch, embed_dim)*. Only populated if *output_hidden_states:* is True.
+                - **encoder_states** (`Tuple(torch.FloatTensor`)): all intermediate hidden states of shape *(src_len,
+                  batch, embed_dim)*. Only populated if *output_hidden_states:* is True.
                 - **all_attentions** (`Tuple(torch.FloatTensor`)): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
@@ -1153,7 +1145,8 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:

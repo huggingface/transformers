@@ -50,8 +50,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -71,8 +71,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -105,7 +105,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
@@ -689,9 +691,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         truncates sequences if overflowing while taking into account the special tokens and manages a moving window
         (with user defined stride) for overflowing tokens.
 
-        Word-level `boxes` are turned into token-level `bbox`. If provided, word-level `word_labels` are
-        turned into token-level `labels`. The word label is used for the first token of the word, while remaining
-        tokens are labeled with -100, such that they will be ignored by the loss function.
+        Word-level `boxes` are turned into token-level `bbox`. If provided, word-level `word_labels` are turned into
+        token-level `labels`. The word label is used for the first token of the word, while remaining tokens are
+        labeled with -100, such that they will be ignored by the loss function.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -874,8 +876,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
         Args:
             ids (`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize`
-                and `convert_tokens_to_ids` methods.
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_tokens_to_ids` methods.
             token_boxes (`List[List[int]]`):
                 Bounding boxes of the first sequence.
             pair_ids (`List[int]`, *optional*):
@@ -890,25 +892,25 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 The strategy to follow for truncation. Can be:
 
-                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will
-                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
-                  sequences (or a batch of pairs) is provided.
-                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will truncate
+                  token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a
+                  batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
-                  greater than the model maximum admissible input size).
+                - `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths greater
+                  than the model maximum admissible input size).
             stride (`int`, *optional*, defaults to 0):
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the
-            list of overflowing tokens.
+            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
+            overflowing tokens.
         """
         if num_tokens_to_remove <= 0:
             return ids, token_boxes, pair_ids, pair_token_boxes, labels, [], [], []
@@ -995,7 +997,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+            encoded_inputs:
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -1010,7 +1013,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         # Load from model defaults
         if return_attention_mask is None:

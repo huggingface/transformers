@@ -71,9 +71,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
     """
     Construct an MBART tokenizer.
 
-    [`MBartTokenizer`] is a subclass of [`XLMRobertaTokenizer`]. Refer to
-    superclass [`XLMRobertaTokenizer`] for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    [`MBartTokenizer`] is a subclass of [`XLMRobertaTokenizer`]. Refer to superclass [`XLMRobertaTokenizer`] for usage
+    examples and documentation concerning the initialization parameters and other methods.
 
     The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
@@ -82,10 +81,11 @@ class MBartTokenizer(XLMRobertaTokenizer):
 
     ```python
     >>> from transformers import MBartTokenizer
-    >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
+
+    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX", tgt_lang="ro_RO")
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
+    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
     >>> inputs["labels"] = labels["input_ids"]
