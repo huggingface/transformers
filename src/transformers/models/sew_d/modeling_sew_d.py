@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SEW model. """
+""" PyTorch SEW model."""
 
 import math
+import warnings
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
 
@@ -39,9 +40,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SEWDConfig"
 _CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _SEQ_CLASS_CHECKPOINT = "asapp/sew-d-tiny-100k"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 1
 
@@ -68,9 +69,9 @@ def _compute_mask_indices(
     min_masks: int = 0,
 ) -> np.ndarray:
     """
-    Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
-    ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
-    on CPU as part of the preprocessing during training.
+    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    CPU as part of the preprocessing during training.
 
     Args:
         shape: The shape for which to compute masks. This should be of a tuple of size 2 where
@@ -180,9 +181,9 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     """
     Build relative position according to the query and key
 
-    We assume the absolute position of query :math:`P_q` is range from (0, query_size) and the absolute position of key
-    :math:`P_k` is range from (0, key_size), The relative positions from query to key is :math:`R_{q \\rightarrow k} =
-    P_q - P_k`
+    We assume the absolute position of query \\(P_q\\) is range from (0, query_size) and the absolute position of key
+    \\(P_k\\) is range from (0, key_size), The relative positions from query to key is \\(R_{q \\rightarrow k} = P_q -
+    P_k\\)
 
     Args:
         query_size (int): the length of query
@@ -191,7 +192,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         max_position (int): the maximum allowed absolute position
 
     Return:
-        :obj:`torch.LongTensor`: A tensor with shape [1, query_size, key_size]
+        `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
 
     """
     q_ids = np.arange(0, query_size)
@@ -387,8 +388,8 @@ class SEWDUpsampling(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->SEWD
-class SEWDFeatureExtractor(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->SEWD
+class SEWDFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -439,6 +440,17 @@ class SEWDFeatureExtractor(nn.Module):
         return hidden_states
 
 
+class SEWDFeatureExtractor(SEWDFeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
+
+
 # Copied from transformers.models.deberta.modeling_deberta.ContextPooler
 class ContextPooler(nn.Module):
     def __init__(self, config):
@@ -468,23 +480,28 @@ class XSoftmax(torch.autograd.Function):
     Masked Softmax which is optimized for saving memory
 
     Args:
-        input (:obj:`torch.tensor`): The input tensor that will apply softmax.
-        mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+        input (`torch.tensor`): The input tensor that will apply softmax.
+        mask (`torch.IntTensor`):
+            The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
         dim (int): The dimension that will apply softmax
 
-    Example::
+    Example:
 
-          >>> import torch
-          >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
+    ```python
+    >>> import torch
+    >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
 
-          >>> # Make a tensor
-          >>> x = torch.randn([4,20,100])
+    >>> # Make a tensor
+    >>> x = torch.randn([4, 20, 100])
 
-          >>> # Create a mask
-          >>> mask = (x>0).int()
+    >>> # Create a mask
+    >>> mask = (x > 0).int()
 
-          >>> y = XSoftmax.apply(x, mask, dim=-1)
-    """
+    >>> # Specify the dimension to apply softmax
+    >>> dim = -1
+
+    >>> y = XSoftmax.apply(x, mask, dim)
+    ```"""
 
     @staticmethod
     def forward(self, input, mask, dim):
@@ -571,7 +588,7 @@ class StableDropout(nn.Module):
         Call the module
 
         Args:
-            x (:obj:`torch.tensor`): The input tensor to apply dropout
+            x (`torch.tensor`): The input tensor to apply dropout
         """
         if self.training and self.drop_prob > 0:
             return XDropout.apply(x, self.get_context())
@@ -622,9 +639,9 @@ class DisentangledSelfAttention(nn.Module):
     Disentangled self-attention module
 
     Parameters:
-        config (:obj:`DebertaV2Config`):
+        config (`DebertaV2Config`):
             A model config class instance with the configuration to build a new model. The schema is similar to
-            `BertConfig`, for more details, please refer :class:`~transformers.DebertaV2Config`
+            *BertConfig*, for more details, please refer [`DebertaV2Config`]
 
     """
 
@@ -684,28 +701,28 @@ class DisentangledSelfAttention(nn.Module):
         Call the module
 
         Args:
-            hidden_states (:obj:`torch.FloatTensor`):
+            hidden_states (`torch.FloatTensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
-                `Attention(Q,K,V)`
+                *Attention(Q,K,V)*
 
-            attention_mask (:obj:`torch.ByteTensor`):
-                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maximum
-                sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
+            attention_mask (`torch.ByteTensor`):
+                An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
+                sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            output_attentions (:obj:`bool`, optional):
+            output_attentions (`bool`, optional):
                 Whether return the attention matrix.
 
-            query_states (:obj:`torch.FloatTensor`, optional):
-                The `Q` state in `Attention(Q,K,V)`.
+            query_states (`torch.FloatTensor`, optional):
+                The *Q* state in *Attention(Q,K,V)*.
 
-            relative_pos (:obj:`torch.LongTensor`):
-                The relative position encoding between the tokens in the sequence. It's of shape [`B`, `N`, `N`] with
-                values ranging in [`-max_relative_positions`, `max_relative_positions`].
+            relative_pos (`torch.LongTensor`):
+                The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
+                values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (:obj:`torch.FloatTensor`):
-                The embedding of relative distances. It's a tensor of shape [:math:`2 \\times
-                \\text{max_relative_positions}`, `hidden_size`].
+            rel_embeddings (`torch.FloatTensor`):
+                The embedding of relative distances. It's a tensor of shape [\\(2 \\times
+                \\text{max_relative_positions}\\), *hidden_size*].
 
 
         """
@@ -1201,6 +1218,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
 
     config_class = SEWDConfig
     base_model_prefix = "sew-d"
+    main_input_name = "input_values"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
 
@@ -1273,50 +1291,48 @@ class SEWDPreTrainedModel(PreTrainedModel):
 
 
 SEWD_START_DOCSTRING = r"""
-    SEW-D was proposed in `Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech Recognition
-    <https://arxiv.org/abs/2109.06870>`__ by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav
-    Artzi.
+    SEW-D was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech
+    Recognition](https://arxiv.org/abs/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger,
+    Yoav Artzi.
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving etc.).
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.SEWDConfig`): Model configuration class with all the parameters of the model.
+        config ([`SEWDConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
 SEWD_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
-            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
-        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
-            1]``:
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
+            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
+            1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            [What are attention masks?](../glossary#attention-mask)
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1329,7 +1345,7 @@ class SEWDModel(SEWDPreTrainedModel):
     def __init__(self, config: SEWDConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = SEWDFeatureExtractor(config)
+        self.feature_extractor = SEWDFeatureEncoder(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.feature_layer_norm_eps)
 
         self.project_features = config.conv_dim[-1] != config.hidden_size
@@ -1337,7 +1353,8 @@ class SEWDModel(SEWDPreTrainedModel):
             self.feature_projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         self.encoder = SEWDEncoder(config)
 
@@ -1352,8 +1369,8 @@ class SEWDModel(SEWDPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
-        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
-        <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1449,7 +1466,7 @@ class SEWDModel(SEWDPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SEW-D Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    """SEW-D Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     SEWD_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV_2_VEC_2->SEWD
@@ -1474,8 +1491,20 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.sew_d.feature_extractor._freeze_parameters()
 
@@ -1496,11 +1525,11 @@ class SEWDForCTC(SEWDPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_length)`, `optional`):
-            Labels for connectionist temporal classification. Note that ``target_length`` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
-            1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
-            config.vocab_size - 1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size - 1]`.
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1583,8 +1612,20 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.sew_d.feature_extractor._freeze_parameters()
 
@@ -1598,7 +1639,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1614,10 +1655,10 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
