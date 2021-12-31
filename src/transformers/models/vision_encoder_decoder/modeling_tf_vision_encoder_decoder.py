@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support TF Vision-Encoder-Text-Decoder architectures """
+""" Classes to support TF Vision-Encoder-Text-Decoder architectures"""
 
 
 from typing import Optional
@@ -42,47 +42,46 @@ _CONFIG_FOR_DOC = "VisionEncoderDecoderConfig"
 VISION_ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize an image-to-text-sequence model with any pretrained vision autoencoding model
     as the encoder and any pretrained text autoregressive model as the decoder. The encoder is loaded via
-    [`~TFAutoModel.from_pretrained`] function and the decoder is loaded via
-    [`~TFAutoModelForCausalLM.from_pretrained`] function. Cross-attention layers are automatically
-    added to the decoder and should be fine-tuned on a downstream generative task, like image captioning.
+    [`~TFAutoModel.from_pretrained`] function and the decoder is loaded via [`~TFAutoModelForCausalLM.from_pretrained`]
+    function. Cross-attention layers are automatically added to the decoder and should be fine-tuned on a downstream
+    generative task, like image captioning.
 
     The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
-    tasks was shown in [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
+    tasks was shown in [Leveraging Pre-trained Checkpoints for Sequence Generation
+    Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
     Zhou, Wei Li, Peter J. Liu.
 
-    Additionally, in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models](https://arxiv.org/abs/2109.10282) it is shown how leveraging large pretrained vision models for optical
+    Additionally, in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained
+    Models](https://arxiv.org/abs/2109.10282) it is shown how leveraging large pretrained vision models for optical
     character recognition (OCR) yields a significant performance improvement.
 
     After such a Vision-Encoder-Text-Decoder model has been trained/fine-tuned, it can be saved/loaded just like any
     other models (see the examples for more information).
 
-    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config ([`VisionEncoderDecoderConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the
-            model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using the vision's model's feature extractor. For example, using
-            [`ViTFeatureExtractor`]. See [`ViTFeatureExtractor.__call__`] for
-            details.
+            [`ViTFeatureExtractor`]. See [`ViTFeatureExtractor.__call__`] for details.
         decoder_input_ids (`np.ndarray` or `tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`PreTrainedTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
 
@@ -90,32 +89,32 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             `past_key_values`).
 
             Provide for sequence to sequence training to the decoder. Indices can be obtained using
-            [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
+            details.
         decoder_attention_mask (`np.ndarray` or `tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
-            also be used by default.
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
         encoder_outputs (`tuple(tuple(tf.Tensor)`, *optional*):
-            This tuple must consist of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
-            `attentions`) `last_hidden_state` (`tf.Tensor` of shape `({0}, hidden_size)`) is a
-            tensor of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the
-            decoder.
+            This tuple must consist of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` (`tf.Tensor` of shape `({0}, hidden_size)`) is a tensor of hidden-states at the output
+            of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`tuple(tuple(tf.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `({0})`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `({0})`.
         decoder_inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. This is useful if you want more control over how to convert `decoder_input_ids`
-            indices into associated vectors than the model's internal embedding lookup matrix.
+            representation. This is useful if you want more control over how to convert `decoder_input_ids` indices
+            into associated vectors than the model's internal embedding lookup matrix.
         labels (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
-            Labels for computing the masked language modeling loss for the decoder. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            Labels for computing the masked language modeling loss for the decoder. Indices should be in `[-100, 0,
+            ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -123,8 +122,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~file_utils.Seq2SeqLMOutput`] instead of a
-            plain tuple.
+            If set to `True`, the model will return a [`~file_utils.Seq2SeqLMOutput`] instead of a plain tuple.
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -138,10 +136,10 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(VISION_ENCODER_DECODER_START_DOCSTRING)
 class TFVisionEncoderDecoderModel(TFPreTrainedModel):
     r"""
-    [`TFVisionEncoderDecoder`] is a generic model class that will be instantiated as a transformer
-    architecture with one of the base vision model classes of the library as encoder and another one of the base model
-    classes as decoder when created with the :meth*~transformers.TFAutoModel.from_pretrained* class method for the
-    encoder and :meth*~transformers.TFAutoModelForCausalLM.from_pretrained* class method for the decoder.
+    [`TFVisionEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture
+    with one of the base vision model classes of the library as encoder and another one of the base model classes as
+    decoder when created with the :meth*~transformers.TFAutoModel.from_pretrained* class method for the encoder and
+    :meth*~transformers.TFAutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
@@ -287,12 +285,14 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         >>> img = Image.open(requests.get(url, stream=True).raw)
         >>> pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values  # Batch size 1
 
-        >>> output_ids = model.generate(pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True).sequences
+        >>> output_ids = model.generate(
+        ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
+        >>> ).sequences
 
         >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         >>> preds = [pred.strip() for pred in preds]
 
-        >>> assert preds == ['a cat laying on top of a couch next to another cat']
+        >>> assert preds == ["a cat laying on top of a couch next to another cat"]
         ```"""
 
         from_pt = kwargs.pop("from_pt", False)
@@ -334,8 +334,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
-                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *pytorch checkpoint file* (e.g, `./pt_model/`). In this case,
@@ -358,9 +358,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
 
         ```python
         >>> from transformers import TFVisionEncoderDecoderModel
+
         >>> # initialize a vit-bert from a pretrained ViT and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
         >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     'google/vit-base-patch16-224-in21k', 'bert-base-uncased'
+        ...     "google/vit-base-patch16-224-in21k", "bert-base-uncased"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")
@@ -489,7 +490,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
 
         >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
         >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     'google/vit-base-patch16-224-in21k', 'gpt2'
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
         ... )
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

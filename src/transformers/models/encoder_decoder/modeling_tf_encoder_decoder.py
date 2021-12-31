@@ -148,8 +148,8 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
 class TFEncoderDecoderModel(TFPreTrainedModel):
     r"""
-    [`TFEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one of
-    the base model classes of the library as encoder and another one as decoder when created with the
+    [`TFEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one
+    of the base model classes of the library as encoder and another one as decoder when created with the
     :meth*~transformers.TFAutoModel.from_pretrained* class method for the encoder and
     :meth*~transformers.TFAutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
