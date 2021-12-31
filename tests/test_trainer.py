@@ -23,6 +23,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -61,6 +62,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from transformers.training_args import OptimizerNames
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -1690,3 +1692,85 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
             trainer.hyperparameter_search(
                 direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="sigopt", n_trials=4
             )
+
+
+@require_torch
+class TrainerOptimizerChoiceTest(unittest.TestCase):
+    def test_invalid_optimizer(self):
+        args = TrainingArguments(optim="bla", output_dir="None")
+        with self.assertRaises(ValueError):
+            Trainer.get_optimizercls_and_params(args)
+
+    def check_optim(self, args, mandatory_params, expected_cls):
+        """
+        Checks that the common case for an optimizer works.
+        """
+        actual_cls, optim_params = Trainer.get_optimizercls_and_params(args)
+        self.assertEqual(expected_cls, actual_cls)
+        self.assertIsNotNone(optim_params)
+
+        for p, v in mandatory_params.items():
+            self.assertTrue(p in optim_params)
+            actual_v = optim_params[p]
+            self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
+
+    def test_adafactor(self):
+        from transformers.optimization import Adafactor
+
+        args = TrainingArguments(optim=OptimizerNames.ADAFACTOR.value, output_dir="None")
+
+        mandatory_params = {"scale_parameter": False, "relative_step": False}
+
+        self.check_optim(args, mandatory_params, Adafactor)
+
+    def test_adam_hf(self):
+        from transformers.optimization import AdamW
+
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_HF.value, output_dir="None", learning_rate=0.3)
+
+        mandatory_params = {
+            "betas": (args.adam_beta1, args.adam_beta2),
+            "eps": args.adam_epsilon,
+            "lr": args.learning_rate,
+        }
+
+        self.check_optim(args, mandatory_params, AdamW)
+
+    def test_adam_torch(self):
+        from torch.optim import AdamW
+
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_TORCH.value, output_dir="None", learning_rate=0.3)
+
+        mandatory_params = {
+            "betas": (args.adam_beta1, args.adam_beta2),
+            "eps": args.adam_epsilon,
+            "lr": args.learning_rate,
+        }
+
+        self.check_optim(args, mandatory_params, AdamW)
+
+    def test_fused_adam(self):
+        args = TrainingArguments(optim=OptimizerNames.APEX_FUSED_ADAM.value, output_dir="None", learning_rate=0.3)
+
+        mandatory_params = {
+            "betas": (args.adam_beta1, args.adam_beta2),
+            "eps": args.adam_epsilon,
+            "lr": args.learning_rate,
+        }
+
+        mock = Mock()
+        modules = {
+            "apex": mock,
+            "apex.optimizers": mock.optimizers,
+            "apex.optimizers.FusedAdam": mock.optimizers.FusedAdam,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim(args, mandatory_params, mock.optimizers.FusedAdam)
+
+    def test_fused_adam_no_apex(self):
+        args = TrainingArguments(optim=OptimizerNames.APEX_FUSED_ADAM.value, output_dir="None")
+
+        # Pretend that apex does not exist, even if installed.
+        with patch.dict("sys.modules", {"apex": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizercls_and_params(args)

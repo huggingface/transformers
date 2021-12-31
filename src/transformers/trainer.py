@@ -820,40 +820,7 @@ class Trainer:
                 },
             ]
 
-            optimizer_kwargs = {"lr": self.args.learning_rate}
-
-            adam_kwargs = {
-                "betas": (self.args.adam_beta1, self.args.adam_beta2),
-                "eps": self.args.adam_epsilon,
-            }
-
-            # TODO the following code is a good candidate for PEP 622 once Python 3.10 becomes the
-            #  minimum required version. See, https://www.python.org/dev/peps/pep-0622/
-            if self.args.optim == OptimizerNames.ADAFACTOR.value:
-                optimizer_cls = Adafactor
-                optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
-            elif self.args.optim == OptimizerNames.ADAMW_HF.value:
-                from .optimization import AdamW
-
-                optimizer_cls = AdamW
-                optimizer_kwargs.update(adam_kwargs)
-            elif self.args.optim == OptimizerNames.ADAMW_TORCH.value:
-                from torch.optim import AdamW
-
-                optimizer_cls = AdamW
-                optimizer_kwargs.update(adam_kwargs)
-            elif self.args.optim == OptimizerNames.APEX_FUSED_ADAM.value:
-                try:
-                    from apex.optimizers import FusedAdam
-
-                    optimizer_cls = FusedAdam
-                    optimizer_kwargs.update(adam_kwargs)
-                except ImportError:
-                    raise ValueError(
-                        "Trainer attempted to instantiate apex.optimizers.FusedAdam but apex is not installed!"
-                    )
-            else:
-                raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {self.args.optim}")
+            optimizer_cls, optimizer_kwargs = Trainer.get_optimizercls_and_params(self.args)
 
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
                 self.optimizer = OSS(
@@ -868,6 +835,48 @@ class Trainer:
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
 
         return self.optimizer
+
+    @staticmethod
+    def get_optimizercls_and_params(args: TrainingArguments) -> Tuple[Any, Any]:
+        """
+        Returns the optimizer class and optimizer parameters based on the training arguments.
+
+        Args:
+            args (`transformers.training_args.TrainingArguments`):
+                The training arguments for the training session.
+
+        """
+        optimizer_kwargs = {"lr": args.learning_rate}
+        adam_kwargs = {
+            "betas": (args.adam_beta1, args.adam_beta2),
+            "eps": args.adam_epsilon,
+        }
+        # TODO the following code is a good candidate for PEP 622 once Python 3.10 becomes the
+        #  minimum required version. See, https://www.python.org/dev/peps/pep-0622/
+        if args.optim == OptimizerNames.ADAFACTOR.value:
+            optimizer_cls = Adafactor
+            optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
+        elif args.optim == OptimizerNames.ADAMW_HF.value:
+            from .optimization import AdamW
+
+            optimizer_cls = AdamW
+            optimizer_kwargs.update(adam_kwargs)
+        elif args.optim == OptimizerNames.ADAMW_TORCH.value:
+            from torch.optim import AdamW
+
+            optimizer_cls = AdamW
+            optimizer_kwargs.update(adam_kwargs)
+        elif args.optim == OptimizerNames.APEX_FUSED_ADAM.value:
+            try:
+                from apex.optimizers import FusedAdam
+
+                optimizer_cls = FusedAdam
+                optimizer_kwargs.update(adam_kwargs)
+            except ImportError:
+                raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
+        else:
+            raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
+        return optimizer_cls, optimizer_kwargs
 
     def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
         """
