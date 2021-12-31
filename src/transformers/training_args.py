@@ -69,7 +69,7 @@ def default_logdir() -> str:
     return os.path.join("runs", current_time + "_" + socket.gethostname())
 
 
-class OptimizerOptions(Enum):
+class OptimizerNames(Enum):
     """
     Stores the acceptable string identifiers for optimizers.
     """
@@ -655,8 +655,8 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     optim: str = field(
-        default=OptimizerOptions.ADAMW_HF.value,
-        metadata={"help": f'The optimizer to use: {", ".join([e.value for e in OptimizerOptions])}'},
+        default=OptimizerNames.ADAMW_HF.value,
+        metadata={"help": f'The optimizer to use: {", ".join([e.value for e in OptimizerNames])}'},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
@@ -832,7 +832,7 @@ class TrainingArguments:
                 "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim adafactor` instead",
                 FutureWarning,
             )
-            self.optim = OptimizerOptions.ADAFACTOR.value
+            self.optim = OptimizerNames.ADAFACTOR.value
 
         if (
             is_torch_available()

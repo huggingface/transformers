@@ -128,7 +128,7 @@ from .trainer_utils import (
     set_seed,
     speed_metrics,
 )
-from .training_args import OptimizerOptions, ParallelMode, TrainingArguments
+from .training_args import OptimizerNames, ParallelMode, TrainingArguments
 from .utils import logging
 
 
@@ -829,20 +829,20 @@ class Trainer:
 
             # TODO the following code is a good candidate for PEP 622 once Python 3.10 becomes the
             #  minimum required version. See, https://www.python.org/dev/peps/pep-0622/
-            if self.args.optim == OptimizerOptions.ADAFACTOR.value:
+            if self.args.optim == OptimizerNames.ADAFACTOR.value:
                 optimizer_cls = Adafactor
                 optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
-            elif self.args.optim == OptimizerOptions.ADAMW_HF.value:
+            elif self.args.optim == OptimizerNames.ADAMW_HF.value:
                 from .optimization import AdamW
 
                 optimizer_cls = AdamW
                 optimizer_kwargs.update(adam_kwargs)
-            elif self.args.optim == OptimizerOptions.ADAMW_TORCH.value:
+            elif self.args.optim == OptimizerNames.ADAMW_TORCH.value:
                 from torch.optim import AdamW
 
                 optimizer_cls = AdamW
                 optimizer_kwargs.update(adam_kwargs)
-            elif self.args.optim == OptimizerOptions.APEX_FUSED_ADAM.value:
+            elif self.args.optim == OptimizerNames.APEX_FUSED_ADAM.value:
                 try:
                     from apex.optimizers import FusedAdam
 
