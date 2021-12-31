@@ -656,7 +656,7 @@ class TrainingArguments:
     )
     optim: str = field(
         default=OptimizerNames.ADAMW_HF.value,
-        metadata={"help": f'The optimizer to use: {", ".join([e.value for e in OptimizerNames])}'},
+        metadata={"help": "The optimizer to use.", "choices": [e.value for e in OptimizerNames]},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
