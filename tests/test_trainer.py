@@ -27,7 +27,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-import transformers
+import transformers.optimization
 from huggingface_hub import Repository, delete_repo, login
 from parameterized import parameterized
 from requests.exceptions import HTTPError
