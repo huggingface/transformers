@@ -29,6 +29,7 @@ import numpy as np
 
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
+from parameterized import parameterized
 from transformers import (
     AutoTokenizer,
     IntervalStrategy,
@@ -38,6 +39,7 @@ from transformers import (
     logging,
 )
 from transformers.file_utils import WEIGHTS_NAME
+import transformers
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -1696,12 +1698,40 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
 
 @require_torch
 class TrainerOptimizerChoiceTest(unittest.TestCase):
+
+    test_params = [
+        (OptimizerNames.ADAM_HF.value, transformers.optimization.AdamW, {
+            "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+            "eps": TrainingArguments.adam_epsilon,
+            "lr": TrainingArguments.learning_rate,
+        }),
+        (OptimizerNames.ADAM_TORCH.value, torch.optim.AdamW, {
+            "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+            "eps": TrainingArguments.adam_epsilon,
+            "lr": TrainingArguments.learning_rate,
+        }),
+        (OptimizerNames.ADAFACTOR.value, transformers.optimization.Adafactor, {
+            "scale_parameter": False,
+            "relative_step": False,
+            "lr": TrainingArguments.learning_rate,
+        }),
+    ]
+
     def test_invalid_optimizer(self):
         args = TrainingArguments(optim="bla", output_dir="None")
         with self.assertRaises(ValueError):
             Trainer.get_optimizer_cls_and_kwargs(args)
 
-    def check_optim(self, args, mandatory_params, expected_cls):
+    @parameterized.expand(test_params)
+    def test_supported_optim(self, name: str, expected_cls, mandatory_kwargs):
+        """
+        Checks that the common case for an optimizer works.
+        """
+        args = TrainingArguments(optim=name, output_dir="None")
+
+        self.check_optim_and_kwargs(args, mandatory_kwargs, expected_cls)
+
+    def check_optim_and_kwargs(self, args, mandatory_params, expected_cls):
         """
         Checks that the common case for an optimizer works.
         """
@@ -1713,41 +1743,6 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             self.assertTrue(p in optim_kwargs)
             actual_v = optim_kwargs[p]
             self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
-
-    def test_adafactor(self):
-        from transformers.optimization import Adafactor
-
-        args = TrainingArguments(optim=OptimizerNames.ADAFACTOR.value, output_dir="None")
-
-        mandatory_params = {"scale_parameter": False, "relative_step": False}
-
-        self.check_optim(args, mandatory_params, Adafactor)
-
-    def test_adam_hf(self):
-        from transformers.optimization import AdamW
-
-        args = TrainingArguments(optim=OptimizerNames.ADAM_HF.value, output_dir="None", learning_rate=0.3)
-
-        mandatory_params = {
-            "betas": (args.adam_beta1, args.adam_beta2),
-            "eps": args.adam_epsilon,
-            "lr": args.learning_rate,
-        }
-
-        self.check_optim(args, mandatory_params, AdamW)
-
-    def test_adam_torch(self):
-        from torch.optim import AdamW
-
-        args = TrainingArguments(optim=OptimizerNames.ADAM_TORCH.value, output_dir="None", learning_rate=0.3)
-
-        mandatory_params = {
-            "betas": (args.adam_beta1, args.adam_beta2),
-            "eps": args.adam_epsilon,
-            "lr": args.learning_rate,
-        }
-
-        self.check_optim(args, mandatory_params, AdamW)
 
     def test_fused_adam(self):
         args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None", learning_rate=0.3)
