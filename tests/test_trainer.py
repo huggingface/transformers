@@ -1699,7 +1699,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_invalid_optimizer(self):
         args = TrainingArguments(optim="bla", output_dir="None")
         with self.assertRaises(ValueError):
-            Trainer.get_optimizercls_and_params(args)
+            Trainer.get_optimizer_cls_and_kwargs(args)
 
     def check_optim(self, args, mandatory_params, expected_cls):
         """
@@ -1773,4 +1773,4 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         # Pretend that apex does not exist, even if installed.
         with patch.dict("sys.modules", {"apex": None}):
             with self.assertRaises(ValueError):
-                Trainer.get_optimizercls_and_params(args)
+                Trainer.get_optimizer_cls_and_kwargs(args)
