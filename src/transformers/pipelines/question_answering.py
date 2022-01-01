@@ -293,9 +293,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
             # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
             # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+            # Careful `tok` might be None if it's an added token.
             p_mask = np.asarray(
                 [
-                    [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                    [tok == 0 if question_first else 1 for tok in encoded_inputs.sequence_ids(span_id)]
                     for span_id in range(num_spans)
                 ]
             )
@@ -361,6 +362,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                     others[k] = v
 
             is_last = i == len(features) - 1
+
             yield {"example": example, "is_last": is_last, **fw_args, **others}
 
     def _forward(self, inputs):
