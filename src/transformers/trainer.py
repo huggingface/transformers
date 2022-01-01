@@ -837,7 +837,7 @@ class Trainer:
         return self.optimizer
 
     @staticmethod
-    def get_optimizercls_and_params(args: TrainingArguments) -> Tuple[Any, Any]:
+    def get_optimizer_cls_and_kwargs(args: TrainingArguments) -> Tuple[Any, Any]:
         """
         Returns the optimizer class and optimizer parameters based on the training arguments.
 
