@@ -66,7 +66,7 @@ class NystromformerEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -139,7 +139,7 @@ class NystromformerSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.num_landmarks = config.num_landmarks
-        self.seq_len = config.seq_len
+        self.seq_len = config.max_position_embeddings
         self.conv_kernel_size = config.conv_kernel_size
         
         if config.inv_coeff_init_option:

@@ -66,8 +66,6 @@ class NystromformerConfig(PretrainedConfig):
         num_landmarks (:obj:`int`, `optional`, defaults to 64):
             The number of landmark (or Nystrom) points to used in Nystrom approximation of the softmax self-attention
             matrix.
-        seq_len (:obj:`int`, `optional`, defaults to 512):
-            The sequence length.
         conv_kernel_size (:obj:`int`, `optional`, defaults to 65):
             The kernel size of depthwise convolution used in Nystrom approximation.
         inv_coeff_init_option (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -98,22 +96,21 @@ class NystromformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30000,
+        vocab_size=50265,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
-        hidden_act="gelu",
+        hidden_act="gelu_new",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=2,
         num_landmarks=64,
-        seq_len=512,
         conv_kernel_size=65,
         inv_coeff_init_option=False,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=1,
         bos_token_id=0,
@@ -132,7 +129,6 @@ class NystromformerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.num_landmarks = num_landmarks
-        self.seq_len = seq_len
         self.conv_kernel_size = conv_kernel_size
         self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
