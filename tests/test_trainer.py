@@ -1710,8 +1710,8 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         self.assertIsNotNone(optim_kwargs)
 
         for p, v in mandatory_params.items():
-            self.assertTrue(p in optim_params)
-            actual_v = optim_params[p]
+            self.assertTrue(p in optim_kwargs)
+            actual_v = optim_kwargs[p]
             self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
 
     def test_adafactor(self):
