@@ -1707,7 +1707,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         """
         actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(args)
         self.assertEqual(expected_cls, actual_cls)
-        self.assertIsNotNone(optim_params)
+        self.assertIsNotNone(optim_kwargs)
 
         for p, v in mandatory_params.items():
             self.assertTrue(p in optim_params)
