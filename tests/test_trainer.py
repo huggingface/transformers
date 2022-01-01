@@ -1705,7 +1705,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         """
         Checks that the common case for an optimizer works.
         """
-        actual_cls, optim_params = Trainer.get_optimizercls_and_params(args)
+        actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(args)
         self.assertEqual(expected_cls, actual_cls)
         self.assertIsNotNone(optim_params)
 
