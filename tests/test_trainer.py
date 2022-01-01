@@ -27,9 +27,10 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
+import transformers
 from huggingface_hub import Repository, delete_repo, login
-from requests.exceptions import HTTPError
 from parameterized import parameterized
+from requests.exceptions import HTTPError
 from transformers import (
     AutoTokenizer,
     IntervalStrategy,
@@ -39,7 +40,6 @@ from transformers import (
     logging,
 )
 from transformers.file_utils import WEIGHTS_NAME
-import transformers
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -1698,23 +1698,32 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
 
 @require_torch
 class TrainerOptimizerChoiceTest(unittest.TestCase):
+    default_adam_kwargs = {
+        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+        "eps": TrainingArguments.adam_epsilon,
+        "lr": TrainingArguments.learning_rate,
+    }
 
     test_params = [
-        (OptimizerNames.ADAM_HF.value, transformers.optimization.AdamW, {
-            "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
-            "eps": TrainingArguments.adam_epsilon,
-            "lr": TrainingArguments.learning_rate,
-        }),
-        (OptimizerNames.ADAM_TORCH.value, torch.optim.AdamW, {
-            "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
-            "eps": TrainingArguments.adam_epsilon,
-            "lr": TrainingArguments.learning_rate,
-        }),
-        (OptimizerNames.ADAFACTOR.value, transformers.optimization.Adafactor, {
-            "scale_parameter": False,
-            "relative_step": False,
-            "lr": TrainingArguments.learning_rate,
-        }),
+        (
+            OptimizerNames.ADAM_HF.value,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAM_TORCH.value,
+            torch.optim.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAFACTOR.value,
+            transformers.optimization.Adafactor,
+            {
+                "scale_parameter": False,
+                "relative_step": False,
+                "lr": TrainingArguments.learning_rate,
+            },
+        ),
     ]
 
     def test_invalid_optimizer(self):
@@ -1727,32 +1736,27 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         """
         Checks that the common case for an optimizer works.
         """
-        args = TrainingArguments(optim=name, output_dir="None")
+        self.check_optim_and_kwargs(name, mandatory_kwargs, expected_cls)
 
-        self.check_optim_and_kwargs(args, mandatory_kwargs, expected_cls)
-
-    def check_optim_and_kwargs(self, args, mandatory_params, expected_cls):
+    def check_optim_and_kwargs(self, name, mandatory_kwargs, expected_cls):
         """
         Checks that the common case for an optimizer works.
         """
+        args = TrainingArguments(optim=name, output_dir="None")
         actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(args)
         self.assertEqual(expected_cls, actual_cls)
         self.assertIsNotNone(optim_kwargs)
 
-        for p, v in mandatory_params.items():
+        for p, v in mandatory_kwargs.items():
             self.assertTrue(p in optim_kwargs)
             actual_v = optim_kwargs[p]
             self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
 
     def test_fused_adam(self):
-        args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None", learning_rate=0.3)
-
-        mandatory_params = {
-            "betas": (args.adam_beta1, args.adam_beta2),
-            "eps": args.adam_epsilon,
-            "lr": args.learning_rate,
-        }
-
+        # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
+        # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam, but only has to return a
+        # class called, so mocking apex.optimizers.FusedAdam should be fine for testing and allow
+        # the test to run without requiring an apex installation.
         mock = Mock()
         modules = {
             "apex": mock,
@@ -1760,12 +1764,17 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "apex.optimizers.FusedAdam": mock.optimizers.FusedAdam,
         }
         with patch.dict("sys.modules", modules):
-            self.check_optim(args, mandatory_params, mock.optimizers.FusedAdam)
+            self.check_optim_and_kwargs(
+                OptimizerNames.ADAM_APEX_FUSED.value,
+                TrainerOptimizerChoiceTest.default_adam_kwargs,
+                mock.optimizers.FusedAdam,
+            )
 
     def test_fused_adam_no_apex(self):
         args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None")
 
-        # Pretend that apex does not exist, even if installed.
+        # Pretend that apex does not exist, even if installed. By setting apex to None, importing
+        # apex will fail even if apex is installed.
         with patch.dict("sys.modules", {"apex": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
