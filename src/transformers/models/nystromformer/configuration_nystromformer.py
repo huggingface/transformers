@@ -110,7 +110,6 @@ class NystromformerConfig(PretrainedConfig):
         inv_coeff_init_option=False,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        use_cache=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
