@@ -914,8 +914,11 @@ class FlaxRoFormerForMultipleChoiceModule(nn.Module):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[0]
+        # Equivalent to sequence_summary call in the PyTorch implementation
+        hidden_states = outputs[0]
+        pooled_output = hidden_states[:, -1]
         pooled_output = self.dropout(pooled_output, deterministic=deterministic)
+
         logits = self.classifier(pooled_output)
 
         reshaped_logits = logits.reshape(-1, num_choices)
