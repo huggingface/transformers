@@ -1696,15 +1696,14 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
             )
 
 
-@require_torch
-class TrainerOptimizerChoiceTest(unittest.TestCase):
+if is_torch_available():
     default_adam_kwargs = {
         "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
         "eps": TrainingArguments.adam_epsilon,
         "lr": TrainingArguments.learning_rate,
     }
 
-    test_params = [
+    optim_test_params = [
         (
             OptimizerNames.ADAM_HF.value,
             transformers.optimization.AdamW,
@@ -1725,18 +1724,34 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             },
         ),
     ]
+    if is_apex_available():
+        import apex
 
+        optim_test_params.append(
+            (
+                OptimizerNames.ADAM_APEX_FUSED.value,
+                apex.optimizers.FusedAdam,
+                default_adam_kwargs,
+            )
+        )
+
+
+@require_torch
+class TrainerOptimizerChoiceTest(unittest.TestCase):
     def test_invalid_optimizer(self):
         args = TrainingArguments(optim="bla", output_dir="None")
         with self.assertRaises(ValueError):
             Trainer.get_optimizer_cls_and_kwargs(args)
 
-    @parameterized.expand(test_params)
+    @parameterized.expand(optim_test_params)
     def test_supported_optim(self, name: str, expected_cls, mandatory_kwargs):
         """
         Checks that the common case for an optimizer works.
         """
         self.check_optim_and_kwargs(name, mandatory_kwargs, expected_cls)
+
+        trainer = get_regression_trainer(optim=name)
+        trainer.train()
 
     def check_optim_and_kwargs(self, name, mandatory_kwargs, expected_cls):
         """
@@ -1766,19 +1781,9 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
                 OptimizerNames.ADAM_APEX_FUSED.value,
-                TrainerOptimizerChoiceTest.default_adam_kwargs,
+                default_adam_kwargs,
                 mock.optimizers.FusedAdam,
             )
-
-    @unittest.skipUnless(is_apex_available(), "Skipping the test since apex is not installed")
-    def test_fused_adam_apex(self):
-        # This test is only run if apex is available, so importing should work fine.
-        from apex.optimizers import FusedAdam
-        self.check_optim_and_kwargs(
-            OptimizerNames.ADAM_APEX_FUSED.value,
-            TrainerOptimizerChoiceTest.default_adam_kwargs,
-            FusedAdam,
-        )
 
     def test_fused_adam_no_apex(self):
         args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None")
