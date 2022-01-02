@@ -1744,16 +1744,6 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             Trainer.get_optimizer_cls_and_kwargs(args)
 
-    @parameterized.expand(optim_test_params, skip_on_empty=True)
-    def test_supported_optim(self, name: str, expected_cls, mandatory_kwargs):
-        """
-        Checks that the common case for an optimizer works.
-        """
-        self.check_optim_and_kwargs(name, mandatory_kwargs, expected_cls)
-
-        trainer = get_regression_trainer(optim=name)
-        trainer.train()
-
     def check_optim_and_kwargs(self, name, mandatory_kwargs, expected_cls):
         """
         Checks that the common case for an optimizer works.
@@ -1767,6 +1757,16 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             self.assertTrue(p in optim_kwargs)
             actual_v = optim_kwargs[p]
             self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
+
+    @parameterized.expand(optim_test_params, skip_on_empty=True)
+    def test_supported_optim(self, name: str, expected_cls, mandatory_kwargs):
+        """
+        Checks that the common case for an optimizer works.
+        """
+        self.check_optim_and_kwargs(name, mandatory_kwargs, expected_cls)
+
+        trainer = get_regression_trainer(optim=name)
+        trainer.train()
 
     def test_fused_adam(self):
         # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
