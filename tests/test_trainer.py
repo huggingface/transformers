@@ -27,7 +27,6 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-import transformers.optimization
 from huggingface_hub import Repository, delete_repo, login
 from parameterized import parameterized
 from requests.exceptions import HTTPError
@@ -73,6 +72,7 @@ if is_torch_available():
     from torch import nn
     from torch.utils.data import IterableDataset
 
+    import transformers.optimization
     from transformers import (
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
