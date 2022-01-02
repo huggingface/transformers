@@ -24,11 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     MaskedLMOutput,
@@ -141,7 +137,7 @@ class NystromformerSelfAttention(nn.Module):
         self.num_landmarks = config.num_landmarks
         self.seq_len = config.seq_len
         self.conv_kernel_size = config.conv_kernel_size
-        
+
         if config.inv_coeff_init_option:
             self.init_option = config["inv_init_coeff_option"]
         else:
@@ -158,10 +154,13 @@ class NystromformerSelfAttention(nn.Module):
 
         if self.conv_kernel_size is not None:
             self.conv = nn.Conv2d(
-                in_channels = self.num_attention_heads, out_channels = self.num_attention_heads,
-                kernel_size = (self.conv_kernel_size, 1), padding = (self.conv_kernel_size // 2, 0),
-                bias = False,
-                groups = self.num_attention_heads)
+                in_channels=self.num_attention_heads,
+                out_channels=self.num_attention_heads,
+                kernel_size=(self.conv_kernel_size, 1),
+                padding=(self.conv_kernel_size // 2, 0),
+                bias=False,
+                groups=self.num_attention_heads,
+            )
 
     def iterative_inv(self, mat, n_iter=6):
         I = torch.eye(mat.size(-1), device=mat.device)

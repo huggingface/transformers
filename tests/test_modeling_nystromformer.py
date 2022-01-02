@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import NystromformerConfig, AlbertTokenizer, is_torch_available
+from transformers import AlbertTokenizer, NystromformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -288,9 +288,7 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.4532, -0.0936,  0.5137],
-                [-0.2676,  0.0628,  0.6186],
-                [-0.3629, -0.1726,  0.4716]]]
+            [[[-0.4532, -0.0936, 0.5137], [-0.2676, 0.0628, 0.6186], [-0.3629, -0.1726, 0.4716]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
@@ -307,9 +305,7 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-4.2054,  2.5545, -4.3157],
-         [-7.1428, 23.0433, -4.2694],
-         [-5.4785,  4.9240, -2.6824]]]
+            [[[-4.2054, 2.5545, -4.3157], [-7.1428, 23.0433, -4.2694], [-5.4785, 4.9240, -2.6824]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
@@ -318,11 +314,11 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
     def test_masked_lm_end_to_end(self):
         sentence = "the [MASK] of Belgium is Brussels"
 
-        tokenizer = AlbertTokenizer.from_pretrained('uw-madison/nystromformer-512')
+        tokenizer = AlbertTokenizer.from_pretrained("uw-madison/nystromformer-512")
         model = NystromformerForMaskedLM.from_pretrained("uw-madison/nystromformer-512")
-        
-        encoding = tokenizer(sentence, return_tensors = 'pt')
+
+        encoding = tokenizer(sentence, return_tensors="pt")
         token_logits = model(encoding.input_ids).logits
-        prediction = token_logits[:,2,:].argmax(-1)[0]
+        prediction = token_logits[:, 2, :].argmax(-1)[0]
 
         self.assertEqual(tokenizer.decode(prediction), "capital")
