@@ -36,7 +36,6 @@ class NystromformerConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 30000):
             Vocabulary size of the Nystromformer model. Defines the number of different tokens that can be represented
@@ -60,12 +59,11 @@ class NystromformerConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`NystromformerModel`] or
-            [`TFNystromformerModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`NystromformerModel`]-.
         seq_len (`int`, *optional*, defaults to 64):
             Sequence length used in segment-means.
         num_landmarks (`int`, *optional*, defaults to 64):
-            The number of landmark (or Nystrom) points to used in Nystrom approximation of the softmax self-attention
+            The number of landmark (or Nystrom) points to use in Nystrom approximation of the softmax self-attention
             matrix.
         conv_kernel_size (`int`, *optional*, defaults to 65):
             The kernel size of depthwise convolution used in Nystrom approximation.
