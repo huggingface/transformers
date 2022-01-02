@@ -2522,7 +2522,6 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
-
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
