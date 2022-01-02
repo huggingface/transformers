@@ -276,6 +276,7 @@ class NystromformerModelTest(ModelTesterMixin, unittest.TestCase):
             model = NystromformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+
 @require_torch
 class NystromformerModelIntegrationTest(unittest.TestCase):
     @slow
