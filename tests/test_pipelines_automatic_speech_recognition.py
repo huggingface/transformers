@@ -16,6 +16,7 @@ import unittest
 
 import numpy as np
 import pytest
+from datasets import load_dataset
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
@@ -26,14 +27,7 @@ from transformers import (
     Wav2Vec2ForCTC,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.testing_utils import (
-    is_pipeline_test,
-    require_datasets,
-    require_tf,
-    require_torch,
-    require_torchaudio,
-    slow,
-)
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_torchaudio, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -79,7 +73,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     def test_small_model_pt(self):
-        import numpy as np
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -105,11 +98,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 framework="pt",
             )
 
-    @require_datasets
     @require_torch
     @slow
     def test_torch_large(self):
-        import numpy as np
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -121,14 +112,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": ""})
 
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
-    @require_datasets
     @require_torch
     @slow
     def test_torch_speech_encoder_decoder(self):
@@ -139,8 +127,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             framework="pt",
         )
 
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
@@ -148,10 +134,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @slow
     @require_torch
-    @require_datasets
     def test_simple_wav2vec2(self):
-        import numpy as np
-        from datasets import load_dataset
 
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
@@ -177,10 +160,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_torchaudio
-    @require_datasets
     def test_simple_s2t(self):
-        import numpy as np
-        from datasets import load_dataset
 
         model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-mustc-en-it-st")
         tokenizer = AutoTokenizer.from_pretrained("facebook/s2t-small-mustc-en-it-st")
@@ -207,7 +187,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_torchaudio
-    @require_datasets
     def test_xls_r_to_en(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -215,8 +194,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             feature_extractor="facebook/wav2vec2-xls-r-1b-21-to-en",
             framework="pt",
         )
-
-        from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
@@ -226,7 +203,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_torchaudio
-    @require_datasets
     def test_xls_r_from_en(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -235,9 +211,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             framework="pt",
         )
 
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "Ein Mann sagte zu dem Universum, Sir, ich bin da."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_speech_to_text_leveraged(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-2-bart-base",
+            feature_extractor="patrickvonplaten/wav2vec2-2-bart-base",
+            tokenizer=AutoTokenizer.from_pretrained("patrickvonplaten/wav2vec2-2-bart-base"),
+            framework="pt",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "a man said to the universe sir i exist"})

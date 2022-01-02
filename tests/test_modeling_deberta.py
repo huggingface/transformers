@@ -275,7 +275,8 @@ class DebertaModelIntegrationTest(unittest.TestCase):
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
             [[[-0.5986, -0.8055, -0.8462], [1.4484, -0.9348, -0.8059], [0.3123, 0.0032, -1.4131]]]

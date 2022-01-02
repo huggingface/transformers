@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import os
 import unittest
 from typing import Tuple
 
@@ -21,6 +21,11 @@ from transformers import AddedToken, LukeTokenizer
 from transformers.testing_utils import require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
+
+
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/vocab.json")
+SAMPLE_MERGE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/merges.txt")
+SAMPLE_ENTITY_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_entity_vocab.json")
 
 
 class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
@@ -35,7 +40,15 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, task=None, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return self.tokenizer_class.from_pretrained("studio-ousia/luke-base", task=task, **kwargs)
+        tokenizer = LukeTokenizer(
+            vocab_file=SAMPLE_VOCAB,
+            merges_file=SAMPLE_MERGE_FILE,
+            entity_vocab_file=SAMPLE_ENTITY_VOCAB,
+            task=task,
+            **kwargs,
+        )
+        tokenizer.sanitize_special_tokens()
+        return tokenizer
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -43,24 +56,15 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/luke-base")
+        tokenizer = self.get_tokenizer()
         text = "lower newer"
-        bpe_tokens = ["lower", "\u0120newer"]
+        bpe_tokens = ["l", "o", "w", "er", "Ġ", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text)  # , add_prefix_space=True)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [29668, 13964, 3]
+        input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-    def luke_dict_integration_testing(self):
-        tokenizer = self.get_tokenizer()
-
-        self.assertListEqual(tokenizer.encode("Hello world!", add_special_tokens=False), [0, 31414, 232, 328, 2])
-        self.assertListEqual(
-            tokenizer.encode("Hello world! cécé herlolip 418", add_special_tokens=False),
-            [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
-        )
 
     @slow
     def test_sequence_builders(self):
@@ -235,6 +239,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer(sentence, entity_spans=[0, 0, 0])
 
 
+@slow
 @require_torch
 class LukeTokenizerIntegrationTests(unittest.TestCase):
     tokenizer_class = LukeTokenizer
