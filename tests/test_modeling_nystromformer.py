@@ -274,6 +274,25 @@ class NystromformerModelTest(ModelTesterMixin, unittest.TestCase):
             model = NystromformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="Head masking not implemented")
+    def test_head_pruning(self):
+        pass
+
+    @unittest.skip(reason="Head masking not implemented")
+    def test_head_pruning_integration(self):
+        pass
+
+    @unittest.skip(reason="Head masking not implemented")
+    def test_head_pruning_save_load_from_config_init(self):
+        pass
+
+    @unittest.skip(reason="Head masking not implemented")
+    def test_head_pruning_save_load_from_pretrained(self):
+        pass
+
+    @unittest.skip(reason="Head masking not implemented")
+    def test_headmasking(self):
+        pass
 
 @require_torch
 class NystromformerModelIntegrationTest(unittest.TestCase):
