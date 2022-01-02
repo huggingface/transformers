@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Funnel Transformer model configuration """
+""" Funnel Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -36,19 +36,18 @@ FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FunnelConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FunnelModel`] or a
-    [`TFBertModel`]. It is used to instantiate a Funnel Transformer model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the Funnel Transformer [funnel-transformer/small](https://huggingface.co/funnel-transformer/small) architecture.
+    This is the configuration class to store the configuration of a [`FunnelModel`] or a [`TFBertModel`]. It is used to
+    instantiate a Funnel Transformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Funnel
+    Transformer [funnel-transformer/small](https://huggingface.co/funnel-transformer/small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Funnel transformer. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`FunnelModel`] or
-            [`TFFunnelModel`].
+            by the `inputs_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
         block_sizes (`List[int]`, *optional*, defaults to `[4, 4, 4]`):
             The sizes of the blocks used in the model.
         block_repeats (`List[int]`, *optional*):
@@ -64,8 +63,8 @@ class FunnelConfig(PretrainedConfig):
         d_inner (`int`, *optional*, defaults to 3072):
             Inner dimension in the feed-forward blocks.
         hidden_act (`str` or `callable`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -76,8 +75,7 @@ class FunnelConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 3):
-            The vocabulary size of the `token_type_ids` passed when calling [`FunnelModel`] or
-            [`TFFunnelModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
         initializer_range (`float`, *optional*, defaults to 0.1):
             The standard deviation of the *uniform initializer* for initializing all weight matrices in attention
             layers.
@@ -90,8 +88,8 @@ class FunnelConfig(PretrainedConfig):
         pooling_type (`str`, *optional*, defaults to `"mean"`):
             Possible values are `"mean"` or `"max"`. The way pooling is performed at the beginning of each block.
         attention_type (`str`, *optional*, defaults to `"relative_shift"`):
-            Possible values are `"relative_shift"` or `"factorized"`. The former is faster on CPU/GPU while the
-            latter is faster on TPU.
+            Possible values are `"relative_shift"` or `"factorized"`. The former is faster on CPU/GPU while the latter
+            is faster on TPU.
         separate_cls (`bool`, *optional*, defaults to `True`):
             Whether or not to separate the cls token when applying pooling.
         truncate_seq (`bool`, *optional*, defaults to `False`):
