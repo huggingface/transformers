@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import NystromformerConfig, is_torch_available
+from transformers import NystromformerConfig, AlbertTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -278,20 +278,51 @@ class NystromformerModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class NystromformerModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = NystromformerForMaskedLM.from_pretrained("nystromformer-base-512")
+    def test_inference_no_head(self):
+        model = NystromformerModel.from_pretrained("uw-madison/nystromformer-512")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        expected_shape = torch.Size((1, 6, 768))
+        self.assertEqual(output.shape, expected_shape)
+
+        # TODO Replace values below with what was printed above.
+        expected_slice = torch.tensor(
+            [[[-0.4532, -0.0936,  0.5137],
+                [-0.2676,  0.0628,  0.6186],
+                [-0.3629, -0.1726,  0.4716]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_masked_lm(self):
+        model = NystromformerForMaskedLM.from_pretrained("uw-madison/nystromformer-512")
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+        vocab_size = 30000
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [[[-4.2054,  2.5545, -4.3157],
+         [-7.1428, 23.0433, -4.2694],
+         [-5.4785,  4.9240, -2.6824]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_masked_lm_end_to_end(self):
+        sentence = "the [MASK] of Belgium is Brussels"
+
+        tokenizer = AlbertTokenizer.from_pretrained('uw-madison/nystromformer-512')
+        model = NystromformerForMaskedLM.from_pretrained("uw-madison/nystromformer-512")
+        
+        encoding = tokenizer(sentence, return_tensors = 'pt')
+        token_logits = model(encoding.input_ids).logits
+        prediction = token_logits[:,2,:].argmax(-1)[0]
+
+        self.assertEqual(tokenizer.decode(prediction), "capital")

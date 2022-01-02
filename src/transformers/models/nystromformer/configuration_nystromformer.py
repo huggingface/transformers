@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nystromformer-base-512": "https://huggingface.co/nystromformer-base-512/resolve/main/config.json",
+    "uw-madison/nystromformer-512": "https://huggingface.co/uw-madison/nystromformer-512/resolve/main/config.json",
     # See all Nystromformer models at https://huggingface.co/models?filter=nystromformer
 }
 
@@ -31,7 +31,7 @@ class NystromformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.NystromformerModel`. It is
     used to instantiate an Nystromformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Nystromformer
-    `nystromformer-base-512 <https://huggingface.co/nystromformer-base-512>`__ architecture.
+    `uw-madison/nystromformer-512 <https://huggingface.co/uw-madison/nystromformer-512>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -63,6 +63,8 @@ class NystromformerConfig(PretrainedConfig):
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling
             :class:`~transformers.NystromformerModel` or :class:`~transformers.TFNystromformerModel`.
+        seq_len (:obj:`int`, `optional`, defaults to 64):
+            Sequence length used in segment-means.
         num_landmarks (:obj:`int`, `optional`, defaults to 64):
             The number of landmark (or Nystrom) points to used in Nystrom approximation of the softmax self-attention
             matrix.
@@ -83,10 +85,10 @@ class NystromformerConfig(PretrainedConfig):
 
         >>> from transformers import NystromformerModel, NystromformerConfig
 
-        >>> # Initializing a Nystromformer nystromformer-base-512 style configuration
+        >>> # Initializing a Nystromformer uw-madison/nystromformer-512 style configuration
         >>> configuration = NystromformerConfig()
 
-        >>> # Initializing a model from the nystromformer-base-512 style configuration
+        >>> # Initializing a model from the uw-madison/nystromformer-512 style configuration
         >>> model = NystromformerModel(configuration)
 
         >>> # Accessing the model configuration
@@ -96,7 +98,7 @@ class NystromformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=30000,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -104,8 +106,9 @@ class NystromformerConfig(PretrainedConfig):
         hidden_act="gelu_new",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
+        max_position_embeddings=510,
         type_vocab_size=2,
+        seq_len=64,
         num_landmarks=64,
         conv_kernel_size=65,
         inv_coeff_init_option=False,
@@ -128,6 +131,7 @@ class NystromformerConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
+        self.seq_len = seq_len
         self.num_landmarks = num_landmarks
         self.conv_kernel_size = conv_kernel_size
         self.inv_coeff_init_option = inv_coeff_init_option

@@ -24,17 +24,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "nystromformer-base-512": "https://huggingface.co/nystromformer-base-512/resolve/main/vocab.txt",
+        "uw-madison/nystromformer-512": "https://huggingface.co/uw-madison/nystromformer-512/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "nystromformer-base-512": 512,
+    "uw-madison/nystromformer-512": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "nystromformer-base-512": {"do_lower_case": False},
+    "uw-madison/nystromformer-512": {"do_lower_case": False},
 }
 
 

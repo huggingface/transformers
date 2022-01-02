@@ -49,7 +49,7 @@ def convert_checkpoint_helper(config, orig_state_dict):
             orig_state_dict[rename_key(key)] = val
 
     orig_state_dict['cls.predictions.bias']  = orig_state_dict['cls.predictions.decoder.bias']
-    orig_state_dict['nystromformer.embeddings.position_ids'] = torch.arange(config.max_position_embeddings).expand((1, -1)) 
+    orig_state_dict['nystromformer.embeddings.position_ids'] = torch.arange(config.max_position_embeddings).expand((1, -1)) + 2
     
     return orig_state_dict
 
@@ -61,8 +61,9 @@ def convert_nystromformer_checkpoint(checkpoint_path, nystromformer_config_file,
     model = NystromformerForMaskedLM(config)
     
     new_state_dict = convert_checkpoint_helper(config, orig_state_dict)
-    model.eval()
 
+    model.load_state_dict(new_state_dict)
+    model.eval()
     model.save_pretrained(pytorch_dump_path)
 
     print(f'Checkpoint successfuly converted. Model saved at {pytorch_dump_path}')

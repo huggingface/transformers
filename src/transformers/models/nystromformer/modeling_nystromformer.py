@@ -50,12 +50,12 @@ from .configuration_nystromformer import NystromformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "nystromformer-base-512"
+_CHECKPOINT_FOR_DOC = "uw-madison/nystromformer-512"
 _CONFIG_FOR_DOC = "NystromformerConfig"
 _TOKENIZER_FOR_DOC = "NystromformerTokenizer"
 
 NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nystromformer-base-512",
+    "uw-madison/nystromformer-512",
     # See all Nyströmformer models at https://huggingface.co/models?filter=nystromformer
 ]
 
@@ -66,7 +66,7 @@ class NystromformerEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -75,7 +75,7 @@ class NystromformerEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
@@ -139,7 +139,7 @@ class NystromformerSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.num_landmarks = config.num_landmarks
-        self.seq_len = config.max_position_embeddings
+        self.seq_len = config.seq_len
         self.conv_kernel_size = config.conv_kernel_size
         
         if config.inv_coeff_init_option:
