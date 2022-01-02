@@ -23,11 +23,7 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 
 _import_structure = {
     "configuration_nystromformer": ["NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "NystromformerConfig"],
-    "tokenization_nystromformer": ["NystromformerTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_nystromformer_fast"] = ["NystromformerTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_nystromformer"] = [
@@ -45,10 +41,6 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
-    from .tokenization_nystromformer import NystromformerTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_nystromformer_fast import NystromformerTokenizerFast
 
     if is_torch_available():
         from .modeling_nystromformer import (
