@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import AlbertTokenizer, NystromformerConfig, is_torch_available
+from transformers import AutoTokenizer, NystromformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -230,6 +230,8 @@ class NystromformerModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_pruning = False
+    test_headmasking = False
 
     def setUp(self):
         self.model_tester = NystromformerModelTester(self)
@@ -274,26 +276,6 @@ class NystromformerModelTest(ModelTesterMixin, unittest.TestCase):
             model = NystromformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Head masking not implemented")
-    def test_head_pruning(self):
-        pass
-
-    @unittest.skip(reason="Head masking not implemented")
-    def test_head_pruning_integration(self):
-        pass
-
-    @unittest.skip(reason="Head masking not implemented")
-    def test_head_pruning_save_load_from_config_init(self):
-        pass
-
-    @unittest.skip(reason="Head masking not implemented")
-    def test_head_pruning_save_load_from_pretrained(self):
-        pass
-
-    @unittest.skip(reason="Head masking not implemented")
-    def test_headmasking(self):
-        pass
-
 @require_torch
 class NystromformerModelIntegrationTest(unittest.TestCase):
     @slow
@@ -322,7 +304,6 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
             [[[-4.2054, 2.5545, -4.3157], [-7.1428, 23.0433, -4.2694], [-5.4785, 4.9240, -2.6824]]]
         )
@@ -333,7 +314,7 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
     def test_masked_lm_end_to_end(self):
         sentence = "the [MASK] of Belgium is Brussels"
 
-        tokenizer = AlbertTokenizer.from_pretrained("uw-madison/nystromformer-512")
+        tokenizer = AutoTokenizer.from_pretrained("uw-madison/nystromformer-512")
         model = NystromformerForMaskedLM.from_pretrained("uw-madison/nystromformer-512")
 
         encoding = tokenizer(sentence, return_tensors="pt")
