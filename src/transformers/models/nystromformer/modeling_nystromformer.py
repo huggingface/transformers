@@ -702,9 +702,7 @@ class NystromformerModel(NystromformerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Nyströmformer Model with a `language modeling` head on top.""", NYSTROMFORMER_START_DOCSTRING
-)
+@add_start_docstrings("""Nyströmformer Model with a `language modeling` head on top.""", NYSTROMFORMER_START_DOCSTRING)
 class NystromformerForMaskedLM(NystromformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
