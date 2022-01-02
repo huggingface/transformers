@@ -1739,15 +1739,7 @@ if is_torch_available():
 
 @require_torch
 class TrainerOptimizerChoiceTest(unittest.TestCase):
-    def test_invalid_optimizer(self):
-        args = TrainingArguments(optim="bla", output_dir="None")
-        with self.assertRaises(ValueError):
-            Trainer.get_optimizer_cls_and_kwargs(args)
-
     def check_optim_and_kwargs(self, name, mandatory_kwargs, expected_cls):
-        """
-        Checks that the common case for an optimizer works.
-        """
         args = TrainingArguments(optim=name, output_dir="None")
         actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(args)
         self.assertEqual(expected_cls, actual_cls)
@@ -1759,14 +1751,17 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
 
     @parameterized.expand(optim_test_params, skip_on_empty=True)
-    def test_supported_optim(self, name: str, expected_cls, mandatory_kwargs):
-        """
-        Checks that the common case for an optimizer works.
-        """
+    def test_optim_supported(self, name: str, expected_cls, mandatory_kwargs):
+        # exercises all the valid --optim options
         self.check_optim_and_kwargs(name, mandatory_kwargs, expected_cls)
 
         trainer = get_regression_trainer(optim=name)
         trainer.train()
+
+    def test_optim_unsupported(self):
+        args = TrainingArguments(optim="bogus", output_dir="None")
+        with self.assertRaises(ValueError):
+            Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_fused_adam(self):
         # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
