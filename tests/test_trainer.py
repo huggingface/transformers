@@ -39,7 +39,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.file_utils import WEIGHTS_NAME
+from transformers.file_utils import WEIGHTS_NAME, is_apex_available
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -1769,6 +1769,16 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                 TrainerOptimizerChoiceTest.default_adam_kwargs,
                 mock.optimizers.FusedAdam,
             )
+
+    @unittest.skipUnless(is_apex_available(), "Skipping the test since apex is not installed")
+    def test_fused_adam_apex(self):
+        # This test is only run if apex is available, so importing should work fine.
+        from apex.optimizers import FusedAdam
+        self.check_optim_and_kwargs(
+            OptimizerNames.ADAM_APEX_FUSED.value,
+            TrainerOptimizerChoiceTest.default_adam_kwargs,
+            FusedAdam,
+        )
 
     def test_fused_adam_no_apex(self):
         args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None")
