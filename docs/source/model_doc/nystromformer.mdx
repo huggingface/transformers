@@ -25,7 +25,7 @@ that drives the impressive performance of Transformers is the self-attention mec
 dependence of other tokens on each specific token. While beneficial, the quadratic complexity of self-attention on the
 input sequence length has limited its application to longer sequences -- a topic being actively studied in the
 community. To address this limitation, we propose Nyströmformer -- a model that exhibits favorable scalability as a
-function of sequence length. O ur idea is based on adapting the Nyström method to approximate standard self-attention
+function of sequence length. Our idea is based on adapting the Nyström method to approximate standard self-attention
 with O(n) complexity. The scalability of Nyströmformer enables application to longer sequences with thousands of
 tokens. We perform evaluations on multiple downstream tasks on the GLUE benchmark and IMDB reviews with standard
 sequence length, and find that our Nyströmformer performs comparably, or in a few cases, even slightly better, than
