@@ -1744,7 +1744,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             Trainer.get_optimizer_cls_and_kwargs(args)
 
-    @parameterized.expand(optim_test_params)
+    @parameterized.expand(optim_test_params, skip_on_empty=True)
     def test_supported_optim(self, name: str, expected_cls, mandatory_kwargs):
         """
         Checks that the common case for an optimizer works.
