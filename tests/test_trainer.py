@@ -1696,6 +1696,7 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
             )
 
 
+optim_test_params = []
 if is_torch_available():
     default_adam_kwargs = {
         "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
