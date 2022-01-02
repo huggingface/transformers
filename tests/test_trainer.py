@@ -1786,6 +1786,6 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
 
         # Pretend that apex does not exist, even if installed. By setting apex to None, importing
         # apex will fail even if apex is installed.
-        with patch.dict("sys.modules", {"apex": None}):
+        with patch.dict("sys.modules", {"apex.optimizers": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
