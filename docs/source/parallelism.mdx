@@ -199,7 +199,7 @@ Implementations:
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 - [OSLO](https://github.com/tunib-ai/oslo) - this is implemented based on the Hugging Face Transformers.
 
-🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive inter-layer model parallelism support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
+🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive PP support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
 
 Other approaches:
 
