@@ -39,11 +39,11 @@ The following is the brief description of the main concepts that will be describ
 5. Sharded DDP - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
 
 
-## Data Parallel
+## Data Parallelism
 
 Most users with just 2 GPUs already enjoy the increased training speed up thanks to DataParallel (DP) and DistributedDataParallel (DDP) that are almost trivial to use. This is a built-in feature of Pytorch.
 
-## ZeRO Data Parallel
+## ZeRO Data Parallelism
 
 ZeRO-powered data parallelism (ZeRO-DP) is described on the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
 ![DeepSpeed-Image-1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png)
@@ -124,7 +124,7 @@ Implementations:
 - [Fairscale](https://github.com/facebookresearch/fairscale/#optimizer-state-sharding-zero) ZeRO-DP stages 1+2+3
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
-## Naive Model Parallel (Vertical) and Pipeline Parallel
+## Naive Model Parallelism (Vertical) and Pipeline Parallelism
 
 Naive Model Parallel (MP) is where one spreads groups of model layers across multiple GPUs. The mechanism is relatively simple - switch the desired layers `.to()` the desired devices and now whenever the data goes in and out those layers switch the data to the same device as the layer and leave the rest unmodified.
 
