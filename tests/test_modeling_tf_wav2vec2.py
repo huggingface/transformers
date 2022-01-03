@@ -15,6 +15,7 @@
 
 
 import copy
+import glob
 import inspect
 import math
 import unittest
@@ -23,6 +24,7 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 
+from huggingface_hub import snapshot_download
 from transformers import Wav2Vec2Config, is_tf_available
 from transformers.file_utils import is_librosa_available, is_pyctcdecode_available
 from transformers.testing_utils import require_librosa, require_pyctcdecode, require_tf, slow
@@ -485,8 +487,6 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
 @slow
 class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
@@ -556,18 +556,17 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset("common_voice", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
+        downloaded_folder = snapshot_download("patrickvonplaten/common_voice_es_sample")
+        file_path = glob.glob(downloaded_folder + "/*")[0]
+        sample = librosa.load(file_path, sr=16_000)[0]
 
         model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
         processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
 
-        input_values = processor(resampled_audio, return_tensors="tf").input_values
+        input_values = processor(sample, return_tensors="tf").input_values
 
         logits = model(input_values).logits
 
         transcription = processor.batch_decode(logits.numpy()).text
 
-        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+        self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
