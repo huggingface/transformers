@@ -41,14 +41,17 @@ class XGLMConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 256008):
             Vocabulary size of the XGLM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`XGLMModel`] or [`FlaxXGLMModel`].
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         d_model (`int`, *optional*, defaults to 1024):
             Dimension of the layers and the pooler layer.
+        ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         num_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers Transformer decoder.
         attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -58,14 +61,13 @@ class XGLMConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layerdrop: (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        scale_embedding (`bool`, *optional*, defaults to `True`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -96,19 +98,19 @@ class XGLMConfig(PretrainedConfig):
         self,
         vocab_size=256008,
         max_position_embeddings=2048,
-        num_layers=24,
-        ffn_dim=4096,
-        attention_heads=16,
-        layerdrop=0.0,
-        use_cache=True,
-        activation_function="gelu",
         d_model=1024,
+        ffn_dim=4096,
+        num_layers=24,
+        attention_heads=16,
+        activation_function="gelu",
         dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.0,
+        layerdrop=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
         scale_embedding=True,
+        use_cache=True,
+        decoder_start_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -120,14 +122,14 @@ class XGLMConfig(PretrainedConfig):
         self.ffn_dim = ffn_dim
         self.num_layers = num_layers
         self.attention_heads = attention_heads
+        self.activation_function = activation_function
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
         self.layerdrop = layerdrop
-        self.use_cache = use_cache
+        self.init_std = init_std
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.use_cache = use_cache
 
         super().__init__(
             pad_token_id=pad_token_id,
