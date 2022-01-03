@@ -232,3 +232,30 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
+
+    @require_torch
+    @slow
+    def test_chunking(self):
+        model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+        tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            framework="pt",
+            chunk_length_ms=10_000,
+        )
+
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 100
+        audio = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio], batch_size=2)
+        expected_text = "A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats
+        expected = [{"text": expected_text.strip()}]
+        self.assertEqual(output, expected)
