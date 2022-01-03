@@ -1606,6 +1606,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForMaskedLM
         >>> from datasets import load_dataset
         >>> import soundfile as sf
+        >>> import torch
 
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
