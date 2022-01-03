@@ -506,7 +506,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
     def test_inference_large(self):
         model = WavLMModel.from_pretrained("microsoft/wavlm-large").to(torch_device)
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "microsoft/wavlm-base-plus", return_attention_mask=True
+            "microsoft/wavlm-large", return_attention_mask=True
         )
 
         input_speech = self._load_datasamples(2)
@@ -522,8 +522,9 @@ class WavLMModelIntegrationTest(unittest.TestCase):
             )
 
         EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
-            [[[0.1612, 0.4314], [0.1690, 0.4344]], [[0.2086, 0.1396], [0.3014, 0.0903]]]
+            [[[0.2122, 0.0500], [0.2118, 0.0563]], [[0.1353, 0.1818], [0.2453, 0.0595]]]
         )
+
         self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=5e-2))
 
     def test_inference_diarization(self):
