@@ -99,6 +99,7 @@ _deps = [
     "dataclasses",
     "datasets",
     "deepspeed>=0.5.7",
+    "einops",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -121,6 +122,7 @@ _deps = [
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "optuna",
+    "opt_einsum",
     "optax>=0.0.8",
     "packaging>=20.0",
     "parameterized",
@@ -129,6 +131,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
+    "pykeops",
     "pytest",
     "pytest-timeout",
     "pytest-xdist",
@@ -141,6 +144,7 @@ _deps = [
     "sacremoses",
     "sagemaker>=2.31.0",
     "scikit-learn",
+    "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "librosa",
@@ -265,6 +269,7 @@ extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
+extras["s4"] = deps_list("einops", "opt_einsum", "pykeops","scipy")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
