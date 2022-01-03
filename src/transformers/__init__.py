@@ -22,20 +22,8 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.15.0.dev0"
+__version__ = "4.16.0.dev0"
 
-# Work around to update TensorFlow's absl.logging threshold which alters the
-# default Python logging output behavior when present.
-# see: https://github.com/abseil/abseil-py/issues/99
-# and: https://github.com/tensorflow/tensorflow/issues/26691#issuecomment-500369493
-try:
-    import absl.logging
-except ImportError:
-    pass
-else:
-    absl.logging.set_verbosity("info")
-    absl.logging.set_stderrthreshold("info")
-    absl.logging._warn_preinit_stderr = False
 
 from typing import TYPE_CHECKING
 
@@ -887,6 +875,7 @@ if is_torch_available():
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ElectraForCausalLM",
             "ElectraForMaskedLM",
             "ElectraForMultipleChoice",
             "ElectraForPreTraining",
@@ -1556,6 +1545,15 @@ if is_tf_available():
             "TFCamembertForSequenceClassification",
             "TFCamembertForTokenClassification",
             "TFCamembertModel",
+        ]
+    )
+    _import_structure["models.clip"].extend(
+        [
+            "TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCLIPModel",
+            "TFCLIPPreTrainedModel",
+            "TFCLIPTextModel",
+            "TFCLIPVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -2832,6 +2830,7 @@ if TYPE_CHECKING:
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ElectraForCausalLM,
             ElectraForMaskedLM,
             ElectraForMultipleChoice,
             ElectraForPreTraining,
@@ -3405,6 +3404,13 @@ if TYPE_CHECKING:
             TFCamembertForSequenceClassification,
             TFCamembertForTokenClassification,
             TFCamembertModel,
+        )
+        from .models.clip import (
+            TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCLIPModel,
+            TFCLIPPreTrainedModel,
+            TFCLIPTextModel,
+            TFCLIPVisionModel,
         )
         from .models.convbert import (
             TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

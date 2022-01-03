@@ -149,7 +149,9 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_tokenizers
     def test_tokenizer_identifier_non_existent(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast, AutoTokenizer]:
-            with self.assertRaises(EnvironmentError):
+            with self.assertRaisesRegex(
+                ValueError, ".*is not a local path or a model identifier on the model Hub. Did you make a typo?"
+            ):
                 _ = tokenizer_class.from_pretrained("julien-c/herlolip-not-exists")
 
     def test_parents_and_children_in_mappings(self):
@@ -207,6 +209,7 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer.vocab_size, 30000)
         self.assertEqual(tokenizer.unk_token, "[UNK]")
         self.assertEqual(tokenizer.padding_side, "right")
+        self.assertEqual(tokenizer.truncation_side, "right")
 
     def test_auto_tokenizer_from_local_folder(self):
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)

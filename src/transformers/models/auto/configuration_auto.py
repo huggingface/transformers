@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Config class. """
+""" Auto Config class."""
 import importlib
 import re
 import warnings
@@ -281,6 +281,16 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("unispeech-sat", "UniSpeechSat"),
         ("unispeech", "UniSpeech"),
         ("wavlm", "WavLM"),
+        ("bort", "BORT"),
+        ("dialogpt", "DialoGPT"),
+        ("xls_r", "XLS-R"),
+        ("t5v1.1", "T5v1.1"),
+        ("herbert", "HerBERT"),
+        ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
+        ("megatron_gpt2", "MegatronGPT2"),
+        ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
+        ("mluke", "mLUKE"),
+        ("layoutxlm", "LayoutXLM"),
     ]
 )
 
@@ -413,8 +423,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPP
 
 def _get_class_name(model_class: Union[str, List[str]]):
     if isinstance(model_class, (list, tuple)):
-        return " or ".join([f":class:`~transformers.{c}`" for c in model_class if c is not None])
-    return f":class:`~transformers.{model_class}`"
+        return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
+    return f"[`{model_class}`]"
 
 
 def _list_model_options(indent, config_to_class=None, use_model_types=True):
@@ -422,9 +432,7 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
         raise ValueError("Using `use_model_types=False` requires a `config_to_class` dictionary.")
     if use_model_types:
         if config_to_class is None:
-            model_type_to_name = {
-                model_type: f":class:`~transformers.{config}`" for model_type, config in CONFIG_MAPPING_NAMES.items()
-            }
+            model_type_to_name = {model_type: f"[`{config}`]" for model_type, config in CONFIG_MAPPING_NAMES.items()}
         else:
             model_type_to_name = {
                 model_type: _get_class_name(model_class)
@@ -445,7 +453,7 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
             config: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING_NAMES.items()
         }
         lines = [
-            f"{indent}- :class:`~transformers.{config_name}` configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
+            f"{indent}- [`{config_name}`] configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
             for config_name in sorted(config_to_name.keys())
         ]
     return "\n".join(lines)
@@ -477,9 +485,9 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
 class AutoConfig:
     r"""
     This is a generic configuration class that will be instantiated as one of the configuration classes of the library
-    when created with the :meth:`~transformers.AutoConfig.from_pretrained` class method.
+    when created with the [`~AutoConfig.from_pretrained`] class method.
 
-    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    This class cannot be instantiated directly using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -503,81 +511,85 @@ class AutoConfig:
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 
-        The configuration class to instantiate is selected based on the :obj:`model_type` property of the config object
-        that is loaded, or when it's missing, by falling back to using pattern matching on
-        :obj:`pretrained_model_name_or_path`:
+        The configuration class to instantiate is selected based on the `model_type` property of the config object that
+        is loaded, or when it's missing, by falling back to using pattern matching on `pretrained_model_name_or_path`:
 
         List options
 
         Args:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
                 Can be either:
 
-                    - A string, the `model id` of a pretrained model configuration hosted inside a model repo on
-                      huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-                      namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing a configuration file saved using the
-                      :meth:`~transformers.PretrainedConfig.save_pretrained` method, or the
-                      :meth:`~transformers.PreTrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
-                    - A path or url to a saved configuration JSON `file`, e.g.,
-                      ``./my_model_directory/configuration.json``.
-            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
+                    - A string, the *model id* of a pretrained model configuration hosted inside a model repo on
+                      huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                      namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                    - A path to a *directory* containing a configuration file saved using the
+                      [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
+                      e.g., `./my_model_directory/`.
+                    - A path or url to a saved configuration JSON *file*, e.g.,
+                      `./my_model_directory/configuration.json`.
+            cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
-            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the model weights and configuration files and override the
                 cached versions if they exist.
-            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
-            proxies (:obj:`Dict[str, str]`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                If :obj:`False`, then this function returns just the final configuration object.
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                If `False`, then this function returns just the final configuration object.
 
-                If :obj:`True`, then this functions returns a :obj:`Tuple(config, unused_kwargs)` where `unused_kwargs`
-                is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
-                the part of ``kwargs`` which has not been used to update ``config`` and is otherwise ignored.
-            trust_remote_code (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+            trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
-                should only be set to :obj:`True` for repositories you trust and in which you have read the code, as it
-                will execute code present on the Hub on your local machine.
-            kwargs(additional keyword arguments, `optional`):
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
+            kwargs(additional keyword arguments, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
-                by the ``return_unused_kwargs`` keyword parameter.
+                by the `return_unused_kwargs` keyword parameter.
 
-        Examples::
+        Examples:
 
-            >>> from transformers import AutoConfig
+        ```python
+        >>> from transformers import AutoConfig
 
-            >>> # Download configuration from huggingface.co and cache.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+        >>> # Download configuration from huggingface.co and cache.
+        >>> config = AutoConfig.from_pretrained("bert-base-uncased")
 
-            >>> # Download configuration from huggingface.co (user-uploaded) and cache.
-            >>> config = AutoConfig.from_pretrained('dbmdz/bert-base-german-cased')
+        >>> # Download configuration from huggingface.co (user-uploaded) and cache.
+        >>> config = AutoConfig.from_pretrained("dbmdz/bert-base-german-cased")
 
-            >>> # If configuration file is in a directory (e.g., was saved using `save_pretrained('./test/saved_model/')`).
-            >>> config = AutoConfig.from_pretrained('./test/bert_saved_model/')
+        >>> # If configuration file is in a directory (e.g., was saved using *save_pretrained('./test/saved_model/')*).
+        >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/")
 
-            >>> # Load a specific configuration file.
-            >>> config = AutoConfig.from_pretrained('./test/bert_saved_model/my_configuration.json')
+        >>> # Load a specific configuration file.
+        >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/my_configuration.json")
 
-            >>> # Change some config attributes when loading a pretrained config.
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
-            >>> config.output_attentions
-            True
-            >>> config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False, return_unused_kwargs=True)
-            >>> config.output_attentions
-            True
-            >>> config.unused_kwargs
-            {'foo': False}
-        """
+        >>> # Change some config attributes when loading a pretrained config.
+        >>> config = AutoConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        >>> config.output_attentions
+        True
+
+        >>> config, unused_kwargs = AutoConfig.from_pretrained(
+        ...     "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        ... )
+        >>> config.output_attentions
+        True
+
+        >>> config.unused_kwargs
+        {'foo': False}
+        ```"""
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", False)
@@ -621,8 +633,8 @@ class AutoConfig:
         Register a new configuration for this class.
 
         Args:
-            model_type (:obj:`str`): The model type like "bert" or "gpt".
-            config (:class:`~transformers.PretrainedConfig`): The config to register.
+            model_type (`str`): The model type like "bert" or "gpt".
+            config ([`PretrainedConfig`]): The config to register.
         """
         if issubclass(config, PretrainedConfig) and config.model_type != model_type:
             raise ValueError(

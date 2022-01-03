@@ -52,7 +52,7 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
-    from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
+    from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteria, StoppingCriteriaList
     from transformers.generation_utils import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -1644,6 +1644,55 @@ class GenerationIntegrationTests(unittest.TestCase):
         # BeamSearchScorer max_length should not influence "real" max_length
         self.assertEqual(generated_ids.tolist(), generated_ids_no_max_len.tolist())
 
+    def test_custom_stopping_criteria_overload_error(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        stopping_criteria = StoppingCriteriaList()
+        stopping_criteria.append(MaxLengthCriteria(max_length=42))
+        with self.assertRaises(ValueError):
+            bart_model.generate(input_ids, stopping_criteria=stopping_criteria)
+        with self.assertRaises(ValueError):
+            bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=32)
+
+    def test_custom_stopping_criteria(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        class DummyCriteria(StoppingCriteria):
+            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+                return input_ids.shape[-1] >= 20
+
+        stopping_criteria = StoppingCriteriaList()
+        stopping_criteria.append(DummyCriteria())
+
+        self.assertEqual(
+            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=22).shape),
+            [1, 20],
+        )
+        self.assertEqual(
+            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=18).shape),
+            [1, 18],
+        )
+
+    def test_custom_logits_processor(self):
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        logits_processor = LogitsProcessorList()
+        logits_processor.append(MinLengthLogitsProcessor(min_length=10, eos_token_id=0))
+        with self.assertRaises(ValueError):
+            bart_model.generate(input_ids, logits_processor=logits_processor)
+
+        bart_model.config.min_length = None
+        bart_model.generate(input_ids, logits_processor=logits_processor)
+
     def test_max_new_tokens_encoder_decoder(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
@@ -1807,7 +1856,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
         with self.assertRaises(ValueError):
-            model.generate(input_ids=input_ids, input_values=input_ids)
+            model.generate(input_ids=input_ids, inputs_embeds=input_ids)
 
     def test_generate_input_values_as_encoder_kwarg(self):
         input_values = floats_tensor((2, 250))
@@ -1838,3 +1887,19 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (2, 5))
+
+    def test_generate_encoder_outputs_attention_mask(self):
+        input_values = floats_tensor((2, 250)).to(torch_device)
+        attention_mask = torch.ones_like(input_values)
+        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
+        model = model.to(torch_device)
+
+        encoder = model.get_encoder()
+
+        encoder_outputs = encoder(input_values)
+
+        output_sequences_no_mask = model.generate(encoder_outputs=encoder_outputs).cpu()
+        output_sequences_with_mask = model.generate(encoder_outputs=encoder_outputs, attention_mask=attention_mask)
+        output_sequences_with_mask = output_sequences_with_mask.cpu()
+
+        self.assertListEqual(output_sequences_no_mask.tolist(), output_sequences_with_mask.tolist())

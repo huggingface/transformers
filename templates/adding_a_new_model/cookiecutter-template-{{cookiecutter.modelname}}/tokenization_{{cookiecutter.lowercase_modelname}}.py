@@ -43,10 +43,10 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BertTokenizer):
     r"""
     Construct a {{cookiecutter.modelname}} tokenizer.
 
-    :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    [`~{{cookiecutter.camelcase_modelname}}Tokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
     parameters.
     """
 
@@ -85,10 +85,10 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BartTokenizer):
     """
     Construct a {{cookiecutter.modelname}} tokenizer.
 
-    :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer` is identical to :class:`~transformers.BartTokenizer` and runs end-to-end
+    [`~{{cookiecutter.camelcase_modelname}}Tokenizer`] is identical to [`BartTokenizer`] and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BartTokenizer` for usage examples and documentation concerning
+    Refer to superclass [`BartTokenizer`] for usage examples and documentation concerning
     parameters.
     """
 
@@ -125,7 +125,7 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
     Construct a {{cookiecutter.modelname}} tokenizer. Based on byte-level Byte-Pair-Encoding.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
     """
 
@@ -173,11 +173,11 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
         Save the vocabulary and special tokens file to a directory.
 
         Args:
-            save_directory (:obj:`str`):
+            save_directory (`str`):
                 The directory in which to save the vocabulary.
 
         Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
+            `Tuple(str)`: Paths to the files saved.
         """
 
     def build_inputs_with_special_tokens(
@@ -188,17 +188,17 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
         by concatenating and adding special tokens.
         A {{cookiecutter.modelname}} sequence has the following format:
 
-        - single sequence: ``<s> X </s>``
-        - pair of sequences: ``<s> A </s></s> B </s>``
+        - single sequence: `<s> X </s>`
+        - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -211,18 +211,18 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -241,13 +241,13 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
         {{cookiecutter.modelname}} does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`:  List of zeros.
+            `List[int]`:  List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -264,10 +264,10 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
 
 class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" {{cookiecutter.modelname}} tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" {{cookiecutter.modelname}} tokenizer (backed by HuggingFace's *tokenizers* library).
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
     """
 
@@ -317,13 +317,13 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast)
         {{cookiecutter.modelname}} does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`:  List of zeros.
+            `List[int]`:  List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

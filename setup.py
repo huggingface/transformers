@@ -24,11 +24,11 @@ To create the package for pypi.
 
 3. Unpin specific versions from setup.py that use a git install.
 
-4. Commit these changes with the message: "Release: VERSION" and push.
+4. Commit these changes with the message: "Release: <VERSION>" and push.
 
 5. Wait for the tests on master to be completed and be green (otherwise revert and fix bugs)
 
-6. Add a tag in git to mark the release: "git tag <VERSION> -m 'Adds tag <VERSION> for pypi' "
+6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
    Push the tag to git: git push --tags origin master
 
 7. Build both the sources and the wheel. Do not change anything in setup.py between
@@ -70,6 +70,7 @@ from distutils.core import Command
 from pathlib import Path
 
 from setuptools import find_packages, setup
+
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
@@ -148,7 +149,7 @@ _deps = [
     "tensorflow>=2.3",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.10.1,<0.11",
+    "tokenizers>=0.10.1",
     "torch>=1.0",
     "torchaudio",
     "pyctcdecode>=0.2.0",
@@ -256,7 +257,8 @@ extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
-extras["speech"] = deps_list("torchaudio") + extras["audio"]  # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
+# `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
+extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
@@ -267,7 +269,18 @@ extras["codecarbon"] = deps_list("codecarbon")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
-        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-timeout", "black", "sacrebleu", "rouge-score", "nltk", "GitPython"
+        "pytest",
+        "pytest-xdist",
+        "timeout-decorator",
+        "parameterized",
+        "psutil",
+        "datasets",
+        "pytest-timeout",
+        "black",
+        "sacrebleu",
+        "rouge-score",
+        "nltk",
+        "GitPython",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -338,7 +351,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.15.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.16.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
