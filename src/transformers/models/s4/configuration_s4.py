@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" S4 model configuration """
+""" S4 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -87,8 +87,9 @@ class S4Config(PretrainedConfig):
             The discretization step size (maximum).
         trainable_s4_params (:obj:`dict`, `optional`, defaults to :obj:`{"A":1, "B":2, "C":1, "dt":1}`):
             The parameters of the S4 model that are trainable.
-        learning_rate_s4_params (:obj:`dict`, `optional`, defaults to :obj:`{"A":0.0005, "B":0.0005, "C":null "dt":0.0005}`):
-            The learning rate of the S4 model parameters.
+        learning_rate_s4_params (:
+            obj:`dict`, `optional`, defaults to :obj:`{"A":0.0005, "B":0.0005, "C":null "dt":0.0005}`): The learning
+            rate of the S4 model parameters.
         cache (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to cache the SS Kernel during evaluation.
         weight_decay (:obj:`float`, `optional`, defaults to :obj:`0.0`):

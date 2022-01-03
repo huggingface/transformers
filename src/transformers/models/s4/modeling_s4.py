@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch S4 model. """
+""" PyTorch S4 model."""
 
 
 import functools
@@ -164,7 +164,7 @@ class S4Embedding(nn.Module):
         return embed
 
 
-""" Cauchy kernel """
+""" Cauchy kernel"""
 
 
 def _broadcast_dims(*tensors):
@@ -216,7 +216,7 @@ def _conj(x):
     return torch.cat([x, x.conj()], dim=-1)
 
 
-""" simple nn.Module components """
+""" simple nn.Module components"""
 
 
 def Activation(activation=None, dim=-1):
@@ -323,7 +323,7 @@ def LinearActivation(
     return linear
 
 
-""" Misc functional utilities """
+""" Misc functional utilities"""
 
 
 def krylov(L, A, b, c=None, return_power=False):
@@ -420,7 +420,7 @@ def power(L, A, v=None):
     return I, v.squeeze(-1)
 
 
-""" HiPPO utilities """
+""" HiPPO utilities"""
 
 
 def transition(measure, N, **measure_args):
@@ -535,7 +535,7 @@ def nplr(measure, N, rank=1, dtype=torch.float):
     return w, p, p, B, V
 
 
-""" Final S4 Module """
+""" Final S4 Module"""
 
 
 class OptimModule(nn.Module):
@@ -1749,8 +1749,9 @@ class S4LMHeadModelOutput(ModelOutput):
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
     Args:
-        losses (:obj:`torch.FloatTensor` of shape `(batch_size, sequence_length-1)`, `optional`, returned when ``labels`` is provided)
-            Language modeling losses (not reduced).
+        losses (:
+            obj:`torch.FloatTensor` of shape `(batch_size, sequence_length-1)`, `optional`, returned when ``labels`` is
+            provided) Language modeling losses (not reduced).
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
     """
@@ -2067,7 +2068,7 @@ class S4Model(S4PreTrainedModel):
         )
 
 
-@add_start_docstrings("""S4 Model with a `language modeling` head on top for CLM fine-tuning. """, S4_START_DOCSTRING)
+@add_start_docstrings("""S4 Model with a `language modeling` head on top for CLM fine-tuning.""", S4_START_DOCSTRING)
 class S4LMHeadModel(S4PreTrainedModel):
     def __init__(self, config: S4Config):
         super().__init__(config)
