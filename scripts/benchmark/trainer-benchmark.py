@@ -208,9 +208,9 @@ def process_run_single(id, cmd, variation, output_dir, target_metric_key, metric
 
     # save the streams
     prefix = variation.replace(" ", "-")
-    with open(Path(output_dir) / f"{prefix}.stdout.txt", "w") as f:
+    with open(Path(output_dir) / f"log.{prefix}.stdout.txt", "w") as f:
         f.write(result.stdout)
-    with open(Path(output_dir) / f"{prefix}.stderr.txt", "w") as f:
+    with open(Path(output_dir) / f"log.{prefix}.stderr.txt", "w") as f:
         f.write(result.stderr)
 
     if result.returncode != 0:
@@ -396,7 +396,7 @@ def main():
 
     # capture prints into a log file for convenience
     report_fn = f"benchmark-report-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.txt"
-    print(f"\nNote: each run's output is also logged under {output_dir}/*.std*.txt")
+    print(f"\nNote: each run's output is also logged under {output_dir}/log.*.std*.txt")
     print(f"and this script's output is also piped into {report_fn}")
 
     sys.stdout = Tee(report_fn)
