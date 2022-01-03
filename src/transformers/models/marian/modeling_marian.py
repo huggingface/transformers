@@ -1519,10 +1519,12 @@ class MarianForCausalLM(MarianPreTrainedModel):
         ```python
         >>> from transformers import MarianTokenizer, MarianForCausalLM
 
-        >>> tokenizer = MarianTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = MarianForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
+        >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-fr-en", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        >>> with tokenizer.as_target_tokenizer():
+        >>>     inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
