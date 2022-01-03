@@ -1,4 +1,4 @@
-# Image Captioning (vision-encoder-text-decoder model) training examples
+# Image Captioning (vision-encoder-text-decoder model) training example
 
 The following example showcases how to finetune a vision-encoder-text-decoder model for image captioning
 using the JAX/Flax backend, leveraging 🤗 Transformers library's [FlaxVisionEncoderDecoderModel](FlaxVisionEncoderDecoderModel).
