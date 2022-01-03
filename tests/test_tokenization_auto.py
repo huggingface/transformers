@@ -209,6 +209,7 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer.vocab_size, 30000)
         self.assertEqual(tokenizer.unk_token, "[UNK]")
         self.assertEqual(tokenizer.padding_side, "right")
+        self.assertEqual(tokenizer.truncation_side, "right")
 
     def test_auto_tokenizer_from_local_folder(self):
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
