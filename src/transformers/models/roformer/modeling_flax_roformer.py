@@ -279,10 +279,9 @@ class FlaxRoFormerSelfAttention(nn.Module):
 
         def rotate_layer(layer, sin_pos, cos_pos):
             rotate_half_layer = jnp.stack([-layer[..., 1::2], layer[..., ::2]], axis=-1).reshape(layer.shape)
-            # return layer * cos_pos + rotate_half_layer * sin_pos
-            return jnp.einsum("bslh,...sh->bslh", layer, cos_pos) + jnp.einsum(
-                "bslh,...sh->bslh", rotate_half_layer, sin_pos
-            )
+            rotary_matrix_cos = jnp.einsum("bslh,...sh->bslh", layer, cos_pos)
+            rotary_matrix_sin = jnp.einsum("bslh,...sh->bslh", rotate_half_layer, sin_pos)
+            return rotary_matrix_cos + rotary_matrix_sin
 
         query_layer = rotate_layer(query_layer, sin_pos, cos_pos)
         key_layer = rotate_layer(key_layer, sin_pos, cos_pos)
@@ -702,17 +701,13 @@ class FlaxRoFormerModule(nn.Module):
         self,
         input_ids,
         attention_mask,
-        token_type_ids: Optional[np.ndarray] = None,
-        head_mask: Optional[np.ndarray] = None,
+        token_type_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        # make sure `token_type_ids` is correctly initialized when not passed
-        if token_type_ids is None:
-            token_type_ids = jnp.zeros_like(input_ids)
-
         hidden_states = self.embeddings(input_ids, token_type_ids, attention_mask, deterministic=deterministic)
         outputs = self.encoder(
             hidden_states,
@@ -898,9 +893,9 @@ class FlaxRoFormerForMultipleChoiceModule(nn.Module):
         return_dict: bool = True,
     ):
         num_choices = input_ids.shape[1]
-        input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
-        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
-        token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1]) if token_type_ids is not None else None
+        input_ids = input_ids.reshape(-1, input_ids.shape[-1])
+        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1])
+        token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1])
 
         # Model
         outputs = self.roformer(

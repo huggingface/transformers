@@ -1,4 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
+    import jax.numpy as jnp
     from transformers.models.roformer.modeling_flax_roformer import (
         FlaxRoFormerForMaskedLM,
         FlaxRoFormerForMultipleChoice,
@@ -140,3 +141,25 @@ class FlaxRoFormerModelTest(FlaxModelTesterMixin, unittest.TestCase):
             model = model_class_name.from_pretrained("junnyu/roformer_chinese_small", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
+
+
+@require_flax
+class FlaxRoFormerModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = FlaxRoFormerForMaskedLM.from_pretrained("junnyu/roformer_chinese_base", from_pt=True)
+        input_ids = jnp.array([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        # TODO Replace vocab size
+        vocab_size = 50000
+
+        expected_shape = (1, 6, vocab_size)
+        self.assertEqual(output.shape, expected_shape)
+
+        # TODO Replace values below with what was printed above.
+        expected_slice = jnp.array(
+            [[[-0.1205, -1.0265, 0.2922], [-1.5134, 0.1974, 0.1519], [-5.0135, -3.9003, -0.8404]]]
+        )
+
+        self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
