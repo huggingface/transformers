@@ -356,6 +356,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "max_length": max_length,
                 "stride": stride,
                 "strategy": truncation_strategy.value,
+                "direction": self.truncation_side,
             }
 
             # _truncation might contain more keys that the target `transformers`
