@@ -197,8 +197,9 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
+- [OSLO](https://github.com/tunib-ai/oslo) - this is implemented based on the Hugging Face Transformers.
 
-🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive PP support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
+🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive inter-layer model parallelism support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
 
 Other approaches:
 
@@ -209,6 +210,7 @@ Here the bubble (idle time) is further minimized by prioritizing backward passes
 
 Varuna further tries to improve the schedule by using simulations to discover the most efficient scheduling.
 
+OSLO has pipeline parallelism implementation based on the Transformers.
 
 ## Tensor Parallelism
 
@@ -246,12 +248,13 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
+- [OSLO](https://github.com/tunib-ai/oslo) has the tensor parallelism implementation based on the Transformers.
 
 🤗 Transformers status:
 - core: not yet implemented in the core
 - but if you want inference [parallelformers](https://github.com/tunib-ai/parallelformers) provides this support for most of our models. So until this is implemented in the core you can use theirs. And hopefully training mode will be supported too.
 - Deepspeed-Inference also supports our BERT, GPT-2, and GPT-Neo models in their super-fast CUDA-kernel-based inference mode, see more [here](https://www.deepspeed.ai/tutorials/inference-tutorial/)
-
+- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with Transformers.
 
 
 ## DP+PP
@@ -269,8 +272,10 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
 
-🤗 Transformers status: not yet implemented
+🤗 Transformers status:
+- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with Transformers.
 
 
 ## DP+PP+TP
@@ -288,8 +293,10 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
 
-🤗 Transformers status: not yet implemented, since we have no PP and TP.
+🤗 Transformers status:
+- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with Transformers.
 
 
 ## DP+PP+TP+ZeRO
@@ -308,8 +315,10 @@ And since we have ZeRO, the other benefit is ZeRO-Offload. Since this is stage 1
 
 Implementations:
 - [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed)
+- [OSLO](https://github.com/tunib-ai/oslo)
 
-🤗 Transformers status: not yet implemented, since we have no PP and TP.
+🤗 Transformers status:
+- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with Transformers.
 
 
 ## FlexFlow
