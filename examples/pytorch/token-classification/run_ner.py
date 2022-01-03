@@ -32,11 +32,11 @@ from datasets import ClassLabel, load_dataset, load_metric
 import transformers
 from transformers import (
     AutoConfig,
-    PretrainedConfig,
     AutoModelForTokenClassification,
     AutoTokenizer,
     DataCollatorForTokenClassification,
     HfArgumentParser,
+    PretrainedConfig,
     PreTrainedTokenizerFast,
     Trainer,
     TrainingArguments,
