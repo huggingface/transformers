@@ -279,6 +279,16 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("unispeech-sat", "UniSpeechSat"),
         ("unispeech", "UniSpeech"),
         ("wavlm", "WavLM"),
+        ("bort", "BORT"),
+        ("dialogpt", "DialoGPT"),
+        ("xls_r", "XLS-R"),
+        ("t5v1.1", "T5v1.1"),
+        ("herbert", "HerBERT"),
+        ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
+        ("megatron_gpt2", "MegatronGPT2"),
+        ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
+        ("mluke", "mLUKE"),
+        ("layoutxlm", "LayoutXLM"),
     ]
 )
 
