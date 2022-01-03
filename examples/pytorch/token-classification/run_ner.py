@@ -297,10 +297,10 @@ def main():
 
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
-        label_keys = label_list
+        label_keys = list(range(len(label_list)))
     else:
         label_list = get_label_list(raw_datasets["train"][label_column_name])
-        label_keys = list(range(len(label_list)))
+        label_keys = label_list
 
     num_labels = len(label_list)
 
@@ -362,7 +362,7 @@ def main():
                 "\nIgnoring the model labels as a result.",
             )
     else:
-        label_to_id = {k: i for i, k in enumerate(label_list)}
+        label_to_id = {k: i for i, k in enumerate(label_keys)}
 
     model.config.label2id = label_to_id
     model.config.id2label = {i: l for l, i in label_to_id.items()}
