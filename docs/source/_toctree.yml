@@ -120,17 +120,17 @@
       title: BERT
     - local: model_doc/bertweet
       title: Bertweet
-    - local: model_doc/bertgeneration
+    - local: model_doc/bert-generation
       title: BertGeneration
-    - local: model_doc/bert_japanese
+    - local: model_doc/bert-japanese
       title: BertJapanese
-    - local: model_doc/bigbird
+    - local: model_doc/big_bird
       title: BigBird
     - local: model_doc/bigbird_pegasus
       title: BigBirdPegasus
     - local: model_doc/blenderbot
       title: Blenderbot
-    - local: model_doc/blenderbot_small
+    - local: model_doc/blenderbot-small
       title: Blenderbot Small
     - local: model_doc/bort
       title: BORT
@@ -150,7 +150,7 @@
       title: CTRL
     - local: model_doc/deberta
       title: DeBERTa
-    - local: model_doc/deberta_v2
+    - local: model_doc/deberta-v2
       title: DeBERTa-v2
     - local: model_doc/deit
       title: DeiT
@@ -164,7 +164,7 @@
       title: DPR
     - local: model_doc/electra
       title: ELECTRA
-    - local: model_doc/encoderdecoder
+    - local: model_doc/encoder-decoder
       title: Encoder Decoder Models
     - local: model_doc/flaubert
       title: FlauBERT
@@ -175,7 +175,7 @@
     - local: model_doc/funnel
       title: Funnel Transformer
     - local: model_doc/herbert
-      title: herBERT
+      title: HerBERT
     - local: model_doc/ibert
       title: I-BERT
     - local: model_doc/imagegpt
@@ -200,7 +200,7 @@
       title: M2M100
     - local: model_doc/mbart
       title: MBart and MBart-50
-    - local: model_doc/megatron_bert
+    - local: model_doc/megatron-bert
       title: MegatronBERT
     - local: model_doc/megatron_gpt2
       title: MegatronGPT2
@@ -214,7 +214,7 @@
       title: MPNet
     - local: model_doc/mt5
       title: MT5
-    - local: model_doc/gpt
+    - local: model_doc/openai-gpt
       title: OpenAI GPT
     - local: model_doc/gpt2
       title: OpenAI GPT2
@@ -250,9 +250,9 @@
       title: SegFormer
     - local: model_doc/sew
       title: SEW
-    - local: model_doc/sew_d
+    - local: model_doc/sew-d
       title: SEW-D
-    - local: model_doc/speechencoderdecoder
+    - local: model_doc/speech-encoder-decoder
       title: Speech Encoder Decoder Models
     - local: model_doc/speech_to_text
       title: Speech2Text
@@ -268,17 +268,17 @@
       title: T5v1.1
     - local: model_doc/tapas
       title: TAPAS
-    - local: model_doc/transformerxl
+    - local: model_doc/transfo-xl
       title: Transformer XL
     - local: model_doc/trocr
       title: TrOCR
     - local: model_doc/unispeech
       title: UniSpeech
-    - local: model_doc/unispeech_sat
+    - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
-    - local: model_doc/visionencoderdecoder
+    - local: model_doc/vision-encoder-decoder
       title: Vision Encoder Decoder Models
-    - local: model_doc/vision_text_dual_encoder
+    - local: model_doc/vision-text-dual-encoder
       title: Vision Text Dual Encoder
     - local: model_doc/vit
       title: Vision Transformer (ViT)
@@ -292,9 +292,9 @@
       title: WavLM
     - local: model_doc/xlm
       title: XLM
-    - local: model_doc/xlmprophetnet
+    - local: model_doc/xlm-prophetnet
       title: XLM-ProphetNet
-    - local: model_doc/xlmroberta
+    - local: model_doc/xlm-roberta
       title: XLM-RoBERTa
     - local: model_doc/xlnet
       title: XLNet
