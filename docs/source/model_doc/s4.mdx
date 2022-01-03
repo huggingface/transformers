@@ -1,23 +1,20 @@
-.. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
 
-    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-    the License. You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-    specific language governing permissions and limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
 
-S4
------------------------------------------------------------------------------------------------------------------------
+# S4
 
-Overview
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## Overview
 
-The S4 model was proposed in `Efficiently Modeling Long Sequences with Structured State Spaces
-<https://arxiv.org/abs/2111.00396>`__ by <Albert Gu, Karan Goel, Christopher Ré>. The core of S4 is a drop-in
+The S4 model was proposed in [Efficiently Modeling Long Sequences with Structured State Spaces](https://arxiv.org/abs/2111.00396) by <Albert Gu, Karan Goel, Christopher Ré>. The core of S4 is a drop-in
 replacement for attention that has extremely good scaling properties as sequence length increases.S4 is able to handle
 long-range tasks (like Pathfinder-X) that all previous known architectures fail on.
 
@@ -44,25 +41,19 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by `kamalkraj <https://huggingface.co/kamalkraj>`__. The original code can be found `here
-<https://github.com/HazyResearch/state-spaces>`__.
+This model was contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/HazyResearch/state-spaces).
 
-S4Config
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## S4Config
 
-.. autoclass:: transformers.S4Config
-    :members:
+[[autodoc]] S4Config
+    - all
 
+## S4Model
 
-S4Model
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[[autodoc]] S4Model
+    - forward
 
-.. autoclass:: transformers.S4Model
-    :members: forward
+## S4LMHeadModel
 
-
-S4LMHeadModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.S4LMHeadModel
-    :members: forward
+[[autodoc]] S4LMHeadModel
+    - forward
