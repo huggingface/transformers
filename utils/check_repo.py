@@ -76,7 +76,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "RealmBertModel",  # Building part of bigger (tested) model.
     "RealmReader",  # Not regular model.
     "RealmScorer",  # Not regular model.
-    "RealmSearcher",  # Not regular model.
     "RealmForOpenQA",  # Not regular model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "Speech2Text2DecoderWrapper",  # Building part of bigger (tested) model.
@@ -138,7 +137,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RealmForOpenQA",
     "RealmScorer",
     "RealmReader",
-    "RealmSearcher",
     "TFDPRReader",
     "TFGPT2DoubleHeadsModel",
     "TFOpenAIGPTDoubleHeadsModel",

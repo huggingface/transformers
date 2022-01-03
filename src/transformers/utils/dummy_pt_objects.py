@@ -3979,6 +3979,9 @@ class RealmPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class RealmReader:
     def __init__(self, *args, **kwargs):
@@ -3986,11 +3989,6 @@ class RealmReader:
 
 
 class RealmScorer:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class RealmSearcher:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

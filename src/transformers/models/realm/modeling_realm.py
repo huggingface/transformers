@@ -832,25 +832,6 @@ class RealmScorerOutput(ModelOutput):
 
 
 @dataclass
-class RealmSearcherOutput(ModelOutput):
-    """
-    Outputs of RealmSearcher models.
-
-    Args:
-        retrieved_logits (`torch.FloatTensor` of shape `(config.searcher_beam_size,)`):
-            The relevance score of document candidates (before softmax).
-        retrieved_blocks (`np.ndarray` of shape `(config.searcher_beam_size,)`):
-            Retrieved document blocks.
-        retrieved_block_ids (`torch.LongTensor` of shape `(config.searcher_beam_size,)`):
-            IDs of retrieved blocks.
-    """
-
-    retrieved_logits: torch.FloatTensor = None
-    retrieved_blocks: np.ndarray = None
-    retrieved_block_ids: torch.LongTensor = None
-
-
-@dataclass
 class RealmReaderOutput(ModelOutput):
     """
     Outputs of RealmReader models.
@@ -1669,60 +1650,28 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
 """
 
 
-class RealmSearcher(RealmPreTrainedModel):
-    def __init__(self, config):
-        # TODO(PVP) - this class has to be removed
-        super().__init__(config)
-        self.embedder = RealmEmbedder(config)
-        self.register_buffer(
-            "block_emb",
-            torch.zeros(()).new_empty(
-                size=(config.num_block_records, config.retriever_proj_size),
-                dtype=torch.float32,
-                device=torch.device("cpu"),
-            ),
-        )
-        self.init_weights()
-
-
 @add_start_docstrings(
-    "A wrapper of `RealmSearcher` and `RealmReader` providing end-to-end open domain question answering.",
+    "`RealmForOpenQA` for end-to-end open domain question answering.",
     REALM_START_DOCSTRING,
 )
 class RealmForOpenQA(RealmPreTrainedModel):
-    def __init__(self, config, searcher, reader, retriever):
+    def __init__(self, config, retriever=None):
         super().__init__(config)
-        self.embedder = searcher.embedder
-        self.reader = reader
-        self.block_emb = searcher.block_emb
+        self.embedder = RealmEmbedder(config)
+        self.reader = RealmReader(config)
+        self.block_emb = nn.Parameter(torch.FloatTensor(size=(config.num_block_records, config.retriever_proj_size)).uniform_())
+
+        # add retriever for 
+        # single-call forward pass
         self.retriever = retriever
 
-    #        self.init_weights()
+        self.init_weights()
 
     @property
     def beam_size(self):
         if self.training:
             return self.config.searcher_beam_size
         return self.config.reader_beam_size
-
-    @classmethod
-    def from_pretrained(cls, searcher_pretrained_name_or_path, reader_pretrained_name_or_path, retriever, **kwargs):
-        """
-        Args:
-            searcher_pretrained_name_or_path (`str`):
-                Searcher pretrained name or path.
-            reader_pretrained_name_or_path (`str`):
-                Reader pretrained name or path.
-
-        """
-        config = kwargs.pop("config", None) or RealmConfig.from_pretrained(searcher_pretrained_name_or_path, **kwargs)
-        searcher = RealmSearcher.from_pretrained(searcher_pretrained_name_or_path, config=config, **kwargs)
-        reader = RealmReader.from_pretrained(reader_pretrained_name_or_path, config=config, **kwargs)
-        return cls(config, searcher, reader, retriever)
-
-    def save_pretrained(self, save_directory):
-        self.searcher.save_pretrained(save_directory)
-        self.reader.save_pretrained(save_directory)
 
     @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING)
     @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
@@ -1736,12 +1685,15 @@ class RealmForOpenQA(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmForOpenQA, RealmTokenizer
 
-        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", blocks.tfr)
+        >>> retriever = RealmRetriever.from_pretrained("qqaatw/realm-open-qa")
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-open-qa")
+        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-open-qa", retriever=retriever)
 
         >>> question = "Who is the pioneer in modern computer science?"
-        >>> answer_ids = tokenizer(["alan mathison turing"], add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False).input_ids
+        >>> quastion_ids = tokenizer(question, return_tensors="pt").input_ids
+        >>> answer_ids = tokenizer("alan mathison turing", add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False, return_tensors="pt").input_ids
 
-        >>> searcher_output, reader_output, predicted_answer = model(question, answer_ids)
+        >>> searcher_output, reader_output, predicted_answer = model(question_ids, answer_ids)
         >>> loss = reader_output.loss
         ```"""
 
