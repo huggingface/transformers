@@ -232,6 +232,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
 
         >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"], padding=True, return_tensors="pt")
+        >>> inputs.pop("token_type_ids")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs = self.text_model(
