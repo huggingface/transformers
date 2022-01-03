@@ -24,13 +24,13 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 
+from huggingface_hub import snapshot_download
 from transformers import Wav2Vec2Config, is_tf_available
 from transformers.file_utils import is_librosa_available, is_pyctcdecode_available
 from transformers.testing_utils import require_librosa, require_pyctcdecode, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from huggingface_hub import snapshot_download
 
 
 if is_tf_available():
@@ -569,5 +569,4 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         transcription = processor.batch_decode(logits.numpy()).text
 
-        import ipdb; ipdb.set_trace()
-        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+        self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
