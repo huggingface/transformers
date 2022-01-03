@@ -295,22 +295,6 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
-    def test_inference_masked_lm(self):
-        model = NystromformerForMaskedLM.from_pretrained("uw-madison/nystromformer-512")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
-        vocab_size = 30000
-
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[[-4.2054, 2.5545, -4.3157], [-7.1428, 23.0433, -4.2694], [-5.4785, 4.9240, -2.6824]]]
-        )
-
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
     def test_masked_lm_end_to_end(self):
         sentence = "the [MASK] of Belgium is Brussels"
 
