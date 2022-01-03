@@ -1,7 +1,7 @@
 # Image Captioning (vision-encoder-text-decoder model) training examples
 
 The following example showcases how to finetune a vision-encoder-text-decoder model for image captioning
-using the JAX/Flax backend, leveraging 🤗 Transformers library's `FlaxVisionEncoderDecoderModel`.
+using the JAX/Flax backend, leveraging 🤗 Transformers library's [FlaxVisionEncoderDecoderModel](FlaxVisionEncoderDecoderModel).
 
 JAX/Flax allows you to trace pure functions and compile them into efficient, fused accelerator code on both GPU and TPU.
 Models written in JAX/Flax are **immutable** and updated in a purely functional
@@ -55,5 +55,5 @@ python3 run_image_captioning_flax.py \
 	--push_to_hub
 ```
 
-This should finish in about 1h30, with validation loss and ROUGE2 score of 2.0153 and 14.64 respectively after 1 epoch.
-Training statistics can be accessed on [Models](https://huggingface.co/ydshieh/image-captioning-training-results/tensorboard).
+This should finish in about 1h30 on Cloud TPU, with validation loss and ROUGE2 score of 2.0153 and 14.64 respectively
+after 1 epoch. Training statistics can be accessed on [Models](https://huggingface.co/ydshieh/image-captioning-training-results/tensorboard).
