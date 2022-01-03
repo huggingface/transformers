@@ -609,7 +609,7 @@ def check_model_type_doc_match():
 
     errors = []
     for m in model_docs:
-        if m not in model_types:
+        if m not in model_types and m != "auto":
             close_matches = get_close_matches(m, model_types)
             error_message = f"{m} is not a proper model identifier."
             if len(close_matches) > 0:
