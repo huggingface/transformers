@@ -39,11 +39,11 @@ The following is the brief description of the main concepts that will be describ
 5. Sharded DDP - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
 
 
-## Data Parallel
+## Data Parallelism
 
 Most users with just 2 GPUs already enjoy the increased training speed up thanks to DataParallel (DP) and DistributedDataParallel (DDP) that are almost trivial to use. This is a built-in feature of Pytorch.
 
-## ZeRO Data Parallel
+## ZeRO Data Parallelism
 
 ZeRO-powered data parallelism (ZeRO-DP) is described on the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
 ![DeepSpeed-Image-1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png)
@@ -124,7 +124,7 @@ Implementations:
 - [Fairscale](https://github.com/facebookresearch/fairscale/#optimizer-state-sharding-zero) ZeRO-DP stages 1+2+3
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
-## Naive Model Parallel (Vertical) and Pipeline Parallel
+## Naive Model Parallelism (Vertical) and Pipeline Parallelism
 
 Naive Model Parallel (MP) is where one spreads groups of model layers across multiple GPUs. The mechanism is relatively simple - switch the desired layers `.to()` the desired devices and now whenever the data goes in and out those layers switch the data to the same device as the layer and leave the rest unmodified.
 
@@ -197,6 +197,7 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
+- [OSLO](https://github.com/tunib-ai/oslo) - this is implemented based on the Hugging Face Transformers.
 
 🤗 Transformers status: as of this writing none of the models supports full-PP. GPT2 and T5 models have naive PP support. The main obstacle is being unable to convert the models to `nn.Sequential` and have all the inputs to be Tensors. This is because currently the models include many features that make the conversion very complicated, and will need to be removed to accomplish that.
 
@@ -209,6 +210,7 @@ Here the bubble (idle time) is further minimized by prioritizing backward passes
 
 Varuna further tries to improve the schedule by using simulations to discover the most efficient scheduling.
 
+OSLO has pipeline parallelism implementation based on the Transformers without `nn.Sequential` converting.
 
 ## Tensor Parallelism
 
@@ -246,13 +248,12 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
+- [OSLO](https://github.com/tunib-ai/oslo) has the tensor parallelism implementation based on the Transformers.
 
 🤗 Transformers status:
 - core: not yet implemented in the core
 - but if you want inference [parallelformers](https://github.com/tunib-ai/parallelformers) provides this support for most of our models. So until this is implemented in the core you can use theirs. And hopefully training mode will be supported too.
 - Deepspeed-Inference also supports our BERT, GPT-2, and GPT-Neo models in their super-fast CUDA-kernel-based inference mode, see more [here](https://www.deepspeed.ai/tutorials/inference-tutorial/)
-
-
 
 ## DP+PP
 
@@ -269,9 +270,9 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers status: not yet implemented
-
 
 ## DP+PP+TP
 
@@ -288,11 +289,11 @@ Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
 
-
-## DP+PP+TP+ZeRO
+## ZeRO DP+PP+TP
 
 One of the main features of DeepSpeed is ZeRO, which is a super-scalable extension of DP. It has already been discussed in [ZeRO Data Parallel](#zero-data-parallel). Normally it's a standalone feature that doesn't require PP or TP. But it can be combined with PP and TP.
 
@@ -308,9 +309,9 @@ And since we have ZeRO, the other benefit is ZeRO-Offload. Since this is stage 1
 
 Implementations:
 - [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed)
+- [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
-
 
 ## FlexFlow
 
