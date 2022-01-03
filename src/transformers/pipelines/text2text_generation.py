@@ -136,8 +136,8 @@ class Text2TextGenerationPipeline(Pipeline):
         """
 
         result = super().__call__(*args, **kwargs)
-        if isinstance(result, dict):
-            return [result]
+        if isinstance(args[0], list) and all(isinstance(el, str) for el in args[0]):
+            return [res[0] for res in result]
         return result
 
     def preprocess(self, inputs, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs):
