@@ -32,6 +32,7 @@ from datasets import ClassLabel, load_dataset, load_metric
 import transformers
 from transformers import (
     AutoConfig,
+    PretrainedConfig,
     AutoModelForTokenClassification,
     AutoTokenizer,
     DataCollatorForTokenClassification,
@@ -296,31 +297,17 @@ def main():
 
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
-        # No need to convert the labels since they are already ints.
-        label_to_id = {i: i for i in range(len(label_list))}
+        label_keys = label_list
     else:
         label_list = get_label_list(raw_datasets["train"][label_column_name])
-        label_to_id = {l: i for i, l in enumerate(label_list)}
+        label_keys = list(range(len(label_list)))
+
     num_labels = len(label_list)
 
-    # Map that sends B-Xxx label to its I-Xxx counterpart
-    b_to_i_label = []
-    for idx, label in enumerate(label_list):
-        if label.startswith("B-") and label.replace("B-", "I-") in label_list:
-            b_to_i_label.append(label_list.index(label.replace("B-", "I-")))
-        else:
-            b_to_i_label.append(idx)
-
-    # Load pretrained model and tokenizer
-    #
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
-        label2id=label_to_id,
-        id2label={i: l for l, i in label_to_id.items()},
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
@@ -362,6 +349,31 @@ def main():
             "at https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet this "
             "requirement"
         )
+
+    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
+        # Some have all caps in their config, some don't.
+        label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
+        if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+            label_to_id = {k: int(label_name_to_id[k]) for k in label_keys}
+        else:
+            logger.warning(
+                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
+                "\nIgnoring the model labels as a result.",
+            )
+    else:
+        label_to_id = {k: i for i, k in enumerate(label_list)}
+
+    model.config.label2id = label_to_id
+    model.config.id2label = {i: l for l, i in label_to_id.items()}
+
+    # Map that sends B-Xxx label to its I-Xxx counterpart
+    b_to_i_label = []
+    for idx, label in enumerate(label_list):
+        if label.startswith("B-") and label.replace("B-", "I-") in label_list:
+            b_to_i_label.append(label_list.index(label.replace("B-", "I-")))
+        else:
+            b_to_i_label.append(idx)
 
     # Preprocessing the dataset
     # Padding strategy
