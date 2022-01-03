@@ -341,7 +341,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ...     pixel_values=inputs.pixel_values,
         ...     return_loss=True,
         ... )
-        >>> loss, logits_per_image = outputs.loss, outputs.logits_per_imag  # this is the image-text similarity score
+        >>> loss, logits_per_image = outputs.loss, outputs.logits_per_image  # this is the image-text similarity score
 
         >>> # save and load from pretrained
         >>> model.save_pretrained("vit-bert")
