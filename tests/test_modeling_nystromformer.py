@@ -288,7 +288,6 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
             [[[-0.4532, -0.0936, 0.5137], [-0.2676, 0.0628, 0.6186], [-0.3629, -0.1726, 0.4716]]]
         )
