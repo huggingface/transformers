@@ -210,7 +210,7 @@ Here the bubble (idle time) is further minimized by prioritizing backward passes
 
 Varuna further tries to improve the schedule by using simulations to discover the most efficient scheduling.
 
-OSLO has pipeline parallelism implementation based on the Transformers.
+OSLO has pipeline parallelism implementation based on the Transformers without `nn.Sequential` converting.
 
 ## Tensor Parallelism
 
@@ -254,7 +254,7 @@ Implementations:
 - core: not yet implemented in the core
 - but if you want inference [parallelformers](https://github.com/tunib-ai/parallelformers) provides this support for most of our models. So until this is implemented in the core you can use theirs. And hopefully training mode will be supported too.
 - Deepspeed-Inference also supports our BERT, GPT-2, and GPT-Neo models in their super-fast CUDA-kernel-based inference mode, see more [here](https://www.deepspeed.ai/tutorials/inference-tutorial/)
-- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with Transformers.
+- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with the Transformers.
 
 
 ## DP+PP
@@ -275,7 +275,7 @@ Implementations:
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers status:
-- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with Transformers.
+- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with the Transformers.
 
 
 ## DP+PP+TP
@@ -296,7 +296,7 @@ Implementations:
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers status:
-- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with Transformers.
+- [OSLO](https://github.com/tunib-ai/oslo) is under discussion about integration with the Transformers.
 
 
 ## DP+PP+TP+ZeRO
