@@ -382,6 +382,7 @@ def main():
     args = parser.parse_args()
 
     output_dir = "output_benchmark"
+    Path(output_dir).mkdir(exist_ok=True)
     base_cmd = get_base_cmd(args, output_dir)
 
     # split each dimension into its --foo variations
