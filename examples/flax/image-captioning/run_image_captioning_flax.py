@@ -333,6 +333,9 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     """
     steps = len(dataset) // batch_size  # Skip incomplete batch.
 
+    # We use `numpy.ndarray` to interact with `datasets.Dataset`, since using `jax.numpy.array` to index into a
+    # dataset is significantly slow. Using JAX array at the 1st place is only to keep JAX's PRNGs generation
+    # mechanism, which works differently from NumPy/SciPy.
     if shuffle:
         batch_idx = jax.random.permutation(rng, len(dataset))
         batch_idx = np.asarray(batch_idx)
@@ -821,6 +824,9 @@ def main():
         training in this case.
         """
 
+        # We use `numpy.ndarray` to interact with `datasets.Dataset`, since using `jax.numpy.array` to index into a
+        # dataset is significantly slow. Using JAX array at the 1st place is only to keep JAX's PRNGs generation
+        # mechanism, which works differently from NumPy/SciPy.
         if shuffle:
             indices = jax.random.permutation(rng, len(ds))
             indices = np.asarray(indices)
