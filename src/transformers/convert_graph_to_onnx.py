@@ -377,7 +377,7 @@ def convert(
 def optimize(onnx_model_path: Path) -> Path:
     """
     Load the model at the specified path and let onnxruntime look at transformations on the graph to enable all the
-    optimizations possibl
+    optimizations possible
 
     Args:
         onnx_model_path: filepath where the model binary description is stored
