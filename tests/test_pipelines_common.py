@@ -77,11 +77,14 @@ def get_tiny_config_from_class(configuration_class):
     model_tester = model_tester_class(parent=None)
 
     if hasattr(model_tester, "get_pipeline_config"):
-        return model_tester.get_pipeline_config()
+        config = model_tester.get_pipeline_config()
     elif hasattr(model_tester, "get_config"):
-        return model_tester.get_config()
+        config = model_tester.get_config()
     else:
+        config = None
         logger.warning(f"Model tester {model_tester_class.__name__} has no `get_config()`.")
+
+    return config
 
 
 @lru_cache(maxsize=100)
@@ -100,11 +103,17 @@ def get_tiny_tokenizer_from_checkpoint(checkpoint):
     return tokenizer
 
 
-def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config):
+def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_extractor_class):
     try:
         feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
     except Exception:
-        feature_extractor = None
+        try:
+            if feature_extractor_class is not None:
+                feature_extractor = feature_extractor_class()
+            else:
+                feature_extractor = None
+        except Exception:
+            feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
 
@@ -168,7 +177,9 @@ class PipelineTestCaseMeta(type):
                         self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
                 else:
                     tokenizer = None
-                feature_extractor = get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config)
+                feature_extractor = get_tiny_feature_extractor_from_checkpoint(
+                    checkpoint, tiny_config, feature_extractor_class
+                )
 
                 if tokenizer is None and feature_extractor is None:
                     self.skipTest(
@@ -193,8 +204,10 @@ class PipelineTestCaseMeta(type):
                             # Need to copy because Conversation object is mutated
                             yield copy.deepcopy(random.choice(examples))
 
+                    out = []
                     for item in pipeline(data(10), batch_size=4):
-                        pass
+                        out.append(item)
+                    self.assertEqual(len(out), 10)
 
                 run_batch_test(pipeline, examples)
 
@@ -218,6 +231,13 @@ class PipelineTestCaseMeta(type):
                         if not tokenizer_classes:
                             # We need to test even if there are no tokenizers.
                             tokenizer_classes = [None]
+                        else:
+                            # Remove the non defined tokenizers
+                            # ByT5 and Perceiver are bytes-level and don't define
+                            # FastTokenizer, we can just ignore those.
+                            tokenizer_classes = [
+                                tokenizer_class for tokenizer_class in tokenizer_classes if tokenizer_class is not None
+                            ]
 
                         for tokenizer_class in tokenizer_classes:
                             if tokenizer_class is not None:
@@ -426,3 +446,141 @@ class PipelinePadTest(unittest.TestCase):
                 torch.zeros((2, 11, 2), dtype=torch.long),
             ),
         )
+
+
+@is_pipeline_test
+@require_torch
+class PipelineUtilsTest(unittest.TestCase):
+    def test_pipeline_dataset(self):
+        from transformers.pipelines.pt_utils import PipelineDataset
+
+        dummy_dataset = [0, 1, 2, 3]
+
+        def add(number, extra=0):
+            return number + extra
+
+        dataset = PipelineDataset(dummy_dataset, add, {"extra": 2})
+        self.assertEqual(len(dataset), 4)
+        outputs = [dataset[i] for i in range(4)]
+        self.assertEqual(outputs, [2, 3, 4, 5])
+
+    def test_pipeline_iterator(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        dummy_dataset = [0, 1, 2, 3]
+
+        def add(number, extra=0):
+            return number + extra
+
+        dataset = PipelineIterator(dummy_dataset, add, {"extra": 2})
+        self.assertEqual(len(dataset), 4)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [2, 3, 4, 5])
+
+    def test_pipeline_iterator_no_len(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        def dummy_dataset():
+            for i in range(4):
+                yield i
+
+        def add(number, extra=0):
+            return number + extra
+
+        dataset = PipelineIterator(dummy_dataset(), add, {"extra": 2})
+        with self.assertRaises(TypeError):
+            len(dataset)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [2, 3, 4, 5])
+
+    def test_pipeline_batch_unbatch_iterator(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        dummy_dataset = [{"id": [0, 1, 2]}, {"id": [3]}]
+
+        def add(number, extra=0):
+            return {"id": [i + extra for i in number["id"]]}
+
+        dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}])
+
+    def test_pipeline_batch_unbatch_iterator_tensors(self):
+        import torch
+
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        dummy_dataset = [{"id": torch.LongTensor([[10, 20], [0, 1], [0, 2]])}, {"id": torch.LongTensor([[3]])}]
+
+        def add(number, extra=0):
+            return {"id": number["id"] + extra}
+
+        dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(
+            nested_simplify(outputs), [{"id": [[12, 22]]}, {"id": [[2, 3]]}, {"id": [[2, 4]]}, {"id": [[5]]}]
+        )
+
+    def test_pipeline_chunk_iterator(self):
+        from transformers.pipelines.pt_utils import PipelineChunkIterator
+
+        def preprocess_chunk(n: int):
+            for i in range(n):
+                yield i
+
+        dataset = [2, 3]
+
+        dataset = PipelineChunkIterator(dataset, preprocess_chunk, {}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+
+        self.assertEqual(outputs, [0, 1, 0, 1, 2])
+
+    def test_pipeline_pack_iterator(self):
+        from transformers.pipelines.pt_utils import PipelinePackIterator
+
+        def pack(item):
+            return {"id": item["id"] + 1, "is_last": item["is_last"]}
+
+        dataset = [
+            {"id": 0, "is_last": False},
+            {"id": 1, "is_last": True},
+            {"id": 0, "is_last": False},
+            {"id": 1, "is_last": False},
+            {"id": 2, "is_last": True},
+        ]
+
+        dataset = PipelinePackIterator(dataset, pack, {})
+
+        outputs = [item for item in dataset]
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"id": 1},
+                    {"id": 2},
+                ],
+                [
+                    {"id": 1},
+                    {"id": 2},
+                    {"id": 3},
+                ],
+            ],
+        )
+
+    def test_pipeline_pack_unbatch_iterator(self):
+        from transformers.pipelines.pt_utils import PipelinePackIterator
+
+        dummy_dataset = [{"id": [0, 1, 2], "is_last": [False, True, False]}, {"id": [3], "is_last": [True]}]
+
+        def add(number, extra=0):
+            return {"id": [i + extra for i in number["id"]], "is_last": number["is_last"]}
+
+        dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
+
+        outputs = [item for item in dataset]
+        self.assertEqual(outputs, [[{"id": 2}, {"id": 3}], [{"id": 4}, {"id": 5}]])
