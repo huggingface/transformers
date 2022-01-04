@@ -18,9 +18,8 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, TypeVar
+from typing import Optional, Tuple
 
-import numpy as np
 import torch
 from packaging import version
 from torch import nn
@@ -42,10 +41,8 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_realm import RealmConfig
-from .utils_realm import BruteForceSearcher, ScaNNSearcher, convert_tfrecord_to_np
 
 
-T = TypeVar("T", bound="Module")
 logger = logging.get_logger(__name__)
 _BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
 _EMBEDDER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-embedder"
@@ -1693,13 +1690,14 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING.format("1, sequence_length"))
     @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, 
+    def forward(
+        self,
         input_ids,
-        attention_mask=None, 
+        attention_mask=None,
         token_type_ids=None,
         answer_ids=None,
         return_dict=None,
-        ):
+    ):
         r"""
         Returns:
 

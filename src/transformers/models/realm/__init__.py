@@ -37,9 +37,7 @@ if is_torch_available():
         "RealmScorer",
         "load_tf_weights_in_realm",
     ]
-    _import_structure["retrieval_realm"] = [
-        "RealmRetriever",
-    ]
+    _import_structure["retrieval_realm"] = ["RealmRetriever"]
 
 
 if TYPE_CHECKING:
@@ -57,9 +55,7 @@ if TYPE_CHECKING:
             RealmScorer,
             load_tf_weights_in_realm,
         )
-        from .retrieval_realm import (
-            RealmRetriever
-        )
+        from .retrieval_realm import RealmRetriever
 
 
 else:

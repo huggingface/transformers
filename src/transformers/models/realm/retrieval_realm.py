@@ -16,8 +16,7 @@
 import numpy as np
 
 from ...utils import logging
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from .modeling_realm import REALM_START_DOCSTRING
+
 
 logger = logging.get_logger(__name__)
 
@@ -30,6 +29,7 @@ def convert_tfrecord_to_np(block_records_path, num_block_records):
     np_record = next(blocks_dataset.take(1).as_numpy_iterator())
 
     return np_record
+
 
 class ScaNNSearcher:
     def __init__(
@@ -59,16 +59,17 @@ class ScaNNSearcher:
 
 
 class RealmRetriever:
-    """"The retriever of REALM outputting retrieved evidence block and whether the block has answers."
-    
+    """The retriever of REALM outputting the retrieved evidence block and whether the block has answers."
+
     Parameters:
         config ([`RealmConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
             weights.
-        tokenizer ([`RealmTokenizer`]): RealmTokenizer to encode retrieved texts.
-        block_records_path ([`str`]): The path of `block_records`, which cantains evidence texts.
+        tokenizer ([`RealmTokenizer`]): The tokenizer to encode retrieved texts.
+        block_records_path (`str`): The path of `block_records`, which cantains evidence texts.
     """
+
     def __init__(self, config, tokenizer, block_records_path):
         super().__init__()
         self.config = config
