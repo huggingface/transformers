@@ -293,7 +293,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         >>> model.save_pretrained("./rag")
 
         >>> # load retriever
-        >>> retriever = RagRetriever.from_pretrained(PATH, index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained("facebook/rag-token-base", index_name="exact", use_dummy_dataset=True)
         >>> # load fine-tuned model with retriever
         >>> model = TFRagModel.from_pretrained("./rag", retriever=retriever)
         ```"""
