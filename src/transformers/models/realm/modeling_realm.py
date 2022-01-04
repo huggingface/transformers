@@ -54,8 +54,10 @@ REALM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "qqaatw/realm-cc-news-pretrained-bert",
     "qqaatw/realm-cc-news-pretrained-embedder",
     "qqaatw/realm-cc-news-pretrained-retriever",
-    "qqaatw/realm-orqa-nq-searcher",
+    "qqaatw/realm-orqa-nq-openqa",
     "qqaatw/realm-orqa-nq-reader",
+    "qqaatw/realm-orqa-wq-openqa",
+    "qqaatw/realm-orqa-wq-reader",
     # See all REALM models at https://huggingface.co/models?filter=realm
 ]
 
@@ -838,13 +840,13 @@ class RealmReaderOutput(ModelOutput):
         reader_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `start_positions`, `end_positions`, `has_answers` are provided):
             Reader loss.
         retriever_correct (`torch.BoolTensor` of shape `(config.searcher_beam_size,)`, *optional*):
-            Whether or not a evidence block derived from *RealmSearcher* contains answer.
+            Whether or not an evidence block contains answer.
         reader_correct (`torch.BoolTensor` of shape `(config.reader_beam_size, num_candidates)`, *optional*):
             Whether or not a span candidate contains answer.
         block_idx (`torch.LongTensor` of shape `()`):
-            The index of retrieved evidence blocks in which the predicted answer most likely.
+            The index of the retrieved evidence block in which the predicted answer is most likely.
         candidate (`torch.LongTensor` of shape `()`):
-            The index of retrieved span candidates in which the predicted answer most likely.
+            The index of the retrieved span candidates in which the predicted answer is most likely.
         start_pos (`torch.IntTensor` of shape `()`):
             Predicted answer starting position in *RealmReader*'s inputs.
         end_pos: (`torch.IntTensor` of shape `()`):
@@ -1498,7 +1500,7 @@ class RealmReader(RealmPreTrainedModel):
     ):
         r"""
         relevance_score (`torch.FloatTensor` of shape `(searcher_beam_size,)`, *optional*):
-            Relevance score derived from *RealmSearcher*, must be specified if you want to compute the marginal log
+            Relevance score, which must be specified if you want to compute the marginal log
             loss.
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1509,7 +1511,7 @@ class RealmReader(RealmPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         has_answers (`torch.BoolTensor` of shape `(searcher_beam_size,)`, *optional*):
-            Whether or not the evidence blocks derived from *RealmSearcher* have answer(s).
+            Whether or not the evidence block has answer(s).
 
         Returns:
         """

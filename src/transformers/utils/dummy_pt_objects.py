@@ -3988,6 +3988,11 @@ class RealmReader:
         requires_backends(self, ["torch"])
 
 
+class RealmRetriever:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class RealmScorer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
