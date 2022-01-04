@@ -1107,6 +1107,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
 
     ```python
     >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
@@ -1117,9 +1118,12 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
 
     >>> # audio file is decoded on the fly
     >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
-    >>> outputs = model(**inputs)
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
     ```
 """
 
@@ -1139,17 +1143,36 @@ PT_SPEECH_CTC_SAMPLE = r"""
 
     >>> # audio file is decoded on the fly
     >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
-    >>> logits = model(**inputs).logits
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
     >>> predicted_ids = torch.argmax(logits, dim=-1)
 
     >>> # transcribe speech
     >>> transcription = processor.batch_decode(predicted_ids)
+    >>> transcription[0]
+    {expected_output}
+    ```
 
-    >>> # compute loss
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import torch
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
     >>> with processor.as_target_processor():
     ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
 
+    >>> # compute loss
     >>> loss = model(**inputs).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
     ```
 """
 
@@ -1168,15 +1191,31 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
-    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
-    >>> logits = model(**inputs).logits
+    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
     >>> predicted_class_ids = torch.argmax(logits, dim=-1)
     >>> predicted_label = model.config.id2label[predicted_class_ids]
+    >>> predicted_label
+    {expected_output}
+    ```
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import torch
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 
     >>> # compute loss - target_label is e.g. "down"
     >>> target_label = model.config.id2label[0]
     >>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
     >>> loss = model(**inputs).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
     ```
 """
 
@@ -1197,10 +1236,14 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
 
     >>> # audio file is decoded on the fly
     >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
-    >>> logits = model(**inputs).logits
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
     >>> probabilities = torch.sigmoid(logits[0])
     >>> # labels is a one-hot array of shape (num_frames, num_speakers)
     >>> labels = (probabilities > 0.5).long()
+    >>> labels[0].tolist()
+    {expected_output}
     ```
 """
 
@@ -1220,8 +1263,12 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
-    >>> inputs = feature_extractor(dataset[:2]["audio"]["array"], return_tensors="pt")
-    >>> embeddings = model(**inputs).embeddings
+    >>> inputs = feature_extractor(
+    ...     [d["array"] for d in dataset[:2]["audio"]], sampling_rate=sampling_rate, return_tensors="pt", padding=True
+    ... )
+    >>> with torch.no_grad():
+    ...     embeddings = model(**inputs).embeddings
+
     >>> embeddings = torch.nn.functional.normalize(embeddings, dim=-1).cpu()
 
     >>> # the resulting embeddings can be used for cosine similarity-based retrieval
@@ -1230,6 +1277,8 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> threshold = 0.7  # the optimal threshold is dataset-dependent
     >>> if similarity < threshold:
     ...     print("Speakers are not the same!")
+    >>> round(similarity.item(), 2)
+    {expected_output}
     ```
 """
 
@@ -1533,9 +1582,11 @@ def add_code_sample_docstrings(
     checkpoint=None,
     output_type=None,
     config_class=None,
-    mask=None,
+    mask="[MASK]",
     model_cls=None,
-    modality=None
+    modality=None,
+    expected_output="",
+    expected_loss="",
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1548,7 +1599,14 @@ def add_code_sample_docstrings(
         else:
             sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
-        doc_kwargs = dict(model_class=model_class, processor_class=processor_class, checkpoint=checkpoint)
+        doc_kwargs = dict(
+            model_class=model_class,
+            processor_class=processor_class,
+            checkpoint=checkpoint,
+            expected_output=expected_output,
+            expected_loss=expected_loss,
+            mask=mask,
+        )
 
         if "SequenceClassification" in model_class and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
@@ -1561,7 +1619,6 @@ def add_code_sample_docstrings(
         elif "MultipleChoice" in model_class:
             code_sample = sample_docstrings["MultipleChoice"]
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
-            doc_kwargs["mask"] = "[MASK]" if mask is None else mask
             code_sample = sample_docstrings["MaskedLM"]
         elif "LMHead" in model_class or "CausalLM" in model_class:
             code_sample = sample_docstrings["LMHead"]

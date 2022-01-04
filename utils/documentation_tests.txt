@@ -1,2 +1,3 @@
 docs/source/quicktour.mdx
 docs/source/task_summary.mdx
+src/transformers/models/wavlm/modeling_wavlm.py
