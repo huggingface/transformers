@@ -800,7 +800,6 @@ if is_torch_available():
             "CharacterBertLMHeadModel",
             "CharacterBertModel",
             "CharacterBertPreTrainedModel",
-            "CharacterCnn",
             "load_tf_weights_in_character_bert",
         ]
     )
@@ -2797,7 +2796,6 @@ if TYPE_CHECKING:
             CharacterBertLMHeadModel,
             CharacterBertModel,
             CharacterBertPreTrainedModel,
-            CharacterCnn,
             load_tf_weights_in_character_bert,
         )
         from .models.clip import (
