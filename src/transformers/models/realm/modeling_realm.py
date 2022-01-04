@@ -884,7 +884,7 @@ class RealmReaderOutput(ModelOutput):
 class RealmForOpenQAOutput(ModelOutput):
     """
 
-    Outputs of RealmReader models.
+    Outputs of RealmForOpenQA models.
 
     Args:
         searcher_output (`dict`):
@@ -1659,10 +1659,14 @@ class RealmForOpenQA(RealmPreTrainedModel):
         super().__init__(config)
         self.embedder = RealmEmbedder(config)
         self.reader = RealmReader(config)
-        self.block_emb = nn.Parameter(torch.FloatTensor(size=(config.num_block_records, config.retriever_proj_size)).uniform_())
-
-        # add retriever for 
-        # single-call forward pass
+        self.register_buffer(
+            "block_emb",
+            torch.zeros(()).new_empty(
+                size=(config.num_block_records, config.retriever_proj_size),
+                dtype=torch.FloatTensor,
+                device=torch.device("cpu"),
+            ),
+        )
         self.retriever = retriever
 
         self.init_weights()
@@ -1708,13 +1712,15 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         # [1, projection_size]
         question_projection = question_outputs[0]
-        # [1, searcher_beam_size]
 
         batch_scores = torch.einsum("BD,QD->QB", self.block_emb, question_projection)
+        # [1, searcher_beam_size]
         _, retrieved_block_ids = torch.topk(batch_scores, k=self.beam_size, dim=-1)
+        
+        # [searcher_beam_size]
+        # Must return cpu tensor for subsequent numpy operations
         retrieved_block_ids = retrieved_block_ids.squeeze().cpu()
 
-        # Must return cpu tensor for subsequent numpy operations
         # Retrieve possible answers
         has_answers, start_pos, end_pos, concat_inputs = self.retriever(retrieved_block_ids, input_ids, answer_ids)
 
