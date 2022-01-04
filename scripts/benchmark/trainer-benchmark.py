@@ -64,17 +64,19 @@
 #
 # and here is a possible output:
 #
-#    | Variation       |     Train |   Diff |   Train |
-#    |                 |   samples |      % |    loss |
-#    |                 |       per |        |         |
-#    |                 |    second |        |         |
-#    |:----------------|----------:|-------:|--------:|
-#    | --tf32 0        |    286.07 |    100 |    2.51 |
-#    | --tf32 1        |    342.82 |    120 |    2.51 |
-#    | --fp16 --tf32 0 |    422.07 |    148 |    2.51 |
-#    | --fp16 --tf32 1 |    423.18 |    148 |    2.51 |
-#    | --bf16 --tf32 0 |    415.93 |    145 |    2.52 |
-#    | --bf16 --tf32 1 |    418.51 |    146 |    2.52 |
+#
+# | Variation       |     Train |   Diff |   Train |
+# |                 |   samples |      % |    loss |
+# |                 |       per |        |         |
+# |                 |    second |        |         |
+# |:----------------|----------:|-------:|--------:|
+# | --tf32 0        |    285.11 |      0 |    2.51 |
+# | --tf32 1        |    342.09 |     20 |    2.51 |
+# | --fp16 --tf32 0 |    423.49 |     49 |    2.51 |
+# | --fp16 --tf32 1 |    423.13 |     48 |    2.51 |
+# | --bf16 --tf32 0 |    416.80 |     46 |    2.52 |
+# | --bf16 --tf32 1 |    415.87 |     46 |    2.52 |
+#
 #
 # So you can quickly compare the different outcomes.
 #
@@ -301,7 +303,7 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
     # create diff column if possible
     if not math.isnan(sentinel_value):
         df[diff_key] = df.apply(
-            lambda r: round(100 * r[target_metric_key] / sentinel_value)
+            lambda r: round(100 * (r[target_metric_key] - sentinel_value) / sentinel_value)
             if not math.isnan(r[target_metric_key])
             else 0,
             axis="columns",
