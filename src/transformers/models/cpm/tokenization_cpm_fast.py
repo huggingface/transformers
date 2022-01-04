@@ -36,10 +36,11 @@ class CpmTokenizerFast(XLNetTokenizerFast):
 
     def __init__(self, *args, **kwargs):
         """
-        Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and [SentencePiece](https://github.com/google/sentencepiece).
+        Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and
+        [SentencePiece](https://github.com/google/sentencepiece).
 
-        This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main
-        methods. Users should refer to this superclass for more information regarding those methods.
+        This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should
+        refer to this superclass for more information regarding those methods.
 
         Args:
             vocab_file (`str`):
@@ -57,8 +58,8 @@ class CpmTokenizerFast(XLNetTokenizerFast):
 
                 <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the `cls_token`.
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the `cls_token`.
 
                 </Tip>
 

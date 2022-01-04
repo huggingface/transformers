@@ -72,11 +72,10 @@ class FunnelTokenizerFast(BertTokenizerFast):
     r"""
     Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`FunnelTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+    [`FunnelTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -143,8 +142,7 @@ class FunnelTokenizerFast(BertTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

@@ -69,8 +69,8 @@ encode the text and prepare the images. The following example shows how to get t
 >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
 
 >>> outputs = model(**inputs)
->>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
->>> probs = logits_per_image.softmax(dim=1) # we can take the softmax to get the label probabilities
+>>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+>>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
 
 This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/openai/CLIP).

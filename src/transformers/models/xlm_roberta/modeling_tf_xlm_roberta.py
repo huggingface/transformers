@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0  XLM-RoBERTa model. """
+""" TF 2.0 XLM-RoBERTa model."""
 
 from ...file_utils import add_start_docstrings
 from ...utils import logging
@@ -38,13 +38,13 @@ TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 XLM_ROBERTA_START_DOCSTRING = r"""
 
-    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
     <Tip>
 
@@ -53,11 +53,11 @@ XLM_ROBERTA_START_DOCSTRING = r"""
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
-    the tensors in the first argument of the model call function: `model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-    the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
 
     - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -70,8 +70,7 @@ XLM_ROBERTA_START_DOCSTRING = r"""
     Parameters:
         config ([`XLMRobertaConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -81,8 +80,8 @@ XLM_ROBERTA_START_DOCSTRING = r"""
 )
 class TFXLMRobertaModel(TFRobertaModel):
     """
-    This class overrides [`TFRobertaModel`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFRobertaModel`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -94,21 +93,21 @@ class TFXLMRobertaModel(TFRobertaModel):
 )
 class XLMRobertaForCausalLM(TFRobertaForCausalLM):
     """
-    This class overrides [`TFRobertaForCausalLM`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFRobertaForCausalLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """,
+    """XLM-RoBERTa Model with a `language modeling` head on top.""",
     XLM_ROBERTA_START_DOCSTRING,
 )
 class TFXLMRobertaForMaskedLM(TFRobertaForMaskedLM):
     """
-    This class overrides [`TFRobertaForMaskedLM`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFRobertaForMaskedLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -123,8 +122,8 @@ class TFXLMRobertaForMaskedLM(TFRobertaForMaskedLM):
 )
 class TFXLMRobertaForSequenceClassification(TFRobertaForSequenceClassification):
     """
-    This class overrides [`TFRobertaForSequenceClassification`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForSequenceClassification`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -139,8 +138,8 @@ class TFXLMRobertaForSequenceClassification(TFRobertaForSequenceClassification):
 )
 class TFXLMRobertaForTokenClassification(TFRobertaForTokenClassification):
     """
-    This class overrides [`TFRobertaForTokenClassification`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForTokenClassification`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -155,8 +154,8 @@ layers on top of the hidden-states output to compute `span start logits` and `sp
 )
 class TFXLMRobertaForQuestionAnswering(TFRobertaForQuestionAnswering):
     """
-    This class overrides [`TFRobertaForQuestionAnsweringSimple`]. Please check the superclass for
-    the appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForQuestionAnsweringSimple`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -171,8 +170,8 @@ class TFXLMRobertaForQuestionAnswering(TFRobertaForQuestionAnswering):
 )
 class TFXLMRobertaForMultipleChoice(TFRobertaForMultipleChoice):
     """
-    This class overrides [`TFRobertaForMultipleChoice`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForMultipleChoice`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
