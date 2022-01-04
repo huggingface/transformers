@@ -245,7 +245,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
             framework="pt",
-            chunk_length_ms=10_000,
+            chunk_length_s=10.0,
         )
 
         from datasets import load_dataset
