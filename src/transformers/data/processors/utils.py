@@ -248,8 +248,8 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             pad_on_left: If set to `True`, the examples will be padded on the left rather than on the right (default)
             pad_token: Padding token
             mask_padding_with_zero: If set to `True`, the attention mask will be filled by `1` for actual values
-                and by `0` for padded values. If set to `False`, inverts it (`1` for padded values, `0` for
-                actual values)
+                and by `0` for padded values. If set to `False`, inverts it (`1` for padded values, `0` for actual
+                values)
 
         Returns:
             If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the

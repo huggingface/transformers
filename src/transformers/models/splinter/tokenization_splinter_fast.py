@@ -56,8 +56,8 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" Splinter tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -186,7 +186,8 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create the token type IDs corresponding to the sequences passed. [What are token type IDs?](../glossary#token-type-ids)
+        Create the token type IDs corresponding to the sequences passed. [What are token type
+        IDs?](../glossary#token-type-ids)
 
         Should be overridden in a subclass if the model has a special way of building those.
 

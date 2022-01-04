@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Speech2Text model configuration """
+""" Speech2Text model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,13 +28,13 @@ SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Speech2Text2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Speech2Text2ForCausalLM`]. It
-    is used to instantiate an Speech2Text2 model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`Speech2Text2ForCausalLM`]. It is used to
+    instantiate an Speech2Text2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Speech2Text2
     [facebook/s2t-small-librispeech-asr](https://huggingface.co/facebook/s2t-small-librispeech-asr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -50,8 +50,8 @@ class Speech2Text2Config(PretrainedConfig):
         decoder_ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the pooler. If string, `"gelu"`, `"relu"`,
+            `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -62,8 +62,8 @@ class Speech2Text2Config(PretrainedConfig):
             The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            https://arxiv.org/abs/1909.11556>`__ for more details. decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see
+            https://arxiv.org/abs/1909.11556>`__ for more details. decoder_layerdrop: (`float`, *optional*, defaults to
+            0.0): The LayerDrop probability for the decoder. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Flaubert model, based on XLM. """
+""" PyTorch Flaubert model, based on XLM."""
 
 
 import random
@@ -54,19 +54,18 @@ FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 FLAUBERT_START_DOCSTRING = r"""
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`FlaubertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 FLAUBERT_INPUTS_DOCSTRING = r"""
@@ -74,9 +73,8 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FlaubertTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`FlaubertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -87,25 +85,27 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices
-            selected in `[0, ..., input_ids.size(-1)]`:
+            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`:
         cache (`Dict[str, torch.FloatTensor]`, *optional*):
             Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up
-            sequential decoding. The dictionary object will be modified in-place during the forward pass to add newly
-            computed hidden-states.
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -113,9 +113,9 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -325,8 +325,8 @@ class FlaubertModel(XLMModel):
 )
 class FlaubertWithLMHeadModel(XLMWithLMHeadModel):
     """
-    This class overrides [`XLMWithLMHeadModel`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`XLMWithLMHeadModel`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -347,8 +347,8 @@ class FlaubertWithLMHeadModel(XLMWithLMHeadModel):
 )
 class FlaubertForSequenceClassification(XLMForSequenceClassification):
     """
-    This class overrides [`XLMForSequenceClassification`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`XLMForSequenceClassification`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -369,8 +369,8 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
 )
 class FlaubertForTokenClassification(XLMForTokenClassification):
     """
-    This class overrides [`XLMForTokenClassification`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`XLMForTokenClassification`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -391,8 +391,8 @@ class FlaubertForTokenClassification(XLMForTokenClassification):
 )
 class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
     """
-    This class overrides [`XLMForQuestionAnsweringSimple`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`XLMForQuestionAnsweringSimple`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -413,8 +413,8 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
 )
 class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
     """
-    This class overrides [`XLMForQuestionAnswering`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`XLMForQuestionAnswering`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = FlaubertConfig
@@ -435,8 +435,8 @@ class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
 )
 class FlaubertForMultipleChoice(XLMForMultipleChoice):
     """
-    This class overrides [`XLMForMultipleChoice`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`XLMForMultipleChoice`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = FlaubertConfig

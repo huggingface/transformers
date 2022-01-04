@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Longformer configuration """
+""" Longformer configuration"""
 from collections import OrderedDict
 from typing import List, Mapping, Union
 
@@ -34,22 +34,21 @@ LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LongformerConfig(RobertaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongformerModel`] or a
-    [`TFLongformerModel`]. It is used to instantiate a Longformer model according to the specified
-    arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
+    is used to instantiate a Longformer model according to the specified arguments, defining the model architecture.
 
-    This is the configuration class to store the configuration of a [`LongformerModel`]. It is used
-    to instantiate an Longformer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
+    This is the configuration class to store the configuration of a [`LongformerModel`]. It is used to instantiate an
+    Longformer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the RoBERTa
     [roberta-base](https://huggingface.co/roberta-base) architecture with a sequence length 4,096.
 
-    The [`LongformerConfig`] class directly inherits [`RobertaConfig`]. It reuses
-    the same defaults. Please check the parent class for more information.
+    The [`LongformerConfig`] class directly inherits [`RobertaConfig`]. It reuses the same defaults. Please check the
+    parent class for more information.
 
     Args:
         attention_window (`int` or `List[int]`, *optional*, defaults to 512):
-            Size of an attention window around each token. If an `int`, use the same size for all layers. To
-            specify a different window size for each layer, use a `List[int]` where `len(attention_window) == num_hidden_layers`.
+            Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
+            different window size for each layer, use a `List[int]` where `len(attention_window) == num_hidden_layers`.
 
     Example:
 
