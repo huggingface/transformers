@@ -1303,8 +1303,8 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/unispeech_sat-base")
-        >>> model = UniSpeechSatForPreTraining.from_pretrained("microsoft/unispeech_sat-base")
+        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/unispeech-sat-base")
+        >>> model = UniSpeechSatForPreTraining.from_pretrained("microsoft/unispeech-sat-base")
 
 
         >>> def map_to_array(batch):
