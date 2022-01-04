@@ -16,6 +16,7 @@ from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
+from ..models.electra import ElectraOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
 
@@ -208,6 +209,16 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls=LayoutLMOnnxConfig,
+        ),
+        "electra": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            # "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ElectraOnnxConfig,
         ),
     }
 
