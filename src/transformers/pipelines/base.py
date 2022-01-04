@@ -954,12 +954,12 @@ class Pipeline(_ScikitCompat):
             logger.warning(f"Ignoring args : {args}")
 
         if num_workers is None:
-            if self.num_workers is None:
+            if self._num_workers is None:
                 num_workers = 0
             else:
                 num_workers = self._num_workers
         if batch_size is None:
-            if self.batch_size is None:
+            if self._batch_size is None:
                 batch_size = 1
             else:
                 batch_size = self._batch_size
