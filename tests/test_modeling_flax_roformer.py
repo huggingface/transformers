@@ -147,17 +147,15 @@ class FlaxRoFormerModelTest(FlaxModelTesterMixin, unittest.TestCase):
 class FlaxRoFormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = FlaxRoFormerForMaskedLM.from_pretrained("junnyu/roformer_chinese_base", from_pt=True)
+        model = FlaxRoFormerForMaskedLM.from_pretrained("junnyu/roformer_chinese_base")
         input_ids = jnp.array([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        # TODO Replace vocab size
         vocab_size = 50000
 
         expected_shape = (1, 6, vocab_size)
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = jnp.array(
             [[[-0.1205, -1.0265, 0.2922], [-1.5134, 0.1974, 0.1519], [-5.0135, -3.9003, -0.8404]]]
         )
