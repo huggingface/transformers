@@ -779,7 +779,6 @@ def main():
             predict_dataset = predict_dataset.with_format("numpy")
 
     # Store some constant
-
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
 
     if training_args.block_size % train_batch_size > 0:
@@ -1303,5 +1302,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()
