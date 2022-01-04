@@ -1,6 +1,12 @@
 from typing import List, Union
 
-from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
+from ..file_utils import (
+    add_end_docstrings,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+    requires_backends,
+)
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -9,6 +15,11 @@ if is_vision_available():
     from PIL import Image
 
     from ..image_utils import load_image
+
+if is_tf_available():
+    import tensorflow as tf
+
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
@@ -31,12 +42,12 @@ class ImageClassificationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         requires_backends(self, "vision")
-        self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
+        self.check_model_type(
+            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+            if self.framework == "tf"
+            else MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+        )
 
     def _sanitize_parameters(self, top_k=None):
         postprocess_params = {}
@@ -77,7 +88,7 @@ class ImageClassificationPipeline(Pipeline):
 
     def preprocess(self, image):
         image = load_image(image)
-        model_inputs = self.feature_extractor(images=image, return_tensors="pt")
+        model_inputs = self.feature_extractor(images=image, return_tensors=self.framework)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -87,8 +98,16 @@ class ImageClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs, top_k=5):
         if top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
-        probs = model_outputs.logits.softmax(-1)[0]
-        scores, ids = probs.topk(top_k)
+
+        if self.framework == "pt":
+            probs = model_outputs.logits.softmax(-1)[0]
+            scores, ids = probs.topk(top_k)
+        elif self.framework == "tf":
+            probs = tf.nn.softmax(model_outputs.logits, axis=-1)[0]
+            topk = tf.math.top_k(probs, k=top_k)
+            scores, ids = topk.values.numpy(), topk.indices.numpy()
+        else:
+            raise ValueError(f"Unsupported framework: {self.framework}")
 
         scores = scores.tolist()
         ids = ids.tolist()
