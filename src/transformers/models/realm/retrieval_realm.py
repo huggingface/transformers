@@ -15,9 +15,9 @@
 """Realm Retriever model implementation."""
 import numpy as np
 
-# from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
-
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from .modeling_realm import REALM_START_DOCSTRING
 
 logger = logging.get_logger(__name__)
 
@@ -30,7 +30,6 @@ def convert_tfrecord_to_np(block_records_path, num_block_records):
     np_record = next(blocks_dataset.take(1).as_numpy_iterator())
 
     return np_record
-
 
 class ScaNNSearcher:
     def __init__(
@@ -56,12 +55,20 @@ class ScaNNSearcher:
 
     def search_batched(self, question_projection):
         retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
-        # Must return cpu tensor for subsequent numpy operations
-        #        return torch.tensor(retrieved_block_ids.astype("int64"), device=torch.device("cpu"))
         return retrieved_block_ids.astype("int64")
 
 
 class RealmRetriever:
+    """"The retriever of REALM outputting retrieved evidence block and whether the block has answers."
+    
+    Parameters:
+        config ([`RealmConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
+            weights.
+        tokenizer ([`RealmTokenizer`]): RealmTokenizer to encode retrieved texts.
+        block_records_path ([`str`]): The path of `block_records`, which cantains evidence texts.
+    """
     def __init__(self, config, tokenizer, block_records_path):
         super().__init__()
         self.config = config
@@ -71,7 +78,6 @@ class RealmRetriever:
         )
         self.tokenizer = tokenizer
 
-    #    ) -> BatchEncoding:
     def __call__(self, retrieved_block_ids, question_input_ids, answer_ids, return_tensors="pt"):
         retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
 
@@ -88,7 +94,6 @@ class RealmRetriever:
         )
         concat_inputs_tensors = concat_inputs.convert_to_tensors(return_tensors)
 
-        # concat inputs should come from the retriever here
         if answer_ids is not None:
             return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_tensors,)
         else:
@@ -104,11 +109,13 @@ class RealmRetriever:
         for input_id in concat_inputs.input_ids:
             start_pos.append([])
             end_pos.append([])
-            sep_idx = input_id.index(self.tokenizer.sep_token_id)
+            input_id_list = input_id.tolist()
+            # Checking answers after the [SEP] token
+            sep_idx = input_id_list.index(self.tokenizer.sep_token_id)
             for answer in answer_ids:
                 for idx in range(sep_idx, len(input_id)):
-                    if answer[0] == input_id[idx]:
-                        if input_id[idx : idx + len(answer)] == answer:
+                    if answer[0] == input_id_list[idx]:
+                        if input_id_list[idx : idx + len(answer)] == answer:
                             start_pos[-1].append(idx)
                             end_pos[-1].append(idx + len(answer) - 1)
 

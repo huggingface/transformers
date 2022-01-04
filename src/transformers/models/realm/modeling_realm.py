@@ -91,17 +91,20 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
 
     for name, array in zip(names, arrays):
         # For reader
-        if isinstance(model, RealmReader) and "reader" not in name:
+        if not isinstance(model, RealmForOpenQA) and isinstance(model, RealmReader) and "reader" not in name:
             logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
             continue
-        elif not isinstance(model, RealmReader) and "reader" in name:
+        elif not isinstance(model, RealmForOpenQA) and not isinstance(model, RealmReader) and "reader" in name:
             logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
             continue
-        name = name.replace("reader/module/bert/", "bert/")
-        name = name.replace("reader/module/cls/", "cls/")
-        name = name.replace("reader/dense/", "qa_outputs/dense_intermediate/")
-        name = name.replace("reader/dense_1/", "qa_outputs/dense_output/")
-        name = name.replace("reader/layer_normalization", "qa_outputs/layer_normalization")
+
+        # For reader
+        reader_prefix = "" if isinstance(model, RealmReader) else "reader/"
+        name = name.replace("reader/module/bert/", f"{reader_prefix}bert/")
+        name = name.replace("reader/module/cls/", f"{reader_prefix}cls/")
+        name = name.replace("reader/dense/", f"{reader_prefix}qa_outputs/dense_intermediate/")
+        name = name.replace("reader/dense_1/", f"{reader_prefix}qa_outputs/dense_output/")
+        name = name.replace("reader/layer_normalization", f"{reader_prefix}qa_outputs/layer_normalization")
 
         # For embedder and retriever
         embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
@@ -109,12 +112,6 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
         name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
         name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
-
-        # Fine-tuned checkpoints
-        name = name.replace("module/module/module/module/bert/", f"{embedder_prefix}bert/")
-        name = name.replace("module/module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
-        name = name.replace("module/module/module/dense/", f"{embedder_prefix}cls/dense/")
-        name = name.replace("module/module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -848,9 +845,9 @@ class RealmReaderOutput(ModelOutput):
         reader_correct (`torch.BoolTensor` of shape `(config.reader_beam_size, num_candidates)`, *optional*):
             Whether or not a span candidate contains answer.
         block_idx (`torch.LongTensor` of shape `()`):
-            The index of retrieved evidence blocks in which the predicted answer in most likely
+            The index of retrieved evidence blocks in which the predicted answer most likely.
         candidate (`torch.LongTensor` of shape `()`):
-            .
+            The index of retrieved span candidates in which the predicted answer most likely.
         start_pos (`torch.IntTensor` of shape `()`):
             Predicted answer starting position in *RealmReader*'s inputs.
         end_pos: (`torch.IntTensor` of shape `()`):
@@ -887,17 +884,14 @@ class RealmForOpenQAOutput(ModelOutput):
     Outputs of RealmForOpenQA models.
 
     Args:
-        searcher_output (`dict`):
-            Searcher output.
         reader_output (`dict`):
             Reader output.
-        predicted_answer (`str`):
-            Predicted answer.
+        predicted_answer_ids (`torch.LongTensor` of shape `(answer_sequence_length)`):
+            Predicted answer ids.
     """
 
-    searcher_output: dict = None
     reader_output: dict = None
-    predicted_answer: str = None
+    predicted_answer_ids: torch.LongTensor = None
 
 
 class RealmPredictionHeadTransform(nn.Module):
@@ -975,11 +969,11 @@ class RealmReaderProjection(nn.Module):
             Generate span candidates.
 
             Args:
-            masks: <int32> [num_retrievals, max_sequence_len]
+                masks: <int32> [num_retrievals, max_sequence_len]
 
             Returns:
-            starts: <int32> [num_spans] ends: <int32> [num_spans] span_masks: <int32> [num_retrievals, num_spans]
-            whether spans locate in evidence block.
+                starts: <int32> [num_spans] ends: <int32> [num_spans] span_masks: <int32> [num_retrievals, num_spans]
+                whether spans locate in evidence block.
             """
             _, max_sequence_len = masks.shape
 
@@ -1196,7 +1190,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The retriever of REALM outputting relevance score representing the score of document candidates (before softmax).",
+    "The scorer of REALM outputting relevance score representing the score of document candidates (before softmax).",
     REALM_START_DOCSTRING,
 )
 class RealmScorer(RealmPreTrainedModel):
@@ -1640,9 +1634,29 @@ class RealmReader(RealmPreTrainedModel):
 
 REALM_FOR_OPEN_QA_DOCSTRING = r"""
     Args:
-        question (`str`):
-            OpenQA Question.
-        answer_ids (`torch.LongTensor` of shape `(num_answers, answer_length)`, *optional*):
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`RealmTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
+            details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token (should not be used in this model by design).
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        answer_ids (`list` of shape `(num_answers, answer_length)`, *optional*):
             Answer ids for computing the marginal log-likelihood loss. Indices should be in `[-1, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-1` are ignored (masked),
             the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         return_dict (`bool`, *optional*):
@@ -1663,7 +1677,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
             "block_emb",
             torch.zeros(()).new_empty(
                 size=(config.num_block_records, config.retriever_proj_size),
-                dtype=torch.FloatTensor,
+                dtype=torch.float32,
                 device=torch.device("cpu"),
             ),
         )
@@ -1677,9 +1691,15 @@ class RealmForOpenQA(RealmPreTrainedModel):
             return self.config.searcher_beam_size
         return self.config.reader_beam_size
 
-    @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING.format("1, sequence_length"))
     @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, input_ids, token_type_ids, attention_mask, answer_ids=None, return_dict=None):
+    def forward(self, 
+        input_ids,
+        attention_mask=None, 
+        token_type_ids=None,
+        answer_ids=None,
+        return_dict=None,
+        ):
         r"""
         Returns:
 
@@ -1687,7 +1707,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import RealmForOpenQA, RealmTokenizer
+        >>> from transformers import RealmForOpenQA, RealmRetriever, RealmTokenizer
 
         >>> retriever = RealmRetriever.from_pretrained("qqaatw/realm-open-qa")
         >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-open-qa")
@@ -1712,13 +1732,12 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         # [1, projection_size]
         question_projection = question_outputs[0]
-
+        # [1, block_emb_size]
         batch_scores = torch.einsum("BD,QD->QB", self.block_emb, question_projection)
         # [1, searcher_beam_size]
         _, retrieved_block_ids = torch.topk(batch_scores, k=self.beam_size, dim=-1)
-        
         # [searcher_beam_size]
-        # Must return cpu tensor for subsequent numpy operations
+        # Must convert to cpu tensor for subsequent numpy operations
         retrieved_block_ids = retrieved_block_ids.squeeze().cpu()
 
         # Retrieve possible answers
@@ -1728,6 +1747,8 @@ class RealmForOpenQA(RealmPreTrainedModel):
             has_answers = torch.tensor(has_answers, dtype=torch.bool, device=self.reader.device)
             start_pos = torch.tensor(start_pos, dtype=torch.long, device=self.reader.device)
             end_pos = torch.tensor(end_pos, dtype=torch.long, device=self.reader.device)
+
+        concat_inputs = concat_inputs.to(self.reader.device)
 
         # [searcher_beam_size, projection_size]
         retrieved_block_emb = torch.index_select(
@@ -1754,10 +1775,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
         ]
 
         if not return_dict:
-            return answer_ids, searcher_output, reader_output
+            return reader_output, predicted_answer_ids
 
         return RealmForOpenQAOutput(
-            predicted_answer=predicted_answer_ids,
-            searcher_output={},
             reader_output=reader_output,
+            predicted_answer_ids=predicted_answer_ids,
         )

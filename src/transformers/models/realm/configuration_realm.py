@@ -24,8 +24,10 @@ REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "realm-cc-news-pretrained-bert": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-bert/resolve/main/config.json",
     "realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/config.json",
     "realm-cc-news-pretrained-retriever": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-retriever/resolve/main/config.json",
-    "realm-orqa-nq-searcher": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/config.json",
-    "realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/config.json",
+    "realm-orqa-nq-openqa": "https://huggingface.co/qqaatw/realm-orqa-nq-openqa/resolve/main/config.json",
+    "realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-reader/resolve/main/config.json",
+    "realm-orqa-wq-openqa": "https://huggingface.co/qqaatw/realm-orqa-wq-openqa/resolve/main/config.json",
+    "realm-orqa-wq-reader": "https://huggingface.co/qqaatw/realm-orqa-wq-reader/resolve/main/config.json",
     # See all REALM models at https://huggingface.co/models?filter=realm
 }
 
@@ -37,7 +39,7 @@ class RealmConfig(PretrainedConfig):
     1. [`RealmEmbedder`]
     2. [`RealmScorer`]
     3. [`RealmKnowledgeAugEncoder`]
-    4. [`RealmSearcher`]
+    4. [`RealmRetriever`]
     5. [`RealmReader`]
     6. [`RealmForOpenQA`]
 
@@ -53,8 +55,7 @@ class RealmConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the REALM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`RealmEmbedder`],
-            [`RealmScorer`], [`RealmKnowledgeAugEncoder`],
-            [`RealmSearcher`], or [`RealmReader`].
+            [`RealmScorer`], [`RealmKnowledgeAugEncoder`], or [`RealmReader`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         retriever_proj_size (`int`, *optional*, defaults to 128):
@@ -79,8 +80,7 @@ class RealmConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
             The vocabulary size of the `token_type_ids` passed when calling [`RealmEmbedder`],
-            [`RealmScorer`], [`RealmKnowledgeAugEncoder`],
-            [`RealmSearcher`], or [`RealmReader`].
+            [`RealmScorer`], [`RealmKnowledgeAugEncoder`], or [`RealmReader`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -88,9 +88,6 @@ class RealmConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        use_scann (`bool`, *optional*, defaults to `True`):
-            Whether or not [`RealmSearcher`] uses *ScaNN* as the vector similarity searcher. This
-            option has no effect and is reserved for future development.
         span_hidden_size (`int`, *optional*, defaults to 256):
             Dimension of the reader's spans.
         max_span_width (`int`, *optional*, defaults to 10):
@@ -142,7 +139,6 @@ class RealmConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        use_scann=True,
         span_hidden_size=256,
         max_span_width=10,
         reader_layer_norm_eps=1e-3,
@@ -174,7 +170,6 @@ class RealmConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.use_scann = use_scann
 
         # Reader config
         self.span_hidden_size = span_hidden_size

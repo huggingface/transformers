@@ -39,8 +39,8 @@ if is_torch_available():
 
 # Direct download link
 # https://storage.cloud.google.com/orqa-data/enwiki-20181220/blocks.tfr
-# BLOCK_RECORDS_PATH = r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
-BLOCK_RECORDS_PATH = "/home/patrick/realm/blocks.tfr"
+BLOCK_RECORDS_PATH = r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
+#BLOCK_RECORDS_PATH = "/home/patrick/realm/blocks.tfr"
 
 
 class RealmModelTester:
@@ -126,7 +126,6 @@ class RealmModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         candiate_input_ids = ids_tensor([self.batch_size, self.num_candidates, self.seq_length], self.vocab_size)
         reader_input_ids = ids_tensor([self.reader_beam_size, self.reader_seq_len], self.vocab_size)
-        searcher_input_ids = ids_tensor([1, self.searcher_seq_len], self.vocab_size)
 
         input_mask = None
         candiate_input_mask = None
@@ -135,7 +134,6 @@ class RealmModelTester:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
             candiate_input_mask = random_attention_mask([self.batch_size, self.num_candidates, self.seq_length])
             reader_input_mask = random_attention_mask([self.reader_beam_size, self.reader_seq_len])
-            searcher_input_mask = random_attention_mask([1, self.reader_seq_len])
 
         token_type_ids = None
         candidate_token_type_ids = None
@@ -146,7 +144,6 @@ class RealmModelTester:
                 [self.batch_size, self.num_candidates, self.seq_length], self.type_vocab_size
             )
             reader_token_type_ids = ids_tensor([self.reader_beam_size, self.reader_seq_len], self.type_vocab_size)
-            searcher_token_type_ids = ids_tensor([1, self.searcher_seq_len], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None
@@ -159,19 +156,17 @@ class RealmModelTester:
         config = self.get_config()
 
         # inputs with additional num_candidates axis.
-        retriever_encoder_inputs = (candiate_input_ids, candiate_input_mask, candidate_token_type_ids)
+        scorer_encoder_inputs = (candiate_input_ids, candiate_input_mask, candidate_token_type_ids)
         # reader inputs
         reader_inputs = (reader_input_ids, reader_input_mask, reader_token_type_ids)
-        searcher_inputs = (searcher_input_ids, searcher_input_mask, searcher_token_type_ids)
 
         return (
             config,
             input_ids,
             token_type_ids,
             input_mask,
-            retriever_encoder_inputs,
+            scorer_encoder_inputs,
             reader_inputs,
-            searcher_inputs,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -200,9 +195,8 @@ class RealmModelTester:
         input_ids,
         token_type_ids,
         input_mask,
-        retriever_encoder_inputs,
+        scorer_encoder_inputs,
         reader_inputs,
-        searcher_inputs,
         sequence_labels,
         token_labels,
         choice_labels,
@@ -219,9 +213,8 @@ class RealmModelTester:
         input_ids,
         token_type_ids,
         input_mask,
-        retriever_encoder_inputs,
+        scorer_encoder_inputs,
         reader_inputs,
-        searcher_inputs,
         sequence_labels,
         token_labels,
         choice_labels,
@@ -231,9 +224,9 @@ class RealmModelTester:
         model.eval()
         relevance_score = floats_tensor([self.batch_size, self.num_candidates])
         result = model(
-            retriever_encoder_inputs[0],
-            attention_mask=retriever_encoder_inputs[1],
-            token_type_ids=retriever_encoder_inputs[2],
+            scorer_encoder_inputs[0],
+            attention_mask=scorer_encoder_inputs[1],
+            token_type_ids=scorer_encoder_inputs[2],
             relevance_score=relevance_score,
             labels=token_labels,
         )
@@ -247,9 +240,8 @@ class RealmModelTester:
         input_ids,
         token_type_ids,
         input_mask,
-        retriever_encoder_inputs,
+        scorer_encoder_inputs,
         reader_inputs,
-        searcher_inputs,
         sequence_labels,
         token_labels,
         choice_labels,
@@ -269,15 +261,14 @@ class RealmModelTester:
         self.parent.assertEqual(result.start_pos.shape, ())
         self.parent.assertEqual(result.end_pos.shape, ())
 
-    def create_and_check_retriever(
+    def create_and_check_scorer(
         self,
         config,
         input_ids,
         token_type_ids,
         input_mask,
-        retriever_encoder_inputs,
+        scorer_encoder_inputs,
         reader_inputs,
-        searcher_inputs,
         sequence_labels,
         token_labels,
         choice_labels,
@@ -289,9 +280,9 @@ class RealmModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            candidate_input_ids=retriever_encoder_inputs[0],
-            candidate_attention_mask=retriever_encoder_inputs[1],
-            candidate_token_type_ids=retriever_encoder_inputs[2],
+            candidate_input_ids=scorer_encoder_inputs[0],
+            candidate_attention_mask=scorer_encoder_inputs[1],
+            candidate_token_type_ids=scorer_encoder_inputs[2],
         )
         self.parent.assertEqual(result.relevance_score.shape, (self.batch_size, self.num_candidates))
         self.parent.assertEqual(result.query_score.shape, (self.batch_size, self.retriever_proj_size))
@@ -306,9 +297,8 @@ class RealmModelTester:
             input_ids,
             token_type_ids,
             input_mask,
-            retriever_encoder_inputs,
+            scorer_encoder_inputs,
             reader_inputs,
-            searcher_inputs,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -362,7 +352,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_retriever(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_retriever(*config_and_inputs)
+        self.model_tester.create_and_check_scorer(*config_and_inputs)
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -392,9 +382,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_open_qa_from_pretrained(self):
         # TODO: TF record dataset
-        model = RealmForOpenQA.from_pretrained(
-            "qqaatw/realm-orqa-nq-searcher", "qqaatw/realm-orqa-nq-reader", BLOCK_RECORDS_PATH
-        )
+        model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-openqa", BLOCK_RECORDS_PATH)
         self.assertIsNotNone(model)
 
     @slow
@@ -403,7 +391,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @slow
-    def test_retriever_from_pretrained(self):
+    def test_scorer_from_pretrained(self):
         model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever")
         self.assertIsNotNone(model)
 
@@ -449,11 +437,11 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         config = RealmConfig(use_scann=False)
 
-        tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-searcher")
+        tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-openqa")
         retriever = RealmRetriever(config, tokenizer, BLOCK_RECORDS_PATH)
 
         model = RealmForOpenQA.from_pretrained(
-            "patrickvonplaten/realm-open-qa",
+            "qqaatw/realm-orqa-nq-openqa",
             retriever=retriever,
             config=config,
         )
@@ -468,7 +456,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         ).to(model.device)
 
-        predicted_answer_ids = model(**question).predicted_answer
+        predicted_answer_ids = model(**question).predicted_answer_ids
 
         predicted_answer = tokenizer.decode(predicted_answer_ids)
         self.assertEqual(predicted_answer, "alan mathison turing")
@@ -502,7 +490,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output.end_pos, expected_end_pos, atol=1e-4))
 
     @slow
-    def test_inference_retriever(self):
+    def test_inference_scorer(self):
         num_candidates = 2
 
         model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever", num_candidates=num_candidates)
