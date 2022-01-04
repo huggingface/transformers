@@ -607,26 +607,21 @@ def main():
         captions = []
         for caption in examples[caption_column]:
             captions.append(caption.lower() + " " + tokenizer.eos_token)
-
         targets = captions
 
         model_inputs = {}
-
         # Setup the tokenizer for targets
         with tokenizer.as_target_tokenizer():
             labels = tokenizer(
                 targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
             )
-
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
             labels["input_ids"], model.config.pad_token_id, model.config.decoder_start_token_id
         )
         model_inputs["decoder_input_ids"] = np.asarray(decoder_input_ids)
-
         # We need decoder_attention_mask so we can ignore pad tokens from loss
         model_inputs["decoder_attention_mask"] = labels["attention_mask"]
-
         model_inputs[image_column] = examples[image_column]
 
         return model_inputs
@@ -1207,14 +1202,11 @@ def main():
         epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
 
         for epoch in epochs:
-
             # ======================== Training ================================
-
             # Create sampling rng
             rng, input_rng = jax.random.split(rng)
 
             train_metrics = []
-
             train_batches = blockwise_data_loader(
                 input_rng,
                 train_dataset,

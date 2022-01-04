@@ -35,7 +35,7 @@ python3 run_image_captioning_flax.py \
 	--output_dir ./image-captioning-training-results \
 	--encoder_model_name_or_path "google/vit-base-patch16-224-in21k" \
 	--decoder_model_name_or_path "gpt2" \
-	--dataset_name ydshieh/dummy_coco_dataset \
+	--dataset_name ydshieh/coco_dataset_script \
 	--dataset_config_name=2017 \
 	--data_dir $PWD/data \
 	--image_column image_path \
