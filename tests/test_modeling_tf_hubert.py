@@ -184,7 +184,7 @@ class TFHubertModelTester:
         model = TFHubertForCTC(config)
 
         # freeze feature encoder
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
         input_values = input_values[:3]
 

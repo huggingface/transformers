@@ -18,7 +18,7 @@ import numpy as np
 
 from ..file_utils import is_torch_available
 from ..utils import logging
-from .base import Pipeline
+from .base import ChunkPipeline
 
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-class AutomaticSpeechRecognitionPipeline(Pipeline):
+class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     """
     Pipeline that aims at extracting spoken text contained within some audio.
 
@@ -81,20 +81,24 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
                 The feature extractor that will be used by the pipeline to encode waveform for the model.
             model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
                 The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
-                from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`]
-                for TensorFlow.
+                from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
             tokenizer ([`PreTrainedTokenizer`]):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
                 [`PreTrainedTokenizer`].
-            modelcard (`str` or [`ModelCard`], *optional*):
-                Model card attributed to the model for this pipeline.
+            chunk_length_ms (`int`, *optional*, defaults to 0):
+                The input length for in each chunk. If `0` then chunking is disabled (default). Only available for CTC
+                models.
+            stride_length_ms (`int`, *optional*, defaults to `chunk_length_ms / 6`):
+                The length of stride on the left and right of each chunk. Used only with `chunk_length_ms > 0`. This
+                enables the model to *see* more context and infer letters better than without this context but the
+                pipeline discards the stride bits at the end to make the final reconstitution as perfect as possible.
             framework (`str`, *optional*):
-                The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified
-                framework must be installed.
+                The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must
+                be installed.
 
                 If no framework is specified, will default to the one currently installed. If no framework is specified
-                and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
-                no model is provided.
+                and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no
+                model is provided.
             device (`int`, *optional*, defaults to -1):
                 Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the
                 model on the associated CUDA device id.
@@ -114,16 +118,16 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`]
-        documentation for more information.
+        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
+        information.
 
         Args:
             inputs (`np.ndarray` or `bytes` or `str`):
-                The inputs is either a raw waveform (`np.ndarray` of shape (n, ) of type `np.float32` or
-                `np.float64`) at the correct sampling rate (no further check will be done) or a `str` that is
-                the filename of the audio file, the file will be read at the correct sampling rate to get the waveform
-                using *ffmpeg*. This requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is
-                supposed to be the content of an audio file and is interpreted by *ffmpeg* in the same way.
+                The inputs is either a raw waveform (`np.ndarray` of shape (n, ) of type `np.float32` or `np.float64`)
+                at the correct sampling rate (no further check will be done) or a `str` that is the filename of the
+                audio file, the file will be read at the correct sampling rate to get the waveform using *ffmpeg*. This
+                requires *ffmpeg* to be installed on the system. If *inputs* is `bytes` it is supposed to be the
+                content of an audio file and is interpreted by *ffmpeg* in the same way.
 
         Return:
             A `dict` with the following keys:
@@ -134,9 +138,14 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
 
     def _sanitize_parameters(self, **kwargs):
         # No parameters on this pipeline right now
-        return {}, {}, {}
+        preprocess_params = {}
+        if "chunk_length_ms" in kwargs:
+            preprocess_params["chunk_length_ms"] = kwargs["chunk_length_ms"]
+        if "stride_length_ms" in kwargs:
+            preprocess_params["stride_length_ms"] = kwargs["stride_length_ms"]
+        return preprocess_params, {}, {}
 
-    def preprocess(self, inputs):
+    def preprocess(self, inputs, chunk_length_ms=0, stride_length_ms=None):
         if isinstance(inputs, str):
             with open(inputs, "rb") as f:
                 inputs = f.read()
@@ -149,13 +158,48 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
-        processed = self.feature_extractor(
-            inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-        return processed
+        if chunk_length_ms:
+            if stride_length_ms is None:
+                stride_length_ms = chunk_length_ms // 6
+            inputs_len = len(inputs)
+            chunk_len = chunk_length_ms * self.feature_extractor.sampling_rate // 1000
+            stride_len = stride_length_ms * self.feature_extractor.sampling_rate // 1000
+
+            # Redefine chunk_len to useful chunk length
+            # Not the size
+            # chunk_len = chunk_len - 2 * stride_len
+
+            if self.model.__class__ not in MODEL_FOR_CTC_MAPPING.values():
+                raise ValueError(
+                    "`chunk_length_ms` is only valid for CTC models, use other chunking options for other models"
+                )
+            if chunk_len < stride_len:
+                raise ValueError("Chunk length must be superior to stride length")
+
+            # make sure that
+            step = chunk_len
+            for i in range(0, inputs_len, step):
+                # add start and end paddings to the chunk
+                start = 0 if i - stride_len < 0 else i - stride_len
+                stop = inputs_len if i + chunk_len + stride_len > inputs_len else i + chunk_len + stride_len
+                chunk = inputs[start:stop]
+                processed = self.feature_extractor(
+                    chunk, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                )
+                stride_left = i - start
+                stride_right = max(stop - (i + chunk_len), 0)
+                is_last = i + step > inputs_len
+
+                yield {"is_last": is_last, "stride": (stop - start, stride_left, stride_right), **processed}
+        else:
+            processed = self.feature_extractor(
+                inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            )
+            yield {"is_last": True, **processed}
 
     def _forward(self, model_inputs):
         model_class = self.model.__class__
+        is_last = model_inputs.pop("is_last")
         if model_class in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             encoder = self.model.get_encoder()
             # we need to pass `processed.get("attention_mask")` here since audio encoder
@@ -165,17 +209,33 @@ class AutomaticSpeechRecognitionPipeline(Pipeline):
             tokens = self.model.generate(
                 encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
             )
-            tokens = tokens.squeeze(0)
         elif model_class in MODEL_FOR_CTC_MAPPING.values():
+            stride = model_inputs.pop("stride", None)
             outputs = self.model(**model_inputs)
-            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
+            tokens = outputs.logits.argmax(dim=-1)
+            if stride is not None:
+                if isinstance(stride, tuple):
+                    stride = [stride]
+
+                max_token_n = tokens.shape[-1]
+                max_input_n = max(input_n for input_n, _, _ in stride)
+                ratio = max_token_n / max_input_n
+                for i, (input_n, left, right) in enumerate(stride):
+                    token_n = int(input_n * ratio) + 1
+                    left_token = int(left / input_n * token_n)
+                    right_token = int((input_n - right) / input_n * token_n) + 1
+                    tokens[i, :left_token] = self.tokenizer.pad_token_id
+                    tokens[i, right_token:] = self.tokenizer.pad_token_id
         else:
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
-            tokens = outputs.logits.squeeze(0).argmax(dim=-1)
-        return tokens
+            tokens = outputs.logits.argmax(dim=-1)
+        return {"tokens": tokens, "is_last": is_last}
 
     def postprocess(self, model_outputs):
         skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        recognized_string = self.tokenizer.decode(model_outputs, skip_special_tokens=skip_special_tokens)
+        tokens = np.concatenate([outputs["tokens"].numpy() for outputs in model_outputs], axis=-1)
+        tokens = tokens.squeeze(0)
+
+        recognized_string = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
         return {"text": recognized_string}

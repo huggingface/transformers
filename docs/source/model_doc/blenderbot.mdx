@@ -41,7 +41,7 @@ This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The
 - Available checkpoints can be found in the [model hub](https://huggingface.co/models?search=blenderbot).
 - This is the *default* Blenderbot model class. However, some smaller checkpoints, such as
   `facebook/blenderbot_small_90M`, have a different architecture and consequently should be used with
-  [BlenderbotSmall](blenderbot_small).
+  [BlenderbotSmall](blenderbot-small).
 
 
 ## Usage
@@ -50,11 +50,12 @@ Here is an example of model usage:
 
 ```python
 >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
->>> mname = 'facebook/blenderbot-400M-distill'
+
+>>> mname = "facebook/blenderbot-400M-distill"
 >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
 >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
 >>> UTTERANCE = "My friends are cool but they eat too many carbs."
->>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
+>>> inputs = tokenizer([UTTERANCE], return_tensors="pt")
 >>> reply_ids = model.generate(**inputs)
 >>> print(tokenizer.batch_decode(reply_ids))
 ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]

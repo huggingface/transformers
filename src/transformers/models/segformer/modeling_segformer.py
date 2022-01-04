@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SegFormer model. """
+""" PyTorch SegFormer model."""
 
 
 import collections
@@ -433,8 +433,7 @@ SEGFORMER_START_DOCSTRING = r"""
     Parameters:
         config ([`SegformerConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 SEGFORMER_INPUTS_DOCSTRING = r"""
@@ -442,8 +441,7 @@ SEGFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`SegformerFeatureExtractor`]. See
-            [`SegformerFeatureExtractor.__call__`] for details.
+            [`SegformerFeatureExtractor`]. See [`SegformerFeatureExtractor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -495,7 +493,7 @@ class SegformerModel(SegformerPreTrainedModel):
         >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         >>> model = SegformerModel("nvidia/segformer-b0-finetuned-ade-512-512")
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -559,8 +557,9 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
@@ -571,11 +570,11 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained('nvidia/mit-b0')
-        >>> model = SegformerForImageClassification.from_pretrained('nvidia/mit-b0')
+        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/mit-b0")
+        >>> model = SegformerForImageClassification.from_pretrained("nvidia/mit-b0")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -691,7 +690,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SegFormer Model transformer with an all-MLP decode head on top e.g. for ADE20k, CityScapes. """,
+    """SegFormer Model transformer with an all-MLP decode head on top e.g. for ADE20k, CityScapes.""",
     SEGFORMER_START_DOCSTRING,
 )
 class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
@@ -715,8 +714,8 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed
-            (Cross-Entropy).
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
 
         Returns:
 
@@ -730,12 +729,12 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs.logits # shape (batch_size, num_labels, height/4, width/4)
+        >>> logits = outputs.logits  # shape (batch_size, num_labels, height/4, width/4)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

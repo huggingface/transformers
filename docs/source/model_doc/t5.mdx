@@ -98,8 +98,8 @@ language modeling head on top of the decoder.
   tokenizer = T5Tokenizer.from_pretrained("t5-small")
   model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
-  input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
-  labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
+  input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
+  labels = tokenizer("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
   # the forward function automatically creates the correct decoder_input_ids
   loss = model(input_ids=input_ids, labels=labels).loss
   ```
@@ -120,8 +120,8 @@ language modeling head on top of the decoder.
   tokenizer = T5Tokenizer.from_pretrained("t5-small")
   model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
-  input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
-  labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
+  input_ids = tokenizer("translate English to German: The house is wonderful.", return_tensors="pt").input_ids
+  labels = tokenizer("Das Haus ist wunderbar.", return_tensors="pt").input_ids
   # the forward function automatically creates the correct decoder_input_ids
   loss = model(input_ids=input_ids, labels=labels).loss
   ```
@@ -148,7 +148,7 @@ language modeling head on top of the decoder.
   ignored. The code example below illustrates all of this.
 
   ```python
-  from transformers import T5Tokenizer, T5ForConditionalGeneration 
+  from transformers import T5Tokenizer, T5ForConditionalGeneration
   import torch
 
   tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -168,18 +168,19 @@ language modeling head on top of the decoder.
   # encode the inputs
   task_prefix = "translate English to French: "
   input_sequences = [input_sequence_1, input_sequence_2]
-  encoding = tokenizer([task_prefix + sequence for sequence in input_sequences], 
-                      padding='longest', 
-                      max_length=max_source_length, 
-                      truncation=True, 
-                      return_tensors="pt")
+  encoding = tokenizer(
+      [task_prefix + sequence for sequence in input_sequences],
+      padding="longest",
+      max_length=max_source_length,
+      truncation=True,
+      return_tensors="pt",
+  )
   input_ids, attention_mask = encoding.input_ids, encoding.attention_mask
 
   # encode the targets
-  target_encoding = tokenizer([output_sequence_1, output_sequence_2], 
-                              padding='longest', 
-                              max_length=max_target_length, 
-                              truncation=True)
+  target_encoding = tokenizer(
+      [output_sequence_1, output_sequence_2], padding="longest", max_length=max_target_length, truncation=True
+  )
   labels = target_encoding.input_ids
 
   # replace padding token id's of the labels by -100
@@ -218,12 +219,12 @@ There's also [this blog post](https://huggingface.co/blog/encoder-decoder#encode
 generation works in general in encoder-decoder models.
 
 ```python
-from transformers import T5Tokenizer, T5ForConditionalGeneration 
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 tokenizer = T5Tokenizer.from_pretrained("t5-small")
 model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
-input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
+input_ids = tokenizer("translate English to German: The house is wonderful.", return_tensors="pt").input_ids
 outputs = model.generate(input_ids)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 # Das Haus ist wunderbar.
@@ -242,17 +243,17 @@ model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
 # when generating, we will use the logits of right-most token to predict the next token
 # so the padding should be on the left
-tokenizer.padding_side = "left" 
-tokenizer.pad_token = tokenizer.eos_token # to avoid an error
+tokenizer.padding_side = "left"
+tokenizer.pad_token = tokenizer.eos_token  # to avoid an error
 
-task_prefix = 'translate English to German: '
-sentences = ['The house is wonderful.', 'I like to work in NYC.'] # use different length sentences to test batching
+task_prefix = "translate English to German: "
+sentences = ["The house is wonderful.", "I like to work in NYC."]  # use different length sentences to test batching
 inputs = tokenizer([task_prefix + sentence for sentence in sentences], return_tensors="pt", padding=True)
 
 output_sequences = model.generate(
-    input_ids=inputs['input_ids'],
-    attention_mask=inputs['attention_mask'],
-    do_sample=False, # disable sampling to test if batching affects output
+    input_ids=inputs["input_ids"],
+    attention_mask=inputs["attention_mask"],
+    do_sample=False,  # disable sampling to test if batching affects output
 )
 
 print(tokenizer.batch_decode(output_sequences, skip_special_tokens=True))

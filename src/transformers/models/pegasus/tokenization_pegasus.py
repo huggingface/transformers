@@ -42,8 +42,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -56,8 +56,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -80,7 +80,9 @@ class PegasusTokenizer(PreTrainedTokenizer):
             tokenizer](https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66)
             that uses the tokens 2 - 104 only for pretraining
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
