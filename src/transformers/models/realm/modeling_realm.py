@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch REALM model. """
+""" PyTorch REALM model."""
 
 
 import math
@@ -792,12 +792,13 @@ class RealmEmbedderOutput(ModelOutput):
 
             Projected score.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -852,12 +853,13 @@ class RealmReaderOutput(ModelOutput):
         end_pos: (`torch.IntTensor` of shape `()`):
             Predicted answer ending position in *RealmReader*'s inputs.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -1063,15 +1065,14 @@ class RealmPreTrainedModel(PreTrainedModel):
 
 
 REALM_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config ([`RealmConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 REALM_INPUTS_DOCSTRING = r"""
@@ -1079,9 +1080,8 @@ REALM_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RealmTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`RealmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
@@ -1092,14 +1092,16 @@ REALM_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -1109,9 +1111,9 @@ REALM_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1230,9 +1232,8 @@ class RealmScorer(RealmPreTrainedModel):
         candidate_input_ids (`torch.LongTensor` of shape `(batch_size, num_candidates, sequence_length)`):
             Indices of candidate input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RealmTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`RealmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         candidate_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_candidates, sequence_length)`, *optional*):
@@ -1243,7 +1244,8 @@ class RealmScorer(RealmPreTrainedModel):
 
             [What are attention masks?](../glossary#attention-mask)
         candidate_token_type_ids (`torch.LongTensor` of shape `(batch_size, num_candidates, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
@@ -1359,8 +1361,9 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
             modeling loss.
 
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         mlm_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid calculating joint loss on certain positions. If not specified, the loss will not be masked.
@@ -1377,14 +1380,11 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
 
-        >>> tokenizer = RealmTokenizer.from_pretrained('qqaatw/realm-cc-news-pretrained-bert')
-        >>> model = RealmKnowledgeAugEncoder.from_pretrained('qqaatw/realm-cc-news-pretrained-bert', num_candidates=2)
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+        >>> model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert", num_candidates=2)
 
         >>> # batch_size = 2, num_candidates = 2
-        >>> text = [
-        >>>     ["Hello world!", "Nice to meet you!"],
-        >>>     ["The cute cat.", "The adorable dog."]
-        >>> ]
+        >>> text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]
 
         >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1500,16 +1500,15 @@ class RealmReader(RealmPreTrainedModel):
     ):
         r"""
         relevance_score (`torch.FloatTensor` of shape `(searcher_beam_size,)`, *optional*):
-            Relevance score, which must be specified if you want to compute the marginal log
-            loss.
+            Relevance score, which must be specified if you want to compute the marginal log loss.
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         has_answers (`torch.BoolTensor` of shape `(searcher_beam_size,)`, *optional*):
             Whether or not the evidence block has answer(s).
 
@@ -1636,9 +1635,8 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RealmTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`RealmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
@@ -1649,15 +1647,17 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token (should not be used in this model by design).
 
             [What are token type IDs?](../glossary#token-type-ids)
         answer_ids (`list` of shape `(num_answers, answer_length)`, *optional*):
-            Answer ids for computing the marginal log-likelihood loss. Indices should be in `[-1, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-1` are ignored (masked),
-            the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            Answer ids for computing the marginal log-likelihood loss. Indices should be in `[-1, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-1` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1715,7 +1715,13 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         >>> question = "Who is the pioneer in modern computer science?"
         >>> quastion_ids = tokenizer(question, return_tensors="pt").input_ids
-        >>> answer_ids = tokenizer("alan mathison turing", add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False, return_tensors="pt").input_ids
+        >>> answer_ids = tokenizer(
+        ...     "alan mathison turing",
+        ...     add_special_tokens=False,
+        ...     return_token_type_ids=False,
+        ...     return_attention_mask=False,
+        ...     return_tensors="pt",
+        >>> ).input_ids
 
         >>> searcher_output, reader_output, predicted_answer = model(question_ids, answer_ids)
         >>> loss = reader_output.loss

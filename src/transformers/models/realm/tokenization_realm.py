@@ -56,11 +56,10 @@ class RealmTokenizer(BertTokenizer):
     r"""
     Construct a REALM tokenizer.
 
-    [`RealmTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`RealmTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting and
+    wordpiece.
 
-    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -99,10 +98,7 @@ class RealmTokenizer(BertTokenizer):
         >>> from transformers import RealmTokenizer
 
         >>> # batch_size = 2, num_candidates = 2
-        >>> text = [
-        >>>     ["Hello world!", "Nice to meet you!"],
-        >>>     ["The cute cat.", "The adorable dog."]
-        >>> ]
+        >>> text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]
 
         >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
         >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
