@@ -276,7 +276,7 @@ class PipelinePackIterator(PipelineIterator):
             else:
                 item = processed
                 is_last = item.pop("is_last")
-            accumulator.append(item)
+                accumulator.append(item)
         return accumulator
 
 
