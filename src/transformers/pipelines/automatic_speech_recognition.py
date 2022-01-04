@@ -66,6 +66,23 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
+def apply_stride(tokens, stride):
+    max_token_n = tokens.shape[-1]
+    max_input_n = max(input_n for input_n, _, _ in stride)
+    ratio = max_token_n / max_input_n
+    for i, (input_n, left, right) in enumerate(stride):
+        token_n = int(round(input_n * ratio))
+        left_token = int(round(left / input_n * token_n))
+        right_token = int(round((input_n - right) / input_n * token_n))
+        # This is CTC to preseve decoding, we need to duplicate
+        # next letter, and last letter
+        first_letter = tokens[i, left_token]
+        tokens[i, :left_token] = first_letter
+
+        last_letter = tokens[i, right_token - 1]
+        tokens[i, right_token:] = last_letter
+
+
 class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     """
     Pipeline that aims at extracting spoken text contained within some audio.
@@ -85,10 +102,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             tokenizer ([`PreTrainedTokenizer`]):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
                 [`PreTrainedTokenizer`].
-            chunk_length_s (`int`, *optional*, defaults to 0):
+            chunk_length_s (`float`, *optional*, defaults to 0):
                 The input length for in each chunk. If `0` then chunking is disabled (default). Only available for CTC
                 models.
-            stride_length_s (`int`, *optional*, defaults to `chunk_length_s / 6`):
+            stride_length_s (`float`, *optional*, defaults to `chunk_length_s / 6`):
                 The length of stride on the left and right of each chunk. Used only with `chunk_length_s > 0`. This
                 enables the model to *see* more context and infer letters better than without this context but the
                 pipeline discards the stride bits at the end to make the final reconstitution as perfect as possible.
@@ -160,10 +177,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         if chunk_length_s:
             if stride_length_s is None:
-                stride_length_s = chunk_length_s // 6
+                stride_length_s = chunk_length_s / 6
             inputs_len = len(inputs)
-            chunk_len = chunk_length_s * self.feature_extractor.sampling_rate
-            stride_len = stride_length_s * self.feature_extractor.sampling_rate
+            chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate))
+            stride_len = int(round(stride_length_s * self.feature_extractor.sampling_rate))
 
             # Redefine chunk_len to useful chunk length
             # Not the size
@@ -217,15 +234,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if isinstance(stride, tuple):
                     stride = [stride]
 
-                max_token_n = tokens.shape[-1]
-                max_input_n = max(input_n for input_n, _, _ in stride)
-                ratio = max_token_n / max_input_n
-                for i, (input_n, left, right) in enumerate(stride):
-                    token_n = int(input_n * ratio) + 1
-                    left_token = int(left / input_n * token_n)
-                    right_token = int((input_n - right) / input_n * token_n) + 1
-                    tokens[i, :left_token] = self.tokenizer.pad_token_id
-                    tokens[i, right_token:] = self.tokenizer.pad_token_id
+                apply_stride(tokens, stride)
         else:
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
