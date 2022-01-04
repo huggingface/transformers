@@ -2084,6 +2084,17 @@ if is_flax_available():
             "FlaxRobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.roformer"].extend(
+        [
+            "FlaxRoFormerForMaskedLM",
+            "FlaxRoFormerForMultipleChoice",
+            "FlaxRoFormerForQuestionAnswering",
+            "FlaxRoFormerForSequenceClassification",
+            "FlaxRoFormerForTokenClassification",
+            "FlaxRoFormerModel",
+            "FlaxRoFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
@@ -3818,6 +3829,15 @@ if TYPE_CHECKING:
             FlaxRobertaForTokenClassification,
             FlaxRobertaModel,
             FlaxRobertaPreTrainedModel,
+        )
+        from .models.roformer import (
+            FlaxRoFormerForMaskedLM,
+            FlaxRoFormerForMultipleChoice,
+            FlaxRoFormerForQuestionAnswering,
+            FlaxRoFormerForSequenceClassification,
+            FlaxRoFormerForTokenClassification,
+            FlaxRoFormerModel,
+            FlaxRoFormerPreTrainedModel,
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
