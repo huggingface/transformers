@@ -1083,11 +1083,8 @@ def main():
 
             # Save generations
             if generations:
-                with open(
-                    os.path.join(training_args.output_dir, ckpt_dir, f"{metric_key_prefix}_generation.json"),
-                    "w",
-                    encoding="UTF-8",
-                ) as fp:
+                output_fn = os.path.join(training_args.output_dir, ckpt_dir, f"{metric_key_prefix}_generation.json")
+                with open(output_fn, "w", encoding="UTF-8") as fp:
                     json.dump(generations, fp, ensure_ascii=False, indent=4)
 
     def evaluate(rng: jax.random.PRNGKey, dataset: Dataset, ckpt_dir: str = ""):
