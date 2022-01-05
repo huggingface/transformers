@@ -39,8 +39,6 @@ if is_torch_available():
 
 # Direct download link
 # https://storage.cloud.google.com/orqa-data/enwiki-20181220/blocks.tfr
-# BLOCK_RECORDS_PATH = r"/mnt/sda1/REALM/language/language/data/enwiki-20181220/blocks.tfr"
-BLOCK_RECORDS_PATH = "/home/patrick/realm/block_records.npy"
 
 
 class RealmModelTester:
@@ -439,7 +437,6 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-openqa")
         retriever = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-openqa")
-        #        retriever = RealmRetriever(config, tokenizer, BLOCK_RECORDS_PATH)
 
         model = RealmForOpenQA.from_pretrained(
             "qqaatw/realm-orqa-nq-openqa",
