@@ -1,7 +1,7 @@
 # Image Captioning (vision-encoder-text-decoder model) training example
 
 The following example showcases how to finetune a vision-encoder-text-decoder model for image captioning
-using the JAX/Flax backend, leveraging 🤗 Transformers library's [FlaxVisionEncoderDecoderModel](FlaxVisionEncoderDecoderModel).
+using the JAX/Flax backend, leveraging 🤗 Transformers library's [FlaxVisionEncoderDecoderModel](https://huggingface.co/docs/transformers/model_doc/visionencoderdecoder#transformers.FlaxVisionEncoderDecoderModel).
 
 JAX/Flax allows you to trace pure functions and compile them into efficient, fused accelerator code on both GPU and TPU.
 Models written in JAX/Flax are **immutable** and updated in a purely functional
@@ -12,10 +12,10 @@ library or use your own files (jsonlines or csv), then fine-tune one of the arch
 
 For custom datasets in `jsonlines` format please see: https://huggingface.co/docs/datasets/loading_datasets.html#json-files and you also will find examples of these below.
 
+### Download COCO dataset (2017)
 This example uses COCO dataset (2017) through a custom dataset script, which requires users to manually download the
 COCO dataset before training.
 
-### Download COCO dataset (2017)
 ```bash
 mkdir data
 cd data
@@ -27,14 +27,23 @@ wget http://images.cocodataset.org/annotations/image_info_test2017.zip
 cd ..
 ```
 
+### Create a model from a vision encoder model and a text decoder model
+Next, we create a [FlaxVisionEncoderDecoderModel](https://huggingface.co/docs/transformers/model_doc/visionencoderdecoder#transformers.FlaxVisionEncoderDecoderModel) instance from a vision encoder ([ViT](https://huggingface.co/docs/transformers/model_doc/vit#transformers.FlaxViTModel)) and a text decoder ([GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2#transformers.FlaxGPT2Model)):
+
+```bash
+python3 create_model_from_encoder_decoder_models.py \
+    --output_dir model \
+    --encoder_model_name_or_path google/vit-base-patch16-224-in21k \
+    --decoder_model_name_or_path gpt2
+```
+
 ### Train the model
-Next we can run the example script to train the model:
+Finally, we can run the example script to train the model:
 
 ```bash
 python3 run_image_captioning_flax.py \
 	--output_dir ./image-captioning-training-results \
-	--encoder_model_name_or_path "google/vit-base-patch16-224-in21k" \
-	--decoder_model_name_or_path "gpt2" \
+	--model_name_or_path model \
 	--dataset_name ydshieh/coco_dataset_script \
 	--dataset_config_name=2017 \
 	--data_dir $PWD/data \
