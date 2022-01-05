@@ -16,6 +16,22 @@
 
 ####################################################################################################
 
+#
+# Note: If when running this conversion script you're getting an exception:
+#     ModuleNotFoundError: No module named 'megatron.model.enums'
+# you need to tell python where to find the clone of Megatron-LM, e.g.:
+#
+# cd /tmp
+# git clone https://github.com/NVIDIA/Megatron-LM
+# PYTHONPATH=/tmp/Megatron-LM python src/transformers/models/megatron_bert/convert_megatron_bert_checkpoint.py ...
+#
+# if you already have it cloned elsewhere, simply adjust the path to the existing path
+#
+# If the training was done using a Megatron-LM fork, e.g.,
+# https://github.com/microsoft/Megatron-DeepSpeed/ then chances are that you need to have that one
+# in your path, i.e., /path/to/Megatron-DeepSpeed/
+#
+
 import argparse
 import json
 import os
