@@ -20,7 +20,6 @@ The cross-attention will be randomly initialized.
 """
 
 from dataclasses import dataclass, field
-
 from typing import Optional
 
 from transformers import (
@@ -37,6 +36,7 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
+
     output_dir: str = field(
         metadata={"help": "The output directory where the model will be written."},
     )
@@ -62,7 +62,7 @@ class ModelArguments:
 
 def main():
     parser = HfArgumentParser((ModelArguments,))
-    model_args, = parser.parse_args_into_dataclasses()
+    (model_args,) = parser.parse_args_into_dataclasses()
 
     # Load pretrained model and tokenizer
 

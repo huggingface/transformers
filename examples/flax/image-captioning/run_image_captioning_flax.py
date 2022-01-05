@@ -166,9 +166,7 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={
-            "help": "The model checkpoint for weights initialization."
-        },
+        metadata={"help": "The model checkpoint for weights initialization."},
     )
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
