@@ -439,8 +439,7 @@ def main():
 
     # Load pretrained model and tokenizer
     model = FlaxVisionEncoderDecoderModel.from_pretrained(
-        encoder_pretrained_model_name_or_path=model_args.encoder_model_name_or_path,
-        decoder_pretrained_model_name_or_path=model_args.decoder_model_name_or_path,
+        model_args.model_name_or_path,
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
     )
