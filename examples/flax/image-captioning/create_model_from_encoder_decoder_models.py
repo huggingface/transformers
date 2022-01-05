@@ -106,10 +106,7 @@ def main():
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.encoder_model_name_or_path)
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.decoder_model_name_or_path,
-        use_fast=model_args.use_fast_tokenizer,
-    )
+    tokenizer = AutoTokenizer.from_pretrained(model_args.decoder_model_name_or_path)
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 
     model.save_pretrained(model_args.output_dir)
