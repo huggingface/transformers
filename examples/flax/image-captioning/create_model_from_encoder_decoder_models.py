@@ -68,21 +68,17 @@ def main():
 
     # Use explicit specified encoder config
     if model_args.encoder_config_name:
-        encoder_config = AutoConfig.from_pretrained(model_args.encoder_config_name, cache_dir=model_args.cache_dir)
+        encoder_config = AutoConfig.from_pretrained(model_args.encoder_config_name)
     # Use pretrained encoder model's config
     else:
-        encoder_config = AutoConfig.from_pretrained(
-            model_args.encoder_model_name_or_path, cache_dir=model_args.cache_dir
-        )
+        encoder_config = AutoConfig.from_pretrained(model_args.encoder_model_name_or_path)
 
     # Use explicit specified decoder config
     if model_args.decoder_config_name:
-        decoder_config = AutoConfig.from_pretrained(model_args.decoder_config_name, cache_dir=model_args.cache_dir)
+        decoder_config = AutoConfig.from_pretrained(model_args.decoder_config_name)
     # Use pretrained decoder model's config
     else:
-        decoder_config = AutoConfig.from_pretrained(
-            model_args.decoder_model_name_or_path, cache_dir=model_args.cache_dir
-        )
+        decoder_config = AutoConfig.from_pretrained(model_args.decoder_model_name_or_path)
 
     # necessary for `from_encoder_decoder_pretrained` when `decoder_config` is passed
     decoder_config.is_decoder = True
@@ -108,13 +104,10 @@ def main():
     model.config.decoder_start_token_id = decoder_start_token_id
     model.config.pad_token_id = pad_token_id
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.encoder_model_name_or_path, cache_dir=model_args.cache_dir
-    )
+    feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.encoder_model_name_or_path)
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.decoder_model_name_or_path,
-        cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
     )
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
