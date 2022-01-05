@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PLBART model configuration """
+""" PLBART model configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -93,14 +93,12 @@ class PLBartConfig(PretrainedConfig):
 
         >>> from transformers import PLBartModel, PLBartConfig
 
-        >>> # Initializing a PLBART uclanlp/plbart-base style configuration
-        >>> configuration = PLBartConfig()
+        >>> # Initializing a PLBART uclanlp/plbart-base style configuration >>> configuration = PLBartConfig()
 
-        >>> # Initializing a model from the uclanlp/plbart-base style configuration
-        >>> model = PLBartModel(configuration)
+        >>> # Initializing a model from the uclanlp/plbart-base style configuration >>> model =
+        PLBartModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+        >>> # Accessing the model configuration >>> configuration = model.config
     """
     model_type = "plbart"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -108,7 +106,7 @@ class PLBartConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50005,  # TODO: Check if vocab size includes the language codes?
+        vocab_size=50005,
         max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=3072,

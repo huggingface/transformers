@@ -37,7 +37,7 @@ PYTHON_CODE = 50002
 class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = PLBartTokenizer
     rust_tokenizer_class = PLBartTokenizerFast
-    test_rust_tokenizer = True
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()

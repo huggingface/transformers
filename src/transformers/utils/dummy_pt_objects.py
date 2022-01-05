@@ -2079,6 +2079,8 @@ class LongformerSelfAttention(metaclass=DummyObject):
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
 class LukeForEntityClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2124,6 +2126,7 @@ class LukePreTrainedModel(metaclass=DummyObject):
 class LxmertEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
+class PerceiverForMultimodalAutoencoding:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2145,6 +2148,8 @@ class LxmertForQuestionAnswering(metaclass=DummyObject):
 class LxmertModel(metaclass=DummyObject):
     _backends = ["torch"]
 
+
+class PerceiverLayer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2159,6 +2164,8 @@ class LxmertPreTrainedModel(metaclass=DummyObject):
 class LxmertVisualFeatureEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
+
+class PerceiverPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

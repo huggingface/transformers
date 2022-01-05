@@ -16,7 +16,13 @@ import os
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, PLBartTokenizerFast, is_torch_available
+from transformers import (
+    SPIECE_UNDERLINE,
+    BatchEncoding,
+    PLBartMultiTokenizer,
+    PLBartMultiTokenizerFast,
+    is_torch_available,
+)
 from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -35,19 +41,19 @@ RO_CODE = 250020
 @require_sentencepiece
 @require_tokenizers
 class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = PLBartTokenizer
-    rust_tokenizer_class = PLBartTokenizerFast
-    test_rust_tokenizer = True
+    tokenizer_class = PLBartMultiTokenizer
+    rust_tokenizer_class = PLBartMultiTokenizerFast
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = PLBartMultiTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = PLBartMultiTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -140,7 +146,7 @@ class PLBartEnroIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: PLBartTokenizer = PLBartTokenizer.from_pretrained(
+        cls.tokenizer: PLBartMultiTokenizer = PLBartMultiTokenizer.from_pretrained(
             cls.checkpoint_name, src_lang="en_XX", tgt_lang="ro_RO"
         )
         cls.pad_token_id = 1
@@ -179,7 +185,7 @@ class PLBartEnroIntegrationTest(unittest.TestCase):
         tmpdirname = tempfile.mkdtemp()
         original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
         self.tokenizer.save_pretrained(tmpdirname)
-        new_tok = PLBartTokenizer.from_pretrained(tmpdirname)
+        new_tok = PLBartMultiTokenizer.from_pretrained(tmpdirname)
         self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
 
     @require_torch

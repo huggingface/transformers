@@ -36,7 +36,6 @@ if is_torch_available():
         BatchEncoding,
         PLBartForCausalLM,
         PLBartForConditionalGeneration,
-        PLBartForQuestionAnswering,
         PLBartForSequenceClassification,
         PLBartModel,
     )
@@ -218,9 +217,7 @@ class PLBartModelTester:
 @require_torch
 class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PLBartModel, PLBartForConditionalGeneration, PLBartForSequenceClassification, PLBartForQuestionAnswering)
-        if is_torch_available()
-        else ()
+        (PLBartModel, PLBartForConditionalGeneration, PLBartForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (PLBartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -256,7 +253,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (PLBartModel, PLBartForConditionalGeneration, PLBartForQuestionAnswering):
+        for model_class in (PLBartModel, PLBartForConditionalGeneration):
             model = model_class(config)
             model.to(torch_device)
             model.eval()

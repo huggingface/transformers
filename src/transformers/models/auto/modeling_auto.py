@@ -162,6 +162,8 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         # Model with LM heads mapping
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
+        ("plbart", "PLBartForConditionalGeneration"),
+        ("imagegpt", "ImageGPTForCausalLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -216,6 +218,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("xglm", "XGLMForCausalLM"),
+        ("plbart", "PLBartForCausalLM"),
+        ("imagegpt", "ImageGPTForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -373,6 +377,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Sequence Classification mapping
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
+        ("plbart", "PLBartForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
