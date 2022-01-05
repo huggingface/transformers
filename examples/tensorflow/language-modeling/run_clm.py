@@ -152,15 +152,13 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "Optional input sequence length after tokenization. "
-                    "The training dataset will be truncated in block of this size for training. "
-                    "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            "The training dataset will be truncated in block of this size for training. "
+            "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
     pad_to_block_size: bool = field(
         default=False,
-        metadata={
-            "help": "Whether to pad all samples to `block_size`. "
-        },
+        metadata={"help": "Whether to pad all samples to `block_size`. "},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
