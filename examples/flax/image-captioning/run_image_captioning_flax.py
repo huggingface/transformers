@@ -71,11 +71,6 @@ except (LookupError, OSError):
         nltk.download("punkt", quiet=True)
 
 
-MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-DECODER_MODEL_TYPES = tuple(conf.model_type for conf in list(FLAX_MODEL_FOR_CAUSAL_LM_MAPPING.keys()))
-
-
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
 def shift_tokens_right(input_ids: np.ndarray, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
     """
