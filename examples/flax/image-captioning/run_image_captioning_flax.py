@@ -165,33 +165,10 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    encoder_model_name_or_path: Optional[str] = field(
-        default=None,
+    model_name_or_path: str = field(
         metadata={
-            "help": "The encoder model checkpoint for weights initialization."
-            "Don't set if you want to train an encoder model from scratch."
+            "help": "The model checkpoint for weights initialization."
         },
-    )
-    decoder_model_name_or_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The decoder model checkpoint for weights initialization."
-            "Don't set if you want to train a decoder model from scratch."
-        },
-    )
-    encoder_config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained encoder config name or path if not the same as encoder_model_name"}
-    )
-    decoder_config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained decoder config name or path if not the same as decoder_model_name"}
-    )
-    feature_extractor_name: Optional[str] = field(
-        default=None,
-        metadata={"help": "Pretrained encoder feature extractor_name or path if not the same as encoder_model_name"},
-    )
-    tokenizer_name: Optional[str] = field(
-        default=None,
-        metadata={"help": "Pretrained decoder tokenizer name or path if not the same as decoder_model_name"},
     )
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
@@ -463,86 +440,18 @@ def main():
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     # Load pretrained model and tokenizer
-
-    # Use explicit specified encoder config
-    if model_args.encoder_config_name:
-        encoder_config = AutoConfig.from_pretrained(model_args.encoder_config_name, cache_dir=model_args.cache_dir)
-    # Use pretrained encoder model's config
-    elif model_args.encoder_model_name_or_path:
-        encoder_config = AutoConfig.from_pretrained(
-            model_args.encoder_model_name_or_path, cache_dir=model_args.cache_dir
-        )
-    else:
-        raise ValueError("Encoder Config: Either a pretrained config or a model location for encoder is required.")
-
-    # Use explicit specified decoder config
-    if model_args.decoder_config_name:
-        decoder_config = AutoConfig.from_pretrained(model_args.decoder_config_name, cache_dir=model_args.cache_dir)
-    # Use pretrained decoder model's config
-    elif model_args.decoder_model_name_or_path:
-        decoder_config = AutoConfig.from_pretrained(
-            model_args.decoder_model_name_or_path, cache_dir=model_args.cache_dir
-        )
-    else:
-        raise ValueError("Decoder Config: Either a pretrained config or a model location for decoder is required.")
-    # necessary for `from_encoder_decoder_pretrained` when `decoder_config` is passed
-    decoder_config.is_decoder = True
-    decoder_config.add_cross_attention = True
-
-    model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+    model = FlaxVisionEncoderDecoderModel.from_pretrained(
         encoder_pretrained_model_name_or_path=model_args.encoder_model_name_or_path,
         decoder_pretrained_model_name_or_path=model_args.decoder_model_name_or_path,
-        encoder_config=encoder_config,
-        decoder_config=decoder_config,
-        encoder_seed=training_args.seed,
-        decoder_seed=training_args.seed,
-        encoder_dtype=getattr(jnp, model_args.dtype),
-        decoder_dtype=getattr(jnp, model_args.dtype),
+        seed=training_args.seed,
+        dtype=getattr(jnp, model_args.dtype),
     )
-
-    # GPT2 only has bos/eos tokens but not decoder_start/pad tokens
-    decoder_start_token_id = decoder_config.decoder_start_token_id
-    pad_token_id = decoder_config.pad_token_id
-    if decoder_start_token_id is None:
-        decoder_start_token_id = decoder_config.bos_token_id
-    if pad_token_id is None:
-        pad_token_id = decoder_config.eos_token_id
-
-    # This is necessary to make Flax's generate() work
-    model.config.eos_token_id = decoder_config.eos_token_id
-    model.config.decoder_start_token_id = decoder_start_token_id
-    model.config.pad_token_id = pad_token_id
-
-    if model_args.feature_extractor_name:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(
-            model_args.feature_extractor_name,
-            cache_dir=model_args.cache_dir,
-        )
-    elif model_args.encoder_model_name_or_path:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(
-            model_args.encoder_model_name_or_path, cache_dir=model_args.cache_dir
-        )
-    else:
-        raise ValueError(
-            "You are instantiating a new feature extractor from scratch. This is not supported by this script."
-            "You can do it from another script, save it, and load it from here, using --feature_extractor_name."
-        )
-
-    if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-        )
-    elif model_args.decoder_model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.decoder_model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            use_fast=model_args.use_fast_tokenizer,
-        )
-    else:
-        raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
-            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
-        )
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir
+    )
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+    )
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 
     # Preprocessing the datasets.
