@@ -74,6 +74,12 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES",
         "AutoModelForNextSentencePrediction",
     ),
+    (
+        "audio-frame-classification",
+        "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES",
+        "AutoModelForAudioFrameClassification",
+    ),
+    ("audio-xvector", "MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "AutoModelForAudioXVector"),
 ]
 
 
@@ -215,7 +221,13 @@ def update_metadata(token, commit_sha):
         if repo.is_repo_clean():
             print("Nothing to commit!")
         else:
-            commit_message = f"Update with commit {commit_sha}" if commit_sha is not None else "Update"
+            if commit_sha is not None:
+                commit_message = (
+                    f"Update with commit {commit_sha}\n\nSee: "
+                    f"https://github.com/huggingface/transformers/commit/{commit_sha}"
+                )
+            else:
+                commit_message = "Update"
             repo.push_to_hub(commit_message)
 
 

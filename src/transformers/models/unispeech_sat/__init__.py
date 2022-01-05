@@ -27,9 +27,11 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_unispeech_sat"] = [
         "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "UniSpeechSatForAudioFrameClassification",
         "UniSpeechSatForCTC",
         "UniSpeechSatForPreTraining",
         "UniSpeechSatForSequenceClassification",
+        "UniSpeechSatForXVector",
         "UniSpeechSatModel",
         "UniSpeechSatPreTrainedModel",
     ]
@@ -40,9 +42,11 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_unispeech_sat import (
             UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechSatForAudioFrameClassification,
             UniSpeechSatForCTC,
             UniSpeechSatForPreTraining,
             UniSpeechSatForSequenceClassification,
+            UniSpeechSatForXVector,
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
