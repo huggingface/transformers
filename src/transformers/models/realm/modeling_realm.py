@@ -1133,15 +1133,15 @@ class RealmEmbedder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = RealmBertModel(self.config)
+        self.realm = RealmBertModel(self.config)
         self.cls = RealmScorerProjection(self.config)
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.bert.embeddings.word_embeddings
+        return self.realm.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.bert.embeddings.word_embeddings = value
+        self.realm.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=RealmEmbedderOutput, config_class=_CONFIG_FOR_DOC)
@@ -1163,7 +1163,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        bert_outputs = self.bert(
+        bert_outputs = self.realm(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1320,15 +1320,15 @@ class RealmScorer(RealmPreTrainedModel):
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.bert = RealmBertModel(self.config)
+        self.realm = RealmBertModel(self.config)
         self.cls = RealmOnlyMLMHead(self.config)
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.bert.embeddings.word_embeddings
+        return self.realm.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.bert.embeddings.word_embeddings = value
+        self.realm.embeddings.word_embeddings = value
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1397,7 +1397,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
             input_ids, attention_mask, token_type_ids
         )
 
-        joint_outputs = self.bert(
+        joint_outputs = self.realm(
             flattened_input_ids,
             attention_mask=flattened_attention_mask,
             token_type_ids=flattened_token_type_ids,
@@ -1474,7 +1474,7 @@ class RealmReader(RealmPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = RealmBertModel(config)
+        self.realm = RealmBertModel(config)
         self.cls = RealmOnlyMLMHead(config)
         self.qa_outputs = RealmReaderProjection(config)
 
@@ -1522,7 +1522,7 @@ class RealmReader(RealmPreTrainedModel):
             raise ValueError("You have to specify `token_type_ids` to separate question block and evidence block.")
         if token_type_ids.size(1) < self.config.max_span_width:
             raise ValueError("The input sequence length must be greater than or equal to config.max_span_width.")
-        outputs = self.bert(
+        outputs = self.realm(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1747,7 +1747,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
         retrieved_block_ids = retrieved_block_ids.squeeze().cpu()
 
         # Retrieve possible answers
-        has_answers, start_pos, end_pos, concat_inputs = self.retriever(retrieved_block_ids, input_ids, answer_ids)
+        has_answers, start_pos, end_pos, concat_inputs = self.retriever(
+            retrieved_block_ids, input_ids, answer_ids, max_length=self.config.reader_seq_len
+        )
 
         if has_answers is not None:
             has_answers = torch.tensor(has_answers, dtype=torch.bool, device=self.reader.device)
