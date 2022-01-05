@@ -2084,6 +2084,22 @@ PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 class LukeForEntityClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
+class PerceiverForImageClassificationConvProcessing:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverForImageClassificationFourier:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverForImageClassificationLearned:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2094,24 +2110,34 @@ class LukeForEntityPairClassification(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+class PerceiverForMultimodalAutoencoding:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 class LukeForEntitySpanClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
+class PerceiverForOpticalFlow:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
 class LukeForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
+class PerceiverForSequenceClassification:
         requires_backends(self, ["torch"])
-
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 class LukeModel(metaclass=DummyObject):
     _backends = ["torch"]
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PerceiverLayer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2119,6 +2145,7 @@ class LukeModel(metaclass=DummyObject):
 class LukePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
+class PerceiverModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2126,21 +2153,40 @@ class LukePreTrainedModel(metaclass=DummyObject):
 class LxmertEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
-class PerceiverForMultimodalAutoencoding:
+class PerceiverPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 class LxmertForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PLBartForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 class LxmertForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PLBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2149,14 +2195,22 @@ class LxmertModel(metaclass=DummyObject):
     _backends = ["torch"]
 
 
-class PerceiverLayer:
+class PLBartForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
 
 class LxmertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
+    def forward(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PLBartModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2165,7 +2219,7 @@ class LxmertVisualFeatureEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
 
-class PerceiverPreTrainedModel:
+class PLBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
