@@ -1,4 +1,4 @@
-- sections: 
+- sections:
   - local: index
     title: 🤗 Transformers
   - local: quicktour
@@ -140,6 +140,8 @@
       title: CamemBERT
     - local: model_doc/canine
       title: CANINE
+    - local: model_doc/character_bert
+      title: CharacterBERT
     - local: model_doc/clip
       title: CLIP
     - local: model_doc/convbert
