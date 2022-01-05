@@ -599,6 +599,15 @@ def main():
     remove_columns_kwarg = [x for x in column_names if x != image_column or run_feat_ext_at_beginning]
     processor_names = "tokenizer and feature extractor" if run_feat_ext_at_beginning else "tokenizer"
 
+    # Store some constant
+    train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
+    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
+    if training_args.block_size % train_batch_size > 0 or training_args.block_size % eval_batch_size > 0:
+        raise ValueError(
+            f"`training_args.block_size` needs to be a multiple of the global train/eval batch size."
+            f"Got {training_args.block_size}, {train_batch_size} and {eval_batch_size} respectively instead."
+        )
+
     if training_args.do_train:
         if "train" not in dataset:
             raise ValueError("--do_train requires a train dataset")
@@ -625,6 +634,13 @@ def main():
             # set format (for performance) since the dataset is ready to be used
             train_dataset = train_dataset.with_format("numpy")
 
+        steps_per_epoch = len(train_dataset) // train_batch_size
+        num_train_examples_per_epoch = steps_per_epoch * train_batch_size
+        num_epochs = int(training_args.num_train_epochs)
+        total_train_steps = steps_per_epoch * num_epochs
+    else:
+        num_train_examples_per_epoch = 0
+
     if training_args.do_eval:
         if "validation" not in dataset:
             raise ValueError("--do_eval requires a validation dataset")
@@ -650,6 +666,9 @@ def main():
         if run_feat_ext_at_beginning:
             # set format (for performance) since the dataset is ready to be used
             eval_dataset = eval_dataset.with_format("numpy")
+
+        num_eval_examples = len(eval_dataset)
+        eval_steps = num_eval_examples // eval_batch_size
 
     if training_args.do_predict:
         if "test" not in dataset:
@@ -679,29 +698,6 @@ def main():
             # set format (for performance) since the dataset is ready to be used
             predict_dataset = predict_dataset.with_format("numpy")
 
-    # Store some constant
-    train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
-
-    if training_args.block_size % train_batch_size > 0:
-        raise ValueError(
-            f"`training_args.block_size` needs to be a multiple of the global batch size. Got {training_args.block_size} and {train_batch_size} instead."
-        )
-
-    if training_args.do_train:
-        steps_per_epoch = len(train_dataset) // train_batch_size
-        num_train_examples_per_epoch = steps_per_epoch * train_batch_size
-        num_epochs = int(training_args.num_train_epochs)
-        total_train_steps = steps_per_epoch * num_epochs
-    else:
-        num_train_examples_per_epoch = 0
-
-    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
-
-    if training_args.do_eval:
-        num_eval_examples = len(eval_dataset)
-        eval_steps = num_eval_examples // eval_batch_size
-
-    if training_args.do_predict:
         num_test_examples = len(predict_dataset)
         test_steps = num_test_examples // eval_batch_size
 
