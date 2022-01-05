@@ -169,11 +169,35 @@ The script should now run without hanging or waiting to timeout because it knows
 
 ### Fetch models and tokenizers to use offline
 
-Another option for using 🤗 Transformers offline is to download the files ahead of time, and then point to their local path when you need to use them offline. There are two ways to do this:
+Another option for using 🤗 Transformers offline is to download the files ahead of time, and then point to their local path when you need to use them offline. There are three ways to do this:
 
 * Download a file through the user interface on the [Model Hub](https://huggingface.co/models) by clicking on the ↓ icon.
 
     ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/download-icon.png)
+
+* Use the [`PreTrainedModel.from_pretrained`] and [`PreTrainedModel.save_pretrained`] workflow:
+
+    1. Download your files ahead of time with [`PreTrainedModel.from_pretrained`]:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/T0_3B")
+    >>> model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0_3B")
+    ```
+
+    2. Save your files to a specified directory with [`PreTrainedModel.save_pretrained`]:
+
+    ```python
+    >>> tokenizer.save_pretrained("./your/path/bigscience_t0")
+    >>> model.save_pretrained("./your/path/bigscience_t0")
+    ```
+
+    3. Now when you're offline, reload your files with [`PreTrainedModel.from_pretrained`] from the specified directory:
+
+    ```python
+    >>> tokenizer =  AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
+    >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
 
 * Programmatically download files with the [`huggingface_hub`](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) library:
 
