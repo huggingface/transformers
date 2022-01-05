@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
-          apt install -y libsndfile1-dev
+          apt install -y libsndfile1-dev espeak-ng
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
           pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -84,7 +84,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
           pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
@@ -141,7 +141,7 @@ jobs:
 #    steps:
 #      - name: Install dependencies
 #        run: |
-#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
 #          pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -199,8 +199,8 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
-          apt install -y libsndfile1-dev
+          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
+          apt install -y libsndfile1-dev espeak-ng
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
           pip install https://github.com/kpu/kenlm/archive/master.zip
@@ -255,7 +255,7 @@ jobs:
 #    steps:
 #      - name: Install dependencies
 #        run: |
-#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
 #          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
@@ -312,7 +312,7 @@ jobs:
 #    steps:
 #      - name: Install dependencies
 #        run: |
-#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git
+#          apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
 #          pip install --upgrade pip
 #          pip install .[sklearn,testing,onnxruntime,sentencepiece,tf-speech]
 #          pip install https://github.com/kpu/kenlm/archive/master.zip
