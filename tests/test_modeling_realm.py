@@ -33,6 +33,7 @@ if is_torch_available():
         RealmForOpenQA,
         RealmKnowledgeAugEncoder,
         RealmReader,
+        RealmRetriever,
         RealmScorer,
         RealmTokenizer,
     )
@@ -50,7 +51,7 @@ class RealmModelTester:
         batch_size=13,
         retriever_proj_size=128,
         seq_length=7,
-        is_training=False,
+        is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
@@ -67,7 +68,6 @@ class RealmModelTester:
         type_sequence_label_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_scann=True,
         span_hidden_size=50,
         max_span_width=10,
         reader_layer_norm_eps=1e-3,
@@ -103,7 +103,6 @@ class RealmModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.use_scann = use_scann
 
         # Reader config
         self.span_hidden_size = span_hidden_size
@@ -315,7 +314,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
             RealmEmbedder,
             RealmKnowledgeAugEncoder,
             # RealmScorer is excluded from common tests as it is a container model
-            # consisting of two RealmEmbedders & simple inner product calculation.
+            # consisting of two RealmEmbedders & a simple inner product calculation.
             # RealmScorer
         )
         if is_torch_available()
@@ -358,16 +357,46 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         if not self.model_tester.is_training:
             return
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, *inputs = self.model_tester.prepare_config_and_inputs()
+        input_ids, token_type_ids, input_mask, scorer_encoder_inputs = inputs[0:4]
         config.return_dict = True
 
-        for model_class in [RealmKnowledgeAugEncoder]:
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
+        tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-openqa")
+
+        # RealmKnowledgeAugEncoder training
+        model = RealmKnowledgeAugEncoder(config)
+        model.to(torch_device)
+        model.train()
+        
+        inputs_dict = {
+            "input_ids": scorer_encoder_inputs[0].to(torch_device),
+            "attention_mask": scorer_encoder_inputs[1].to(torch_device),
+            "token_type_ids": scorer_encoder_inputs[2].to(torch_device),
+            "relevance_score": floats_tensor([self.model_tester.batch_size, self.model_tester.num_candidates]),
+        }
+        inputs_dict["labels"] = torch.zeros(
+            (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+        )
+        inputs = inputs_dict
+        loss = model(**inputs).loss
+        loss.backward()
+
+        # RealmForOpenQA training
+        config.vocab_size = 30522
+        retriever = RealmRetriever(config, tokenizer, BLOCK_RECORDS_PATH) # TODO: TF record dataset
+        model = RealmForOpenQA(config, retriever)
+        model.to(torch_device)
+        model.train()
+
+        inputs_dict = {
+            "input_ids": input_ids[:1].to(torch_device),
+            "attention_mask": input_mask[:1].to(torch_device),
+            "token_type_ids": token_type_ids[:1].to(torch_device),
+            "answer_ids": input_ids[:1].tolist(),
+        }
+        inputs = self._prepare_for_class(inputs_dict, RealmForOpenQA)
+        loss = model(**inputs).reader_output.loss
+        loss.backward()
 
     @slow
     def test_embedder_from_pretrained(self):
@@ -435,7 +464,7 @@ class RealmModelIntegrationTest(unittest.TestCase):
     def test_inference_open_qa(self):
         from transformers.models.realm.retrieval_realm import RealmRetriever
 
-        config = RealmConfig(use_scann=False)
+        config = RealmConfig()
 
         tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-openqa")
         retriever = RealmRetriever(config, tokenizer, BLOCK_RECORDS_PATH)
