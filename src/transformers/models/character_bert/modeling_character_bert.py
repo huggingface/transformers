@@ -859,7 +859,8 @@ CHARACTER_BERT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config (:class:`~transformers.CharacterBertConfig`): Model configuration class with all the parameters of the model.
+        config (:
+            class:`~transformers.CharacterBertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -895,13 +896,15 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (:
+            obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`): Mask
+            to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        inputs_embeds (:
+            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -990,18 +993,21 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
+        encoder_hidden_states  (:
+            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`): Sequence
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
+            is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+        past_key_values (:
+            obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of
+            shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key
+            and value hidden states of the attention blocks. Can be used to speed up decoding. If
+            :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`):
@@ -1157,17 +1163,15 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import CharacterBertTokenizer, CharacterBertForPreTraining
-            >>> import torch
+            >>> from transformers import CharacterBertTokenizer, CharacterBertForPreTraining >>> import torch
 
-            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert')
-            >>> model = CharacterBertForPreTraining.from_pretrained('helboukkouri/character-bert')
+            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert') >>> model =
+            CharacterBertForPreTraining.from_pretrained('helboukkouri/character-bert')
 
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt") >>> outputs = model(**inputs)
 
-            >>> prediction_logits = outputs.prediction_logits
-            >>> seq_relationship_logits = outputs.seq_relationship_logits
+            >>> prediction_logits = outputs.prediction_logits >>> seq_relationship_logits =
+            outputs.seq_relationship_logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1207,7 +1211,7 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBert Model with a `language modeling` head on top for CLM fine-tuning. """,
+    """CharacterBert Model with a `language modeling` head on top for CLM fine-tuning.""",
     CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
@@ -1256,9 +1260,10 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
+        encoder_hidden_states  (:
+            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`): Sequence
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
+            is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
@@ -1270,8 +1275,10 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
             ``[-100, 0, ..., config.mlm_vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100``
             are ignored (masked), the loss is only computed for the tokens with labels n ``[0, ...,
             config.mlm_vocab_size]``
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (:
+            obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of
+            shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key
+            and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -1284,16 +1291,14 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import CharacterBertTokenizer, CharacterBertLMHeadModel, CharacterBertConfig
-            >>> import torch
+            >>> from transformers import CharacterBertTokenizer, CharacterBertLMHeadModel, CharacterBertConfig >>>
+            import torch
 
-            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert')
-            >>> config = CharacterBertConfig.from_pretrained("helboukkouri/character-bert")
-            >>> config.is_decoder = True
-            >>> model = CharacterBertLMHeadModel.from_pretrained('helboukkouri/character-bert', config=config)
+            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert') >>> config =
+            CharacterBertConfig.from_pretrained("helboukkouri/character-bert") >>> config.is_decoder = True >>> model =
+            CharacterBertLMHeadModel.from_pretrained('helboukkouri/character-bert', config=config)
 
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt") >>> outputs = model(**inputs)
 
             >>> prediction_logits = outputs.logits
         """
@@ -1361,7 +1366,7 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBert Model with a `language modeling` head on top. """, CHARACTER_BERT_START_DOCSTRING
+    """CharacterBert Model with a `language modeling` head on top.""", CHARACTER_BERT_START_DOCSTRING
 )
 class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
 
@@ -1471,7 +1476,7 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBert Model with a `next sentence prediction (classification)` head on top. """,
+    """CharacterBert Model with a `next sentence prediction (classification)` head on top.""",
     CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
@@ -1515,19 +1520,18 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import CharacterBertTokenizer, CharacterBertForNextSentencePrediction
-            >>> import torch
+            >>> from transformers import CharacterBertTokenizer, CharacterBertForNextSentencePrediction >>> import
+            torch
 
-            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert')
-            >>> model = CharacterBertForNextSentencePrediction.from_pretrained('helboukkouri/character-bert')
+            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert') >>> model =
+            CharacterBertForNextSentencePrediction.from_pretrained('helboukkouri/character-bert')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-            >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light." >>> encoding =
+            tokenizer(prompt, next_sentence, return_tensors='pt')
 
-            >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
-            >>> logits = outputs.logits
-            >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
+            >>> outputs = model(**encoding, labels=torch.LongTensor([1])) >>> logits = outputs.logits >>> assert
+            logits[0, 0] < logits[0, 1] # next sentence was random
         """
 
         if "next_sentence_label" in kwargs:

@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CharacterBERT model configuration """
+""" CharacterBERT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -45,8 +45,9 @@ class CharacterBertConfig(PretrainedConfig):
             The size of the character embeddings.
         cnn_activation (:obj:`str`, `optional`, defaults to :obj:`"relu"`):
             The activation function to apply to the cnn representations.
-        cnn_filters (:obj:`list(list(int))`, `optional`, defaults to :obj:`[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`):
-            The list of CNN filters to use in the CharacterCNN module.
+        cnn_filters (:
+            obj:`list(list(int))`, `optional`, defaults to :obj:`[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6,
+            512], [7, 1024]]`): The list of CNN filters to use in the CharacterCNN module.
         num_highway_layers (:obj:`int`, `optional`, defaults to :obj:`2`):
             The number of Highway layers to apply to the CNNs output.
         max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
