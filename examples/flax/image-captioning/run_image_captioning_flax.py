@@ -46,9 +46,6 @@ from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import Repository
 from transformers import (
-    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
-    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
-    AutoConfig,
     AutoFeatureExtractor,
     AutoTokenizer,
     FlaxVisionEncoderDecoderModel,
