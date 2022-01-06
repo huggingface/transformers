@@ -1273,7 +1273,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         >>> from transformers import FunnelTokenizer, TFFunnelForPreTraining
         >>> import torch
 
-        >>> tokenizer = TFFunnelTokenizer.from_pretrained("funnel-transformer/small")
+        >>> tokenizer = FunnelTokenizer.from_pretrained("funnel-transformer/small")
         >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
