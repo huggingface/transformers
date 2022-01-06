@@ -1382,6 +1382,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         Examples:
 
         ```python
+        >>> import tensorflow as tf
         >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
         >>> import torch
 
