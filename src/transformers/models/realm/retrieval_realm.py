@@ -13,9 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Realm Retriever model implementation."""
+import os
+from typing import Optional, Union
+
 import numpy as np
 
+from huggingface_hub import hf_hub_download
+
 from ...utils import logging
+from .tokenization_realm import RealmTokenizer
+
+
+_REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
 
 
 logger = logging.get_logger(__name__)
@@ -70,16 +79,12 @@ class RealmRetriever:
         block_records_path (`str`): The path of `block_records`, which cantains evidence texts.
     """
 
-    def __init__(self, config, tokenizer, block_records_path):
+    def __init__(self, block_records, tokenizer):
         super().__init__()
-        self.config = config
-        self.block_records = convert_tfrecord_to_np(
-            block_records_path=block_records_path,
-            num_block_records=config.num_block_records,
-        )
+        self.block_records = block_records
         self.tokenizer = tokenizer
 
-    def __call__(self, retrieved_block_ids, question_input_ids, answer_ids, return_tensors="pt"):
+    def __call__(self, retrieved_block_ids, question_input_ids, answer_ids, max_length=None, return_tensors="pt"):
         retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
 
         question = self.tokenizer.decode(question_input_ids[0], skip_special_tokens=True)
@@ -90,15 +95,31 @@ class RealmRetriever:
             text.append(question)
             text_pair.append(retrieved_block.decode())
 
-        concat_inputs = self.tokenizer(
-            text, text_pair, padding=True, truncation=True, max_length=self.config.reader_seq_len
-        )
+        concat_inputs = self.tokenizer(text, text_pair, padding=True, truncation=True, max_length=max_length)
         concat_inputs_tensors = concat_inputs.convert_to_tensors(return_tensors)
 
         if answer_ids is not None:
             return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_tensors,)
         else:
             return (None, None, None, concat_inputs_tensors)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *init_inputs, **kwargs):
+
+        block_records_path = hf_hub_download(
+            repo_id=pretrained_model_name_or_path, filename=_REALM_BLOCK_RECORDS_FILENAME, **kwargs
+        )
+        block_records = np.load(block_records_path, allow_pickle=True)
+
+        tokenizer = RealmTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
+
+        return cls(block_records, tokenizer)
+
+    def save_pretrained(self, save_directory):
+        # save block records
+        np.save(os.path.join(save_directory, _REALM_BLOCK_RECORDS_FILENAME), self.block_records)
+        # save tokenizer
+        self.tokenizer.save_pretrained(save_directory)
 
     def block_has_answer(self, concat_inputs, answer_ids):
         """check if retrieved_blocks has answers."""

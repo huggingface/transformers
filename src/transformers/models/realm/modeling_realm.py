@@ -1760,7 +1760,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
         retrieved_block_ids = retrieved_block_ids.squeeze().cpu()
 
         # Retrieve possible answers
-        has_answers, start_pos, end_pos, concat_inputs = self.retriever(retrieved_block_ids, input_ids, answer_ids)
+        has_answers, start_pos, end_pos, concat_inputs = self.retriever(
+            retrieved_block_ids, input_ids, answer_ids, max_length=self.config.reader_seq_len
+        )
 
         if has_answers is not None:
             has_answers = torch.tensor(has_answers, dtype=torch.bool, device=self.reader.device)
