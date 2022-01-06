@@ -17,7 +17,7 @@ import json
 import re
 import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
-import copy
+from copy import copy
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, List, NewType, Optional, Tuple, Union
@@ -115,7 +115,7 @@ class HfArgumentParser(ArgumentParser):
             elif field.type is bool or field.type == Optional[bool]:
                 # Copy the currect kwargs to use to instantiate a `no_*` complement argument below.
                 # We do not init it here because the `no_*` alternative must be instantiated after the real argument
-                bool_kwargs = copy.copy(kwargs)
+                bool_kwargs = copy(kwargs)
 
                 # Hack because type=bool in argparse does not behave as we want.
                 kwargs["type"] = string_to_bool
