@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021- HuggingFace Inc. team.
+# Copyright 2022 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" Testing suite for the TensorFlow VisionEncoderDecoder model. """
 
 
 import os
@@ -689,13 +690,16 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
         self.assertAlmostEqual(max_diff, 0.0, places=3)
 
-        # TensorFlow => PyTorch
+        # Make sure `from_pretrained` following `save_pretrained` work and give the same result
+        # (See https://github.com/huggingface/transformers/pull/14016)
         with tempfile.TemporaryDirectory() as tmp_dirname:
             encoder_decoder_tf.save_pretrained(tmp_dirname)
-            encoder_decoder_pt = VisionEncoderDecoderModel.from_pretrained(tmp_dirname, from_tf=True)
+            encoder_decoder_tf = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-        max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
-        self.assertAlmostEqual(max_diff, 0.0, places=3)
+            logits_tf_2 = encoder_decoder_tf(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
+
+            max_diff = np.max(np.abs(logits_tf_2.numpy() - logits_tf.numpy()))
+            self.assertAlmostEqual(max_diff, 0.0, places=3)
 
     @require_vision
     @slow

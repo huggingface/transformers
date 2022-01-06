@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 """ Classes to support TF Vision-Encoder-Text-Decoder architectures"""
 
 
+import tempfile
 from typing import Optional
 
 import tensorflow as tf
@@ -410,6 +411,14 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             kwargs_encoder["load_weight_prefix"] = cls.load_weight_prefix
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
+            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            if kwargs_encoder.get("from_pt", None):
+                del kwargs_encoder["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    encoder.save_pretrained(tmp_dirname)
+                    del encoder
+                    encoder = TFAutoModel.from_pretrained(tmp_dirname, *model_args, **kwargs_encoder)
+
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
             if decoder_pretrained_model_name_or_path is None:
@@ -444,6 +453,14 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             kwargs_decoder["name"] = "decoder"
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            if kwargs_decoder.get("from_pt", None):
+                del kwargs_decoder["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    decoder.save_pretrained(tmp_dirname)
+                    del decoder
+                    decoder = TFAutoModelForCausalLM.from_pretrained(tmp_dirname, **kwargs_decoder)
 
         # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         if encoder.name != "encoder":
