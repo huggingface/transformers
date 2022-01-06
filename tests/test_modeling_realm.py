@@ -16,6 +16,8 @@
 
 
 import unittest
+import copy
+import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import RealmConfig, is_torch_available
@@ -377,11 +379,23 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         loss.backward()
 
         # RealmForOpenQA training
-        config.vocab_size = 30522  # the retrieved texts will inevitably have more than 99 vocabs.
-        # TODO: think how to provide a dummy block_records.
-        block_records = np.load(block_records_path, allow_pickle=True)
-        retriever = RealmRetriever(config, block_records, tokenizer)
-        model = RealmForOpenQA(config, retriever)
+        openqa_config = copy.deepcopy(config)
+        openqa_config.vocab_size = 30522  # the retrieved texts will inevitably have more than 99 vocabs.
+        openqa_config.num_block_records = 5
+        openqa_config.searcher_beam_size = 2
+
+        block_records = np.array(
+            [
+                b"This is the first record.",
+                b"This is the second record.",
+                b"This is the third record.",
+                b"This is the fourth record.",
+                b"This is the fifth record.",
+            ],
+            dtype=np.object,
+        )
+        retriever = RealmRetriever(block_records, tokenizer)
+        model = RealmForOpenQA(openqa_config, retriever)
         model.to(torch_device)
         model.train()
 
