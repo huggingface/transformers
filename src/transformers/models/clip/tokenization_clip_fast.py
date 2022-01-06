@@ -167,13 +167,42 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
 
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
+        text_pair = kwargs.pop("text_pair", None)
 
         assert self.add_prefix_space or not is_split_into_words, (
             f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
             "to use it with pretokenized inputs."
         )
 
+        # This is a hack because we don't have a suitable post processor and we need to use Roberta's one
+        if text_pair is not None:
+            kwargs["text"] = kwargs["text"] + text_pair
+
         return super()._encode_plus(*args, **kwargs)
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A CLIP sequence has the following format:
+
+        - single sequence: `<|startoftext|> X <|endoftext|>`
+
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        if token_ids_1 is None:
+            return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+        return [self.bos_token_id] + token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
