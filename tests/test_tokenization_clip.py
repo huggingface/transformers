@@ -206,3 +206,17 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # padding is very hacky in CLIPTokenizer, pad_token_id is always 0
                 # so skip this check
                 # self.assertEqual(tokens[-2], tokenizer.pad_token_id)
+
+    def test_check_encoding_slow_fast(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_s = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                text = "A\n'll 11p223RF☆ho!!to? of a cat"
+                text_tokenized_s = tokenizer_s.tokenize(text)
+                # ['a</w>', "'ll</w>", '1</w>', '1</w>', 'p</w>', '2</w>', '2</w>', '3</w>', 'rf</w>', 'âĺĨ</w>', 'ho</w>', '!!</w>', 'to</w>', '?</w>', 'of</w>', 'a</w>', 'cat</w>']
+
+                text_tokenized_r = tokenizer_r.tokenize(text)
+
+                self.assertListEqual(text_tokenized_s, text_tokenized_r)
