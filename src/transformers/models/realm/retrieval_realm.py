@@ -69,14 +69,11 @@ class ScaNNSearcher:
 
 
 class RealmRetriever:
-    """The retriever of REALM outputting the retrieved evidence block and whether the block has answers."
+    """The retriever of REALM outputting the retrieved evidence block and whether the block has answers as well as answer positions."
 
     Parameters:
-        config ([`RealmConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        block_records (`np.array`): `block_records` which cantains evidence texts.
         tokenizer ([`RealmTokenizer`]): The tokenizer to encode retrieved texts.
-        block_records_path (`str`): The path of `block_records`, which cantains evidence texts.
     """
 
     def __init__(self, block_records, tokenizer):
@@ -105,10 +102,12 @@ class RealmRetriever:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *init_inputs, **kwargs):
-
-        block_records_path = hf_hub_download(
-            repo_id=pretrained_model_name_or_path, filename=_REALM_BLOCK_RECORDS_FILENAME, **kwargs
-        )
+        if os.path.isdir(pretrained_model_name_or_path):
+            block_records_path = os.path.join(pretrained_model_name_or_path, _REALM_BLOCK_RECORDS_FILENAME)
+        else:
+            block_records_path = hf_hub_download(
+                repo_id=pretrained_model_name_or_path, filename=_REALM_BLOCK_RECORDS_FILENAME, **kwargs
+            )
         block_records = np.load(block_records_path, allow_pickle=True)
 
         tokenizer = RealmTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
