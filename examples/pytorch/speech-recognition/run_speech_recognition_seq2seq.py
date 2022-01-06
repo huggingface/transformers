@@ -359,7 +359,7 @@ def main():
         raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
 
     if data_args.max_eval_samples is not None:
-        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_train_samples))
+        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
 
     def prepare_dataset(batch):
         # process audio
