@@ -89,28 +89,42 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         arrays.append(array)
 
     for name, array in zip(names, arrays):
-        # For reader
-        if not isinstance(model, RealmForOpenQA) and isinstance(model, RealmReader) and "reader" not in name:
-            logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
-            continue
-        elif not isinstance(model, RealmForOpenQA) and not isinstance(model, RealmReader) and "reader" in name:
+        if isinstance(model, RealmReader) and "reader" not in name:
             logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
             continue
 
-        # For reader
-        reader_prefix = "" if isinstance(model, RealmReader) else "reader/"
-        name = name.replace("reader/module/bert/", f"{reader_prefix}bert/")
-        name = name.replace("reader/module/cls/", f"{reader_prefix}cls/")
-        name = name.replace("reader/dense/", f"{reader_prefix}qa_outputs/dense_intermediate/")
-        name = name.replace("reader/dense_1/", f"{reader_prefix}qa_outputs/dense_output/")
-        name = name.replace("reader/layer_normalization", f"{reader_prefix}qa_outputs/layer_normalization")
+        # For pretrained openqa reader
+        if (name.startswith("bert") or name.startswith("cls")) and isinstance(model, RealmForOpenQA):
+            name = name.replace("bert/", "reader/realm/")
+            name = name.replace("cls/", "reader/cls/")
+        
+        # For pretrained encoder
+        if (name.startswith("bert") or name.startswith("cls")) and isinstance(model, RealmKnowledgeAugEncoder):
+            name = name.replace("bert/", "realm/")
 
-        # For embedder and retriever
-        embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
-        name = name.replace("module/module/module/bert/", f"{embedder_prefix}bert/")
-        name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
-        name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
-        name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
+        # For finetuned reader
+        if name.startswith("reader"):
+            reader_prefix = "" if isinstance(model, RealmReader) else "reader/"
+            name = name.replace("reader/module/bert/", f"{reader_prefix}realm/")
+            name = name.replace("reader/module/cls/", f"{reader_prefix}cls/")
+            name = name.replace("reader/dense/", f"{reader_prefix}qa_outputs/dense_intermediate/")
+            name = name.replace("reader/dense_1/", f"{reader_prefix}qa_outputs/dense_output/")
+            name = name.replace("reader/layer_normalization", f"{reader_prefix}qa_outputs/layer_normalization")
+
+        # For embedder and scorer
+        if name.startswith("module/module/module/"): # finetuned
+            embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
+            name = name.replace("module/module/module/module/bert/", f"{embedder_prefix}realm/")
+            name = name.replace("module/module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
+            name = name.replace("module/module/module/dense/", f"{embedder_prefix}cls/dense/")
+            name = name.replace("module/module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
+            name = name.replace("module/module/module/bert/", f"{embedder_prefix}realm/")
+            name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
+        elif name.startswith("module/module/"): # pretrained
+            embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
+            name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
+            name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
+            
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -643,7 +657,7 @@ class RealmPooler(nn.Module):
 
 class RealmBertModel(PreTrainedModel):
     """
-    Same as the original BertModel but remvoe docstrings and inherit PreTrainedModel directly.
+    Same as the original BertModel but remove docstrings and inherit PreTrainedModel directly.
     """
 
     def __init__(self, config, add_pooling_layer=True):
@@ -1133,15 +1147,15 @@ class RealmEmbedder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = RealmBertModel(self.config)
+        self.realm = RealmBertModel(self.config)
         self.cls = RealmScorerProjection(self.config)
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.bert.embeddings.word_embeddings
+        return self.realm.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.bert.embeddings.word_embeddings = value
+        self.realm.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=RealmEmbedderOutput, config_class=_CONFIG_FOR_DOC)
@@ -1163,7 +1177,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        bert_outputs = self.bert(
+        bert_outputs = self.realm(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1320,15 +1334,15 @@ class RealmScorer(RealmPreTrainedModel):
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.bert = RealmBertModel(self.config)
+        self.realm = RealmBertModel(self.config)
         self.cls = RealmOnlyMLMHead(self.config)
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.bert.embeddings.word_embeddings
+        return self.realm.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.bert.embeddings.word_embeddings = value
+        self.realm.embeddings.word_embeddings = value
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -1397,7 +1411,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
             input_ids, attention_mask, token_type_ids
         )
 
-        joint_outputs = self.bert(
+        joint_outputs = self.realm(
             flattened_input_ids,
             attention_mask=flattened_attention_mask,
             token_type_ids=flattened_token_type_ids,
@@ -1474,7 +1488,7 @@ class RealmReader(RealmPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = RealmBertModel(config)
+        self.realm = RealmBertModel(config)
         self.cls = RealmOnlyMLMHead(config)
         self.qa_outputs = RealmReaderProjection(config)
 
@@ -1522,7 +1536,7 @@ class RealmReader(RealmPreTrainedModel):
             raise ValueError("You have to specify `token_type_ids` to separate question block and evidence block.")
         if token_type_ids.size(1) < self.config.max_span_width:
             raise ValueError("The input sequence length must be greater than or equal to config.max_span_width.")
-        outputs = self.bert(
+        outputs = self.realm(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1714,16 +1728,15 @@ class RealmForOpenQA(RealmPreTrainedModel):
         >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-open-qa", retriever=retriever)
 
         >>> question = "Who is the pioneer in modern computer science?"
-        >>> quastion_ids = tokenizer(question, return_tensors="pt").input_ids
+        >>> quastion_ids = tokenizer([question], return_tensors="pt").input_ids
         >>> answer_ids = tokenizer(
         ...     "alan mathison turing",
         ...     add_special_tokens=False,
         ...     return_token_type_ids=False,
         ...     return_attention_mask=False,
-        ...     return_tensors="pt",
         >>> ).input_ids
 
-        >>> searcher_output, reader_output, predicted_answer = model(question_ids, answer_ids)
+        >>> reader_output, predicted_answer = model(**question_ids, answer_ids=answer_ids)
         >>> loss = reader_output.loss
         ```"""
 
