@@ -211,7 +211,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_s = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs, from_slow=True)
 
                 text = "A\n'll 11p223RF☆ho!!to?'d'd''d of a cat"
                 text_tokenized_s = tokenizer_s.tokenize(text)
