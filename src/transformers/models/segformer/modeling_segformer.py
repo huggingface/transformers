@@ -490,7 +490,7 @@ class SegformerModel(SegformerPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/mit-b0")
         >>> model = SegformerModel.from_pretrained("nvidia/mit-b0")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
