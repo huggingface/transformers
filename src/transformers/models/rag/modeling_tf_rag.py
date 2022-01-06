@@ -1554,7 +1554,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         ...     "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
         ... )
         >>> # initialize with RagRetriever to do everything in one forward call
-        >>> model = TFRagRagSequenceForGeneration.from_pretrained(
+        >>> model = TFRagSequenceForGeneration.from_pretrained(
         ...     "facebook/rag-sequence-nq", retriever=retriever, from_pt=True
         ... )
 
