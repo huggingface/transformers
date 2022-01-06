@@ -266,7 +266,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
             # BertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == DistilBertForMultipleChoice:
-                continue
+                return
 
             config.torchscript = True
             model = model_class(config=config)
