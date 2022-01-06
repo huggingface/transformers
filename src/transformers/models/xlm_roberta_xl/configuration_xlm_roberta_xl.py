@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLM-RoXLM_ROBERTA_XLa configuration"""
+""" XLM_ROBERTa_XL configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -25,7 +24,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLM_ROXLM_ROBERTA_XLA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+XLM_ROBERTA_XLA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # to fill
 }
 
@@ -100,18 +99,18 @@ class XLMRobertaXLConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        vocab_size=250880,
+        hidden_size=2560,
+        num_hidden_layers=36,
+        num_attention_heads=32,
+        intermediate_size=10240,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
+        max_position_embeddings=514,
+        type_vocab_size=1,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-05,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
