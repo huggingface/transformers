@@ -1724,20 +1724,21 @@ class RealmForOpenQA(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmForOpenQA, RealmRetriever, RealmTokenizer
 
-        >>> retriever = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-openqa")
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-openqa")
-        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-cc-news-pretrained-openqa", retriever=retriever)
+        >>> retriever = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-openqa")
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-openqa")
+        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-openqa", retriever=retriever)
 
         >>> question = "Who is the pioneer in modern computer science?"
-        >>> quastion_ids = tokenizer([question], return_tensors="pt").input_ids
+        >>> question_ids = tokenizer([question], return_tensors="pt")
         >>> answer_ids = tokenizer(
-        ...     "alan mathison turing",
+        ...     ["alan mathison turing"],
         ...     add_special_tokens=False,
         ...     return_token_type_ids=False,
         ...     return_attention_mask=False,
         >>> ).input_ids
 
-        >>> reader_output, predicted_answer = model(**question_ids, answer_ids=answer_ids)
+        >>> reader_output, predicted_answer_ids = model(**question_ids, answer_ids=answer_ids, return_dict=False)
+        >>> predicted_answer = tokenizer.decode(predicted_answer_ids)
         >>> loss = reader_output.loss
         ```"""
 
