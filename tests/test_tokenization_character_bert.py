@@ -107,11 +107,23 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("Adding tokens is not supported (character-level model).")
+    def test_added_token_are_matched_longest_first(self):
+        pass
+
+    @unittest.skip("Adding tokens is not supported (character-level model).")
     def test_encode_decode_with_spaces(self):
         pass
 
     @unittest.skip("CharacterBERT does not use a token/wordpiece vocabulary.")
     def test_get_vocab(self):
+        pass
+
+    @unittest.skip("CharacterBERT does not use a token/wordpiece vocabulary.")
+    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
+        pass
+
+    @unittest.skip("Adding tokens is not supported (character-level model).")
+    def test_tokenize_special_tokens(self):
         pass
 
     def test_conversion_reversible(self):
@@ -231,7 +243,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=total_length - 2,
                     add_special_tokens=False,
                     stride=stride,
-                    truncation="longest_first",
+                    truncation="only_first",
                     return_overflowing_tokens=True,
                     # add_prefix_space=False,
                 )
@@ -371,7 +383,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=len(sequence) - 2,
                     add_special_tokens=False,
                     stride=stride,
-                    truncation="longest_first",
+                    truncation="only_first",
                     return_overflowing_tokens=True,
                     # add_prefix_space=False,
                 )
@@ -403,7 +415,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=len(sequence) - 2,
                     add_special_tokens=False,
                     stride=stride,
-                    truncation=True,
+                    truncation='only_first',
                     return_overflowing_tokens=True,
                     # add_prefix_space=False,
                 )
