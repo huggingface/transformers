@@ -1,0 +1,97 @@
+<!--Copyright 2021 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# YOSO
+
+## Overview
+
+The YOSO model was proposed in [<You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling>(<https://arxiv.org/abs/2111.09714>)  
+by <Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh>. 
+
+The abstract from the paper is the following:
+
+*<Transformer-based models are widely used in natural language processing (NLP). Central to the transformer model is 
+the self-attention mechanism, which captures the interactions of token pairs in the input sequences and depends quadratically 
+on the sequence length. Training such models on longer sequences is expensive. In this paper, we show that a Bernoulli sampling 
+attention mechanism based on Locality Sensitive Hashing (LSH), decreases the quadratic complexity of such models to linear. 
+We bypass the quadratic cost by considering self-attention as a sum of individual tokens associated with Bernoulli random 
+variables that can, in principle, be sampled at once by a single hash (although in practice, this number may be a small constant). 
+This leads to an efficient sampling scheme to estimate self-attention which relies on specific modifications of 
+LSH (to enable deployment on GPU architectures). We evaluate our algorithm on the GLUE benchmark with standard 512 sequence 
+length where we see favorable performance relative to a standard pretrained Transformer. On the Long Range Arena (LRA) benchmark, 
+for evaluating performance on long sequences, our method achieves results consistent with softmax self-attention but with sizable 
+speed-ups and memory savings and often outperforms other efficient self-attention methods. Our code is available at this https URL>*
+
+This model was contributed by [novice03](<https://huggingface.co/<novice03>)`. The original code can be found [here](<https://github.com/mlpen/YOSO>).
+
+## XLNetConfig
+
+[[autodoc]] XLNetConfig
+
+## YosoConfig
+
+[[autodoc]] YosoConfig
+
+
+## YosoTokenizer
+
+[[autodoc]] YosoTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+
+## YosoTokenizerFast
+
+[[autodoc]] YosoTokenizerFast
+
+
+## YosoModel
+
+[[autodoc]] YosoModel
+    - forward
+
+
+## YosoForCausalLM
+
+[[autodoc]] YosoForCausalLM
+    - forward
+
+
+## YosoForMaskedLM
+
+[[autodoc]] YosoForMaskedLM
+    - forward
+
+
+## YosoForSequenceClassification
+
+[[autodoc]] transformers.YosoForSequenceClassification
+    - forward
+
+## YosoForMultipleChoice
+
+[[autodoc]] transformers.YosoForMultipleChoice
+    - forward
+
+
+## YosoForTokenClassification
+
+[[autodoc]] transformers.YosoForTokenClassification
+    - forward
+
+
+## YosoForQuestionAnswering
+
+[[autodoc]] YosoForQuestionAnswering
+    - forward
