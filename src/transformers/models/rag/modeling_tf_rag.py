@@ -559,7 +559,7 @@ class TFRagModel(TFRagPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, RagRetriever, RagModel
+        >>> from transformers import RagTokenizer, RagRetriever, TFRagModel
         >>> import torch
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
