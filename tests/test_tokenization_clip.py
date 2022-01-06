@@ -213,10 +213,58 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_s = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-                text = "A\n'll 11p223RF☆ho!!to? of a cat"
+                text = "A\n'll 11p223RF☆ho!!to?'d'd''d of a cat"
                 text_tokenized_s = tokenizer_s.tokenize(text)
-                # ['a</w>', "'ll</w>", '1</w>', '1</w>', 'p</w>', '2</w>', '2</w>', '3</w>', 'rf</w>', 'âĺĨ</w>', 'ho</w>', '!!</w>', 'to</w>', '?</w>', 'of</w>', 'a</w>', 'cat</w>']
-
                 text_tokenized_r = tokenizer_r.tokenize(text)
 
                 self.assertListEqual(text_tokenized_s, text_tokenized_r)
+
+                # Test that the tokenization is identical on an example containing a character (Latin Small Letter A 
+                # with Tilde) encoded in 2 different ways
+                text = "xa\u0303y" + " " + "x\xe3y"
+                text_tokenized_s = tokenizer_s.tokenize(text)
+                text_tokenized_r = tokenizer_r.tokenize(text)
+
+                self.assertListEqual(text_tokenized_s, text_tokenized_r)
+
+                # Test that the tokenization is identical on unicode of space type
+                spaces_unicodes = [
+                    "\u0009",  # (horizontal tab, '\t')
+                    "\u000B",  # (vertical tab)
+                    "\u000C",  # (form feed)
+                    "\u0020",  # (space, ' ')
+                    "\u200E",  # (left-to-right mark):w
+                    "\u200F",  # (right-to-left mark)
+                ]
+                for unicode_seq in spaces_unicodes:
+                    text_tokenized_s = tokenizer_s.tokenize(unicode_seq)
+                    text_tokenized_r = tokenizer_r.tokenize(unicode_seq)
+
+                    self.assertListEqual(text_tokenized_s, text_tokenized_r)
+
+                # Test that the tokenization is identical on unicode of line break type
+                line_break_unicodes = [
+                    "\u000A",  # (line feed, '\n')
+                    "\r\n", # (carriage return and line feed, '\r\n')
+                    "\u000D",  # (carriage return, '\r')
+                    "\r", # (carriage return, '\r')
+                    "\u000D",  # (carriage return, '\r')
+                    "\u2028",  # (line separator)
+                    "\u2029",  # (paragraph separator)
+                    # "\u0085", # (next line)
+                ]
+
+                # The tokenization is not identical for the character "\u0085" (next line). The slow version transforms
+                # it into the Horizontal Ellipsis character "…" ("\u2026") while the fast version transforms it into a
+                # space (and thus into an empty list).
+
+                for unicode_seq in line_break_unicodes:
+                    text_tokenized_s = tokenizer_s.tokenize(unicode_seq)
+                    text_tokenized_r = tokenizer_r.tokenize(unicode_seq)
+
+                    self.assertListEqual(text_tokenized_s, text_tokenized_r)
+    
+    # overwrite common test
+    def test_added_tokens_do_lower_case(self):
+        # CLIP always lower cases letters to correctly map to phonemes
+        pass
