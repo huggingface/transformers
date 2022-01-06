@@ -135,6 +135,18 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         self.add_prefix_space = add_prefix_space
+        self._wrap_decode_method_backend_tokenizer()
+
+    # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
+    def _wrap_decode_method_backend_tokenizer(self):
+        orig_decode_method = self.backend_tokenizer.decode
+
+        def new_decode_method(*args, **kwargs):
+            text = orig_decode_method(*args, **kwargs)
+            text = text.replace(self.backend_tokenizer.model.end_of_word_suffix, " ").strip()
+            return text
+
+        self.backend_tokenizer.decode = new_decode_method
 
     # Very ugly hack to enable padding
     @property

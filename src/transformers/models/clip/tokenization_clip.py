@@ -332,7 +332,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors).replace("</w>", " ")
+        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors).replace("</w>", " ").strip()
         return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
