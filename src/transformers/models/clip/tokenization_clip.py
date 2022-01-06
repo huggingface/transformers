@@ -197,14 +197,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             re.IGNORECASE,
         )
 
-    # Very ugly hack to enable padding
-    @property
-    def pad_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
-        """
-        return 0
-
     @property
     def vocab_size(self):
         return len(self.encoder)

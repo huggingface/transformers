@@ -148,14 +148,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
 
         self.backend_tokenizer.decode = new_decode_method
 
-    # Very ugly hack to enable padding
-    @property
-    def pad_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
-        """
-        return 0
-
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
         assert self.add_prefix_space or not is_split_into_words, (
