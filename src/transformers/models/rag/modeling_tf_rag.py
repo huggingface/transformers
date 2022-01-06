@@ -939,6 +939,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         Example:
 
         ```python
+        >>> import tensorflow as tf
         >>> from transformers import RagTokenizer, RagRetriever, TFRagTokenForGeneration
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
