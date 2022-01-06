@@ -44,16 +44,17 @@ from .configuration_realm import RealmConfig
 
 
 logger = logging.get_logger(__name__)
-_BERT_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-bert"
 _EMBEDDER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-embedder"
-_RETRIEVER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-retriever"
+_ENCODER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-encoder"
+_SCORER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-scorer"
 _CONFIG_FOR_DOC = "RealmConfig"
 _TOKENIZER_FOR_DOC = "RealmTokenizer"
 
 REALM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "qqaatw/realm-cc-news-pretrained-bert",
     "qqaatw/realm-cc-news-pretrained-embedder",
-    "qqaatw/realm-cc-news-pretrained-retriever",
+    "qqaatw/realm-cc-news-pretrained-encoder",
+    "qqaatw/realm-cc-news-pretrained-scorer",
+    "qqaatw/realm-cc-news-pretrained-openqa",
     "qqaatw/realm-orqa-nq-openqa",
     "qqaatw/realm-orqa-nq-reader",
     "qqaatw/realm-orqa-wq-openqa",

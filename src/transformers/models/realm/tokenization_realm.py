@@ -27,28 +27,36 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt",
-        "realm-cc-news-pretrained-retriever": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-retriever/resolve/main/vocab.txt",
         "realm-cc-news-pretrained-encoder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt",
-        "realm-orqa-nq-searcher": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/vocab.txt",
-        "realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-searcher/resolve/main/vocab.txt",
+        "realm-cc-news-pretrained-scorer": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt",
+        "realm-cc-news-pretrained-openqa": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt",
+        "realm-orqa-nq-openqa": "https://huggingface.co/qqaatw/realm-orqa-nq-openqa/resolve/main/vocab.txt",
+        "realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-reader/resolve/main/vocab.txt",
+        "realm-orqa-wq-openqa": "https://huggingface.co/qqaatw/realm-orqa-wq-openqa/resolve/main/vocab.txt",
+        "realm-orqa-wq-reader": "https://huggingface.co/qqaatw/realm-orqa-wq-reader/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "realm-cc-news-pretrained-embedder": 512,
-    "realm-cc-news-pretrained-retriever": 512,
     "realm-cc-news-pretrained-encoder": 512,
-    "realm-orqa-nq-searcher": 512,
+    "realm-cc-news-pretrained-scorer": 512,
+    "realm-cc-news-pretrained-openqa": 512,
+    "realm-orqa-nq-openqa": 512,
     "realm-orqa-nq-reader": 512,
+    "realm-orqa-wq-openqa": 512,
+    "realm-orqa-wq-reader": 512,
 }
-
 
 PRETRAINED_INIT_CONFIGURATION = {
     "realm-cc-news-pretrained-embedder": {"do_lower_case": True},
-    "realm-cc-news-pretrained-retriever": {"do_lower_case": True},
     "realm-cc-news-pretrained-encoder": {"do_lower_case": True},
-    "realm-orqa-nq-searcher": {"do_lower_case": True},
+    "realm-cc-news-pretrained-scorer": {"do_lower_case": True},
+    "realm-cc-news-pretrained-openqa": {"do_lower_case": True},
+    "realm-orqa-nq-openqa": {"do_lower_case": True},
     "realm-orqa-nq-reader": {"do_lower_case": True},
+    "realm-orqa-wq-openqa": {"do_lower_case": True},
+    "realm-orqa-wq-reader": {"do_lower_case": True},
 }
 
 
