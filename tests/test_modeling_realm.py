@@ -15,8 +15,9 @@
 """ Testing suite for the PyTorch REALM model. """
 
 
-import unittest
 import copy
+import unittest
+
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
@@ -364,7 +365,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         model = RealmKnowledgeAugEncoder(config)
         model.to(torch_device)
         model.train()
-        
+
         inputs_dict = {
             "input_ids": scorer_encoder_inputs[0].to(torch_device),
             "attention_mask": scorer_encoder_inputs[1].to(torch_device),

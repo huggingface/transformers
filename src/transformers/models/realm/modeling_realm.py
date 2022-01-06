@@ -97,7 +97,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         if (name.startswith("bert") or name.startswith("cls")) and isinstance(model, RealmForOpenQA):
             name = name.replace("bert/", "reader/realm/")
             name = name.replace("cls/", "reader/cls/")
-        
+
         # For pretrained encoder
         if (name.startswith("bert") or name.startswith("cls")) and isinstance(model, RealmKnowledgeAugEncoder):
             name = name.replace("bert/", "realm/")
@@ -112,7 +112,7 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
             name = name.replace("reader/layer_normalization", f"{reader_prefix}qa_outputs/layer_normalization")
 
         # For embedder and scorer
-        if name.startswith("module/module/module/"): # finetuned
+        if name.startswith("module/module/module/"):  # finetuned
             embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
             name = name.replace("module/module/module/module/bert/", f"{embedder_prefix}realm/")
             name = name.replace("module/module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
@@ -120,11 +120,10 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
             name = name.replace("module/module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
             name = name.replace("module/module/module/bert/", f"{embedder_prefix}realm/")
             name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
-        elif name.startswith("module/module/"): # pretrained
+        elif name.startswith("module/module/"):  # pretrained
             embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
             name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
             name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
-            
 
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -1395,7 +1394,9 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
 
         >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder")
-        >>> model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder", num_candidates=2)
+        >>> model = RealmKnowledgeAugEncoder.from_pretrained(
+        ...     "qqaatw/realm-cc-news-pretrained-encoder", num_candidates=2
+        ... )
 
         >>> # batch_size = 2, num_candidates = 2
         >>> text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]

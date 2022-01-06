@@ -42,7 +42,8 @@ def convert_tfrecord_to_np(block_records_path, num_block_records):
 
 
 class ScaNNSearcher:
-    """Note that ScaNNSearcher cannot currently be used within the model. In future versions, it might however be included. """
+    """Note that ScaNNSearcher cannot currently be used within the model. In future versions, it might however be included."""
+
     def __init__(
         self,
         db,
@@ -70,11 +71,12 @@ class ScaNNSearcher:
 
 
 class RealmRetriever:
-    """The retriever of REALM outputting the retrieved evidence block and whether the block has answers as well as answer positions."
+    """The retriever of REALM outputting the retrieved evidence block and whether the block has answers as well as answer
+    positions."
 
-    Parameters:
-        block_records (`np.array`): `block_records` which cantains evidence texts.
-        tokenizer ([`RealmTokenizer`]): The tokenizer to encode retrieved texts.
+        Parameters:
+            block_records (`np.array`): `block_records` which cantains evidence texts.
+            tokenizer ([`RealmTokenizer`]): The tokenizer to encode retrieved texts.
     """
 
     def __init__(self, block_records, tokenizer):
