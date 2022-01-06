@@ -38,9 +38,6 @@ if is_torch_available():
         RealmTokenizer,
     )
 
-# Direct download link
-# https://storage.cloud.google.com/orqa-data/enwiki-20181220/blocks.tfr
-
 
 class RealmModelTester:
     def __init__(
@@ -380,8 +377,10 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         loss.backward()
 
         # RealmForOpenQA training
-        config.vocab_size = 30522
-        retriever = RealmRetriever(config, tokenizer, BLOCK_RECORDS_PATH) # TODO: TF record dataset
+        config.vocab_size = 30522  # the retrieved texts will inevitably have more than 99 vocabs.
+        # TODO: think how to provide a dummy block_records.
+        block_records = np.load(block_records_path, allow_pickle=True)
+        retriever = RealmRetriever(config, block_records, tokenizer)
         model = RealmForOpenQA(config, retriever)
         model.to(torch_device)
         model.train()
@@ -403,13 +402,12 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_encoder_from_pretrained(self):
-        model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+        model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder")
         self.assertIsNotNone(model)
 
     @slow
     def test_open_qa_from_pretrained(self):
-        # TODO: TF record dataset
-        model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-openqa", BLOCK_RECORDS_PATH)
+        model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-openqa")
         self.assertIsNotNone(model)
 
     @slow
@@ -419,7 +417,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_scorer_from_pretrained(self):
-        model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-retriever")
+        model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-scorer")
         self.assertIsNotNone(model)
 
 
