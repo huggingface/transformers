@@ -75,6 +75,9 @@ class FlaxPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAlbertForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -84,6 +87,9 @@ class FlaxAlbertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAlbertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -92,6 +98,9 @@ class FlaxAlbertForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxAlbertForPreTraining:
@@ -107,6 +116,9 @@ class FlaxAlbertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAlbertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -115,6 +127,9 @@ class FlaxAlbertForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxAlbertForTokenClassification:
@@ -125,6 +140,9 @@ class FlaxAlbertForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAlbertModel:
     def __init__(self, *args, **kwargs):
@@ -134,6 +152,9 @@ class FlaxAlbertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAlbertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -142,6 +163,9 @@ class FlaxAlbertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = None
@@ -188,6 +212,9 @@ class FlaxAutoModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
@@ -196,6 +223,9 @@ class FlaxAutoModelForCausalLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxAutoModelForImageClassification:
@@ -206,6 +236,9 @@ class FlaxAutoModelForImageClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAutoModelForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -214,6 +247,9 @@ class FlaxAutoModelForMaskedLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxAutoModelForMultipleChoice:
@@ -224,6 +260,9 @@ class FlaxAutoModelForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAutoModelForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
@@ -232,6 +271,9 @@ class FlaxAutoModelForNextSentencePrediction:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxAutoModelForPreTraining:
@@ -242,6 +284,9 @@ class FlaxAutoModelForPreTraining:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAutoModelForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -250,6 +295,9 @@ class FlaxAutoModelForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxAutoModelForSeq2SeqLM:
@@ -260,6 +308,9 @@ class FlaxAutoModelForSeq2SeqLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAutoModelForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -268,6 +319,9 @@ class FlaxAutoModelForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxAutoModelForTokenClassification:
@@ -278,6 +332,9 @@ class FlaxAutoModelForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxAutoModelForVision2Seq:
     def __init__(self, *args, **kwargs):
@@ -286,6 +343,9 @@ class FlaxAutoModelForVision2Seq:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBartForConditionalGeneration:
@@ -296,6 +356,9 @@ class FlaxBartForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBartForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -304,6 +367,9 @@ class FlaxBartForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBartForSequenceClassification:
@@ -314,6 +380,9 @@ class FlaxBartForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBartModel:
     def __init__(self, *args, **kwargs):
@@ -323,6 +392,9 @@ class FlaxBartModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -331,6 +403,9 @@ class FlaxBartPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBeitForImageClassification:
@@ -346,6 +421,9 @@ class FlaxBeitForMaskedImageModeling:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBeitModel:
     def __init__(self, *args, **kwargs):
@@ -354,6 +432,9 @@ class FlaxBeitModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBeitPreTrainedModel:
@@ -364,6 +445,9 @@ class FlaxBeitPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBertForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -372,6 +456,9 @@ class FlaxBertForMaskedLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBertForMultipleChoice:
@@ -382,9 +469,19 @@ class FlaxBertForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
 
@@ -401,6 +498,9 @@ class FlaxBertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -409,6 +509,9 @@ class FlaxBertForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBertForTokenClassification:
@@ -419,6 +522,9 @@ class FlaxBertForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBertModel:
     def __init__(self, *args, **kwargs):
@@ -427,6 +533,9 @@ class FlaxBertModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBertPreTrainedModel:
@@ -437,6 +546,9 @@ class FlaxBertPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBigBirdForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -446,6 +558,9 @@ class FlaxBigBirdForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBigBirdForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -454,6 +569,9 @@ class FlaxBigBirdForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBigBirdForPreTraining:
@@ -469,6 +587,9 @@ class FlaxBigBirdForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBigBirdForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -477,6 +598,9 @@ class FlaxBigBirdForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBigBirdForTokenClassification:
@@ -487,6 +611,9 @@ class FlaxBigBirdForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxBigBirdModel:
     def __init__(self, *args, **kwargs):
@@ -495,6 +622,9 @@ class FlaxBigBirdModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxBigBirdPreTrainedModel:
@@ -505,6 +635,81 @@ class FlaxBigBirdPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBlenderbotForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBlenderbotModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBlenderbotPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBlenderbotSmallForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBlenderbotSmallModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxBlenderbotSmallPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxCLIPModel:
     def __init__(self, *args, **kwargs):
@@ -513,6 +718,9 @@ class FlaxCLIPModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxCLIPPreTrainedModel:
@@ -523,6 +731,9 @@ class FlaxCLIPPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxCLIPTextModel:
     def __init__(self, *args, **kwargs):
@@ -531,6 +742,9 @@ class FlaxCLIPTextModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxCLIPTextPreTrainedModel:
@@ -541,6 +755,9 @@ class FlaxCLIPTextPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxCLIPVisionModel:
     def __init__(self, *args, **kwargs):
@@ -549,6 +766,9 @@ class FlaxCLIPVisionModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxCLIPVisionPreTrainedModel:
@@ -559,6 +779,9 @@ class FlaxCLIPVisionPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxDistilBertForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -567,6 +790,9 @@ class FlaxDistilBertForMaskedLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxDistilBertForMultipleChoice:
@@ -577,6 +803,9 @@ class FlaxDistilBertForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxDistilBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -585,6 +814,9 @@ class FlaxDistilBertForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxDistilBertForSequenceClassification:
@@ -595,6 +827,9 @@ class FlaxDistilBertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxDistilBertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -603,6 +838,9 @@ class FlaxDistilBertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxDistilBertModel:
@@ -613,6 +851,9 @@ class FlaxDistilBertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxDistilBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -621,6 +862,9 @@ class FlaxDistilBertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxElectraForMaskedLM:
@@ -631,6 +875,9 @@ class FlaxElectraForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxElectraForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -639,6 +886,9 @@ class FlaxElectraForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxElectraForPreTraining:
@@ -654,6 +904,9 @@ class FlaxElectraForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxElectraForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -662,6 +915,9 @@ class FlaxElectraForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxElectraForTokenClassification:
@@ -672,6 +928,9 @@ class FlaxElectraForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxElectraModel:
     def __init__(self, *args, **kwargs):
@@ -680,6 +939,9 @@ class FlaxElectraModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxElectraPreTrainedModel:
@@ -690,6 +952,9 @@ class FlaxElectraPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
@@ -698,6 +963,9 @@ class FlaxEncoderDecoderModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxGPT2LMHeadModel:
@@ -708,6 +976,9 @@ class FlaxGPT2LMHeadModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxGPT2Model:
     def __init__(self, *args, **kwargs):
@@ -716,6 +987,9 @@ class FlaxGPT2Model:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxGPT2PreTrainedModel:
@@ -726,6 +1000,9 @@ class FlaxGPT2PreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxGPTNeoForCausalLM:
     def __init__(self, *args, **kwargs):
@@ -734,6 +1011,9 @@ class FlaxGPTNeoForCausalLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxGPTNeoModel:
@@ -744,6 +1024,9 @@ class FlaxGPTNeoModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxGPTNeoPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -752,6 +1035,45 @@ class FlaxGPTNeoPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPTJForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPTJModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGPTJPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxMarianModel:
@@ -762,6 +1084,9 @@ class FlaxMarianModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxMarianMTModel:
     def __init__(self, *args, **kwargs):
@@ -770,6 +1095,9 @@ class FlaxMarianMTModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxMarianPreTrainedModel:
@@ -780,6 +1108,9 @@ class FlaxMarianPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxMBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
@@ -788,6 +1119,9 @@ class FlaxMBartForConditionalGeneration:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxMBartForQuestionAnswering:
@@ -798,6 +1132,9 @@ class FlaxMBartForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxMBartForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -806,6 +1143,9 @@ class FlaxMBartForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxMBartModel:
@@ -816,6 +1156,9 @@ class FlaxMBartModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxMBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -824,6 +1167,9 @@ class FlaxMBartPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxMT5ForConditionalGeneration:
@@ -834,6 +1180,9 @@ class FlaxMT5ForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxMT5Model:
     def __init__(self, *args, **kwargs):
@@ -842,6 +1191,9 @@ class FlaxMT5Model:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxPegasusForConditionalGeneration:
@@ -852,6 +1204,9 @@ class FlaxPegasusForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxPegasusModel:
     def __init__(self, *args, **kwargs):
@@ -860,6 +1215,9 @@ class FlaxPegasusModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxPegasusPreTrainedModel:
@@ -870,6 +1228,9 @@ class FlaxPegasusPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxRobertaForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -878,6 +1239,9 @@ class FlaxRobertaForMaskedLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxRobertaForMultipleChoice:
@@ -888,6 +1252,9 @@ class FlaxRobertaForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxRobertaForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -896,6 +1263,9 @@ class FlaxRobertaForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxRobertaForSequenceClassification:
@@ -906,6 +1276,9 @@ class FlaxRobertaForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxRobertaForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -914,6 +1287,9 @@ class FlaxRobertaForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxRobertaModel:
@@ -924,6 +1300,9 @@ class FlaxRobertaModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxRobertaPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -932,6 +1311,93 @@ class FlaxRobertaPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRoFormerForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRoFormerForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRoFormerForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRoFormerForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRoFormerForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRoFormerModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxRoFormerPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxT5ForConditionalGeneration:
@@ -942,6 +1408,9 @@ class FlaxT5ForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxT5Model:
     def __init__(self, *args, **kwargs):
@@ -950,6 +1419,9 @@ class FlaxT5Model:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxT5PreTrainedModel:
@@ -960,6 +1432,9 @@ class FlaxT5PreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxVisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
@@ -968,6 +1443,21 @@ class FlaxVisionEncoderDecoderModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxVisionTextDualEncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxViTForImageClassification:
@@ -983,6 +1473,9 @@ class FlaxViTModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxViTPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -991,6 +1484,9 @@ class FlaxViTPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
 
 
 class FlaxWav2Vec2ForCTC:
@@ -1011,6 +1507,9 @@ class FlaxWav2Vec2Model:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
 
 class FlaxWav2Vec2PreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1019,3 +1518,6 @@ class FlaxWav2Vec2PreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
+
+    def __call__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])

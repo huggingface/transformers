@@ -18,7 +18,7 @@ Fine-tuning the library models for causal language modeling (GPT-2, GPT-Neo...)
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=causal-lm
+https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own clm task. Pointers for this are left as comments.
 
@@ -30,6 +30,7 @@ import random
 import sys
 from dataclasses import dataclass, field
 from functools import partial
+from itertools import chain
 from pathlib import Path
 from typing import Optional
 
@@ -406,7 +407,7 @@ def main():
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
