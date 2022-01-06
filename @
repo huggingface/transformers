@@ -1904,63 +1904,25 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_sequences_no_mask.tolist(), output_sequences_with_mask.tolist())
 
-    @staticmethod
-    def compute_transition_beam_scores_sum(outputs, vocab_size):
-        # reshape scores
-        scores = torch.stack(outputs.scores).reshape(len(outputs.scores), -1).transpose(0, 1)
-        cut_idx = outputs.sequences.shape[-1] - scores.shape[-1]
-        # compute real indices
-        indices = outputs.sequences[:, cut_idx:] + torch.tensor(outputs.beam_indices, device=outputs.sequences.device) * vocab_size
-
-        # gather scores and run
-        return scores.gather(0, indices).sum(-1)
-
-    def test_transition_scores_beam_search_encoder_decoder(self):
+    def test_returned_beam_scores(self):
         articles = [
             "Justin Timberlake and Jessica Biel, welcome to parenthood.",
             "Michael Phelps is arguably the most decorated Olympian of all time."
-        ]
+        ][:1]
         tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        # torch_device = "cpu"
+
         model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=10, num_beams=2, num_return_sequences=2, eos_token_id=None, return_dict_in_generate=True, output_scores=True, length_penalty=0.0)
         model = model.to(torch_device)
 
         input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
         outputs = model.generate(input_ids=input_ids)
 
-        transition_scores_sum = self.compute_transition_beam_scores_sum(outputs, model.config.vocab_size)
+        scores = torch.stack(outputs.scores).reshape(len(outputs.scores), -1).transpose(0, 1)
+        import ipdb; ipdb.set_trace()
+        indices = outputs.sequences[:, 1:] + torch.stack(outputs.beam_indices).transpose(0, 1) * model.config.vocab_size
 
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
+        sequence_beam_scores = scores.gather(0, indices).cumsum(-1)
 
-    def test_transition_scores_beam_search_decoder_only(self):
-        articles = [
-            "Justin Timberlake",
-            "Michael Phelps",
-        ]
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10, num_beams=2, num_return_sequences=2, pad_token_id=tokenizer.eos_token_id, eos_token_id=None, return_dict_in_generate=True, output_scores=True, length_penalty=0.0)
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores_sum = self.compute_transition_beam_scores_sum(outputs, model.config.vocab_size)
-
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
-
-    def test_transition_scores_group_beam_search_encoder_decoder(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time."
-        ]
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=5, num_beams=2, num_beam_groups=2, num_return_sequences=2, eos_token_id=None, return_dict_in_generate=True, output_scores=True, length_penalty=0.0)
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores_sum = self.compute_transition_beam_scores_sum(outputs, model.config.vocab_size)
-
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
+        self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
+        self.assertEqual(output_sequences.shape, (1, 5))
