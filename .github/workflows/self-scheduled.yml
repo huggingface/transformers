@@ -37,6 +37,7 @@ jobs:
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
           pip install https://github.com/kpu/kenlm/archive/master.zip
+          python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -241,6 +242,7 @@ jobs:
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
           pip install https://github.com/kpu/kenlm/archive/master.zip
+          python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
