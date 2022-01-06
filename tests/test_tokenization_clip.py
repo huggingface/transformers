@@ -38,10 +38,10 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # fmt: off
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|endoftext|>"]
+        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
         # fmt: on
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
+        merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>"]
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
@@ -61,7 +61,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
-        output_text = "lower newer "
+        output_text = "lower newer"
         return input_text, output_text
 
     def test_full_tokenizer(self):
@@ -72,7 +72,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [10, 2, 12, 9, 3, 2, 12, 16]
+        input_bpe_tokens = [10, 2, 16, 9, 3, 2, 16, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     def test_rust_and_python_full_tokenizers(self):
