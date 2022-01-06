@@ -858,6 +858,7 @@ def prepare_img():
 
 
 @require_vision
+@require_torch
 class CLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
