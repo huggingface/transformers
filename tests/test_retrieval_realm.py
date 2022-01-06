@@ -126,7 +126,7 @@ class RealmRetrieverTest(TestCase):
         max_length = config.reader_seq_len
 
         has_answers, start_pos, end_pos, concat_inputs = retriever(
-            retrieved_block_ids, question_input_ids, answer_ids, max_length
+            retrieved_block_ids, question_input_ids, answer_ids=answer_ids, max_length=max_length, return_tensors="np"
         )
 
         self.assertEqual(len(has_answers), 2)
@@ -159,7 +159,9 @@ class RealmRetrieverTest(TestCase):
         ).input_ids
         max_length = config.reader_seq_len
 
-        has_answers, start_pos, end_pos, _ = retriever(retrieved_block_ids, question_input_ids, answer_ids, max_length)
+        has_answers, start_pos, end_pos, _ = retriever(
+            retrieved_block_ids, question_input_ids, answer_ids=answer_ids, max_length=max_length, return_tensors="np"
+        )
 
         self.assertEqual([False, True], has_answers)
         self.assertEqual([[-1], [6]], start_pos)
