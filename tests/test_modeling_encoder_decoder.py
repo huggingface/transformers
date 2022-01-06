@@ -152,11 +152,20 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         return_dict,
+        from_model_paths=False,
         **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
-        enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        if from_model_paths:
+            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+                encoder_model.save_pretrained(encoder_tmp_dirname)
+                decoder_model.save_pretrained(decoder_tmp_dirname)
+                enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_tmp_dirname, decoder_tmp_dirname, **kwargs.pop("extra_init_args", {})
+                )
+        else:
+            kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
+            enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -458,6 +467,15 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=True)
+
+    def test_encoder_decoder_model_from_pretrained_from_model_paths(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_from_pretrained(
+            **input_ids_dict,
+            return_dict=False,
+            from_model_paths=True,
+            extra_init_args={"encoder_hidden_dropout_prob": 0.0, "decoder_hidden_dropout_prob": 0.0},
+        )
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
