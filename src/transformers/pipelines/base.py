@@ -742,6 +742,8 @@ class Pipeline(_ScikitCompat):
             self.model.config.update(task_specific_params.get(task))
 
         self.call_count = 0
+        self._batch_size = kwargs.pop("batch_size", None)
+        self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
     def save_pretrained(self, save_directory: str):
@@ -947,9 +949,21 @@ class Pipeline(_ScikitCompat):
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
 
-    def __call__(self, inputs, *args, num_workers=0, batch_size=1, **kwargs):
+    def __call__(self, inputs, *args, num_workers=None, batch_size=None, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
+
+        if num_workers is None:
+            if self._num_workers is None:
+                num_workers = 0
+            else:
+                num_workers = self._num_workers
+        if batch_size is None:
+            if self._batch_size is None:
+                batch_size = 1
+            else:
+                batch_size = self._batch_size
+
         preprocess_params, forward_params, postprocess_params = self._sanitize_parameters(**kwargs)
 
         # Fuse __init__ params and __call__ params without modifying the __init__ ones.
