@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" REALM model configuration"""
+""" REALM model configuration."""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -86,9 +86,6 @@ class RealmConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         span_hidden_size (`int`, *optional*, defaults to 256):
             Dimension of the reader's spans.
         max_span_width (`int`, *optional*, defaults to 10):
@@ -139,7 +136,6 @@ class RealmConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
         span_hidden_size=256,
         max_span_width=10,
         reader_layer_norm_eps=1e-3,
@@ -170,7 +166,6 @@ class RealmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
 
         # Reader config
         self.span_hidden_size = span_hidden_size
@@ -179,9 +174,7 @@ class RealmConfig(PretrainedConfig):
         self.reader_beam_size = reader_beam_size
         self.reader_seq_len = reader_seq_len
 
-        # Searcher config
+        # Retrieval config
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
         self.searcher_seq_len = searcher_seq_len
-
-        # TODO: Remove use_cache

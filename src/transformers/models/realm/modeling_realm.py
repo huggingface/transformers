@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch REALM model."""
 
-
 import math
 import os
 from dataclasses import dataclass
@@ -1178,7 +1177,7 @@ class RealmEmbedder(RealmPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        bert_outputs = self.realm(
+        realm_outputs = self.realm(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1191,22 +1190,22 @@ class RealmEmbedder(RealmPreTrainedModel):
         )
 
         # [batch_size, hidden_size]
-        pooler_output = bert_outputs[1]
+        pooler_output = realm_outputs[1]
         # [batch_size, retriever_proj_size]
         projected_score = self.cls(pooler_output)
 
         if not return_dict:
-            return (projected_score,) + bert_outputs[2:4]
+            return (projected_score,) + realm_outputs[2:4]
         else:
             return RealmEmbedderOutput(
                 projected_score=projected_score,
-                hidden_states=bert_outputs.hidden_states,
-                attentions=bert_outputs.attentions,
+                hidden_states=realm_outputs.hidden_states,
+                attentions=realm_outputs.attentions,
             )
 
 
 @add_start_docstrings(
-    "The scorer of REALM outputting relevance score representing the score of document candidates (before softmax).",
+    "The scorer of REALM outputting relevance scores representing the score of document candidates (before softmax).",
     REALM_START_DOCSTRING,
 )
 class RealmScorer(RealmPreTrainedModel):
@@ -1395,8 +1394,8 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
 
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
-        >>> model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-bert", num_candidates=2)
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder")
+        >>> model = RealmKnowledgeAugEncoder.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder", num_candidates=2)
 
         >>> # batch_size = 2, num_candidates = 2
         >>> text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]
@@ -1724,9 +1723,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmForOpenQA, RealmRetriever, RealmTokenizer
 
-        >>> retriever = RealmRetriever.from_pretrained("qqaatw/realm-open-qa")
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-open-qa")
-        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-open-qa", retriever=retriever)
+        >>> retriever = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-openqa")
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-openqa")
+        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-cc-news-pretrained-openqa", retriever=retriever)
 
         >>> question = "Who is the pioneer in modern computer science?"
         >>> quastion_ids = tokenizer([question], return_tensors="pt").input_ids
