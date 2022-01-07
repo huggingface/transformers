@@ -16,7 +16,7 @@
 
 
 import json
-from typing import List, Optional, Tuple, List
+from typing import List, Optional, Tuple
 
 from tokenizers import pre_tokenizers
 
