@@ -36,8 +36,8 @@ class TrOCRProcessor:
     Args:
         feature_extractor ([`AutoFeatureExtractor`]):
             An instance of [`AutoFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`RobertaTokenizer`, `XLMRobertaTokenizer`]):
-            An instance of [`RobertaTokenizer`, `XLMRobertaTokenizer`]. The tokenizer is a required input.
+        tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`]):
+            An instance of [`RobertaTokenizer`/`XLMRobertaTokenizer`]. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
