@@ -2006,7 +2006,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         model = BartForConditionalGeneration.from_pretrained(
             "hf-internal-testing/tiny-random-bart",
             max_length=10,
-            num_beams=4,
+            num_beams=2,
             num_beam_groups=2,
             num_return_sequences=2,
             eos_token_id=None,
