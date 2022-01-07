@@ -26,6 +26,7 @@ from .test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():
+    import numpy as np
     import tensorflow as tf
 
     from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
@@ -399,7 +400,8 @@ class TFBertModelIntegrationTest(unittest.TestCase):
     def test_inference_masked_lm(self):
         model = TFBertForPreTraining.from_pretrained("lysandre/tiny-bert-random")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        attention_mask = np.asarray([[1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask)[0]
 
         expected_shape = [1, 6, 32000]
         self.assertEqual(output.shape, expected_shape)
