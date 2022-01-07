@@ -110,50 +110,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # And get both CLIP and Roberta to work at the same time (mostly an issue of adding a space before the string)
         pass
 
-    def test_padding(self, max_length=15):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                # Simple input
-                s = "This is a simple input"
-                s2 = ["This is a simple input 1", "This is a simple input 2"]
-                p = ("This is a simple input", "This is a pair")
-                p2 = [
-                    ("This is a simple input 1", "This is a simple input 2"),
-                    ("This is a simple pair 1", "This is a simple pair 2"),
-                ]
-
-                # Simple input tests
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
-
-                # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
-
-                # Simple input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    s2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
-
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
-
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
-
-                # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    p2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
-
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -266,5 +222,5 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     
     # overwrite common test
     def test_added_tokens_do_lower_case(self):
-        # CLIP always lower cases letters to correctly map to phonemes
+        # CLIP always lower cases letters
         pass
