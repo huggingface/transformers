@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Fine-tuning a 🤗 Flax Transformers model on token classification tasks (NER, POS, CHUNKS)"""
+import json
 import logging
 import os
 import random
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from enum import Enum
 from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -35,7 +37,6 @@ import optax
 import transformers
 from flax import struct, traverse_util
 from flax.jax_utils import replicate, unreplicate
-from flax.metrics import tensorboard
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository
@@ -44,7 +45,7 @@ from transformers import (
     AutoTokenizer,
     FlaxAutoModelForTokenClassification,
     HfArgumentParser,
-    TrainingArguments,
+    is_tensorboard_available,
 )
 from transformers.file_utils import get_full_repo_name
 from transformers.utils import check_min_version
@@ -53,13 +54,75 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.16.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
 PRNGKey = Any
+
+
+@dataclass
+class TrainingArguments:
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
+    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
+    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+    )
+    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+
+    def __post_init__(self):
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
+        the token values by removing their value.
+        """
+        d = asdict(self)
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
+        return d
 
 
 @dataclass
@@ -471,8 +534,23 @@ def main():
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Define a summary writer
-    summary_writer = tensorboard.SummaryWriter(training_args.output_dir)
-    summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
+    has_tensorboard = is_tensorboard_available()
+    if has_tensorboard and jax.process_index() == 0:
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(training_args.output_dir)
+            summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
 
     def write_train_metric(summary_writer, train_metrics, train_time, step):
         summary_writer.scalar("train_time", train_time, step)
@@ -598,13 +676,13 @@ def main():
             state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(train_metric)
 
-            cur_step = epoch * step_per_epoch + step
+            cur_step = (epoch * step_per_epoch) + (step + 1)
 
             if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                 # Save metrics
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
-                if jax.process_index() == 0:
+                if has_tensorboard and jax.process_index() == 0:
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 epochs.write(
@@ -662,7 +740,7 @@ def main():
                         f"Step... ({cur_step}/{total_steps} | Validation f1: {eval_metrics['f1']}, Validation Acc: {eval_metrics['accuracy']})"
                     )
 
-                if jax.process_index() == 0:
+                if has_tensorboard and jax.process_index() == 0:
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
             if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
@@ -674,6 +752,42 @@ def main():
                     if training_args.push_to_hub:
                         repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
         epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
+
+    # Eval after training
+    if training_args.do_eval:
+        eval_metrics = {}
+        eval_loader = eval_data_collator(eval_dataset, eval_batch_size)
+        for batch in tqdm(eval_loader, total=len(eval_dataset) // eval_batch_size, desc="Evaluating ...", position=2):
+            labels = batch.pop("labels")
+            predictions = p_eval_step(state, batch)
+            predictions = np.array([pred for pred in chain(*predictions)])
+            labels = np.array([label for label in chain(*labels)])
+            labels[np.array(chain(*batch["attention_mask"])) == 0] = -100
+            preds, refs = get_labels(predictions, labels)
+            metric.add_batch(predictions=preds, references=refs)
+
+        # evaluate also on leftover examples (not divisible by batch_size)
+        num_leftover_samples = len(eval_dataset) % eval_batch_size
+
+        # make sure leftover batch is evaluated on one device
+        if num_leftover_samples > 0 and jax.process_index() == 0:
+            # take leftover samples
+            batch = eval_dataset[-num_leftover_samples:]
+            batch = {k: np.array(v) for k, v in batch.items()}
+
+            labels = np.array(batch.pop("labels"))
+            predictions = eval_step(unreplicate(state), batch)
+            labels[np.array(batch["attention_mask"]) == 0] = -100
+            preds, refs = get_labels(predictions, labels)
+            metric.add_batch(predictions=preds, references=refs)
+
+        eval_metrics = compute_metrics()
+
+        if jax.process_index() == 0:
+            eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}
+            path = os.path.join(training_args.output_dir, "eval_results.json")
+            with open(path, "w") as f:
+                json.dump(eval_metrics, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":

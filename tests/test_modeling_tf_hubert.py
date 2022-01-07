@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_tf, slow
+from transformers.testing_utils import require_soundfile, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -184,7 +184,7 @@ class TFHubertModelTester:
         model = TFHubertForCTC(config)
 
         # freeze feature encoder
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
         input_values = input_values[:3]
 
@@ -473,27 +473,18 @@ class TFHubertUtilsTest(unittest.TestCase):
 
 @require_tf
 @slow
-@require_datasets
 @require_soundfile
 class TFHubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def test_inference_ctc_normal(self):
         model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")

@@ -23,6 +23,7 @@ import math
 import os
 import sys
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import Optional
 
 import datasets
@@ -46,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.12.0.dev0")
+check_min_version("4.16.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -318,6 +319,7 @@ def main():
         if model_args.config_overrides is not None:
             logger.info(f"Overriding config: {model_args.config_overrides}")
             config.update_from_string(model_args.config_overrides)
+            logger.info(f"New config: {config}")
 
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
@@ -346,7 +348,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = XLNetLMHeadModel.from_config(config)
+        model = XLNetLMHeadModel(config)
 
     model.resize_token_embeddings(len(tokenizer))
 
@@ -402,7 +404,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.

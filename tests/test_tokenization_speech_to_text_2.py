@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import json
 import os
 import tempfile
@@ -19,7 +20,6 @@ import unittest
 
 from transformers.models.speech_to_text_2 import Speech2Text2Tokenizer
 from transformers.models.speech_to_text_2.tokenization_speech_to_text_2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import is_pt_tf_cross_test
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -31,15 +31,21 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = "<s> <pad> </s> <unk> here@@ a couple of@@ words for the vocab".split(" ")
+        vocab = "<s> <pad> </s> <unk> here@@ a couple of@@ words for the he@@ re@@ vocab".split(" ")
+        merges = ["he re</w> 123", "here a 1456"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
         self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
 
         self.tmpdirname = tempfile.mkdtemp()
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
+
+        with open(self.merges_file, "w") as fp:
+            fp.write("\n".join(merges))
 
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
@@ -47,10 +53,10 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[0], "<s>")
         self.assertEqual(vocab_keys[1], "<pad>")
         self.assertEqual(vocab_keys[-1], "vocab")
-        self.assertEqual(len(vocab_keys), 12)
+        self.assertEqual(len(vocab_keys), 14)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 12)
+        self.assertEqual(self.get_tokenizer().vocab_size, 14)
 
     def test_tokenizer_decode(self):
         tokenizer = Speech2Text2Tokenizer.from_pretrained(self.tmpdirname)
@@ -61,99 +67,31 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertTrue(output_string == "herecouple words ofthe")
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_add_special_tokens(self):
-        pass
+    def test_load_no_merges_file(self):
+        tokenizer = Speech2Text2Tokenizer.from_pretrained(self.tmpdirname)
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_add_tokens_tokenizer(self):
-        pass
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            tokenizer.save_pretrained(tmp_dirname)
+            os.remove(os.path.join(tmp_dirname, "merges.txt"))
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_added_tokens_do_lower_case(self):
-        pass
+            # load tokenizer without merges file should not throw an error
+            tokenizer = Speech2Text2Tokenizer.from_pretrained(tmp_dirname)
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_batch_encode_plus_batch_sequence_length(self):
-        pass
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            # save tokenizer and load again
+            tokenizer.save_pretrained(tmp_dirname)
+            tokenizer = Speech2Text2Tokenizer.from_pretrained(tmp_dirname)
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_batch_encode_plus_overflowing_tokens(self):
-        pass
+        self.assertIsNotNone(tokenizer)
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_batch_encode_plus_padding(self):
-        pass
+    # overwrite since merges_file is optional
+    def test_tokenizer_slow_store_full_signature(self):
+        if not self.test_slow_tokenizer:
+            return
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_call(self):
-        pass
+        signature = inspect.signature(self.tokenizer_class.__init__)
+        tokenizer = self.get_tokenizer()
 
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_encode_plus_with_padding(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_internal_consistency(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_maximum_encoding_length_pair_input(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_maximum_encoding_length_single_input(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_number_of_added_tokens(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_padding_to_max_length(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_padding_to_multiple_of(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_pickle_tokenizer(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_prepare_for_model(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_pretokenized_inputs(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_right_and_left_padding(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_save_and_load_tokenizer(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_special_tokens_mask(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_special_tokens_mask_input_pairs(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_token_type_ids(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    def test_added_token_are_matched_longest_first(self):
-        pass
-
-    # currently tokenizer cannot do encoding, but just decoding
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        pass
+        for parameter_name, parameter in signature.parameters.items():
+            if parameter.default != inspect.Parameter.empty and parameter_name != "merges_file":
+                self.assertIn(parameter_name, tokenizer.init_kwargs)

@@ -31,9 +31,13 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
-        classifier = ZeroShotClassificationPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        classifier = ZeroShotClassificationPipeline(
+            model=model, tokenizer=tokenizer, candidate_labels=["polics", "health"]
+        )
+        return classifier, ["Who are you voting for in 2020?", "My stomach hurts."]
 
+    def run_pipeline_test(self, classifier, _):
         outputs = classifier("Who are you voting for in 2020?", candidate_labels="politics")
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
 
@@ -60,6 +64,24 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             "Who are you voting for in 2020?", candidate_labels="politics", hypothesis_template="This text is about {}"
         )
         self.assertEqual(outputs, {"sequence": ANY(str), "labels": [ANY(str)], "scores": [ANY(float)]})
+
+        # https://github.com/huggingface/transformers/issues/13846
+        outputs = classifier(["I am happy"], ["positive", "negative"])
+        self.assertEqual(
+            outputs,
+            [
+                {"sequence": ANY(str), "labels": [ANY(str), ANY(str)], "scores": [ANY(float), ANY(float)]}
+                for i in range(1)
+            ],
+        )
+        outputs = classifier(["I am happy", "I am sad"], ["positive", "negative"])
+        self.assertEqual(
+            outputs,
+            [
+                {"sequence": ANY(str), "labels": [ANY(str), ANY(str)], "scores": [ANY(float), ANY(float)]}
+                for i in range(2)
+            ],
+        )
 
         with self.assertRaises(ValueError):
             classifier("", candidate_labels="politics")

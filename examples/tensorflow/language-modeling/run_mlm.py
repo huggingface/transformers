@@ -18,7 +18,7 @@ Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBER
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
+https://huggingface.co/models?filter=fill-mask
 """
 # You can also adapt this script on your own mlm task. Pointers for this are left as comments.
 
@@ -32,6 +32,7 @@ import random
 import sys
 from dataclasses import dataclass, field
 from functools import partial
+from itertools import chain
 from pathlib import Path
 from typing import Optional
 
@@ -45,8 +46,8 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     CONFIG_NAME,
-    MODEL_FOR_MASKED_LM_MAPPING,
     TF2_WEIGHTS_NAME,
+    TF_MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
@@ -59,8 +60,8 @@ from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/tensorflow/language-modeling/requirements.txt")
+MODEL_CONFIG_CLASSES = list(TF_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
@@ -462,7 +463,7 @@ def main():
         # max_seq_length.
         def group_texts(examples):
             # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
             total_length = len(concatenated_examples[list(examples.keys())[0]])
             # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
             # customize this part to your needs.

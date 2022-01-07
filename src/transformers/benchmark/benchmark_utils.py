@@ -801,7 +801,7 @@ class Benchmark(ABC):
                 info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
             else:
                 logger.warning(
-                    "Psutil not installed, we won't log available CPU memory."
+                    "Psutil not installed, we won't log available CPU memory. "
                     "Install psutil (pip install psutil) to log available CPU memory."
                 )
                 info["cpu_ram_mb"] = "N/A"

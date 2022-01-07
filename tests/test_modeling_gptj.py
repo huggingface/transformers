@@ -21,7 +21,8 @@ from transformers import GPTJConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, tooslow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from .test_generation_utils import GenerationTesterMixin
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -31,6 +32,7 @@ if is_torch_available():
         GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         GPTJForCausalLM,
+        GPTJForQuestionAnswering,
         GPTJForSequenceClassification,
         GPTJModel,
     )
@@ -49,6 +51,7 @@ class GPTJModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
+        rotary_dim=4,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -72,6 +75,7 @@ class GPTJModelTester:
         self.use_mc_token_ids = use_mc_token_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.rotary_dim = rotary_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -142,13 +146,13 @@ class GPTJModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             use_cache=True,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            rotary_dim=self.rotary_dim,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -351,14 +355,19 @@ class GPTJModelTester:
 
 
 @require_torch
-class GPTJModelTest(unittest.TestCase):
+class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification, GPTJForQuestionAnswering)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
     fx_ready_model_classes = all_model_classes
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
+    test_head_masking = False
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -396,8 +405,9 @@ class GPTJModelTest(unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
 
-    @slow
+    @tooslow
     def test_batch_generation(self):
+        # Marked as @tooslow due to GPU OOM
         model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
         model.to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
@@ -464,8 +474,9 @@ class GPTJModelTest(unittest.TestCase):
 
 @require_torch
 class GPTJModelLanguageGenerationTest(unittest.TestCase):
-    @slow
+    @tooslow
     def test_lm_generate_gptj(self):
+        # Marked as @tooslow due to GPU OOM
         for checkpointing in [True, False]:
             model = GPTJForCausalLM.from_pretrained(
                 "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16

@@ -40,11 +40,11 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
     This is a general feature extraction class for speech recognition.
 
     Args:
-        feature_size (:obj:`int`):
+        feature_size (`int`):
             The feature dimension of the extracted features.
-        sampling_rate (:obj:`int`):
+        sampling_rate (`int`):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        padding_value (:obj:`float`):
+        padding_value (`float`):
             The value that is used to fill the padding values / vectors.
     """
 
@@ -78,54 +78,56 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad input values / input vectors or a batch of input values / input vectors up to predefined length or to the
         max sequence length in the batch.
 
-        Padding side (left/right) padding values are defined at the feature extractor level (with
-        ``self.padding_side``, ``self.padding_value``)
+        Padding side (left/right) padding values are defined at the feature extractor level (with `self.padding_side`,
+        `self.padding_value`)
 
-        .. note::
+        <Tip>
 
-            If the ``processed_features`` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors,
-            the result will use the same type unless you provide a different tensor type with ``return_tensors``. In
-            the case of PyTorch tensors, you will lose the specific device of your tensors however.
+        If the `processed_features` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        PyTorch tensors, you will lose the specific device of your tensors however.
+
+        </Tip>
 
         Args:
-            processed_features (:class:`~transformers.BatchFeature`, list of :class:`~transformers.BatchFeature`, :obj:`Dict[str, List[float]]`, :obj:`Dict[str, List[List[float]]` or :obj:`List[Dict[str, List[float]]]`):
-                Processed inputs. Can represent one input (:class:`~transformers.BatchFeature` or :obj:`Dict[str,
-                List[float]]`) or a batch of input values / vectors (list of :class:`~transformers.BatchFeature`,
-                `Dict[str, List[List[float]]]` or `List[Dict[str, List[float]]]`) so you can use this method during
-                preprocessing as well as in a PyTorch Dataloader collate function.
+            processed_features ([`BatchFeature`], list of [`BatchFeature`], `Dict[str, List[float]]`, `Dict[str, List[List[float]]` or `List[Dict[str, List[float]]]`):
+                Processed inputs. Can represent one input ([`BatchFeature`] or `Dict[str, List[float]]`) or a batch of
+                input values / vectors (list of [`BatchFeature`], *Dict[str, List[List[float]]]* or *List[Dict[str,
+                List[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                collate function.
 
-                Instead of :obj:`List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow
-                tensors), see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+                Instead of `List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                see the note above for the return type.
+            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
-            max_length (:obj:`int`, `optional`):
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
-            truncation (:obj:`bool`):
-                Activates truncation to cut input sequences longer than :obj:`max_length` to :obj:`max_length`.
-            pad_to_multiple_of (:obj:`int`, `optional`):
+            truncation (`bool`):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask (:obj:`bool`, `optional`):
+            return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+                [What are attention masks?](../glossary#attention-mask)
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
@@ -137,7 +139,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # The model's main input name, usually `input_values`, has be passed for padding
         if self.model_input_names[0] not in processed_features:
             raise ValueError(
-                "You should supply an instance of :class:`~transformers.BatchFeature` or list of :class:`~transformers.BatchFeature` to this method"
+                "You should supply an instance of `transformers.BatchFeature` or list of `transformers.BatchFeature` to this method "
                 f"that includes {self.model_input_names[0]}, but you provided {list(processed_features.keys())}"
             )
 
@@ -241,7 +243,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features:
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
+                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
             padding_strategy: PaddingStrategy to use for padding.
 
@@ -255,7 +259,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         required_input = processed_features[self.model_input_names[0]]
 
@@ -267,30 +272,31 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) < max_length
 
+        if return_attention_mask and "attention_mask" not in processed_features:
+            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int32)
+
         if needs_to_be_padded:
             difference = max_length - len(required_input)
             if self.padding_side == "right":
                 if return_attention_mask:
-                    attention_mask = np.zeros(max_length, dtype=np.int32)
-                    attention_mask[: len(required_input)] = 1
-                    processed_features["attention_mask"] = attention_mask
+                    processed_features["attention_mask"] = np.pad(
+                        processed_features["attention_mask"], (0, difference)
+                    )
                 padding_shape = ((0, difference), (0, 0)) if self.feature_size > 1 else (0, difference)
                 processed_features[self.model_input_names[0]] = np.pad(
                     required_input, padding_shape, "constant", constant_values=self.padding_value
                 )
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    attention_mask = np.zeros(max_length, dtype=np.int32)
-                    attention_mask[-len(required_input) :] = 1
-                    processed_features["attention_mask"] = attention_mask
+                    processed_features["attention_mask"] = np.pad(
+                        processed_features["attention_mask"], (difference, 0)
+                    )
                 padding_shape = ((difference, 0), (0, 0)) if self.feature_size > 1 else (difference, 0)
                 processed_features[self.model_input_names[0]] = np.pad(
                     required_input, padding_shape, "constant", constant_values=self.padding_value
                 )
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        elif return_attention_mask and "attention_mask" not in processed_features:
-            processed_features["attention_mask"] = np.ones(len(required_input), dtype=np.int32)
 
         return processed_features
 
@@ -305,12 +311,15 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features: Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features:
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
+                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
             max_length: maximum length of the returned list and optionally padding length (see below)
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            truncation: (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            truncation:
+                (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
         if not truncation:
             return processed_features

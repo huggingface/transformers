@@ -30,9 +30,11 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def run_pipeline_test(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
         generator = Text2TextGenerationPipeline(model=model, tokenizer=tokenizer)
+        return generator, ["Something to write", "Something else"]
 
+    def run_pipeline_test(self, generator, _):
         outputs = generator("Something there")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         # These are encoder decoder, they don't just append to incoming string
@@ -47,6 +49,19 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         # do_sample=False necessary for reproducibility
         outputs = generator("Something there", do_sample=False)
         self.assertEqual(outputs, [{"generated_text": ""}])
+
+        num_return_sequences = 3
+        outputs = generator(
+            "Something there",
+            num_return_sequences=num_return_sequences,
+            num_beams=num_return_sequences,
+        )
+        target_outputs = [
+            {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide"},
+            {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide"},
+            {"generated_text": ""},
+        ]
+        self.assertEqual(outputs, target_outputs)
 
     @require_tf
     def test_small_model_tf(self):

@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
+import argparse
+import json
 import logging
 import os
 import random
@@ -35,7 +37,6 @@ import optax
 import transformers
 from flax import struct, traverse_util
 from flax.jax_utils import replicate, unreplicate
-from flax.metrics import tensorboard
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository
@@ -43,9 +44,8 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     FlaxAutoModelForSequenceClassification,
-    HfArgumentParser,
     PretrainedConfig,
-    TrainingArguments,
+    is_tensorboard_available,
 )
 from transformers.file_utils import get_full_repo_name
 from transformers.utils import check_min_version
@@ -449,8 +449,23 @@ def main():
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Define a summary writer
-    summary_writer = tensorboard.SummaryWriter(training_args.output_dir)
-    summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
+    has_tensorboard = is_tensorboard_available()
+    if has_tensorboard and jax.process_index() == 0:
+        try:
+            from flax.metrics.tensorboard import SummaryWriter
+
+            summary_writer = SummaryWriter(args.output_dir)
+            summary_writer.hparams(vars(args))
+        except ImportError as ie:
+            has_tensorboard = False
+            logger.warning(
+                f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
+            )
+    else:
+        logger.warning(
+            "Unable to display metrics through TensorBoard because the package is not installed: "
+            "Please run pip install tensorboard to enable."
+        )
 
     def write_train_metric(summary_writer, train_metrics, train_time, step):
         summary_writer.scalar("train_time", train_time, step)
@@ -605,6 +620,13 @@ def main():
                     if training_args.push_to_hub:
                         repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
             epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
+
+    # save the eval metrics in json
+    if jax.process_index() == 0:
+        eval_metric = {f"eval_{metric_name}": value for metric_name, value in eval_metric.items()}
+        path = os.path.join(args.output_dir, "eval_results.json")
+        with open(path, "w") as f:
+            json.dump(eval_metric, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":

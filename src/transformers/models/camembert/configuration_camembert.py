@@ -13,8 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CamemBERT configuration """
+""" CamemBERT configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ..roberta.configuration_roberta import RobertaConfig
 
@@ -30,8 +34,19 @@ CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CamembertConfig(RobertaConfig):
     """
-    This class overrides :class:`~transformers.RobertaConfig`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
     """
 
     model_type = "camembert"
+
+
+class CamembertOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )

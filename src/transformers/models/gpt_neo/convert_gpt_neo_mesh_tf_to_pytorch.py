@@ -33,7 +33,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
         num_layers=config_json["n_layer"],
         num_heads=config_json["n_head"],
         attention_types=config_json["attention_types"],
-        max_position_embeddings=config_json["n_ctx"],
+        max_position_embeddings=config_json["n_positions"],
         resid_dropout=config_json["res_dropout"],
         embed_dropout=config_json["embed_dropout"],
         attention_dropout=config_json["attn_dropout"],

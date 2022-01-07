@@ -54,12 +54,6 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
-    gradient_checkpointing: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
-        },
-    )
     verbose_logging: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to log verbose messages or not."},
@@ -352,7 +346,7 @@ def main():
     model = Wav2Vec2ForCTC.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        gradient_checkpointing=model_args.gradient_checkpointing,
+        gradient_checkpointing=training_args.gradient_checkpointing,
         vocab_size=len(processor.tokenizer),
     )
 

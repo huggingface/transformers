@@ -12,11 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BEiT model. """
+""" PyTorch BEiT model."""
 
 
 import collections.abc
 import math
+from dataclasses import dataclass
 
 import torch
 import torch.utils.checkpoint
@@ -40,6 +41,32 @@ BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/beit-base-patch16-224",
     # See all BEiT models at https://huggingface.co/models?filter=beit
 ]
+
+
+@dataclass
+class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
+    """
+    Class for outputs of [`BeitModel`].
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
+            *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
+            will be returned.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
 
 
 # Inspired by
@@ -163,6 +190,7 @@ class PatchEmbeddings(nn.Module):
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+
         return x
 
 
@@ -216,7 +244,7 @@ class BeitSelfAttention(nn.Module):
             attention_scores = attention_scores + relative_position_bias
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -495,11 +523,12 @@ class BeitPreTrainedModel(PreTrainedModel):
 
     config_class = BeitConfig
     base_model_prefix = "beit"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -519,37 +548,36 @@ class BeitPreTrainedModel(PreTrainedModel):
 
 
 BEIT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.BeitConfig`): Model configuration class with all the parameters of the model.
+        config ([`BeitConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 BEIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.BeitFeatureExtractor`. See
-            :meth:`transformers.BeitFeatureExtractor.__call__` for details.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
+            [`BeitFeatureExtractor.__call__`] for details.
 
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -570,7 +598,8 @@ class BeitModel(BeitPreTrainedModel):
         )
         self.pooler = BeitPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
@@ -584,7 +613,7 @@ class BeitModel(BeitPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BeitModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -597,22 +626,23 @@ class BeitModel(BeitPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import BeitFeatureExtractor, BeitModel
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import BeitFeatureExtractor, BeitModel
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
-            >>> model = BeitModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+        >>> model = BeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -645,7 +675,7 @@ class BeitModel(BeitPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BeitModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -687,7 +717,8 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -702,32 +733,33 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        bool_masked_pos (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, num_patches)`):
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
-            >>> model = BeitForMaskedImageModeling.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+        >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.beit(
@@ -777,7 +809,8 @@ class BeitForImageClassification(BeitPreTrainedModel):
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -791,32 +824,33 @@ class BeitForImageClassification(BeitPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
-            >>> model = BeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224")
+        >>> model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.beit(
@@ -849,5 +883,357 @@ class BeitForImageClassification(BeitPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class BeitConvModule(nn.Module):
+    """
+    A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
+    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, padding=0, bias=False, dilation=1):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias=bias,
+            dilation=dilation,
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.activation = nn.ReLU()
+
+    def forward(self, input):
+        output = self.conv(input)
+        output = self.bn(output)
+        output = self.activation(output)
+
+        return output
+
+
+class BeitPyramidPoolingModule(nn.ModuleList):
+    """
+    Pyramid Pooling Module (PPM) used in PSPNet.
+
+    Args:
+        pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
+            Module.
+        in_channels (int): Input channels.
+        channels (int): Channels after modules, before conv_seg.
+        align_corners (bool): align_corners argument of F.interpolate.
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, pool_scales, in_channels, channels, align_corners):
+        super().__init__()
+        self.pool_scales = pool_scales
+        self.align_corners = align_corners
+        self.in_channels = in_channels
+        self.channels = channels
+        for pool_scale in pool_scales:
+            self.append(
+                nn.Sequential(
+                    nn.AdaptiveAvgPool2d(pool_scale),
+                    BeitConvModule(self.in_channels, self.channels, kernel_size=1),
+                )
+            )
+
+    def forward(self, x):
+        ppm_outs = []
+        for ppm in self:
+            ppm_out = ppm(x)
+            upsampled_ppm_out = nn.functional.interpolate(
+                ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
+            )
+            ppm_outs.append(upsampled_ppm_out)
+        return ppm_outs
+
+
+class BeitUperHead(nn.Module):
+    """
+    Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
+    [UPerNet](https://arxiv.org/abs/1807.10221).
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
+        self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
+        self.channels = config.hidden_size
+        self.align_corners = False
+        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
+
+        # PSP Module
+        self.psp_modules = BeitPyramidPoolingModule(
+            self.pool_scales,
+            self.in_channels[-1],
+            self.channels,
+            align_corners=self.align_corners,
+        )
+        self.bottleneck = BeitConvModule(
+            self.in_channels[-1] + len(self.pool_scales) * self.channels,
+            self.channels,
+            kernel_size=3,
+            padding=1,
+        )
+        # FPN Module
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_convs = nn.ModuleList()
+        for in_channels in self.in_channels[:-1]:  # skip the top layer
+            l_conv = BeitConvModule(in_channels, self.channels, kernel_size=1)
+            fpn_conv = BeitConvModule(self.channels, self.channels, kernel_size=3, padding=1)
+            self.lateral_convs.append(l_conv)
+            self.fpn_convs.append(fpn_conv)
+
+        self.fpn_bottleneck = BeitConvModule(
+            len(self.in_channels) * self.channels,
+            self.channels,
+            kernel_size=3,
+            padding=1,
+        )
+
+    def psp_forward(self, inputs):
+        x = inputs[-1]
+        psp_outs = [x]
+        psp_outs.extend(self.psp_modules(x))
+        psp_outs = torch.cat(psp_outs, dim=1)
+        output = self.bottleneck(psp_outs)
+
+        return output
+
+    def forward(self, encoder_hidden_states):
+        # build laterals
+        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+
+        laterals.append(self.psp_forward(encoder_hidden_states))
+
+        # build top-down path
+        used_backbone_levels = len(laterals)
+        for i in range(used_backbone_levels - 1, 0, -1):
+            prev_shape = laterals[i - 1].shape[2:]
+            laterals[i - 1] = laterals[i - 1] + nn.functional.interpolate(
+                laterals[i], size=prev_shape, mode="bilinear", align_corners=self.align_corners
+            )
+
+        # build outputs
+        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
+        # append psp feature
+        fpn_outs.append(laterals[-1])
+
+        for i in range(used_backbone_levels - 1, 0, -1):
+            fpn_outs[i] = nn.functional.interpolate(
+                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=self.align_corners
+            )
+        fpn_outs = torch.cat(fpn_outs, dim=1)
+        output = self.fpn_bottleneck(fpn_outs)
+        output = self.classifier(output)
+
+        return output
+
+
+class BeitFCNHead(nn.Module):
+    """
+    Fully Convolution Networks for Semantic Segmentation. This head is implemented of
+    [FCNNet](https://arxiv.org/abs/1411.4038>).
+
+    Args:
+        config (BeitConfig): Configuration.
+        in_channels
+        kernel_size (int): The kernel size for convs in the head. Default: 3.
+        dilation (int): The dilation rate for convs in the head. Default: 1.
+
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    """
+
+    def __init__(self, config, in_index=2, kernel_size=3, dilation=1):
+        super().__init__()
+        self.in_channels = config.hidden_size
+        self.channels = config.auxiliary_channels
+        self.num_convs = config.auxiliary_num_convs
+        self.concat_input = config.auxiliary_concat_input
+        self.in_index = in_index
+
+        conv_padding = (kernel_size // 2) * dilation
+        convs = []
+        convs.append(
+            BeitConvModule(
+                self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+            )
+        )
+        for i in range(self.num_convs - 1):
+            convs.append(
+                BeitConvModule(
+                    self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+                )
+            )
+        if self.num_convs == 0:
+            self.convs = nn.Identity()
+        else:
+            self.convs = nn.Sequential(*convs)
+        if self.concat_input:
+            self.conv_cat = BeitConvModule(
+                self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
+            )
+
+        self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
+
+    def forward(self, encoder_hidden_states):
+        # just take the relevant feature maps
+        hidden_states = encoder_hidden_states[self.in_index]
+        output = self.convs(hidden_states)
+        if self.concat_input:
+            output = self.conv_cat(torch.cat([hidden_states, output], dim=1))
+        output = self.classifier(output)
+        return output
+
+
+@add_start_docstrings(
+    """
+    Beit Model transformer with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
+    """,
+    BEIT_START_DOCSTRING,
+)
+class BeitForSemanticSegmentation(BeitPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.beit = BeitModel(config, add_pooling_layer=False)
+
+        # FPNs
+        self.fpn1 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+            nn.BatchNorm2d(config.hidden_size),
+            nn.GELU(),
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+        )
+        self.fpn2 = nn.Sequential(
+            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+        )
+        self.fpn3 = nn.Identity()
+        self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # Semantic segmentation head(s)
+        self.decode_head = BeitUperHead(config)
+        self.auxiliary_head = BeitFCNHead(config) if config.use_auxiliary_head else None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def compute_loss(self, logits, auxiliary_logits, labels):
+        # upsample logits to the images' original size
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+        )
+        if auxiliary_logits is not None:
+            upsampled_auxiliary_logits = nn.functional.interpolate(
+                auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+        # compute weighted loss
+        loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+        main_loss = loss_fct(upsampled_logits, labels)
+        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+
+        return loss
+
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import BeitFeatureExtractor, BeitForSemanticSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
+        >>> logits = outputs.logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.beit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[2]
+
+        # only keep certain features, and reshape
+        # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
+        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
+        batch_size = pixel_values.shape[0]
+        patch_resolution = self.config.image_size // self.config.patch_size
+        features = [
+            x[:, 1:, :].permute(0, 2, 1).reshape(batch_size, -1, patch_resolution, patch_resolution) for x in features
+        ]
+
+        # apply FPNs
+        ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
+        for i in range(len(features)):
+            features[i] = ops[i](features[i])
+
+        logits = self.decode_head(features)
+        auxiliary_logits = None
+        if self.auxiliary_head is not None:
+            auxiliary_logits = self.auxiliary_head(features)
+
+        loss = None
+        if labels is not None:
+            if self.config.num_labels == 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                loss = self.compute_loss(logits, auxiliary_logits, labels)
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (logits,) + outputs[2:]
+            else:
+                output = (logits,) + outputs[3:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

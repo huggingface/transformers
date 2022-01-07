@@ -21,9 +21,9 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
-        top_k (:obj:`int`, defaults to 5):
+        top_k (`int`, defaults to 5):
             The number of predictions to return.
-        targets (:obj:`str` or :obj:`List[str]`, `optional`):
+        targets (`str` or `List[str]`, *optional*):
             When passed, the model will limit the scores to the passed targets instead of looking up in the whole
             vocab. If the provided targets are not in the model vocab, they will be tokenized and the first resulting
             token will be used (with a warning, and that might be slower).
@@ -32,20 +32,23 @@ logger = logging.get_logger(__name__)
 )
 class FillMaskPipeline(Pipeline):
     """
-    Masked language modeling prediction pipeline using any :obj:`ModelWithLMHead`. See the `masked language modeling
-    examples <../task_summary.html#masked-language-modeling>`__ for more information.
+    Masked language modeling prediction pipeline using any `ModelWithLMHead`. See the [masked language modeling
+    examples](../task_summary#masked-language-modeling) for more information.
 
-    This mask filling pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
-    identifier: :obj:`"fill-mask"`.
+    This mask filling pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"fill-mask"`.
 
     The models that this pipeline can use are models that have been trained with a masked language modeling objective,
     which includes the bi-directional models in the library. See the up-to-date list of available models on
-    `huggingface.co/models <https://huggingface.co/models?filter=masked-lm>`__.
+    [huggingface.co/models](https://huggingface.co/models?filter=fill-mask).
 
-    .. note::
+    <Tip>
 
-        This pipeline only works for inputs with exactly one token masked.
-    """
+    This pipeline only works for inputs with exactly one token masked. Experimental: We added support for multiple
+    masks. The returned values are raw model output, and correspond to disjoint probabilities where one might expect
+    joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
+
+    </Tip>"""
 
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
         if self.framework == "tf":
@@ -59,13 +62,7 @@ class FillMaskPipeline(Pipeline):
     def _ensure_exactly_one_mask_token(self, input_ids: GenericTensor) -> np.ndarray:
         masked_index = self.get_masked_index(input_ids)
         numel = np.prod(masked_index.shape)
-        if numel > 1:
-            raise PipelineException(
-                "fill-mask",
-                self.model.base_model_prefix,
-                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
-            )
-        elif numel < 1:
+        if numel < 1:
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
@@ -89,55 +86,62 @@ class FillMaskPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
-        model_outputs["input_ids"] = model_inputs["input_ids"][0]
+        model_outputs["input_ids"] = model_inputs["input_ids"]
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5, target_ids=None):
         # Cap top_k if there are targets
         if target_ids is not None and target_ids.shape[0] < top_k:
             top_k = target_ids.shape[0]
-        input_ids = model_outputs["input_ids"]
+        input_ids = model_outputs["input_ids"][0]
         outputs = model_outputs["logits"]
-        result = []
 
         if self.framework == "tf":
-            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
+            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()[:, 0]
 
-            # Fill mask pipeline supports only one ${mask_token} per sample
+            outputs = outputs.numpy()
 
-            logits = outputs[0, masked_index.item(), :]
-            probs = tf.nn.softmax(logits)
+            logits = outputs[0, masked_index, :]
+            probs = tf.nn.softmax(logits, axis=-1)
             if target_ids is not None:
-                probs = tf.gather_nd(probs, tf.reshape(target_ids, (-1, 1)))
+                probs = tf.gather_nd(tf.squeeze(probs, 0), target_ids.reshape(-1, 1))
+                probs = tf.expand_dims(probs, 0)
 
             topk = tf.math.top_k(probs, k=top_k)
             values, predictions = topk.values.numpy(), topk.indices.numpy()
         else:
-            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False).squeeze(-1)
             # Fill mask pipeline supports only one ${mask_token} per sample
 
-            logits = outputs[0, masked_index.item(), :]
-            probs = logits.softmax(dim=0)
+            logits = outputs[0, masked_index, :]
+            probs = logits.softmax(dim=-1)
             if target_ids is not None:
                 probs = probs[..., target_ids]
 
             values, predictions = probs.topk(top_k)
 
-        for v, p in zip(values.tolist(), predictions.tolist()):
-            tokens = input_ids.numpy()
-            if target_ids is not None:
-                p = target_ids[p].tolist()
-            tokens[masked_index] = p
-            # Filter padding out:
-            tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
-            result.append(
-                {
-                    "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
-                    "score": v,
-                    "token": p,
-                    "token_str": self.tokenizer.decode(p),
-                }
-            )
+        result = []
+        single_mask = values.shape[0] == 1
+        for i, (_values, _predictions) in enumerate(zip(values.tolist(), predictions.tolist())):
+            row = []
+            for v, p in zip(_values, _predictions):
+                # Copy is important since we're going to modify this array in place
+                tokens = input_ids.numpy().copy()
+                if target_ids is not None:
+                    p = target_ids[p].tolist()
+
+                tokens[masked_index[i]] = p
+                # Filter padding out:
+                tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
+                # Originally we skip special tokens to give readable output.
+                # For multi masks though, the other [MASK] would be removed otherwise
+                # making the output look odd, so we add them back
+                sequence = self.tokenizer.decode(tokens, skip_special_tokens=single_mask)
+                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode(p), "sequence": sequence}
+                row.append(proposition)
+            result.append(row)
+        if single_mask:
+            return result[0]
         return result
 
     def get_target_ids(self, targets, top_k=None):
@@ -202,22 +206,22 @@ class FillMaskPipeline(Pipeline):
         Fill the masked token in the text(s) given as inputs.
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`):
+            args (`str` or `List[str]`):
                 One or several texts (or one list of prompts) with masked tokens.
-            targets (:obj:`str` or :obj:`List[str]`, `optional`):
+            targets (`str` or `List[str]`, *optional*):
                 When passed, the model will limit the scores to the passed targets instead of looking up in the whole
                 vocab. If the provided targets are not in the model vocab, they will be tokenized and the first
                 resulting token will be used (with a warning, and that might be slower).
-            top_k (:obj:`int`, `optional`):
+            top_k (`int`, *optional*):
                 When passed, overrides the number of predictions to return.
 
         Return:
-            A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the following keys:
+            A list or a list of list of `dict`: Each result comes as list of dictionaries with the following keys:
 
-            - **sequence** (:obj:`str`) -- The corresponding input with the mask token prediction.
-            - **score** (:obj:`float`) -- The corresponding probability.
-            - **token** (:obj:`int`) -- The predicted token id (to replace the masked one).
-            - **token** (:obj:`str`) -- The predicted token (to replace the masked one).
+            - **sequence** (`str`) -- The corresponding input with the mask token prediction.
+            - **score** (`float`) -- The corresponding probability.
+            - **token** (`int`) -- The predicted token id (to replace the masked one).
+            - **token** (`str`) -- The predicted token (to replace the masked one).
         """
         outputs = super().__call__(inputs, **kwargs)
         if isinstance(inputs, list) and len(inputs) == 1:

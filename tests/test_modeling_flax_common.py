@@ -22,19 +22,11 @@ from typing import List, Tuple
 import numpy as np
 
 import transformers
-from huggingface_hub import HfApi
+from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    ENDPOINT_STAGING,
-    PASS,
-    USER,
-    CaptureLogger,
-    is_pt_flax_cross_test,
-    is_staging_test,
-    require_flax,
-)
+from transformers.testing_utils import PASS, USER, CaptureLogger, is_pt_flax_cross_test, is_staging_test, require_flax
 from transformers.utils import logging
 
 
@@ -44,11 +36,12 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
     from flax.core.frozen_dict import unfreeze
-    from flax.traverse_util import flatten_dict
+    from flax.traverse_util import flatten_dict, unflatten_dict
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         FLAX_MODEL_MAPPING,
+        FlaxAutoModel,
         FlaxAutoModelForSequenceClassification,
         FlaxBertModel,
     )
@@ -116,7 +109,9 @@ def random_attention_mask(shape, rng=None):
 class FlaxModelTesterMixin:
     model_tester = None
     all_model_classes = ()
+    test_mismatched_shapes = True
     is_encoder_decoder = False
+    test_head_masking = False
 
     def _prepare_for_class(self, inputs_dict, model_class):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -390,6 +385,35 @@ class FlaxModelTesterMixin:
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_class = FLAX_MODEL_MAPPING[config.__class__]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            model = model_class(config)
+            model.params = model.to_bf16(model.params)
+            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+
+            # convert Flax model to PyTorch model
+            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
+            pt_model = pt_model_class(config).eval()
+            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
+
+            # check that all base model weights are loaded correctly
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_model.save_pretrained(tmpdirname)
+                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
+
+                base_params = flatten_dict(unfreeze(base_model.params))
+
+                for key in base_params_from_head.keys():
+                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -579,6 +603,8 @@ class FlaxModelTesterMixin:
             )
 
     def test_load_with_mismatched_shapes(self):
+        if not self.test_mismatched_shapes:
+            return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -593,6 +619,8 @@ class FlaxModelTesterMixin:
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(ValueError):
                         new_model = FlaxAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                    with self.assertRaises(ValueError):
+                        new_model_without_prefix = FlaxAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
                     logger = logging.get_logger("transformers.modeling_flax_utils")
                     with CaptureLogger(logger) as cl:
@@ -604,24 +632,223 @@ class FlaxModelTesterMixin:
                     logits = new_model(**inputs_dict)["logits"]
                     self.assertEqual(logits.shape[1], 42)
 
+                    with CaptureLogger(logger) as cl:
+                        new_model_without_prefix = FlaxAutoModel.from_pretrained(
+                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+                    input_ids = ids_tensor((2, 8), 10)
+                    if self.is_encoder_decoder:
+                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                    else:
+                        new_model_without_prefix(input_ids)
+
+    def test_default_params_dtype(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # check if all params are still in float32 when dtype of computation is half-precision
+            model = model_class(config, dtype=jnp.float16)
+            types = jax.tree_map(lambda x: x.dtype, model.params)
+            types = flatten_dict(types)
+
+            for name, type_ in types.items():
+                self.assertEquals(type_, jnp.float32, msg=f"param {name} is not initialized in fp32.")
+
+    def test_to_bf16(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            # cast all params to bf16
+            params = model.to_bf16(model.params)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            # test if all params are in bf16
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.bfloat16, msg=f"param {name} is not in bf16.")
+
+            # test masking
+            flat_params = flatten_dict(params)
+            key = random.choice(list(flat_params.keys()))  # choose a random param
+            mask = {path: path != key for path in flat_params}  # don't cast the key
+            mask = unflatten_dict(mask)
+
+            params = model.to_bf16(model.params, mask)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            # test if all params are in bf16 except key
+            for name, type_ in types.items():
+                if name == key:
+                    self.assertEqual(type_, jnp.float32, msg=f"param {name} should be in fp32.")
+                else:
+                    self.assertEqual(type_, jnp.bfloat16, msg=f"param {name} is not in bf16.")
+
+    def test_to_fp16(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            # cast all params to fp16
+            params = model.to_fp16(model.params)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            # test if all params are in fp16
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.float16, msg=f"param {name} is not in fp16.")
+
+            # test masking
+            flat_params = flatten_dict(params)
+            key = random.choice(list(flat_params.keys()))  # choose a random param
+            mask = {path: path != key for path in flat_params}  # don't cast the key
+            mask = unflatten_dict(mask)
+
+            params = model.to_fp16(model.params, mask)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            # test if all params are in fp16 except key
+            for name, type_ in types.items():
+                if name == key:
+                    self.assertEqual(type_, jnp.float32, msg=f"param {name} should be in fp32.")
+                else:
+                    self.assertEqual(type_, jnp.float16, msg=f"param {name} is not in fp16.")
+
+    def test_to_fp32(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            # cast all params to fp16 and back to fp32
+            params = model.to_fp16(model.params)
+            params = model.to_fp32(params)
+
+            # test if all params are in fp32
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.float32, msg=f"param {name} is not in fp32.")
+
+            # test masking
+            flat_params = flatten_dict(params)
+            key = random.choice(list(flat_params.keys()))  # choose a random param
+            mask = {path: path != key for path in flat_params}  # don't cast the key
+            mask = unflatten_dict(mask)
+
+            # cast to fp16 and back to fp32 with mask
+            params = model.to_fp16(model.params)
+            params = model.to_fp32(params, mask)
+
+            # test if all params are in fp32 except key
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, params))
+            for name, type_ in types.items():
+                if name == key:
+                    self.assertEqual(type_, jnp.float16, msg=f"param {name} should be in fp16.")
+                else:
+                    self.assertEqual(type_, jnp.float32, msg=f"param {name} is not in fp32.")
+
+    def test_save_load_in_fp16(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+        # convert weights to fp16 and save
+        params = model.to_fp16(model.params)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, params=params)
+
+            # load the weights again and check if they are still in fp16
+            model = model_class.from_pretrained(tmpdirname)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, model.params))
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.float16, msg=f"param {name} is not in fp16.")
+
+    def test_save_load_in_bf16(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+        # convert weights to bf16 and save
+        params = model.to_bf16(model.params)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, params=params)
+
+            # load the weights again and check if they are still in fp16
+            model = model_class.from_pretrained(tmpdirname)
+            types = flatten_dict(jax.tree_map(lambda x: x.dtype, model.params))
+            for name, type_ in types.items():
+                self.assertEqual(type_, jnp.bfloat16, msg=f"param {name} is not in bf16.")
+
+    def test_model_main_input_name(self):
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "__call__"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name = list(model_signature.parameters.keys())[1]
+            self.assertEqual(model_class.main_input_name, observed_main_input_name)
+
+    def test_headmasking(self):
+        if not self.test_head_masking:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        def _prepare_layer_head_mask(i, attention_heads, num_hidden_layers):
+            if i == 0:
+                return np.concatenate([np.zeros(1, dtype=jnp.int32), np.ones(attention_heads - 1, dtype=jnp.int32)])
+            if i == num_hidden_layers - 1:
+                return np.concatenate([np.zeros(attention_heads - 1, dtype=jnp.int32), np.ones(1, dtype=jnp.int32)])
+            return np.ones(attention_heads, dtype=jnp.int32)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
+            # Prepare head mask
+            inputs["head_mask"] = np.stack(
+                [
+                    _prepare_layer_head_mask(i, config.num_attention_heads, config.num_hidden_layers)
+                    for i in range(config.num_hidden_layers)
+                ]
+            )
+            outputs = model(**inputs)
+
+            def _check_attentions_validity(attentions):
+                # Remove NaN
+                for t in attentions:
+                    # Check we don't have more than 25% nans (arbitrary)
+                    self.assertLess(np.isnan(t).sum(), t.size / 4)
+                attentions = [np.where(np.isnan(t), 0.0, t) for t in attentions]
+
+                self.assertAlmostEqual(attentions[0][..., 0, :, :].sum(), 0.0)
+                self.assertNotEqual(attentions[0][..., -1, :, :].sum(), 0.0)
+                if len(attentions) > 2:  # encoder-decodere models have only 2 layers in each modules
+                    self.assertNotEqual(attentions[1][..., 0, :, :].sum(), 0.0)
+                self.assertAlmostEqual(attentions[-1][..., -2, :, :].sum(), 0.0)
+                self.assertNotEqual(attentions[-1][..., -1, :, :].sum(), 0.0)
+
+            if model.config.is_encoder_decoder:
+                raise NotImplementedError("The test has not been implemented for encoder-decoder models yet.")
+            else:
+                _check_attentions_validity(outputs.attentions)
+
 
 @require_flax
 @is_staging_test
 class FlaxModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-flax")
+            delete_repo(token=cls._token, name="test-model-flax")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-flax-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-model-flax-org", organization="valid_org")
         except HTTPError:
             pass
 

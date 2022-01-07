@@ -1,6 +1,8 @@
-# FSNER
+<p align="center"> <img src="http://sayef.tech:8082/uploads/FSNER-LOGO-2.png" alt="FSNER LOGO"> </p>
 
-Implemented by [sayef](https://huggingface.co/sayef).
+<p align="center">
+  Implemented by <a href="https://huggingface.co/sayef"> sayef </a>. 
+</p>
 
 ## Overview
 
@@ -25,13 +27,17 @@ The FSNER model was proposed in [Example-Based Named Entity Recognition](https:/
 ## Installation and Example Usage
 ------
 
-You can use the FSNER model in two ways:
+You can use the FSNER model in 3 ways:
 
-1. Install as a package: `python setup.py install` and import the model as shown in the code example below
+1. Install directly from PyPI: `pip install fsner` and import the model as shown in the code example below
 
     or
 
-2. Change directory to `src` and import the model as shown in the code example below
+2. Install from source: `python setup.py install` and import the model as shown in the code example below
+
+    or
+
+3. Clone repo and change directory to `src` and import the model as shown in the code example below
 
 
 
@@ -65,7 +71,6 @@ supports = [
             "[E] Walmart [/E] is a leading e-commerce company",
             "I recently ordered a book from [E] Amazon [/E]",
             "I ordered this from [E] ShopClues [/E]",
-            "Fridge can be ordered in [E] Amazon [/E]",
             "[E] Flipkart [/E] started it's journey from zero"
         ]
    ]
@@ -73,7 +78,7 @@ supports = [
 device = 'cpu'
 
 W_query = tokenizer.tokenize(query).to(device)
-W_supports = tokenizer.tokenize([s for support in supports for s in support]).to(device)
+W_supports = tokenizer.tokenize(supports).to(device)
 
 start_prob, end_prob = model(W_query, W_supports)
 
