@@ -105,10 +105,7 @@ class TrOCRProcessor:
                 [`PreTrainedTokenizer`]
         """
         feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        if "trocr-small" in pretrained_model_name_or_path:
-            tokenizer = XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        else:
-            tokenizer = RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
