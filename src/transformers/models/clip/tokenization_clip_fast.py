@@ -199,7 +199,7 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed. CLIP does not make use of token type ids, therefore a list of 
+        Create a mask from the two sequences passed. CLIP does not make use of token type ids, therefore a list of
         zeros is returned.
 
         Args:
@@ -217,7 +217,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(bos_token + token_ids_0 + eos_token) * [0]
         return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
-
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
