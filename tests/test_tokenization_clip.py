@@ -102,7 +102,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Testing the unknown token
         input_tokens = tokens + [rust_tokenizer.unk_token]
-        input_bpe_tokens = [10, 2, 12, 9, 3, 2, 12, 16]
+        input_bpe_tokens = [10, 2, 16, 9, 3, 2, 16, 20]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     def test_pretokenized_inputs(self, *args, **kwargs):
