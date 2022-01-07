@@ -214,6 +214,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         input_ids=None,
         attention_mask=None,
         position_ids=None,
+        token_type_ids=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -232,13 +233,13 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
 
         >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"], padding=True, return_tensors="pt")
-        >>> inputs.pop("token_type_ids")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            token_type_ids=token_type_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
