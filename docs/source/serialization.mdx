@@ -436,3 +436,67 @@ Using the traced model for inference is as simple as using its `__call__` dunder
 ```python
 traced_model(tokens_tensor, segments_tensors)
 ```
+
+### Deploying HuggingFace TorchScript models on AWS using the Neuron SDK
+
+AWS introduced the [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/) 
+instance family for low cost, high performance machine learning inference in the cloud. 
+The Inf1 instances are powered by the AWS Inferentia chip, a custom-built hardware accelerator, 
+specializing in deep learning inferencing workloads. 
+[AWS Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#) 
+is the SDK for Inferentia that supports tracing and optimizing transformers models for 
+deployment on Inf1. The Neuron SDK provides:
+
+
+1. Easy-to-use API with one line of code change to trace and optimize a TorchScript model for inference in the cloud.
+2. Out of the box performance optimizations for [improved cost-performance](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/benchmark/>)
+3. Support for HuggingFace transformers models built with either [PyTorch](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/bert_tutorial/tutorial_pretrained_bert.html)
+   or [TensorFlow](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/tensorflow/huggingface_bert/huggingface_bert.html).
+
+#### Implications
+
+Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/master/model_doc/bert) 
+architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/master/model_doc/distilbert)
+ and [roBERTa](https://huggingface.co/docs/transformers/master/model_doc/roberta) 
+ will run best on Inf1 for non-generative tasks such as Extractive Question Answering, 
+ Sequence Classification, Token Classification. Alternatively, text generation
+tasks can be adapted to run on Inf1, according to this [AWS Neuron MarianMT tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html). 
+More information about models that can be converted out of the box on Inferentia can be 
+found in the [Model Architecture Fit section of the Neuron documentation](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia).
+
+#### Dependencies
+
+Using AWS Neuron to convert models requires the following dependencies and environment:
+
+* A [Neuron SDK environment](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide),
+  which comes pre-configured on [AWS Deep Learning AMI](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html).
+
+#### Converting a Model for AWS Neuron
+
+Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/master/en/serialization#using-torchscript-in-python) 
+to trace a "BertModel", you import `torch.neuron` framework extension to access 
+the components of the Neuron SDK through a Python API.
+
+```python
+from transformers import BertModel, BertTokenizer, BertConfig
+import torch
+import torch.neuron
+```
+And only modify the tracing line of code
+
+from:
+
+```python
+torch.jit.trace(model, [tokens_tensor, segments_tensors])
+```
+
+to:
+
+```python
+torch.neuron.trace(model, [token_tensor, segments_tensors])
+```
+
+This change enables Neuron SDK to trace the model and optimize it to run in Inf1 instances.
+
+To learn more about AWS Neuron SDK features, tools, example tutorials and latest updates, 
+please see the [AWS NeuronSDK documentation](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.html).
