@@ -23,7 +23,7 @@ from transformers.models.roberta.tokenization_roberta_fast import RobertaTokeniz
 from transformers.models.xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
 from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
-from ..auto.feature_extraction_auto import AutoFeatureExtractor
+from transformers import AutoTokenizer, AutoFeatureExtractor
 
 
 class TrOCRProcessor:
@@ -105,7 +105,7 @@ class TrOCRProcessor:
                 [`PreTrainedTokenizer`]
         """
         feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
