@@ -36,8 +36,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        # temporary addition: to test the new slow to fast converter
-        self.tokenizers_list = [(CLIPTokenizerFast, "SaulLu/clip-vit-base-patch32", {})]
 
         # fmt: off
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
