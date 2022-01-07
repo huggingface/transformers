@@ -208,10 +208,13 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
         sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
+            Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
+            of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam. .
+            `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
+            tuple of `(max_length-input_ids.shape[-1],)-shaped tuples of scalar `torch.LongTensor` tensors.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -242,10 +245,13 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
         sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
+            Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
+            of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam. .
+            `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
             config.vocab_size)`).
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
+            tuple of `(max_length-1,)-shaped tuples of scalar `torch.LongTensor` tensors.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
@@ -288,10 +294,13 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
         sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
+            Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
+            of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam. .
+            `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
+            tuple of `(max_length-input_ids.shape[-1],)-shaped tuples of scalar `torch.LongTensor` tensors.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -322,10 +331,13 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
         sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
-            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
+            Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
+            of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam. .
+            `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
             config.vocab_size)`).
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
+            tuple of `(max_length-1,)-shaped tuples of scalar `torch.LongTensor` tensors.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -2021,12 +2033,11 @@ class GenerationMixin:
             else:
                 num_return_sequences = beam_scorer.num_beam_hyps_to_keep
                 # return only as many indices as sequences
-                beam_indices = sum(
-                    tuple(
-                        (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
-                    ),
-                    (),
+                beam_indices = tuple(
+                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
                 )
+                beam_indices = sum(beam_indices, ())
+
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
@@ -2342,12 +2353,11 @@ class GenerationMixin:
             else:
                 num_return_sequences = beam_scorer.num_beam_hyps_to_keep
                 # return only as many indices as sequences
-                beam_indices = sum(
-                    tuple(
-                        (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
-                    ),
-                    (),
+                beam_indices = tuple(
+                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
                 )
+                beam_indices = sum(beam_indices, ())
+
             if self.config.is_encoder_decoder:
                 return BeamSampleEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
@@ -2708,12 +2718,10 @@ class GenerationMixin:
                 beam_indices = sum(beam_indices, ())
                 num_return_sequences = beam_scorer.num_beam_hyps_to_keep
                 # return only as many indices as sequences
-                beam_indices = sum(
-                    tuple(
-                        (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
-                    ),
-                    (),
+                beam_indices = tuple(
+                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
                 )
+                beam_indices = sum(beam_indices, ())
 
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
