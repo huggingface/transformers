@@ -224,9 +224,12 @@ class CLIPTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
+
         if token_ids_1 is None:
-            return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-        return [self.bos_token_id] + token_ids_0 + token_ids_1 + [self.eos_token_id]
+            return bos_token + token_ids_0 + eos_token
+        return bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -254,7 +257,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0))+ [1]+ [1] + ([0] * len(token_ids_1)) + [1]
 
     def bpe(self, token):
         if token in self.cache:
