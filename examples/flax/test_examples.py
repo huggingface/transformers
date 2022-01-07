@@ -88,7 +88,7 @@ class ExamplesTests(TestCasePlus):
             --max_train_steps=10
             --num_warmup_steps=2
             --seed=42
-            --max_length=128
+            --max_seq_length=128
             """.split()
 
         with patch.object(sys, "argv", testargs):
