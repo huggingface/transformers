@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CharacterBERT model configuration """
+""" CharacterBERT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -31,70 +31,73 @@ CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CharacterBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.CharacterBertModel`. It is
-    used to instantiate an CharacterBERT model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the CharacterBERT
-    `helboukkouri/character-bert <https://huggingface.co/helboukkouri/character-bert>`__ architecture.
+    This is the configuration class to store the configuration of a [`CharacterBertModel`]. It is used to instantiate
+    an CharacterBERT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the CharacterBERT
+    [helboukkouri/character-bert](https://huggingface.co/helboukkouri/character-bert) architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        character_embeddings_dim (:obj:`int`, `optional`, defaults to :obj:`16`):
+        character_embeddings_dim (`int`, *optional*, defaults to `16`):
             The size of the character embeddings.
-        cnn_activation (:obj:`str`, `optional`, defaults to :obj:`"relu"`):
+        cnn_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function to apply to the cnn representations.
-        cnn_filters (:obj:`list(list(int))`, `optional`, defaults to :obj:`[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`):
+        cnn_filters (`list(list(int))`, *optional*, defaults to `[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`):
             The list of CNN filters to use in the CharacterCNN module.
-        num_highway_layers (:obj:`int`, `optional`, defaults to :obj:`2`):
+        num_highway_layers (`int`, *optional*, defaults to `2`):
             The number of Highway layers to apply to the CNNs output.
-        max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
+        max_word_length (`int`, *optional*, defaults to `50`):
             The maximum token length in characters (actually, in bytes as any non-ascii characters will be converted to
             a sequence of utf-8 bytes).
-        hidden_size (:obj:`int`, `optional`, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
+        max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling
-            :class:`~transformers.CharacterBertModel` or :class:`~transformers.TFCharacterBertModel`.
-        mlm_vocab_size (:obj:`int`, `optional`, defaults to 100000):
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`CharacterBertModel`] or
+            [`TFCharacterBertModel`].
+        mlm_vocab_size (`int`, *optional*, defaults to 100000):
             Size of the output vocabulary for MLM.
-        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if ``config.is_decoder=True``.
+            relevant if `config.is_decoder=True`.
 
-        Example::
+    Example:
 
-        >>> from transformers import CharacterBertModel, CharacterBertConfig
+    ```python
 
-        >>> # Initializing a CharacterBERT helboukkouri/character-bert style configuration
-        >>> configuration = CharacterBertConfig()
+    ```
 
-        >>> # Initializing a model from the helboukkouri/character-bert style configuration
-        >>> model = CharacterBertModel(configuration)
+            >>> from transformers import CharacterBertModel, CharacterBertConfig
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+            >>> # Initializing a CharacterBERT helboukkouri/character-bert style configuration >>> configuration =
+            CharacterBertConfig()
+
+            >>> # Initializing a model from the helboukkouri/character-bert style configuration >>> model =
+            CharacterBertModel(configuration)
+
+            >>> # Accessing the model configuration >>> configuration = model.config
     """
     model_type = "character_bert"
 

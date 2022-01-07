@@ -1,4 +1,4 @@
-- sections: 
+- sections:
   - local: index
     title: 🤗 Transformers
   - local: quicktour
@@ -144,6 +144,8 @@
       title: CANINE
     - local: model_doc/clip
       title: CLIP
+    - local: model_doc/character_bert
+      title: CharacterBERT
     - local: model_doc/convbert
       title: ConvBERT
     - local: model_doc/cpm

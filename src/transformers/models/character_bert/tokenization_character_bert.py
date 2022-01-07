@@ -88,43 +88,43 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     """
     Construct a CharacterBERT tokenizer. Based on characters.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
-        mlm_vocab_file (:obj:`str`, `optional`, defaults to :obj:`None`):
+        mlm_vocab_file (`str`, *optional*, defaults to `None`):
             Path to the Masked Language Modeling vocabulary. This is used for converting the output (token ids) of the
             MLM model into tokens.
-        max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
+        max_word_length (`int`, *optional*, defaults to `50`):
             The maximum token length in characters (actually, in bytes as any non-ascii characters will be converted to
             a sequence of utf-8 bytes).
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_basic_tokenize (`bool`, *optional*, defaults to `True`):
             Whether or not to do basic tokenization before WordPiece.
-        never_split (:obj:`Iterable`, `optional`):
+        never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
-            :obj:`do_basic_tokenize=True`
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
+            `do_basic_tokenize=True`
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"[PAD]"`):
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
-        strip_accents: (:obj:`bool`, `optional`):
+        strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for :obj:`lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original BERT).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -268,13 +268,13 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         sequence of tokens.
 
         Args:
-            ids (:obj:`int` or :obj:`List[int]`):
+            ids (`int` or `List[int]`):
                 The token id (or token ids) to convert to tokens.
-            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
         Returns:
-            :obj:`str` or :obj:`List[str]`: The decoded token(s).
+            `str` or `List[str]`: The decoded token(s).
         """
         if isinstance(ids, list) and isinstance(ids[0], int):
             if tuple(ids) in self.added_tokens_decoder:
@@ -313,17 +313,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CharacterBERT sequence has the following format:
 
-        - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -339,18 +339,18 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             if token_ids_1 is not None:
@@ -371,22 +371,22 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CharacterBERT
         sequence pair mask has the following format:
 
-        ::
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
 
-            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence    | second sequence |
+                If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
-        If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
+                Args:
+                    token_ids_0 (`List[int]`):
+                        List of IDs.
+                    token_ids_1 (`List[int]`, *optional*):
+                        Optional second list of IDs for sequence pairs.
 
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
-            sequence(s).
+                Returns:
+                    `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
+                    sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -414,53 +414,55 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch.
 
-        Padding side (left/right) padding token ids are defined at the tokenizer level (with ``self.padding_side``,
-        ``self.pad_token_id`` and ``self.pad_token_type_id``)
+        Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
+        `self.pad_token_id` and `self.pad_token_type_id`)
 
-        .. note::
+        <Tip>
 
-            If the ``encoded_inputs`` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
-            result will use the same type unless you provide a different tensor type with ``return_tensors``. In the
-            case of PyTorch tensors, you will lose the specific device of your tensors however.
+        If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        PyTorch tensors, you will lose the specific device of your tensors however.
+
+        </Tip>
 
         Args:
-            encoded_inputs (:class:`~transformers.BatchEncoding`, list of :class:`~transformers.BatchEncoding`, :obj:`Dict[str, List[int]]`, :obj:`Dict[str, List[List[int]]` or :obj:`List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input (:class:`~transformers.BatchEncoding` or :obj:`Dict[str,
-                List[int]]`) or a batch of tokenized inputs (list of :class:`~transformers.BatchEncoding`, `Dict[str,
-                List[List[int]]]` or `List[Dict[str, List[int]]]`) so you can use this method during preprocessing as
-                well as in a PyTorch Dataloader collate function.
+            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
+                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
+                tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
+                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                collate function.
 
-                Instead of :obj:`List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
-                see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+                Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
+                the note above for the return type.
+            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
-            max_length (:obj:`int`, `optional`):
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
-            pad_to_multiple_of (:obj:`int`, `optional`):
+            pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 >= 7.5 (Volta).
-            return_attention_mask (:obj:`bool`, `optional`):
+            return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
+                to the specific tokenizer's default, defined by the `return_outputs` attribute.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+                [What are attention masks?](../glossary#attention-mask)
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-            verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+            verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
@@ -566,7 +568,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+            encoded_inputs:
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -581,7 +584,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         # Load from model defaults
         if return_attention_mask is None:
@@ -658,7 +662,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
 
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
-        specific :meth:`~transformers.tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`
+        specific [`~tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`]
         """
         if legacy_format is False:
             raise ValueError(
@@ -687,19 +691,19 @@ class BasicTokenizer(object):
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
     Args:
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        never_split (:obj:`Iterable`, `optional`):
+        never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
-            :obj:`do_basic_tokenize=True`
-        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            `do_basic_tokenize=True`
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this `issue
-            <https://github.com/huggingface/transformers/issues/328>`__).
-        strip_accents: (:obj:`bool`, `optional`):
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
+        strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for :obj:`lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original BERT).
     """
 
     def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
@@ -716,9 +720,9 @@ class BasicTokenizer(object):
         WordPieceTokenizer.
 
         Args:
-            **never_split**: (`optional`) list of str
+            **never_split**: (*optional*) list of str
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
-                :func:`PreTrainedTokenizer.tokenize`) List of token not to split.
+                [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
