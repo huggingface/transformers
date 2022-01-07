@@ -257,7 +257,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0))+ [1]+ [1] + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1] + [1] + ([0] * len(token_ids_1)) + [1]
 
     def bpe(self, token):
         if token in self.cache:
@@ -327,7 +327,12 @@ class CLIPTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors).replace("</w>", " ").strip()
+        text = (
+            bytearray([self.byte_decoder[c] for c in text])
+            .decode("utf-8", errors=self.errors)
+            .replace("</w>", " ")
+            .strip()
+        )
         return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

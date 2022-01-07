@@ -833,7 +833,7 @@ class CLIPConverter(Converter):
                 continuing_subword_prefix="",
                 end_of_word_suffix="</w>",
                 fuse_unk=False,
-                unk_token=str(unk_token)
+                unk_token=str(unk_token),
             )
         )
 
@@ -853,7 +853,7 @@ class CLIPConverter(Converter):
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        
+
         # Hack to have a ByteLevel and TemplaceProcessor
         tokenizer.post_processor = processors.RobertaProcessing(
             sep=(self.original_tokenizer.eos_token, self.original_tokenizer.eos_token_id),

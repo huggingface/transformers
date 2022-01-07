@@ -175,7 +175,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertListEqual(text_tokenized_s, text_tokenized_r)
 
-                # Test that the tokenization is identical on an example containing a character (Latin Small Letter A 
+                # Test that the tokenization is identical on an example containing a character (Latin Small Letter A
                 # with Tilde) encoded in 2 different ways
                 text = "xa\u0303y" + " " + "x\xe3y"
                 text_tokenized_s = tokenizer_s.tokenize(text)
@@ -201,9 +201,9 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Test that the tokenization is identical on unicode of line break type
                 line_break_unicodes = [
                     "\u000A",  # (line feed, '\n')
-                    "\r\n", # (carriage return and line feed, '\r\n')
+                    "\r\n",  # (carriage return and line feed, '\r\n')
                     "\u000D",  # (carriage return, '\r')
-                    "\r", # (carriage return, '\r')
+                    "\r",  # (carriage return, '\r')
                     "\u000D",  # (carriage return, '\r')
                     "\u2028",  # (line separator)
                     "\u2029",  # (paragraph separator)
@@ -219,7 +219,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     text_tokenized_r = tokenizer_r.tokenize(unicode_seq)
 
                     self.assertListEqual(text_tokenized_s, text_tokenized_r)
-    
+
     # overwrite common test
     def test_added_tokens_do_lower_case(self):
         # CLIP always lower cases letters
