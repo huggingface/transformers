@@ -842,12 +842,12 @@ class CLIPConverter(Converter):
         )
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
-                pre_tokenizers.WhitespaceSplit(),
                 pre_tokenizers.Split(
                     Regex(
                         r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"""
                     ),
-                    behavior="merged_with_previous",
+                    behavior="removed",
+                    invert=True,
                 ),
                 pre_tokenizers.ByteLevel(add_prefix_space=False),
             ]
