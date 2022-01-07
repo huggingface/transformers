@@ -97,6 +97,28 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
+    @slow
+    @require_torch
+    def test_large_model_pt_with_lm(self):
+        from pyctcdecode import BeamSearchDecoderCTC
+
+        decoder = BeamSearchDecoderCTC.load_from_hf_hub("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
+            framework="pt",
+        )
+        speech_recognizer.type = "ctc"
+
+        output = speech_recognizer("spanish.wav")
+        self.assertEqual(output, {"text": "bien y qué regalo vas a abrir primero"})
+
+        # Add the decoder to the pipeline to get CTCWithLM behavior.
+        speech_recognizer.tokenizer = decoder
+        speech_recognizer.type = "ctc_with_lm"
+        output = speech_recognizer("spanish.wav")
+        self.assertEqual(output, {"text": "bien y qué regalo vas a abrir primero"})
+
     @require_tf
     def test_small_model_tf(self):
         self.skipTest("Tensorflow not supported yet.")
