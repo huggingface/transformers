@@ -424,32 +424,12 @@ def require_ftfy(test_case):
         return test_case
 
 
-def require_no_ftfy(test_case):
-    """
-    Decorator marking a test that requires ftfy NOT be installed. These tests are skipped when ftfy is installed.
-    """
-    if is_ftfy_available():
-        return unittest.skip("test requires no ftfy")(test_case)
-    else:
-        return test_case
-
-
 def require_spacy(test_case):
     """
     Decorator marking a test that requires SpaCy. These tests are skipped when SpaCy isn't installed.
     """
     if not is_spacy_available():
         return unittest.skip("test requires spacy")(test_case)
-    else:
-        return test_case
-
-
-def require_no_spacy(test_case):
-    """
-    Decorator marking a test that requires SpaCy NOT be installed. These tests are skipped when SpaCy is installed.
-    """
-    if is_spacy_available():
-        return unittest.skip("test requires no spacy")(test_case)
     else:
         return test_case
 
