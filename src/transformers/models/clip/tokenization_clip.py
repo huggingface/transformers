@@ -259,6 +259,29 @@ class CLIPTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1] + [1] + ([0] * len(token_ids_1)) + [1]
 
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed. CLIP does not make use of token type ids, therefore a list of 
+        zeros is returned.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of zeros.
+        """
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
+
+        if token_ids_1 is None:
+            return len(bos_token + token_ids_0 + eos_token) * [0]
+        return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
+
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
