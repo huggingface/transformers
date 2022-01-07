@@ -1887,7 +1887,9 @@ class GenerationMixin:
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
-        beam_indices = tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
+        beam_indices = (
+            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
+        )
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
@@ -2016,6 +2018,15 @@ class GenerationMixin:
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
+            else:
+                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
+                # return only as many indices as sequences
+                beam_indices = sum(
+                    tuple(
+                        (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
+                    ),
+                    (),
+                )
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
@@ -2186,8 +2197,16 @@ class GenerationMixin:
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
 
+        batch_size = len(beam_scorer._beam_hyps)
+        num_beams = beam_scorer.num_beams
+
+        batch_beam_size, cur_len = input_ids.shape
+
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
+        beam_indices = (
+            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
+        )
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
@@ -2198,11 +2217,6 @@ class GenerationMixin:
             encoder_hidden_states = (
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
-
-        batch_size = len(beam_scorer._beam_hyps)
-        num_beams = beam_scorer.num_beams
-
-        batch_beam_size, cur_len = input_ids.shape
 
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores = beam_scores.view((batch_size * num_beams,))
@@ -2249,7 +2263,7 @@ class GenerationMixin:
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (logits_warper(input_ids, next_token_scores_processed))
+                    scores += (logits_warper(input_ids, next_token_scores_processed),)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -2300,6 +2314,9 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
+            if return_dict_in_generate and output_scores:
+                beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
+
             # increase cur_len
             cur_len = cur_len + 1
 
@@ -2322,11 +2339,21 @@ class GenerationMixin:
         if return_dict_in_generate:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
+            else:
+                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
+                # return only as many indices as sequences
+                beam_indices = sum(
+                    tuple(
+                        (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
+                    ),
+                    (),
+                )
             if self.config.is_encoder_decoder:
                 return BeamSampleEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
+                    beam_indices=beam_indices,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -2338,6 +2365,7 @@ class GenerationMixin:
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
+                    beam_indices=beam_indices,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
@@ -2583,9 +2611,9 @@ class GenerationMixin:
                 next_token_scores_processed = logits_processor(
                     group_input_ids, next_token_scores, current_tokens=current_tokens, beam_group_idx=beam_group_idx
                 )
-                next_token_scores = next_token_scores_processed + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(
-                    next_token_scores_processed
-                )
+                next_token_scores = next_token_scores_processed + beam_scores[batch_group_indices].unsqueeze(
+                    -1
+                ).expand_as(next_token_scores_processed)
 
                 if output_scores:
                     processed_score[batch_group_indices] = next_token_scores_processed
@@ -2614,7 +2642,9 @@ class GenerationMixin:
                 beam_idx = beam_outputs["next_beam_indices"]
 
                 if return_dict_in_generate and output_scores:
-                    beam_indices[beam_group_idx] = tuple(beam_indices[beam_group_idx][beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices[0])))
+                    beam_indices[beam_group_idx] = tuple(
+                        beam_indices[beam_group_idx][beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices[0]))
+                    )
 
                 input_ids[batch_group_indices] = group_input_ids[beam_idx]
                 group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
@@ -2676,9 +2706,16 @@ class GenerationMixin:
                 sequence_outputs["sequence_scores"] = None
             else:
                 beam_indices = sum(beam_indices, ())
+                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
+                # return only as many indices as sequences
+                beam_indices = sum(
+                    tuple(
+                        (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
+                    ),
+                    (),
+                )
 
             if self.config.is_encoder_decoder:
-                import ipdb; ipdb.set_trace()
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
