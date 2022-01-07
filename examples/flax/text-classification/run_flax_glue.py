@@ -536,7 +536,7 @@ def main():
                 # Save metrics
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
-                if jax.process_index() == 0:
+                if has_tensorboard and jax.process_index() == 0:
                     write_train_metric(summary_writer, train_metrics, train_time, cur_step)
 
                 epochs.write(
@@ -576,7 +576,7 @@ def main():
 
                 logger.info(f"Step... ({cur_step}/{total_steps} | Eval metrics: {eval_metric})")
 
-                if jax.process_index() == 0:
+                if has_tensorboard and jax.process_index() == 0:
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
             if (cur_step % args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
