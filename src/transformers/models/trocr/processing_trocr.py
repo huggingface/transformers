@@ -34,8 +34,8 @@ class TrOCRProcessor:
     [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`AutoFeatureExtractor`]):
-            An instance of [`AutoFeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor ([`ViTFeatureExtractor`/`DeiTFeatureExtractor`]): 
+            An instance of [`ViTFeatureExtractor`/`DeiTFeatureExtractor`]. The feature extractor is a required input.
         tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`]):
             An instance of [`RobertaTokenizer`/`XLMRobertaTokenizer`]. The tokenizer is a required input.
     """
