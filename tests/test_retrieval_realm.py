@@ -172,7 +172,7 @@ class RealmRetrieverTest(TestCase):
         retriever.save_pretrained(os.path.join(self.tmpdirname, "realm_block_records"))
 
         # Test local path
-        retriever.from_pretrained(os.path.join(self.tmpdirname, "realm_block_records"))
+        retriever = retriever.from_pretrained(os.path.join(self.tmpdirname, "realm_block_records"))
         self.assertEqual(retriever.block_records[0], b"This is the first record")
 
         # Test mocked remote path
