@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The REALM authors and The HuggingFace Inc. team.
+# Copyright 2022 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ _REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
 logger = logging.get_logger(__name__)
 
 
-def convert_tfrecord_to_np(block_records_path, num_block_records):
+def convert_tfrecord_to_np(block_records_path: str, num_block_records: int) -> np.ndarray:
     import tensorflow.compat.v1 as tf
 
     blocks_dataset = tf.data.TFRecordDataset(block_records_path, buffer_size=512 * 1024 * 1024)
@@ -75,8 +75,10 @@ class RealmRetriever:
     positions."
 
         Parameters:
-            block_records (`np.array`): `block_records` which cantains evidence texts.
-            tokenizer ([`RealmTokenizer`]): The tokenizer to encode retrieved texts.
+            block_records (`np.ndarray`):
+                A numpy array which cantains evidence texts.
+            tokenizer ([`RealmTokenizer`]):
+                The tokenizer to encode retrieved texts.
     """
 
     def __init__(self, block_records, tokenizer):

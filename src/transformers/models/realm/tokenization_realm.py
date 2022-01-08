@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The REALM authors and The HuggingFace Inc. team.
+# Copyright 2022 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -108,7 +108,7 @@ class RealmTokenizer(BertTokenizer):
         >>> # batch_size = 2, num_candidates = 2
         >>> text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]
 
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-bert")
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder")
         >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
         ```"""
 

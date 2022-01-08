@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The REALM authors and The HuggingFace Inc. team.
+# Copyright 2022 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -140,7 +140,7 @@ class RealmConfig(PretrainedConfig):
         max_span_width=10,
         reader_layer_norm_eps=1e-3,
         reader_beam_size=5,
-        reader_seq_len=288 + 32,
+        reader_seq_len=320, # 288 + 32
         num_block_records=13353718,
         searcher_beam_size=5000,
         searcher_seq_len=64,
