@@ -191,5 +191,103 @@ have to accept that **your email address** and **username** is shared with the
 mozilla-foundation. To get access to the dataset please click on "*Access repository*" [here](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0).
 
 Next, we recommend that you get familiar with the XLS-R model and its capatibilites.
-In collaboration with [Fairseq's Wav2Vec2 team](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec), we've written a blog post that explains step-by-step 
-how to fine-tune
+In collaboration with [Fairseq's Wav2Vec2 team](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec), 
+we've written ["Fine-tuning XLS-R for Multi-Lingual ASR with 🤗 Transformers"](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) which gives an in-detail explanation of how XLS-R functions and how it can be fine-tuned.
+
+The blog can also be opened and directly fine-tuned in a google colab notebook.
+In this section, we will explain how to fine-tune the model on a local machine.
+
+1. To begin with you should check that you are correctly logged in and that you have `git-lfs` installed so that your fine-tuned model can automatically be uploaded.
+
+Run:
+
+```bash
+huggingface-cli login
+```
+
+to login. It is recommend to login with your personal access token that can be found under your hugging face profile (icon in the top right corner on [hf.co](http://hf.co/), then Settings -> Access Tokens -> User Access Tokens -> New Token (if haven't generated one already)
+
+You can then copy paste this token to login locally.
+Next, make sure that git-lfs is correctly installed. Run:
+
+```bash
+git-lfs -v
+```
+
+The output should show something like `git-lfs/2.13.2 (GitHub; linux amd64; go 1.15.4)`. If your console states that the `git-lfs` command was not found, please make
+sure to install it [here](https://git-lfs.github.com/) or simply via: 
+
+```bash
+sudo apt-get install git-lfs
+```
+
+2. Create your model directory
+
+Now you can create your model directory which will contain all relevant files to 
+reproduce your training and that will be uploaded to the Hub.
+
+In this guide, we'll simply train a dummy model which only takes 1 minute to train.
+We'll call it `xls-r-ab-test`.
+
+```bash
+mkdir -p xls-r-ab-test && cd xls-r-ab-test
+```
+
+3. Add you training script and bash command to reproduce the training
+
+We encourage participants to add all relevant files for training directly to the 
+directory so that everything is fully reproducible.
+
+Let's first copy-paste the official training script from our clone 
+of `transformers` to our just created directory:
+
+```bash
+cp ~/transformers/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py ./
+```
+
+Next, we'll create a bash file to define the hyper-parameters and configurations 
+for training. More detailed information on different settings (single-GPU vs. multi-GPU) can be found [here](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition#connectionist-temporal-classification).
+
+For demonstration purposes, we train the [300m parameter version of XSL-R](https://huggingface.co/facebook/wav2vec2-xls-r-300m): `model_name_or_path="facebook/wav2vec2-xls-r-300m"` on the very low-resource language of "Abkhaz" of [Common Voice 7](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0): `dataset_config_name="ab"` for just a single epoch.
+
+Before starting to train, let's make sure we have installed all the required libraries. You might want to run:
+
+```bash
+pip install -r ~/transformers/examples/pytorch/speech-recognition/requirements.txt
+```
+
+Alright, finally we can define the training script. We'll simply use some 
+dummy hyper-parameters and configurations for demonstration purposes.
+
+Note that we add the flag `--use_auth_token` so that datasets requiring access, 
+such as [Common Voice 7](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0) can be downloaded. In addition we add the `--push_to_hub` flag to make use of the 
+[Trainers `push_to-hub` functionality](https://huggingface.co/docs/transformers/master/en/main_classes/trainer#transformers.Trainer.push_to_hub) so that your model will be automatically uploaded to the Hub.
+
+Let's copy the following code snippet in a file called `run.sh`
+
+```bash
+echo '''python run_speech_recognition_ctc.py \
+	--dataset_name="mozilla-foundation/common_voice_7_0" \
+	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
+	--dataset_config_name="ab" \
+	--output_dir="./" \
+	--overwrite_output_dir \
+	--num_train_epochs="1" \
+	--per_device_train_batch_size="4" \
+	--gradient_accumulation_steps="1" \
+	--learning_rate="3e-4" \
+	--warmup_steps="10" \
+	--save_total_limit="1" \
+	--evaluation_strategy="steps" \
+	--text_column_name="sentence" \
+	--save_steps="5" \
+	--eval_steps="5" \
+	--layerdrop="0.0" \
+	--freeze_feature_encoder \
+	--gradient_checkpointing \
+	--fp16 \
+	--group_by_length \
+	--push_to_hub \
+	--use_auth_token \
+	--do_train --do_eval''' > run.sh
+```
