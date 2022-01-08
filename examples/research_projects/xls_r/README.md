@@ -177,3 +177,19 @@ assert logits.shape[-1] == 32
 ```
 
 ## How to finetune model
+
+In this section we show you how to fine-tune a pretrained [XLS-R Model](https://huggingface.co/docs/transformers/model_doc/xls_r) on the [Common Voice 7 dataset](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0). 
+
+We recommend to fine-tune one of the following pretrained XLS-R checkpoints:
+
+- [300M parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-300m)
+- [1B version version](https://huggingface.co/facebook/wav2vec2-xls-r-1b)
+- [2B version version](https://huggingface.co/facebook/wav2vec2-xls-r-2b)
+
+To begin with please note that in order to use the Common Voice dataset, you 
+have to accept that **your email address** and **username** is shared with the 
+mozilla-foundation. To get access to the dataset please click on "*Access repository*" [here](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0).
+
+Next, we recommend that you get familiar with the XLS-R model and its capatibilites.
+In collaboration with [Fairseq's Wav2Vec2 team](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec), we've written a blog post that explains step-by-step 
+how to fine-tune
