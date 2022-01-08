@@ -1085,6 +1085,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
 
         >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
@@ -1353,6 +1354,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
 
         >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")

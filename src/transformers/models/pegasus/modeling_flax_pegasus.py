@@ -1058,6 +1058,7 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
         >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
@@ -1327,6 +1328,7 @@ class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
         >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
