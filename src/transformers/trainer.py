@@ -2586,7 +2586,6 @@ class Trainer:
         if not self.is_world_process_zero():
             return
         use_auth_token = True if self.args.hub_token is None else self.args.hub_token
-
         if self.args.hub_model_id is None:
             repo_name = Path(self.args.output_dir).absolute().name
         else:
