@@ -30,29 +30,27 @@ if is_vision_available():
 if is_torch_available():
     _import_structure["modeling_vit_mae"] = [
         "VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ViTMAEForImageClassification",
+        "ViTMAEForPreTraining",
         "ViTMAELayer",
         "ViTMAEModel",
         "ViTMAEPreTrainedModel",
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
+
     if is_vision_available():
         from .feature_extraction_vit_mae import ViTMAEFeatureExtractor
 
     if is_torch_available():
         from .modeling_vit_mae import (
             VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViTMAEForImageClassification,
+            ViTMAEForPreTraining,
             ViTMAELayer,
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
-
 
 
 else:

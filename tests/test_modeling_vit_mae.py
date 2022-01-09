@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTMAEForImageClassification, ViTMAEModel
+    from transformers import ViTMAEForPreTraining, ViTMAEModel
     from transformers.models.vit_mae.modeling_vit_mae import ViT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -118,9 +118,9 @@ class ViTMAEModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_pretraining(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = ViTMAEForImageClassification(config)
+        model = ViTMAEForPreTraining(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -147,7 +147,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ViTMAEModel,
-            ViTMAEForImageClassification,
+            ViTMAEForPreTraining,
         )
         if is_torch_available()
         else ()
@@ -340,7 +340,7 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ViTMAEForImageClassification.from_pretrained("facebook/vit-mae-base").to(torch_device)
+        model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

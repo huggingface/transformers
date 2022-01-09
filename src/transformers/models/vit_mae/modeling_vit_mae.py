@@ -72,22 +72,52 @@ class ViTMAEEmbeddings(nn.Module):
             embed_dim=config.hidden_size,
         )
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.position_embeddings = nn.Parameter(
+            torch.zeros(1, num_patches + 1, config.hidden_size), requires_grad=False
+        )  # fixed sin-cos embedding
         self.config = config
+
+    def random_masking(self, x, mask_ratio):
+        """
+        Perform per-sample random masking by per-sample shuffling.
+        Per-sample shuffling is done by argsort random noise.
+        x: [N, L, D], sequence
+        """
+        N, L, D = x.shape  # batch, length, dim
+        len_keep = int(L * (1 - mask_ratio))
+
+        noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
+
+        # sort noise for each sample
+        ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+        ids_restore = torch.argsort(ids_shuffle, dim=1)
+
+        # keep the first subset
+        ids_keep = ids_shuffle[:, :len_keep]
+        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+
+        # generate the binary mask: 0 is keep, 1 is remove
+        mask = torch.ones([N, L], device=x.device)
+        mask[:, :len_keep] = 0
+        # unshuffle to get the binary mask
+        mask = torch.gather(mask, dim=1, index=ids_restore)
+
+        return x_masked, mask, ids_restore
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        # add position embeddings w/o cls token
+        embeddings = embeddings + self.position_embeddings[:, 1:, :]
+
+        # masking: length -> length * mask_ratio
+        embeddings, mask, ids_restore = self.random_masking(embeddings, mask_ratio)
+
+        # append cls token
+        cls_token = self.cls_token + self.position_embeddings[:, :1, :]
+        cls_tokens = cls_token.expand(embeddings.shape[0], -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
-
-        embeddings = self.dropout(embeddings)
 
         return embeddings
 
@@ -114,9 +144,9 @@ class PatchEmbeddings(nn.Module):
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
         if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-                )
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
@@ -545,48 +575,48 @@ class ViTMAEPooler(nn.Module):
 
 
 @add_start_docstrings(
-    """
-    ViTMAE Model transformer with an image classification head on top (a linear layer on top of the final hidden state
-    of the [CLS] token) e.g. for ImageNet.
-    """,
+    "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.",
     VIT_MAE_START_DOCSTRING,
 )
-class ViTMAEForImageClassification(ViTMAEPreTrainedModel):
-    def __init__(self, config):
+class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
+        self.config = config
 
-        self.num_labels = config.num_labels
+        self.embeddings = ViTMAEEmbeddings(config)
         self.vit = ViTMAEModel(config, add_pooling_layer=False)
-
-        # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
     @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
         head_mask=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import ViTMAEFeatureExtractor, ViTMAEForImageClassification
+        >>> from transformers import ViTMAEFeatureExtractor, ViTMAEModel
         >>> from PIL import Image
         >>> import requests
 
@@ -594,14 +624,11 @@ class ViTMAEForImageClassification(ViTMAEPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = ViTMAEFeatureExtractor.from_pretrained("facebook/vit-mae-base")
-        >>> model = ViTMAEForImageClassification.from_pretrained("facebook/vit-mae-base")
+        >>> model = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -617,23 +644,12 @@ class ViTMAEForImageClassification(ViTMAEPreTrainedModel):
 
         logits = self.classifier(sequence_output[:, 0, :])
 
-        loss = None
-        if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
         if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )

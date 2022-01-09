@@ -1377,7 +1377,7 @@ if is_torch_available():
     _import_structure["models.vit_mae"].extend(
         [
             "VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ViTMAEForImageClassification",
+            "ViTMAEForPreTraining",
             "ViTMAELayer",
             "ViTMAEModel",
             "ViTMAEPreTrainedModel",
@@ -3277,7 +3277,7 @@ if TYPE_CHECKING:
         )
         from .models.vit_mae import (
             VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViTMAEForImageClassification,
+            ViTMAEForPreTraining,
             ViTMAELayer,
             ViTMAEModel,
             ViTMAEPreTrainedModel,
