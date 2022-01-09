@@ -999,7 +999,7 @@ class RealmPreTrainedModel(PreTrainedModel):
 
 class RealmBertModel(RealmPreTrainedModel):
     """
-        Same as the original BertModel but remove docstrings.
+    Same as the original BertModel but remove docstrings.
     """
 
     def __init__(self, config, add_pooling_layer=True):
@@ -1137,6 +1137,7 @@ class RealmBertModel(RealmPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+
 
 @add_start_docstrings(
     "The embedder of REALM outputting projected score that will be used to calculate relevance score.",
@@ -1276,7 +1277,7 @@ class RealmScorer(RealmPreTrainedModel):
 
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or input_embeds.")
-        
+
         if candidate_input_ids is None and candidate_inputs_embeds is None:
             raise ValueError("You have to specify either candidate_input_ids or candidate_inputs_embeds.")
 
