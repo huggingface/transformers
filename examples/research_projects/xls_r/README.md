@@ -28,18 +28,20 @@ Don't forget to sign up [here](TODO: Create google from) 🤗.
 ## Organization
 
 Participants are encouraged to leverage pretrained speech recognition checkpoints,
-preferably [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53)  , to train a speech recognition system in a langauge of their 
+preferably [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53), to train a speech recognition system in a langauge of their 
 choice.
 
 Participants can make use of whatever data they think is useful to build a 
 **robust** speech recognition system for **real-world** audio data. We strongly 
 recommend to make use of [Mozilla's diverse Common Voice dataset](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0) when training the model.
-We kindly ask you to make sure the dataset that you are using for training 
+Please do **not** use the `"test"` split of the Common Voice datasets for training
+as we will likely use this split for the final evaluation of your model.
+We kindly ask you to make sure that the dataset that you are using for training 
 has the appropriate licensing - see [here](TODO: ) for more information.
 
 During the event the fine-tuned models will regularly be tested on a **development 
 dataset** provided by the Hugging Face team and at the end of the event all models 
-will be tested on a hidden **test dataset**. For each language, 
+will be tested on a **test dataset**. For each language, 
 the best performing model will receive a prize 🏆 - more information regarding 
 the testing [here](TODO: ) and prizes [here](TODO: ). We believe that framing the 
 event as a competition is more fun, but at the core we strongly encourage 
@@ -367,6 +369,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--length_column_name="input_length" \
 	--evaluation_strategy="steps" \
 	--text_column_name="sentence" \
+	--chars_to_ignore , ? . ! \- \; \: \" “ % ‘ ” � — ’ … – \
 	--save_steps="500" \
 	--eval_steps="500" \
 	--logging_steps="100" \
@@ -386,3 +389,10 @@ echo '''python run_speech_recognition_ctc.py \
 	--do_train --do_eval \
 	--push_to_hub''' > run.sh
 ```
+
+The training takes *ca.* 7 hours and yields a pretty reasonable test word 
+error rate as can be seen on the automatically generated [model card](https://huggingface.co/hf-test/xls-r-300m-sv).
+
+The above chosen hyperparameters probably work quite well on a range of different 
+datasets, but are by no means optimal. It is up to you to find a good set of 
+hyperparameters.
