@@ -44,7 +44,7 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
             Decoded logits in text from. Usually the speech transcription.
     """
 
-    text: Union[List[str], str] = None
+    text: Union[List[str], str]
 
 
 class Wav2Vec2ProcessorWithLM:
