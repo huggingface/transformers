@@ -183,8 +183,8 @@ In this section we show you how to fine-tune a pretrained [XLS-R Model](https://
 We recommend to fine-tune one of the following pretrained XLS-R checkpoints:
 
 - [300M parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-300m)
-- [1B version version](https://huggingface.co/facebook/wav2vec2-xls-r-1b)
-- [2B version version](https://huggingface.co/facebook/wav2vec2-xls-r-2b)
+- [1B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-1b)
+- [2B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-2b)
 
 To begin with please note that in order to use the Common Voice dataset, you 
 have to accept that **your email address** and **username** is shared with the 
@@ -208,7 +208,10 @@ huggingface-cli login
 to login. It is recommend to login with your personal access token that can be found under your hugging face profile (icon in the top right corner on [hf.co](http://hf.co/), then Settings -> Access Tokens -> User Access Tokens -> New Token (if haven't generated one already)
 
 You can then copy paste this token to login locally.
-Next, make sure that git-lfs is correctly installed. Run:
+
+2. Create your model repository
+
+First, let's make sure that `git-lfs` is correctly installed. To so, simply run:
 
 ```bash
 git-lfs -v
@@ -221,19 +224,27 @@ sure to install it [here](https://git-lfs.github.com/) or simply via:
 sudo apt-get install git-lfs
 ```
 
-2. Create your model directory
+Now you can create your model repository which will contain all relevant files to 
+reproduce your training. You can either directly create the model repository on the 
+Hub (Settings -> New Model) or via the CLI. Here we choose to use the CLI instead.
 
-Now you can create your model directory which will contain all relevant files to 
-reproduce your training and that will be uploaded to the Hub.
-
-In this guide, we'll simply train a dummy model which only takes 1 minute to train.
-We'll call it `xls-r-ab-test`.
+Assuming that we want to call our model repository *xls-r-ab-test*, we can run the 
+following command:
 
 ```bash
-mkdir -p xls-r-ab-test && cd xls-r-ab-test
+huggingface-cli repo create xls-r-ab-test
 ```
 
-3. Add you training script and bash command to reproduce the training
+You can now see the model on the Hub, *e.g.* under https://huggingface.co/hf-test/xls-r-ab-test .
+
+Let's clone the repository so that we can define our training script inside.
+
+```bash
+git lfs install
+git clone https://huggingface.co/hf-test/xls-r-ab-test
+```
+
+3. Add you training script and run command to the repository
 
 We encourage participants to add all relevant files for training directly to the 
 directory so that everything is fully reproducible.
@@ -248,7 +259,7 @@ cp ~/transformers/examples/pytorch/speech-recognition/run_speech_recognition_ctc
 Next, we'll create a bash file to define the hyper-parameters and configurations 
 for training. More detailed information on different settings (single-GPU vs. multi-GPU) can be found [here](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition#connectionist-temporal-classification).
 
-For demonstration purposes, we train the [300m parameter version of XSL-R](https://huggingface.co/facebook/wav2vec2-xls-r-300m): `model_name_or_path="facebook/wav2vec2-xls-r-300m"` on the very low-resource language of "Abkhaz" of [Common Voice 7](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0): `dataset_config_name="ab"` for just a single epoch.
+For demonstration purposes, we will use a dummy XLS-R model `model_name_or_path="hf-test/xls-r-dummy"` on the very low-resource language of "Abkhaz" of [Common Voice 7](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0): `dataset_config_name="ab"` for just a single epoch.
 
 Before starting to train, let's make sure we have installed all the required libraries. You might want to run:
 
@@ -268,20 +279,17 @@ Let's copy the following code snippet in a file called `run.sh`
 ```bash
 echo '''python run_speech_recognition_ctc.py \
 	--dataset_name="mozilla-foundation/common_voice_7_0" \
-	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
+	--model_name_or_path="hf-test/xls-r-dummy" \
 	--dataset_config_name="ab" \
 	--output_dir="./" \
 	--overwrite_output_dir \
-	--num_train_epochs="1" \
-	--per_device_train_batch_size="4" \
-	--gradient_accumulation_steps="1" \
+	--max_steps="10" \
+	--per_device_train_batch_size="2" \
 	--learning_rate="3e-4" \
-	--warmup_steps="10" \
 	--save_total_limit="1" \
 	--evaluation_strategy="steps" \
 	--text_column_name="sentence" \
 	--save_steps="5" \
-	--eval_steps="5" \
 	--layerdrop="0.0" \
 	--freeze_feature_encoder \
 	--gradient_checkpointing \
@@ -290,4 +298,88 @@ echo '''python run_speech_recognition_ctc.py \
 	--push_to_hub \
 	--use_auth_token \
 	--do_train --do_eval''' > run.sh
+```
+
+4. Start training
+
+Now all that is left to do is to start training the model by executing the 
+run file.
+
+```bash
+bash run.sh
+```
+
+The training should not take more than a couple of minutes. 
+During the training intermediate saved checkpoints are automatically uploaded to
+your model repository as can be seen [on this commit](https://huggingface.co/hf-test/xls-r-ab-test/commit/0eb19a0fca4d7d163997b59663d98cd856022aa6) . 
+
+At the end of the training the [Trainer](https://huggingface.co/docs/transformers/master/en/main_classes/trainer) automatically creates a nice model card and all 
+relevant files are uploaded.
+
+5. Tips for real model training
+
+The above steps illustrate how a model can technically be fine-tuned.
+However as you can see on the model card [hf-test/xls-r-ab-test](https://huggingface.co/hf-test/xls-r-ab-test), our demonstration has a very poor performance which is
+not surprising given that we trained for just 10 steps on a randomely initialized
+model.
+
+For a real model training, one of the actual pretrained XLS-R models should be used:
+
+- [300M parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-300m)
+- [1B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-1b)
+- [2B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-2b)
+
+Also, the hyper-parameters should be carefully chosen depending on the dataset.
+As an example, we will fine-tune the 300M parameters model on Swedish on a single 
+TITAN RTX 24GB GPU.
+
+The model will be called `"xls-r-300m-sv"`. 
+Following the above steps we first create the model:
+
+```bash
+huggingface-cli repo create xls-r-300m-sv
+```
+
+and then clone it locally:
+
+```bash
+
+
+and we define the following 
+
+hyperparameters for training
+
+```bash
+echo '''python run_speech_recognition_ctc.py \
+	--dataset_name="mozilla-foundation/common_voice_7_0" \
+	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
+	--dataset_config_name="sv-SE" \
+	--output_dir="./" \
+	--overwrite_output_dir \
+	--num_train_epochs="100" \
+	--per_device_train_batch_size="8" \
+	--per_device_eval_batch_size="8" \
+	--gradient_accumulation_steps="4" \
+	--learning_rate="7.5e-5" \
+	--warmup_steps="1000" \
+	--evaluation_strategy="steps" \
+	--text_column_name="sentence" \
+	--save_steps="500" \
+	--eval_steps="500" \
+	--logging_steps="100" \
+	--layerdrop="0.0" \
+	--activation_dropout="0.1" \
+	--save_total_limit="3" \
+	--freeze_feature_extractor \
+	--feat_proj_dropout="0.0" \
+	--mask_time_prob="0.75" \
+	--mask_time_length="10" \
+	--mask_feature_prob="0.25" \
+	--mask_feature_length="64" \
+	--gradient_checkpointing \
+	--fp16 \
+	--group_by_length \
+	--do_train --do_eval \
+	--use_auth_token \
+	--push_to_hub''' > run.sh
 ```
