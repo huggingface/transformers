@@ -289,6 +289,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--save_total_limit="1" \
 	--evaluation_strategy="steps" \
 	--text_column_name="sentence" \
+	--length_column_name="input_length" \
 	--save_steps="5" \
 	--layerdrop="0.0" \
 	--freeze_feature_encoder \
@@ -350,18 +351,20 @@ and we define the following
 hyperparameters for training
 
 ```bash
+
 echo '''python run_speech_recognition_ctc.py \
 	--dataset_name="mozilla-foundation/common_voice_7_0" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
 	--dataset_config_name="sv-SE" \
 	--output_dir="./" \
 	--overwrite_output_dir \
-	--num_train_epochs="100" \
+	--num_train_epochs="50" \
 	--per_device_train_batch_size="8" \
 	--per_device_eval_batch_size="8" \
 	--gradient_accumulation_steps="4" \
 	--learning_rate="7.5e-5" \
-	--warmup_steps="1000" \
+	--warmup_steps="2000" \
+	--length_column_name="input_length" \
 	--evaluation_strategy="steps" \
 	--text_column_name="sentence" \
 	--save_steps="500" \
@@ -370,16 +373,16 @@ echo '''python run_speech_recognition_ctc.py \
 	--layerdrop="0.0" \
 	--activation_dropout="0.1" \
 	--save_total_limit="3" \
-	--freeze_feature_extractor \
+	--freeze_feature_encoder \
 	--feat_proj_dropout="0.0" \
 	--mask_time_prob="0.75" \
 	--mask_time_length="10" \
 	--mask_feature_prob="0.25" \
 	--mask_feature_length="64" \
 	--gradient_checkpointing \
+	--use_auth_token \
 	--fp16 \
 	--group_by_length \
 	--do_train --do_eval \
-	--use_auth_token \
 	--push_to_hub''' > run.sh
 ```
