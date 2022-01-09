@@ -5210,7 +5210,7 @@ class ViTPreTrainedModel:
 VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ViTMAEForImageClassification:
+class ViTMAEForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

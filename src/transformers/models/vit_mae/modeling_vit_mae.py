@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Facebook AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,11 +21,10 @@ import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_vit_mae import ViTMAEConfig
@@ -77,14 +76,13 @@ class ViTMAEEmbeddings(nn.Module):
         )  # fixed sin-cos embedding
         self.config = config
 
-    def random_masking(self, x, mask_ratio):
+    def random_masking(self, x):
         """
-        Perform per-sample random masking by per-sample shuffling.
-        Per-sample shuffling is done by argsort random noise.
-        x: [N, L, D], sequence
+        Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
+        noise. x: [N, L, D], sequence
         """
         N, L, D = x.shape  # batch, length, dim
-        len_keep = int(L * (1 - mask_ratio))
+        len_keep = int(L * (1 - self.config.mask_ratio))
 
         noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
 
@@ -111,15 +109,15 @@ class ViTMAEEmbeddings(nn.Module):
         # add position embeddings w/o cls token
         embeddings = embeddings + self.position_embeddings[:, 1:, :]
 
-        # masking: length -> length * mask_ratio
-        embeddings, mask, ids_restore = self.random_masking(embeddings, mask_ratio)
+        # masking: length -> length * config.mask_ratio
+        embeddings, mask, ids_restore = self.random_masking(embeddings)
 
         # append cls token
         cls_token = self.cls_token + self.position_embeddings[:, :1, :]
         cls_tokens = cls_token.expand(embeddings.shape[0], -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
-        return embeddings
+        return embeddings, mask, ids_restore
 
 
 # Based on timm implementation, which can be found here:
@@ -465,7 +463,7 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
     VIT_MAE_START_DOCSTRING,
 )
 class ViTMAEModel(ViTMAEPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -473,7 +471,6 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         self.encoder = ViTMAEEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViTMAEPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -535,7 +532,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output, mask, ids_restore = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -546,32 +543,60 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output, mask, ids_restore) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
+            mask=mask,
+            ids_restore=ids_restore,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
 
-class ViTMAEPooler(nn.Module):
-    def __init__(self, config):
+class ViTMAEDecoder(nn.Module):
+    def __init__(self, config, num_patches):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.decoder_embed = nn.Linear(config.hidden_size, config.decoder_embed_dim, bias=True)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_embed_dim))
+        self.decoder_pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches + 1, config.decoder_embed_dim), requires_grad=False
+        )  # fixed sin-cos embedding
 
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
+        self.decoder_blocks = nn.ModuleList([ViTMAELayer(config) for _ in range(config.decoder_depth)])
+
+        self.decoder_norm = nn.LayerNorm(config.decoder_embed_dim)
+        self.decoder_pred = nn.Linear(
+            config.decoder_embed_dim, config.patch_size ** 2 * config.num_channels, bias=True
+        )  # encoder to decoder
+
+    def forward(self, hidden_states, ids_restore):
+        # embed tokens
+        x = self.decoder_embed(hidden_states)
+
+        # append mask tokens to sequence
+        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
+        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
+        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
+        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
+
+        # add pos embed
+        x = x + self.decoder_pos_embed
+
+        # apply Transformer blocks
+        for blk in self.decoder_blocks:
+            x = blk(x)
+        x = self.decoder_norm(x)
+
+        # predictor projection
+        x = self.decoder_pred(x)
+
+        # remove cls token
+        x = x[:, 1:, :]
+
+        return x
 
 
 @add_start_docstrings(
@@ -579,12 +604,13 @@ class ViTMAEPooler(nn.Module):
     VIT_MAE_START_DOCSTRING,
 )
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
         self.embeddings = ViTMAEEmbeddings(config)
-        self.vit = ViTMAEModel(config, add_pooling_layer=False)
+        self.vit = ViTMAEModel(config)
+        self.decoder = ViTMAEDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -599,6 +625,35 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
+
+    def patchify(self, imgs):
+        """
+        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
+        """
+        p = self.patch_embed.patch_size[0]
+        assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
+
+        h = w = imgs.shape[2] // p
+        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
+        x = torch.einsum("nchpwq->nhwpqc", x)
+        x = x.reshape(shape=(imgs.shape[0], h * w, p ** 2 * 3))
+        return x
+
+    def forward_loss(self, imgs, pred, mask):
+        """
+        imgs: [N, 3, H, W] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove,
+        """
+        target = self.patchify(imgs)
+        if self.config.norm_pix_loss:
+            mean = target.mean(dim=-1, keepdim=True)
+            var = target.var(dim=-1, keepdim=True)
+            target = (target - mean) / (var + 1.0e-6) ** 0.5
+
+        loss = (pred - target) ** 2
+        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        return loss
 
     @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
@@ -640,16 +695,8 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        logits = self.decoder(outputs.last_hidden_state, outputs.ids_restore)  # [N, L, p*p*3]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        loss = self.forward_loss(pixel_values, logits, outputs.mask)
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return logits, loss
