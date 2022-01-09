@@ -395,3 +395,4 @@ class BeamHypotheses:
             cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret
+
