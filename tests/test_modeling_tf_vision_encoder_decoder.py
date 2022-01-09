@@ -704,7 +704,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
     @require_vision
     @slow
     def test_encoder_decoder_from_pretrained(self):
-        load_weight_prefix = "tf_vision_encoder_decoder_model_1"
+        load_weight_prefix = TFVisionEncoderDecoderModel.load_weight_prefix
 
         config = self.get_encoder_decoder_config()
         feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
