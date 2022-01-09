@@ -89,16 +89,16 @@ class PoolFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_channels=64,
+        num_channels=3,
         patch_size=16,
         stride=16,
-        padding=0,
         pool_size=3,
         mlp_ratio=4.0,
         depths=[2, 2, 6, 2],
         hidden_sizes=[64, 128, 320, 512],
         patch_sizes=[7, 3, 3, 3],
         strides=[4, 2, 2, 2],
+        padding=[2, 1, 1, 1],
         num_encoder_blocks=4,
         drop_path_rate=0.0,
         num_hidden_layers=12,
@@ -108,9 +108,6 @@ class PoolFormerConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
         **kwargs
     ):
         self.num_channels = num_channels
@@ -133,9 +130,6 @@ class PoolFormerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             **kwargs
         )
 

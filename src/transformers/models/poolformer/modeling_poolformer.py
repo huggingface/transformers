@@ -210,18 +210,22 @@ class PoolFormerLayer(nn.Module):
         self.after_norm = PoolFormerGroupNorm(num_channels)
 
     def forward(self, hidden_states):
+        # DEBUG
+        # print(hidden_states.shape)
         pooling_output = self.pooling(self.before_norm(hidden_states))
-
+        # print(pooling_output.shape)
         # First residual connection
         hidden_states = pooling_output + hidden_states
-        
-        layer_output = self.after_norm()
-        layer_output = self.intermediate(layer_output)
+        outputs = ()
+
+        layer_output = self.intermediate(self.after_norm(hidden_states))
 
         # Second residual connection inside the PoolFormerOutput block
         output = self.output(layer_output, hidden_states)
-        outputs = (layer_output,) + output
-
+        
+        outputs = (output,) + outputs
+        # outputs = layer_output + output
+        
         return outputs
 
 
@@ -239,7 +243,7 @@ class PoolFormerEncoder(nn.Module):
                 PoolFormerEmbeddings(
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
-                    padding=config.padding,
+                    padding=config.padding[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
                     hidden_size=config.hidden_sizes[i],
                 )
@@ -271,22 +275,25 @@ class PoolFormerEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
+        pixel_values,
         output_hidden_states=False,
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
-        
+
+        hidden_states = pixel_values
         for idx, x in enumerate(zip(self.patch_embeddings, self.block)):
             embedding_layer, block_layer = x
             # Get patch embeddings from hidden_states
             hidden_states = embedding_layer(hidden_states)
             # Send the embeddings through the blocks
-            for i, current_block in enumerate(block_layer):
-                layer_outputs = current_block(hidden_states)
+            for i, blk in enumerate(block_layer):
+                # DEBUG
+                # print(i)
+                layer_outputs = blk(hidden_states)
                 hidden_states = layer_outputs[0]
             
-            # TODO: Do we need to apply layer norm after every block as well?
+            # TODO Do we need to apply layer norm after every block as well?
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -404,7 +411,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
 
         # self.layernorm = PoolFormerGroupNorm(config)
         # self.pooler = PoolFormerFinalPooler(config) if add_pooling_layer else None
-
+        self.pooler = None
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -447,10 +454,10 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output = self.embeddings(pixel_values)
+        # embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
-            embedding_output,
+            pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
