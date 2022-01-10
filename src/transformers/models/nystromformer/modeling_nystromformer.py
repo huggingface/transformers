@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 UW-Madison The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 UW-Madison The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -79,13 +79,7 @@ class NystromformerEmbeddings(nn.Module):
                 persistent=False,
             )
 
-    def forward(
-        self,
-        input_ids=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-    ):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -188,12 +182,7 @@ class NystromformerSelfAttention(nn.Module):
         layer = layer.view(*new_layer_shape)
         return layer.permute(0, 2, 1, 3)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -295,17 +284,8 @@ class NystromformerAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-    ):
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            output_attentions,
-        )
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -352,17 +332,8 @@ class NystromformerLayer(nn.Module):
         self.intermediate = NystromformerIntermediate(config)
         self.output = NystromformerOutput(config)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-    ):
-        self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            output_attentions=output_attentions,
-        )
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+        self_attention_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
         attention_output = self_attention_outputs[0]
 
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -412,16 +383,10 @@ class NystromformerEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
+                    create_custom_forward(layer_module), hidden_states, attention_mask,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
+                layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -431,15 +396,7 @@ class NystromformerEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
