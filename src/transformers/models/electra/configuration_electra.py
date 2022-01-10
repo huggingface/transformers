@@ -113,7 +113,7 @@ class ElectraConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ElectraModel, ElectraConfig, ElectraOnnxConfig
+    >>> from transformers import ElectraModel, ElectraConfig
 
     >>> # Initializing a ELECTRA electra-base-uncased style configuration
     >>> configuration = ElectraConfig()
