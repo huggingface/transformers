@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available, is_tf_available
 
 
 _import_structure = {
@@ -44,6 +44,19 @@ if is_torch_available():
     ]
 
 
+if is_tf_available():
+    _import_structure["modeling_tf_perceiver"] = [
+        "TFPerceiverForImageClassificationConvProcessing",
+        "TFPerceiverForImageClassificationFourier",
+        "TFPerceiverForImageClassificationLearned",
+        "TFPerceiverForMaskedLM",
+        "TFPerceiverForMultimodalAutoencoding",
+        "TFPerceiverForOpticalFlow",
+        "TFPerceiverForSequenceClassification",
+        "TFPerceiverLayer",
+        "TFPerceiverModel",
+        "TFPerceiverPreTrainedModel",
+    ]
 if TYPE_CHECKING:
     from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig
     from .tokenization_perceiver import PerceiverTokenizer
@@ -64,6 +77,20 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_perceiver import (
+            TFPerceiverForImageClassificationConvProcessing,
+            TFPerceiverForImageClassificationFourier,
+            TFPerceiverForImageClassificationLearned,
+            TFPerceiverForMaskedLM,
+            TFPerceiverForMultimodalAutoencoding,
+            TFPerceiverForOpticalFlow,
+            TFPerceiverForSequenceClassification,
+            TFPerceiverLayer,
+            TFPerceiverModel,
+            TFPerceiverPreTrainedModel,
         )
 
 else:

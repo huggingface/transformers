@@ -1460,6 +1460,20 @@ if is_tf_available():
         "shape_list",
     ]
     # TensorFlow models structure
+    _import_structure["models.perceiver"].extend(
+        [
+            "TFPerceiverForImageClassificationConvProcessing",
+            "TFPerceiverForImageClassificationFourier",
+            "TFPerceiverForImageClassificationLearned",
+            "TFPerceiverForMaskedLM",
+            "TFPerceiverForMultimodalAutoencoding",
+            "TFPerceiverForOpticalFlow",
+            "TFPerceiverForSequenceClassification",
+            "TFPerceiverLayer",
+            "TFPerceiverModel",
+            "TFPerceiverPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3330,6 +3344,18 @@ if TYPE_CHECKING:
             TFLayoutLMPreTrainedModel,
         )
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
+        from .models.perceiver import (
+            TFPerceiverForImageClassificationConvProcessing,
+            TFPerceiverForImageClassificationFourier,
+            TFPerceiverForImageClassificationLearned,
+            TFPerceiverForMaskedLM,
+            TFPerceiverForMultimodalAutoencoding,
+            TFPerceiverForOpticalFlow,
+            TFPerceiverForSequenceClassification,
+            TFPerceiverLayer,
+            TFPerceiverModel,
+            TFPerceiverPreTrainedModel,
+        )
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,
