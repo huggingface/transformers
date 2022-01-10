@@ -25,21 +25,21 @@ logger = logging.get_logger(__name__)
 
 class EncoderDecoderConfig(PretrainedConfig):
     r"""
-    [`EncoderDecoderConfig`] is the configuration class to store the configuration of a
-    [`EncoderDecoderModel`]. It is used to instantiate an Encoder Decoder model according to the
-    specified arguments, defining the encoder and decoder configs.
+    [`EncoderDecoderConfig`] is the configuration class to store the configuration of a [`EncoderDecoderModel`]. It is
+    used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder
+    configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration
-                  object that defines the encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration
-                  object that defines the decoder config.
+                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the encoder config.
+                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the decoder config.
 
     Examples:
 
@@ -57,17 +57,17 @@ class EncoderDecoderConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> config_encoder = model.config.encoder
-    >>> config_decoder  = model.config.decoder
+    >>> config_decoder = model.config.decoder
     >>> # set decoder config to causal lm
     >>> config_decoder.is_decoder = True
     >>> config_decoder.add_cross_attention = True
 
     >>> # Saving the model, including its configuration
-    >>> model.save_pretrained('my-model')
+    >>> model.save_pretrained("my-model")
 
     >>> # loading model and config from pretrained folder
-    >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained('my-model')
-    >>> model = EncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
+    >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained("my-model")
+    >>> model = EncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
     model_type = "encoder-decoder"
     is_composition = True
@@ -93,8 +93,8 @@ class EncoderDecoderConfig(PretrainedConfig):
         cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
-        Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
-        configuration and decoder model configuration.
+        Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
+        decoder model configuration.
 
         Returns:
             [`EncoderDecoderConfig`]: An instance of a configuration object

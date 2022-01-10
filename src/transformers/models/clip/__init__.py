@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from ...file_utils import (
     _LazyModule,
     is_flax_available,
+    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
@@ -45,6 +46,15 @@ if is_torch_available():
         "CLIPPreTrainedModel",
         "CLIPTextModel",
         "CLIPVisionModel",
+    ]
+
+if is_tf_available():
+    _import_structure["modeling_tf_clip"] = [
+        "TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFCLIPModel",
+        "TFCLIPPreTrainedModel",
+        "TFCLIPTextModel",
+        "TFCLIPVisionModel",
     ]
 
 if is_flax_available():
@@ -76,6 +86,15 @@ if TYPE_CHECKING:
             CLIPPreTrainedModel,
             CLIPTextModel,
             CLIPVisionModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_clip import (
+            TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCLIPModel,
+            TFCLIPPreTrainedModel,
+            TFCLIPTextModel,
+            TFCLIPVisionModel,
         )
 
     if is_flax_available():

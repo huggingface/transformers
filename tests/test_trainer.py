@@ -1093,17 +1093,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
     def test_training_finite_iterable_dataset(self):
-        num_gpus = max(1, get_gpu_count())
-        if num_gpus > 2:
-            return
-
         config = RegressionModelConfig()
         model = RegressionPreTrainedModel(config)
 
         batch_size = 1
         num_samples = 10
 
-        available_steps = num_samples // (batch_size * num_gpus)
+        available_steps = num_samples // batch_size
 
         data = FiniteIterableDataset(length=num_samples)
         train_args = TrainingArguments(
@@ -1510,7 +1506,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             expected_commits = [f"Training in progress, epoch {i}" for i in range(3, 0, -1)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, get_gpu_count())
@@ -1534,7 +1529,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             expected_commits = [f"Training in progress, step {i}" for i in range(total_steps, 0, -5)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
 
 
 @require_torch

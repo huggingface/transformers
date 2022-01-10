@@ -82,12 +82,12 @@ class FlaubertTokenizer(XLMTokenizer):
 
     - Moses preprocessing and tokenization.
     - Normalizing all inputs text.
-    - The arguments `special_tokens` and the function `set_special_tokens`, can be used to add additional symbols
-      (like "__classify__") to a vocabulary.
+    - The arguments `special_tokens` and the function `set_special_tokens`, can be used to add additional symbols (like
+      "__classify__") to a vocabulary.
     - The argument `do_lowercase` controls lower casing (automatically set for pretrained vocabularies).
 
-    This tokenizer inherits from [`XLMTokenizer`]. Please check the superclass for usage examples
-    and documentation regarding arguments.
+    This tokenizer inherits from [`XLMTokenizer`]. Please check the superclass for usage examples and documentation
+    regarding arguments.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

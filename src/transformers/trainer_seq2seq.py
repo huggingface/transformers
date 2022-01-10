@@ -46,9 +46,9 @@ class Seq2SeqTrainer(Trainer):
 
         Args:
             eval_dataset (`Dataset`, *optional*):
-                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`,
-                columns not accepted by the `model.forward()` method are automatically removed. It must implement the
-                `__len__` method.
+                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not
+                accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
+                method.
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
@@ -111,8 +111,8 @@ class Seq2SeqTrainer(Trainer):
 
             - predictions (`np.ndarray`): The predictions on `test_dataset`.
             - label_ids (`np.ndarray`, *optional*): The labels (if the dataset contained some).
-            - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset
-              contained labels).
+            - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
+              labels).
         """
         self._max_length = max_length if max_length is not None else self.args.generation_max_length
         self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
@@ -126,7 +126,7 @@ class Seq2SeqTrainer(Trainer):
         ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
-        Perform an evaluation step on `model` using obj:*inputs*.
+        Perform an evaluation step on `model` using `inputs`.
 
         Subclass and override to inject custom behavior.
 
@@ -161,11 +161,17 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
-        model_input_names = self.tokenizer.model_input_names if self.tokenizer is not None else ["input_ids"]
-        generation_inputs = {k: v for k, v in inputs.items() if k in model_input_names}
+        # prepare generation inputs
+        # some encoder-decoder models can have varying encder's and thus
+        # varying model input names
+        if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
+            generation_inputs = inputs[self.model.encoder.main_input_name]
+        else:
+            generation_inputs = inputs[self.model.main_input_name]
 
         generated_tokens = self.model.generate(
-            **generation_inputs,
+            generation_inputs,
+            attention_mask=inputs.get("attention_mask", None),
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded

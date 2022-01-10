@@ -124,8 +124,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a DETR feature extractor.
 
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
+    should refer to this superclass for more information regarding those methods.
 
 
     Args:
@@ -134,13 +134,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
         size (`int`, *optional*, defaults to 800):
-            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`. If size
-            is a sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller
-            edge of the image will be matched to this number. i.e, if `height > width`, then image will be
-            rescaled to `(size * height / width, size)`.
+            Resize the input to the given size. Only has an effect if `do_resize` is set to `True`. If size is a
+            sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
+            the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
+            height / width, size)`.
         max_size (`int`, *optional*, defaults to `1333`):
-            The largest size an image dimension can have (otherwise it's capped). Only has an effect if
-            `do_resize` is set to `True`.
+            The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
+            set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`int`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
@@ -432,15 +432,17 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             annotations (`Dict`, `List[Dict]`, *optional*):
                 The corresponding annotations in COCO format.
 
-                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_detection"`, the annotations for each image should have the following format: {'image_id': int,
-                'annotations': [annotation]}, with the annotations being a list of COCO object annotations.
+                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_detection"`, the annotations for
+                each image should have the following format: {'image_id': int, 'annotations': [annotation]}, with the
+                annotations being a list of COCO object annotations.
 
-                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`, the annotations for each image should have the following format: {'image_id': int,
-                'file_name': str, 'segments_info': [segment_info]} with segments_info being a list of COCO panoptic
-                annotations.
+                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`, the annotations for
+                each image should have the following format: {'image_id': int, 'file_name': str, 'segments_info':
+                [segment_info]} with segments_info being a list of COCO panoptic annotations.
 
             return_segmentation_masks (`Dict`, `List[Dict]`, *optional*, defaults to `False`):
-                Whether to also include instance segmentation masks as part of the labels in case `format = "coco_detection"`.
+                Whether to also include instance segmentation masks as part of the labels in case `format =
+                "coco_detection"`.
 
             masks_path (`pathlib.Path`, *optional*):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
@@ -455,8 +457,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 0 for pixels that are padding (i.e. **masked**).
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch
-                `torch.Tensor` objects.
+                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
+                objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -638,8 +640,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch
-                `torch.Tensor` objects.
+                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
+                objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -674,8 +676,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api.
-        Only supports PyTorch.
+        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
+        PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
@@ -686,8 +688,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 augment, but before padding.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an
-            image in the batch as predicted by the model.
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
@@ -712,8 +714,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
         """
-        Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only
-        supports PyTorch.
+        Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only supports PyTorch.
 
         Parameters:
             outputs ([`DetrSegmentationOutput`]):
@@ -726,8 +727,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Threshold to use when turning the predicted masks into binary values.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an
-            image in the batch as predicted by the model.
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
+            in the batch as predicted by the model.
         """
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
         preds = []
@@ -755,13 +756,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
     def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
-        Converts the output of [`DetrForSegmentation`] into actual instance segmentation
-        predictions. Only supports PyTorch.
+        Converts the output of [`DetrForSegmentation`] into actual instance segmentation predictions. Only supports
+        PyTorch.
 
         Args:
             results (`List[Dict]`):
-                Results list obtained by [`~DetrFeatureExtractor.post_process`], to which "masks"
-                results will be added.
+                Results list obtained by [`~DetrFeatureExtractor.post_process`], to which "masks" results will be
+                added.
             outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
             orig_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
@@ -774,8 +775,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Threshold to use when turning the predicted masks into binary values.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks
-            for an image in the batch as predicted by the model.
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
+            image in the batch as predicted by the model.
         """
 
         if len(orig_target_sizes) != len(max_target_sizes):
@@ -799,8 +800,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
-        Converts the output of [`DetrForSegmentation`] into actual panoptic predictions. Only
-        supports PyTorch.
+        Converts the output of [`DetrForSegmentation`] into actual panoptic predictions. Only supports PyTorch.
 
         Parameters:
             outputs ([`DetrSegmentationOutput`]):
@@ -818,8 +818,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Threshold to use to filter out queries.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values
-            for an image in the batch as predicted by the model.
+            `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
+            an image in the batch as predicted by the model.
         """
         if target_sizes is None:
             target_sizes = processed_sizes

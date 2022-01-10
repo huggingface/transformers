@@ -24,18 +24,6 @@
 
 __version__ = "4.16.0.dev0"
 
-# Work around to update TensorFlow's absl.logging threshold which alters the
-# default Python logging output behavior when present.
-# see: https://github.com/abseil/abseil-py/issues/99
-# and: https://github.com/tensorflow/tensorflow/issues/26691#issuecomment-500369493
-try:
-    import absl.logging
-except ImportError:
-    pass
-else:
-    absl.logging.set_verbosity("info")
-    absl.logging.set_stderrthreshold("info")
-    absl.logging._warn_preinit_stderr = False
 
 from typing import TYPE_CHECKING
 
@@ -885,6 +873,7 @@ if is_torch_available():
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ElectraForCausalLM",
             "ElectraForMaskedLM",
             "ElectraForMultipleChoice",
             "ElectraForPreTraining",
@@ -1549,6 +1538,15 @@ if is_tf_available():
             "TFCamembertModel",
         ]
     )
+    _import_structure["models.clip"].extend(
+        [
+            "TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCLIPModel",
+            "TFCLIPPreTrainedModel",
+            "TFCLIPTextModel",
+            "TFCLIPVisionModel",
+        ]
+    )
     _import_structure["models.convbert"].extend(
         [
             "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2084,6 +2082,17 @@ if is_flax_available():
             "FlaxRobertaForTokenClassification",
             "FlaxRobertaModel",
             "FlaxRobertaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.roformer"].extend(
+        [
+            "FlaxRoFormerForMaskedLM",
+            "FlaxRoFormerForMultipleChoice",
+            "FlaxRoFormerForQuestionAnswering",
+            "FlaxRoFormerForSequenceClassification",
+            "FlaxRoFormerForTokenClassification",
+            "FlaxRoFormerModel",
+            "FlaxRoFormerPreTrainedModel",
         ]
     )
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
@@ -2821,6 +2830,7 @@ if TYPE_CHECKING:
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ElectraForCausalLM,
             ElectraForMaskedLM,
             ElectraForMultipleChoice,
             ElectraForPreTraining,
@@ -3394,6 +3404,13 @@ if TYPE_CHECKING:
             TFCamembertForTokenClassification,
             TFCamembertModel,
         )
+        from .models.clip import (
+            TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCLIPModel,
+            TFCLIPPreTrainedModel,
+            TFCLIPTextModel,
+            TFCLIPVisionModel,
+        )
         from .models.convbert import (
             TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFConvBertForMaskedLM,
@@ -3812,6 +3829,15 @@ if TYPE_CHECKING:
             FlaxRobertaForTokenClassification,
             FlaxRobertaModel,
             FlaxRobertaPreTrainedModel,
+        )
+        from .models.roformer import (
+            FlaxRoFormerForMaskedLM,
+            FlaxRoFormerForMultipleChoice,
+            FlaxRoFormerForQuestionAnswering,
+            FlaxRoFormerForSequenceClassification,
+            FlaxRoFormerForTokenClassification,
+            FlaxRoFormerModel,
+            FlaxRoFormerPreTrainedModel,
         )
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel

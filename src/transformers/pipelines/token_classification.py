@@ -59,8 +59,8 @@ class AggregationStrategy(ExplicitEnum):
         ignore_labels (`List[str]`, defaults to `["O"]`):
             A list of labels to ignore.
         grouped_entities (`bool`, *optional*, defaults to `False`):
-            DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to
-            the same entity together in the predictions or not.
+            DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
+            same entity together in the predictions or not.
         aggregation_strategy (`str`, *optional*, defaults to `"none"`):
             The strategy to fuse (or not) tokens based on the model prediction.
 
@@ -73,14 +73,14 @@ class AggregationStrategy(ExplicitEnum):
                   "NAME"}]. Look for FIRST, MAX, AVERAGE for ways to mitigate that and disambiguate words (on languages
                   that support that meaning, which is basically tokens separated by a space). These mitigations will
                   only work on real words, "New york" might still be tagged with two different entities.
-                - "first" : (works only on word based models) Will use the `SIMPLE` strategy except that words,
-                  cannot end up with different tags. Words will simply use the tag of the first token of the word when
-                  there is ambiguity.
+                - "first" : (works only on word based models) Will use the `SIMPLE` strategy except that words, cannot
+                  end up with different tags. Words will simply use the tag of the first token of the word when there
+                  is ambiguity.
                 - "average" : (works only on word based models) Will use the `SIMPLE` strategy except that words,
                   cannot end up with different tags. scores will be averaged first across tokens, and then the maximum
                   label is applied.
-                - "max" : (works only on word based models) Will use the `SIMPLE` strategy except that words,
-                  cannot end up with different tags. Word entity will simply be the token with the maximum score.
+                - "max" : (works only on word based models) Will use the `SIMPLE` strategy except that words, cannot
+                  end up with different tags. Word entity will simply be the token with the maximum score.
     """,
 )
 class TokenClassificationPipeline(Pipeline):
@@ -88,12 +88,12 @@ class TokenClassificationPipeline(Pipeline):
     Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
     examples](../task_summary#named-entity-recognition) for more information.
 
-    This token recognition pipeline can currently be loaded from [`pipeline`] using the following
-    task identifier: `"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location
-    or miscellaneous).
+    This token recognition pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location or miscellaneous).
 
     The models that this pipeline can use are models that have been fine-tuned on a token classification task. See the
-    up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=token-classification).
+    up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=token-classification).
     """
 
     default_input_names = "sequences"
@@ -166,20 +166,20 @@ class TokenClassificationPipeline(Pipeline):
                 One or several texts (or one list of texts) for token classification.
 
         Return:
-            A list or a list of list of `dict`: Each result comes as a list of dictionaries (one for each token in
-            the corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy)
-            with the following keys:
+            A list or a list of list of `dict`: Each result comes as a list of dictionaries (one for each token in the
+            corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy) with
+            the following keys:
 
             - **word** (`str`) -- The token/word classified.
             - **score** (`float`) -- The corresponding probability for `entity`.
             - **entity** (`str`) -- The entity predicted for that token/word (it is named *entity_group* when
               *aggregation_strategy* is not `"none"`.
-            - **index** (`int`, only present when `aggregation_strategy="none"`) -- The index of the
-              corresponding token in the sentence.
-            - **start** (`int`, *optional*) -- The index of the start of the corresponding entity in the sentence.
-              Only exists if the offsets are available within the tokenizer
-            - **end** (`int`, *optional*) -- The index of the end of the corresponding entity in the sentence.
-              Only exists if the offsets are available within the tokenizer
+            - **index** (`int`, only present when `aggregation_strategy="none"`) -- The index of the corresponding
+              token in the sentence.
+            - **start** (`int`, *optional*) -- The index of the start of the corresponding entity in the sentence. Only
+              exists if the offsets are available within the tokenizer
+            - **end** (`int`, *optional*) -- The index of the end of the corresponding entity in the sentence. Only
+              exists if the offsets are available within the tokenizer
         """
 
         _inputs, offset_mapping = self._args_parser(inputs, **kwargs)

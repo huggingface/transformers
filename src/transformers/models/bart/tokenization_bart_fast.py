@@ -65,9 +65,8 @@ class BartTokenizerFast(RobertaTokenizerFast):
     r"""
     Construct a "fast" BART tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`BartTokenizerFast`] is identical to [`RobertaTokenizerFast`]. Refer to
-    superclass [`RobertaTokenizerFast`] for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    [`BartTokenizerFast`] is identical to [`RobertaTokenizerFast`]. Refer to superclass [`RobertaTokenizerFast`] for
+    usage examples and documentation concerning the initialization parameters and other methods.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

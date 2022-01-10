@@ -33,9 +33,8 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2 feature extractor.
 
-    This feature extractor inherits from
-    [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         feature_size (`int`, defaults to 1):
@@ -46,17 +45,20 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             The value that is used to fill the padding values.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-            improve the performance for some models, *e.g.*, [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
+            improve the performance for some models, *e.g.*,
+            [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~Wav2Vec2FeatureExtractor.__call__`] should return `attention_mask`.
 
             <Tip>
 
-            Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
-            `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
-            `attention_mask` should be passed.
+            Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
+            [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+            `attention_mask`. For such models, `input_values` should simply be padded with 0 and no `attention_mask`
+            should be passed.
 
-            For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
+            For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
+            [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
             passed for batched inference.
 
             </Tip>"""
@@ -121,12 +123,12 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`):
@@ -144,12 +146,14 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+                Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
+                [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
                 `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
                 `attention_mask` should be passed.
 
-                For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
-                passed for batched inference.
+                For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
+                [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should
+                be passed for batched inference.
 
                 </Tip>
 

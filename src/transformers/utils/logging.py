@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Logging utilities. """
+""" Logging utilities."""
 
 import logging
 import os
@@ -240,11 +240,9 @@ def enable_propagation() -> None:
 def enable_explicit_format() -> None:
     """
     Enable explicit formatting for every HuggingFace Transformers's logger. The explicit formatter is as follows:
-
-    ::
-
+    ```
         [LEVELNAME|FILENAME|LINE NUMBER] TIME >> MESSAGE
-
+    ```
     All handlers currently bound to the root logger are affected by this method.
     """
     handlers = _get_library_root_logger().handlers

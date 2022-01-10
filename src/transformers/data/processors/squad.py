@@ -588,6 +588,7 @@ class SquadProcessor(DataProcessor):
 
         ```python
         >>> import tensorflow_datasets as tfds
+
         >>> dataset = tfds.load("squad")
 
         >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)
@@ -774,9 +775,10 @@ class SquadFeatures:
         example_index: the index of the example
         unique_id: The unique Feature identifier
         paragraph_len: The length of the context
-        token_is_max_context: List of booleans identifying which tokens have their maximum context in this feature object.
-            If a token does not have their maximum context in this feature object, it means that another feature object
-            has more information related to that token and should be prioritized over this feature for that token.
+        token_is_max_context:
+            List of booleans identifying which tokens have their maximum context in this feature object. If a token
+            does not have their maximum context in this feature object, it means that another feature object has more
+            information related to that token and should be prioritized over this feature for that token.
         tokens: list of tokens corresponding to the input ids
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index

@@ -70,9 +70,8 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             [35378, 8999, 38, 33273, 11676, 604, 365, 21392, 201, 1819],
         )
 
-    @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("studio-ousia/mluke-base")
+        tokenizer = self.tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-mluke")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
