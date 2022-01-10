@@ -77,11 +77,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [10, 2, 16, 9, 3, 2, 16, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    def test_pretokenized_inputs(self, *args, **kwargs):
-        # It's very difficult to mix/test pretokenization with byte-level
-        # And get both CLIP and Roberta to work at the same time (mostly an issue of adding a space before the string)
-        pass
-
     @require_ftfy
     def test_check_encoding_slow_fast(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
