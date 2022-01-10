@@ -283,7 +283,9 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
         model = NystromformerModel.from_pretrained("uw-madison/nystromformer-512")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+
+        with torch.no_grad():
+            output = model(input_ids)[0]
 
         expected_shape = torch.Size((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
@@ -302,7 +304,10 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
         model = NystromformerForMaskedLM.from_pretrained("uw-madison/nystromformer-512")
 
         encoding = tokenizer(sentence, return_tensors="pt")
-        token_logits = model(encoding.input_ids).logits
+
+        with torch.no_grad():
+            token_logits = model(encoding.input_ids).logits
+            
         prediction = token_logits[:, 2, :].argmax(-1)[0]
 
         self.assertEqual(tokenizer.decode(prediction), "capital")

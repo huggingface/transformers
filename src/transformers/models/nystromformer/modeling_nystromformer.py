@@ -203,14 +203,14 @@ class NystromformerSelfAttention(nn.Module):
             context_layer = torch.matmul(attention_probs, value_layer)
 
         else:
-            Q_landmarks = query_layer.reshape(
+            q_landmarks = query_layer.reshape(
                 -1,
                 self.num_attention_heads,
                 self.num_landmarks,
                 self.seq_len // self.num_landmarks,
                 self.attention_head_size,
             ).mean(dim=-2)
-            K_landmarks = key_layer.reshape(
+            k_landmarks = key_layer.reshape(
                 -1,
                 self.num_attention_heads,
                 self.num_landmarks,
@@ -218,10 +218,10 @@ class NystromformerSelfAttention(nn.Module):
                 self.attention_head_size,
             ).mean(dim=-2)
 
-            kernel_1 = torch.nn.functional.softmax(torch.matmul(query_layer, K_landmarks.transpose(-1, -2)), dim=-1)
-            kernel_2 = torch.nn.functional.softmax(torch.matmul(Q_landmarks, K_landmarks.transpose(-1, -2)), dim=-1)
+            kernel_1 = torch.nn.functional.softmax(torch.matmul(query_layer, k_landmarks.transpose(-1, -2)), dim=-1)
+            kernel_2 = torch.nn.functional.softmax(torch.matmul(q_landmarks, k_landmarks.transpose(-1, -2)), dim=-1)
 
-            attention_scores = torch.matmul(Q_landmarks, key_layer.transpose(-1, -2))
+            attention_scores = torch.matmul(q_landmarks, key_layer.transpose(-1, -2))
 
             if attention_mask is not None:
                 # Apply the attention mask is (precomputed for all layers in NystromformerModel forward() function)
