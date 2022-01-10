@@ -48,7 +48,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "openai/clip-vit-base-patch32": {"do_lower_case": True},
+    "openai/clip-vit-base-patch32": {},
 }
 
 
