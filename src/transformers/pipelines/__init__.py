@@ -611,6 +611,17 @@ def pipeline(
                 feature_extractor, revision=revision, _from_pipeline=task, **model_kwargs
             )
 
+            if feature_extractor._processor_class.endswith("WithLM") and isinstance(model_name, str):
+                try:
+                    from pyctcdecode import BeamSearchDecoderCTC
+
+                    decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name)
+                    kwargs["decoder"] = decoder
+                except Exception as e:
+                    logger.warning(
+                        "Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
+                    )
+
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
             if key.startswith("translation"):
