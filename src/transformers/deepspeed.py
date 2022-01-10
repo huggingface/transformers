@@ -33,16 +33,22 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# XXX: Reza - need the rest of the map
 inference_custom_map = dict(
     electra=dict(ElectraLayer=("output.dense")),
     roberta=dict(RobertaLayer=("output.dense")),
     t5=dict(T5Block=("SelfAttention.o", "EncDecAttention.o", "DenseReluDense.wo")),
+    albert=dict(AlbertLayer=("attention.dense", "ffn_output")),
+    bart=dict(BartEncoderLayer=("self_attn.out_proj", "fc2")),
+    deberta=dict(DebertaLayer=("output.dense")),
+    deberta_v2=dict(DebertaV2Layer=("output.dense")),
+    wav2vec2=dict(Wav2Vec2EncoderLayer=("attention.out_proj", "feed_forward.output_dense"))
 )
 
-# XXX: Reza - need the rest of models that are automated
 inference_auto = [
     "gpt_neo",
+    "gptj",
+    "gpt2",
+    "bert"
 ]
 
 
@@ -71,7 +77,7 @@ def deepspeed_inference_init(trainer, model_arch):
     deepspeed_inference_engine = deepspeed.init_inference(
         trainer.model,
         mp_size=args.world_size,
-        dtype=torch.float,  # XXX: Reza: how to define other types? ds config file?
+        dtype=torch.half if args. fp16 else torch.float,  # XXX: Reza: how to define other types? ds config file?
         **kwargs,
     )
 
