@@ -446,6 +446,8 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_training_loss(self):
         n_gpus = max(1, get_gpu_count())
+
+        # With even logs
         trainer = get_regression_trainer(logging_steps=64 / (8 * n_gpus))
         trainer.train()
         log_history = trainer.state.log_history
@@ -453,6 +455,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         losses = [log["loss"] for log in log_history if "loss" in log]
         train_loss = log_history[-1]["train_loss"]
         self.assertAlmostEqual(sum(losses) / len(losses), train_loss, places=4)
+
+        # With uneven logs
+        trainer = get_regression_trainer(logging_steps=5)
+        trainer.train()
+        log_history = trainer.state.log_history
+
+        # Training loss should be the same as before
+        new_train_loss = log_history[-1]["train_loss"]
+        self.assertAlmostEqual(train_loss, new_train_loss, places=4)
 
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
