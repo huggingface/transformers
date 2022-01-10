@@ -31,7 +31,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CLIPTokenizer
     rust_tokenizer_class = CLIPTokenizerFast
     test_rust_tokenizer = True
-    from_pretrained_kwargs = {"add_prefix_space": True}
+    from_pretrained_kwargs = {}
     test_seq2seq = False
 
     def setUp(self):
@@ -70,7 +70,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = CLIPTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
         bpe_tokens = ["lo", "w", "er</w>", "n", "e", "w", "er</w>"]
-        tokens = tokenizer.tokenize(text, add_prefix_space=True)
+        tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
