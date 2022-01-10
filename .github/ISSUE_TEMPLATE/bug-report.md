@@ -49,7 +49,7 @@ Library:
 - Deepspeed: @stas00
 - Ray/raytune: @richardliaw, @amogkam
 - Text generation: @patrickvonplaten @narsil
-- Tokenizers: @LysandreJik
+- Tokenizers: @SaulLu
 - Trainer: @sgugger
 - Pipelines: @Narsil
 - Speech: @patrickvonplaten, @anton-l
