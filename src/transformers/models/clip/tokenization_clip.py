@@ -135,7 +135,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        do_lower_case=True,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -148,7 +147,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            do_lower_case=do_lower_case,
             **kwargs,
         )
 
