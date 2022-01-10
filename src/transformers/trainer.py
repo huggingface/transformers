@@ -589,7 +589,7 @@ class Trainer:
                 )
             else:
                 return DistributedLengthGroupedSampler(
-                    self.args.train_batch_size  * self.args.gradient_accumulation_steps,
+                    self.args.train_batch_size * self.args.gradient_accumulation_steps,
                     dataset=self.train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
