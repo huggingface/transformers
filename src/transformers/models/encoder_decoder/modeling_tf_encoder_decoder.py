@@ -155,7 +155,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
-    load_weight_prefix = "tf_encoder_decoder_model_1"
+    load_weight_prefix = "tf_encoder_decoder_model"
 
     def __init__(
         self,
