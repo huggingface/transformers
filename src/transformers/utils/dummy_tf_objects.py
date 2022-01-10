@@ -245,6 +245,9 @@ TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+TF_MODEL_FOR_VISION_2_SEQ_MAPPING = None
+
+
 TF_MODEL_MAPPING = None
 
 
@@ -372,6 +375,18 @@ class TFAutoModelForTableQuestionAnswering:
 
 
 class TFAutoModelForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForVision2Seq:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -2667,6 +2682,18 @@ class TFTransfoXLModel:
 
 
 class TFTransfoXLPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFVisionEncoderDecoderModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
