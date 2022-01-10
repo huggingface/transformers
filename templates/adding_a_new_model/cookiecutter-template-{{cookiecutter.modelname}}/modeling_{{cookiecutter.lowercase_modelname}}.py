@@ -2067,7 +2067,7 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
 """
 
 {{cookiecutter.uppercase_modelname}}_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
     ```python
     >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, {{cookiecutter.camelcase_modelname}}ForConditionalGeneration

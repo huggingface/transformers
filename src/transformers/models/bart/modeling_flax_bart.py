@@ -1506,7 +1506,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
 FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
-    Summarization example::
+    Summarization example:
 
     ```python
     >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
@@ -1522,7 +1522,7 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 
-    Mask filling example::
+    Mask filling example:
 
     ```python
     >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration

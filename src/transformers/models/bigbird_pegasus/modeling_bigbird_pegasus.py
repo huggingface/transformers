@@ -1619,7 +1619,7 @@ BIGBIRD_PEGASUS_START_DOCSTRING = r"""
 """
 
 BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
     ```python
     >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration

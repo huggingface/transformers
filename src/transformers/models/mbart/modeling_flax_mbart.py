@@ -1530,7 +1530,7 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
 FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
     Returns:
 
-    Summarization example::
+    Summarization example:
 
     ```python
     >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration, MBartConfig
@@ -1546,7 +1546,7 @@ FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 
-    Mask filling example::
+    Mask filling example:
 
     ```python
     >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration

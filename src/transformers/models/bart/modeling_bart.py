@@ -534,7 +534,7 @@ BART_START_DOCSTRING = r"""
 """
 
 BART_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
     ```python
     >>> from transformers import BartTokenizer, BartForConditionalGeneration
@@ -550,7 +550,7 @@ BART_GENERATION_EXAMPLE = r"""
     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 
-    Mask filling example::
+    Mask filling example:
 
     ```python
     >>> from transformers import BartTokenizer, BartForConditionalGeneration

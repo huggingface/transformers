@@ -512,7 +512,7 @@ PEGASUS_START_DOCSTRING = r"""
 """
 
 PEGASUS_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
     ```python
     >>> from transformers import PegasusTokenizer, PegasusForConditionalGeneration

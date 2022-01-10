@@ -1454,7 +1454,7 @@ LED_START_DOCSTRING = r"""
 """
 
 LED_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
     ```python
     >>> import torch
