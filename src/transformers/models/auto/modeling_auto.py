@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("swin", "SwinModel"),
         ("imagegpt", "ImageGPTModel"),
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
@@ -258,6 +259,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
                 "PerceiverForImageClassificationConvProcessing",
             ),
         ),
+        ("swin", "SwinforImageClassification")
     ]
 )
 
@@ -349,6 +351,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("swin", "SwinForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
