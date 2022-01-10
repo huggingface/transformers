@@ -266,8 +266,6 @@ class NystromformerSelfOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Nystromformer
 class NystromformerAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -297,7 +295,6 @@ class NystromformerAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
@@ -901,11 +898,11 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->Nystromformer
+
 @add_start_docstrings(
     """
-    Nyströmformer Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    Nyströmformer Model with a multiple choice classification head on top (a linear layer on top of the pooled output
+    and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     NYSTROMFORMER_START_DOCSTRING,
 )
@@ -914,9 +911,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
         super().__init__(config)
 
         self.nystromformer = NystromformerModel(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
+        classifier_dropout = (config.hidden_dropout_prob)
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
