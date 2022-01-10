@@ -96,21 +96,25 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     new_state_dict = convert_state_dict(state_dict, config)
 
-    for k, v in new_state_dict.items():
-        print(k, v.shape)
-
     model.load_state_dict(new_state_dict)
     model.eval()
 
-    url = 'https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg'
+    url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
 
     image = Image.open(requests.get(url, stream=True).raw)
     feature_extractor = ViTMAEFeatureExtractor(size=config.image_size)
     inputs = feature_extractor(images=image, return_tensors="pt")
-    
+
     # forward pass
     torch.manual_seed(2)
     outputs = model(**inputs)
+    logits = outputs.logits
+
+    assert torch.allclose(
+        logits[0, :3, :3],
+        torch.tensor([[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]),
+        atol=1e-4,
+    )
 
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
