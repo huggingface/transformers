@@ -305,7 +305,7 @@ class RagPreTrainedModel(PreTrainedModel):
         >>> from transformers import RagModel
 
         >>> # initialize a RAG from two pretrained models.
-        >>> model = RagModel.from_question_encoder_generator_pretrained(
+        >>> model = RagModel.from_pretrained_question_encoder_generator(
         ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
         ... )
         >>> # saving model after fine-tuning
