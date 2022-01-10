@@ -41,15 +41,10 @@ inference_custom_map = dict(
     bart=dict(BartEncoderLayer=("self_attn.out_proj", "fc2")),
     deberta=dict(DebertaLayer=("output.dense")),
     deberta_v2=dict(DebertaV2Layer=("output.dense")),
-    wav2vec2=dict(Wav2Vec2EncoderLayer=("attention.out_proj", "feed_forward.output_dense"))
+    wav2vec2=dict(Wav2Vec2EncoderLayer=("attention.out_proj", "feed_forward.output_dense")),
 )
 
-inference_auto = [
-    "gpt_neo",
-    "gptj",
-    "gpt2",
-    "bert"
-]
+inference_auto = ["gpt_neo", "gptj", "gpt2", "bert"]
 
 
 def deepspeed_inference_init(trainer, model_arch):
