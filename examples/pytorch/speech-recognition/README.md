@@ -74,6 +74,7 @@ python run_speech_recognition_ctc.py \
 	--warmup_steps="500" \
 	--evaluation_strategy="steps" \
 	--text_column_name="sentence" \
+	--length_column_name="input_length" \
 	--save_steps="400" \
 	--eval_steps="100" \
 	--layerdrop="0.0" \
@@ -108,6 +109,7 @@ python -m torch.distributed.launch \
 	--warmup_steps="500" \
 	--evaluation_strategy="steps" \
 	--text_column_name="sentence" \
+	--length_column_name="input_length" \
 	--save_steps="400" \
 	--eval_steps="100" \
 	--logging_steps="1" \
