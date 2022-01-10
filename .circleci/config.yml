@@ -1009,6 +1009,7 @@ workflows:
             - run_tests_onnxruntime
             - run_tests_hub
             - run_tests_layoutlmv2
+            - run_tests_tokenization_clip
     nightly:
         triggers:
             - schedule:
