@@ -162,27 +162,28 @@ class NystromformerSelfAttention(nn.Module):
                 groups=self.num_attention_heads,
             )
 
+    # Function to approximate Moore-Penrose inverse via the iterative method 
     def iterative_inv(self, mat, n_iter=6):
-        I = torch.eye(mat.size(-1), device=mat.device)
-        K = mat
+        identity = torch.eye(mat.size(-1), device=mat.device)
+        key = mat
 
-        # The entries of K are positive and ||K||_{\infty} = 1 due to softmax
+        # The entries of key are positive and ||key||_{\infty} = 1 due to softmax
         if self.init_option == "original":
             # This original implementation is more conservative to compute coefficient of Z_0.
-            V = 1 / torch.max(torch.sum(K, dim=-2)) * K.transpose(-1, -2)
+            value = 1 / torch.max(torch.sum(key, dim=-2)) * key.transpose(-1, -2)
         else:
-            # This is the exact coefficient computation, 1 / ||K||_1, of initialization of Z_0, leading to faster convergence.
-            V = 1 / torch.max(torch.sum(K, dim=-2), dim=-1).values[:, :, None, None] * K.transpose(-1, -2)
+            # This is the exact coefficient computation, 1 / ||key||_1, of initialization of Z_0, leading to faster convergence.
+            value = 1 / torch.max(torch.sum(key, dim=-2), dim=-1).values[:, :, None, None] * key.transpose(-1, -2)
 
         for _ in range(n_iter):
-            KV = torch.matmul(K, V)
-            V = torch.matmul(0.25 * V, 13 * I - torch.matmul(KV, 15 * I - torch.matmul(KV, 7 * I - KV)))
-        return V
+            key_value = torch.matmul(key, value)
+            value = torch.matmul(0.25 * value, 13 * identity - torch.matmul(key_value, 15 * identity - torch.matmul(key_value, 7 * identity - key_value)))
+        return value
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    def transpose_for_scores(self, layer):
+        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        layer = layer.view(*new_layer_shape)
+        return layer.permute(0, 2, 1, 3)
 
     def forward(
         self,
@@ -309,6 +310,7 @@ class NystromformerAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Nystromformer
 class NystromformerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -324,6 +326,7 @@ class NystromformerIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Nystromformer
 class NystromformerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -449,6 +452,7 @@ class NystromformerEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransfrom with Bert->Nystromformer
 class NystromformerPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -466,6 +470,7 @@ class NystromformerPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Nystromformer
 class NystromformerLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -486,6 +491,7 @@ class NystromformerLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Nystromformer
 class NystromformerOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -544,7 +550,7 @@ NYSTROMFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`NystromformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
