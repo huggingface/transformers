@@ -34,6 +34,7 @@ from .file_utils import (
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
+    is_ftfy_available,
     is_keras2onnx_available,
     is_librosa_available,
     is_onnx_available,
@@ -408,6 +409,16 @@ def require_vision(test_case):
     """
     if not is_vision_available():
         return unittest.skip("test requires vision")(test_case)
+    else:
+        return test_case
+
+
+def require_ftfy(test_case):
+    """
+    Decorator marking a test that requires ftfy. These tests are skipped when ftfy isn't installed.
+    """
+    if not is_ftfy_available():
+        return unittest.skip("test requires ftfy")(test_case)
     else:
         return test_case
 

@@ -20,7 +20,7 @@ import unittest
 
 from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_ftfy, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -165,6 +165,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # so skip this check
                 # self.assertEqual(tokens[-2], tokenizer.pad_token_id)
 
+    @require_ftfy
     def test_check_encoding_slow_fast(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -221,6 +222,10 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     text_tokenized_r = tokenizer_r.tokenize(unicode_seq)
 
                     self.assertListEqual(text_tokenized_s, text_tokenized_r)
+
+    @require_ftfy
+    def test_tokenization_python_rust_equals(self):
+        super().test_tokenization_python_rust_equals()
 
     # overwrite common test
     def test_added_tokens_do_lower_case(self):
