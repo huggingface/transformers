@@ -150,8 +150,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
     r"""
     [`TFEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one
     of the base model classes of the library as encoder and another one as decoder when created with the
-   [`~TFAutoModel.from_pretrained`] class method for the encoder and
-   [`~TFAutoModelForCausalLM.from_pretrained`] class method for the decoder.
+    [`~TFAutoModel.from_pretrained`] class method for the encoder and [`~TFAutoModelForCausalLM.from_pretrained`] class
+    method for the decoder.
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
