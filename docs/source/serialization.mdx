@@ -150,7 +150,7 @@ print(list(onnx_config.outputs.keys()))
 which outputs:
 
 ```python
-['last_hidden_state']
+["last_hidden_state"]
 ```
 
 ### Selecting features for different model topologies
@@ -182,7 +182,7 @@ print(distilbert_features)
 which outputs:
 
 ```python
-['default', 'masked-lm', 'causal-lm', 'sequence-classification', 'token-classification', 'question-answering']
+["default", "masked-lm", "causal-lm", "sequence-classification", "token-classification", "question-answering"]
 ```
 
 You can then pass one of these features to the `--feature` argument in the
@@ -255,6 +255,7 @@ Since DistilBERT is an encoder-based model, its configuration inherits from
 from typing import Mapping, OrderedDict
 from transformers.onnx import OnnxConfig
 
+
 class DistilBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -303,7 +304,7 @@ print(onnx_config.outputs)
 which gives:
 
 ```python
-OrderedDict([('last_hidden_state', {0: 'batch', 1: 'sequence'})])
+OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"})])
 ```
 
 Notice that the outputs property follows the same structure as the inputs; it
@@ -350,9 +351,7 @@ model_ckpt = "distilbert-base-uncased"
 base_model = AutoModel.from_pretrained(model_ckpt)
 tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 
-onnx_inputs, onnx_outputs = export(
-    tokenizer, base_model, onnx_config, onnx_config.default_onnx_opset, onnx_path
-)
+onnx_inputs, onnx_outputs = export(tokenizer, base_model, onnx_config, onnx_config.default_onnx_opset, onnx_path)
 ```
 
 The `onnx_inputs` and `onnx_outputs` returned by the `export()` function are
