@@ -194,7 +194,9 @@ we've written ["Fine-tuning XLS-R for Multi-Lingual ASR with 🤗 Transformers"]
 The blog can also be opened and directly fine-tuned in a google colab notebook.
 In this section, we will explain how to fine-tune the model on a local machine.
 
-1. To begin with you should check that you are correctly logged in and that you have `git-lfs` installed so that your fine-tuned model can automatically be uploaded.
+1. **Log in**
+
+To begin with you should check that you are correctly logged in and that you have `git-lfs` installed so that your fine-tuned model can automatically be uploaded.
 
 Run:
 
@@ -206,7 +208,7 @@ to login. It is recommend to login with your personal access token that can be f
 
 You can then copy-paste this token to log in locally.
 
-2. Create your model repository
+2. **Create your model repository**
 
 First, let's make sure that `git-lfs` is correctly installed. To so, simply run:
 
@@ -241,7 +243,7 @@ git lfs install
 git clone https://huggingface.co/hf-test/xls-r-ab-test
 ```
 
-3. Add your training script and `run`-command to the repository
+3. **Add your training script and `run`-command to the repository**
 
 We encourage participants to add all relevant files for training directly to the 
 directory so that everything is fully reproducible.
@@ -298,7 +300,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--do_train --do_eval''' > run.sh
 ```
 
-4. Start training
+4. **Start training**
 
 Now all that is left to do is to start training the model by executing the 
 run file.
@@ -314,7 +316,7 @@ your model repository as can be seen [on this commit](https://huggingface.co/hf-
 At the end of the training, the [Trainer](https://huggingface.co/docs/transformers/master/en/main_classes/trainer) automatically creates a nice model card and all 
 relevant files are uploaded.
 
-5. Tips for real model training
+5. **Tips for real model training**
 
 The above steps illustrate how a model can technically be fine-tuned.
 However as you can see on the model card [hf-test/xls-r-ab-test](https://huggingface.co/hf-test/xls-r-ab-test), our demonstration has a very poor performance which is
