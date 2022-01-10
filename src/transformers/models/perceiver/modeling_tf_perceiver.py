@@ -51,11 +51,11 @@ class TFPerceiverMaskedLMOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    loss: Optional[tf.tensor] = None
-    logits: tf.tensor = None
-    hidden_states: Optional[Tuple[tf.tensor]] = None
-    attentions: Optional[Tuple[tf.tensor]] = None
-    cross_attentions: Optional[Tuple[tf.tensor]] = None
+    loss: Optional[tf.Tensor] = None
+    logits: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
+    cross_attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 class TFPerceiverSelfAttention(tf.keras.layers.Layer):
