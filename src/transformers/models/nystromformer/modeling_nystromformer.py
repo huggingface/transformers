@@ -35,7 +35,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -357,13 +356,11 @@ class NystromformerLayer(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -420,13 +417,11 @@ class NystromformerEncoder(nn.Module):
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
-                    layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
-                    layer_head_mask,
                     output_attentions,
                 )
 
@@ -976,9 +971,9 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
+        sequence_output = outputs[0]
+        
+        pooled_output = self.dropout(sequence_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
@@ -988,7 +983,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
+            output = (reshaped_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
