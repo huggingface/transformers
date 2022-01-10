@@ -602,6 +602,11 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+            # Finally, should be able to resume with the same trainer/same deepspeed engine instance
+            # XXX: but currently this not possible due DS bug: https://github.com/microsoft/DeepSpeed/issues/1612
+            # trainer.train(resume_from_checkpoint=checkpoint)
+            # a workaround needs to be used that re-creates the deepspeed engine
+
     @parameterized.expand(stages)
     def test_load_state_dict_from_zero_checkpoint(self, stage):
         # test that we can load fp32 weights directly from the zero checkpoint into the current model
@@ -697,11 +702,10 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_basic_distributed(self, stage):
         self.run_and_check(stage=stage, distributed=True)
 
-    @parameterized.expand(stages)
-    def test_do_eval_no_train(self, stage):
-        # we should not fail if train is skipped
+    def test_do_eval_no_train(self):
+        # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
-            stage=stage,
+            stage=ZERO3,
             eval_steps=1,
             distributed=False,
             do_train=False,
@@ -754,6 +758,22 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         output_dir = self.run_trainer(**kwargs, model_name=output_dir)
 
         self.do_checks(output_dir, do_train=do_train, do_eval=do_eval)
+
+    @require_torch_multi_gpu
+    @parameterized.expand(["fp16", "fp32"])
+    def test_inference(self, dtype):
+        # this is just inference, so no optimizer should be loaded
+        # it only works for z3 (makes no sense with z1-z2)
+        fp16 = True if dtype == "fp16" else False
+        self.run_and_check(
+            stage=ZERO3,
+            model_name=T5_TINY,
+            distributed=True,
+            do_train=False,
+            do_eval=True,
+            quality_checks=False,
+            fp16=fp16,
+        )
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
 
@@ -952,4 +972,50 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         with CaptureStderr() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
+        assert "Detected DeepSpeed ZeRO-3" in cs.err
+
+    @parameterized.expand(stages)
+    def test_load_best_model(self, stage):
+        # this test exercises --load_best_model_at_end - the key is being able to resume after some training
+
+        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_name_or_path {T5_TINY}
+            --tokenizer_name {T5_TINY}
+            --train_file {data_dir}/train.json
+            --validation_file {data_dir}/val.json
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --source_lang en
+            --target_lang ro
+            --do_train
+            --max_train_samples 3
+            --do_eval
+            --max_eval_samples 1
+            --logging_strategy steps
+            --logging_steps 1
+            --evaluation_strategy steps
+            --eval_steps 1
+            --save_strategy steps
+            --save_steps 1
+            --load_best_model_at_end
+            --per_device_train_batch_size 1
+            --per_device_eval_batch_size 1
+            --num_train_epochs 1
+            --fp16
+            --report_to none
+            """.split()
+        args.extend(["--source_prefix", "translate English to Romanian: "])
+
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero3.json".split()
+        script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
+        launcher = get_launcher(distributed=False)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        with CaptureStderr() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+        # enough to test it didn't fail
         assert "Detected DeepSpeed ZeRO-3" in cs.err

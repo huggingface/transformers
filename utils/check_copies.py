@@ -275,54 +275,6 @@ def get_model_list(filename, start_prompt, end_prompt):
     return "".join(result)
 
 
-def split_long_line_with_indent(line, max_per_line, indent):
-    """Split the `line` so that it doesn't go over `max_per_line` and adds `indent` to new lines."""
-    words = line.split(" ")
-    lines = []
-    current_line = words[0]
-    for word in words[1:]:
-        if len(f"{current_line} {word}") > max_per_line:
-            lines.append(current_line)
-            current_line = " " * indent + word
-        else:
-            current_line = f"{current_line} {word}"
-    lines.append(current_line)
-    return "\n".join(lines)
-
-
-def convert_to_rst(model_list, max_per_line=None):
-    """Convert `model_list` to rst format."""
-    # Convert **[description](link)** to `description <link>`__
-    def _rep_link(match):
-        title, link = match.groups()
-        # Keep hard links for the models not released yet
-        if "master" in link or not link.startswith("https://huggingface.co/transformers"):
-            return f"`{title} <{link}>`__"
-        # Convert links to relative links otherwise
-        else:
-            link = link[len("https://huggingface.co/transformers/") : -len(".html")]
-            return f":doc:`{title} <{link}>`"
-
-    model_list = re.sub(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*", _rep_link, model_list)
-
-    # Convert [description](link) to `description <link>`__
-    model_list = re.sub(r"\[([^\]]*)\]\(([^\)]*)\)", r"`\1 <\2>`__", model_list)
-
-    # Enumerate the lines properly
-    lines = model_list.split("\n")
-    result = []
-    for i, line in enumerate(lines):
-        line = re.sub(r"^\s*(\d+)\.", f"{i+1}.", line)
-        # Split the lines that are too long
-        if max_per_line is not None and len(line) > max_per_line:
-            prompt = re.search(r"^(\s*\d+\.\s+)\S", line)
-            indent = len(prompt.groups()[0]) if prompt is not None else 0
-            line = split_long_line_with_indent(line, max_per_line, indent)
-
-        result.append(line)
-    return "\n".join(result)
-
-
 def convert_to_localized_md(model_list, localized_model_list, format_str):
     """Convert `model_list` to each localized README."""
 
@@ -376,6 +328,11 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     return num_models_equal, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
 
 
+def convert_readme_to_index(model_list):
+    model_list = model_list.replace("https://huggingface.co/docs/transformers/master/", "")
+    return model_list.replace("https://huggingface.co/docs/transformers/", "")
+
+
 def _find_text_in_file(filename, start_prompt, end_prompt):
     """
     Find the text in `filename` between a line beginning with `start_prompt` and before `end_prompt`, removing empty
@@ -406,18 +363,16 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
 
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    rst_list, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.rst"),
-        start_prompt="    This list is updated automatically from the README",
-        end_prompt="Supported frameworks",
+    index_list, start_index, end_index, lines = _find_text_in_file(
+        filename=os.path.join(PATH_TO_DOCS, "index.mdx"),
+        start_prompt="<!--This list is updated automatically from the README",
+        end_prompt="### Supported frameworks",
     )
     md_list = get_model_list(
         filename="README.md",
         start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
         end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
     )
-
-    converted_rst_list = convert_to_rst(md_list, max_per_line=max_per_line)
 
     converted_md_lists = []
     for filename, value in LOCALIZED_READMES.items():
@@ -430,13 +385,14 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
 
         converted_md_lists.append((filename, num_models_equal, converted_md_list, _start_prompt, _end_prompt))
 
-    if converted_rst_list != rst_list:
+    converted_md_list = convert_readme_to_index(md_list)
+    if converted_md_list != index_list:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.rst"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [converted_rst_list] + lines[end_index:])
+            with open(os.path.join(PATH_TO_DOCS, "index.mdx"), "w", encoding="utf-8", newline="\n") as f:
+                f.writelines(lines[:start_index] + [converted_md_list] + lines[end_index:])
         else:
             raise ValueError(
-                "The model list in the README changed and the list in `index.rst` has not been updated. Run "
+                "The model list in the README changed and the list in `index.mdx` has not been updated. Run "
                 "`make fix-copies` to fix this."
             )
 

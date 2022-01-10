@@ -18,6 +18,7 @@ import inspect
 import os
 import re
 import warnings
+from difflib import get_close_matches
 from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
@@ -94,12 +95,16 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_tf_xlm_roberta.py",
     "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
+    "test_modeling_vision_text_dual_encoder.py",
+    "test_modeling_flax_vision_text_dual_encoder.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "PerceiverForMultimodalAutoencoding",
+    "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
     "SegformerForSemanticSegmentation",
     "BeitForSemanticSegmentation",
@@ -107,6 +112,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
+    "TFCLIPTextModel",
+    "TFCLIPVisionModel",
     "FlaxCLIPTextModel",
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
@@ -114,6 +121,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DPRReader",
     "FlaubertForQuestionAnswering",
     "GPT2DoubleHeadsModel",
+    "LukeForMaskedLM",
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",
@@ -195,6 +203,7 @@ def get_model_modules():
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
         "modeling_tf_transfo_xl_utilities",
+        "modeling_tf_vision_encoder_decoder",
         "modeling_vision_encoder_decoder",
     ]
     modules = []
@@ -458,6 +467,11 @@ def find_all_documented_objects():
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
+            content = f.read()
+        raw_doc_objs = re.findall("\[\[autodoc\]\]\s+(\S+)\s+", content)
+        documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
     return documented_obj
 
 
@@ -497,6 +511,8 @@ DEPRECATED_OBJECTS = [
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
+    "TFTrainer",
+    "TFTrainingArguments",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -580,6 +596,78 @@ def check_all_objects_are_documented():
         raise Exception(
             "The following objects are in the public init so should be documented:\n - "
             + "\n - ".join(undocumented_objs)
+        )
+    check_docstrings_are_in_md()
+    check_model_type_doc_match()
+
+
+def check_model_type_doc_match():
+    """Check all doc pages have a corresponding model type."""
+    model_doc_folder = Path(PATH_TO_DOC) / "model_doc"
+    model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
+
+    model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
+
+    errors = []
+    for m in model_docs:
+        if m not in model_types and m != "auto":
+            close_matches = get_close_matches(m, model_types)
+            error_message = f"{m} is not a proper model identifier."
+            if len(close_matches) > 0:
+                close_matches = "/".join(close_matches)
+                error_message += f" Did you mean {close_matches}?"
+            errors.append(error_message)
+
+    if len(errors) > 0:
+        raise ValueError(
+            "Some model doc pages do not match any existing model type:\n"
+            + "\n".join(errors)
+            + "\nYou can add any missing model type to the `MODEL_NAMES_MAPPING` constant in "
+            "models/auto/configuration_auto.py."
+        )
+
+
+# Re pattern to catch :obj:`xx`, :class:`xx`, :func:`xx` or :meth:`xx`.
+_re_rst_special_words = re.compile(r":(?:obj|func|class|meth):`([^`]+)`")
+# Re pattern to catch things between double backquotes.
+_re_double_backquotes = re.compile(r"(^|[^`])``([^`]+)``([^`]|$)")
+# Re pattern to catch example introduction.
+_re_rst_example = re.compile(r"^\s*Example.*::\s*$", flags=re.MULTILINE)
+
+
+def is_rst_docstring(docstring):
+    """
+    Returns `True` if `docstring` is written in rst.
+    """
+    if _re_rst_special_words.search(docstring) is not None:
+        return True
+    if _re_double_backquotes.search(docstring) is not None:
+        return True
+    if _re_rst_example.search(docstring) is not None:
+        return True
+    return False
+
+
+def check_docstrings_are_in_md():
+    """Check all docstrings are in md"""
+    files_with_rst = []
+    for file in Path(PATH_TO_TRANSFORMERS).glob("**/*.py"):
+        with open(file, "r") as f:
+            code = f.read()
+        docstrings = code.split('"""')
+
+        for idx, docstring in enumerate(docstrings):
+            if idx % 2 == 0 or not is_rst_docstring(docstring):
+                continue
+            files_with_rst.append(file)
+            break
+
+    if len(files_with_rst) > 0:
+        raise ValueError(
+            "The following files have docstrings written in rst:\n"
+            + "\n".join([f"- {f}" for f in files_with_rst])
+            + "\nTo fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
+            "(`pip install git+https://github.com/huggingface/doc-builder`)"
         )
 
 

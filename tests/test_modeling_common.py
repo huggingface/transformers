@@ -61,6 +61,7 @@ if is_torch_available():
 
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
@@ -150,6 +151,7 @@ class ModelTesterMixin:
             elif model_class in [
                 *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING),
+                *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
             ]:
@@ -212,6 +214,17 @@ class ModelTesterMixin:
                     or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
                 )
                 self.assertTrue(len(load_result.unexpected_keys) == 0)
+
+    def test_gradient_checkpointing_backward_compatibility(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            config.gradient_checkpointing = True
+            model = model_class(config)
+            self.assertTrue(model.is_gradient_checkpointing)
 
     def test_gradient_checkpointing_enable_disable(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -418,6 +431,7 @@ class ModelTesterMixin:
                 continue
             model = model_class(config)
             model.to(torch_device)
+            model.gradient_checkpointing_enable()
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
@@ -1300,6 +1314,13 @@ class ModelTesterMixin:
             model.set_input_embeddings(nn.Embedding(10, 10))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_model_main_input_name(self):
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "forward"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name = list(model_signature.parameters.keys())[1]
+            self.assertEqual(model_class.main_input_name, observed_main_input_name)
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:

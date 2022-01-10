@@ -19,12 +19,16 @@ Pretraining the library models for T5-like span-masked language modeling on a te
 Here is the full list of checkpoints on the hub that can be pretrained by this script:
 https://huggingface.co/models?filter=t5
 """
-# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
+import json
 import logging
 import os
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+
+# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
+from enum import Enum
+from itertools import chain
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -49,7 +53,6 @@ from transformers import (
     HfArgumentParser,
     PreTrainedTokenizerBase,
     T5Config,
-    TrainingArguments,
     is_tensorboard_available,
     set_seed,
 )
@@ -59,6 +62,68 @@ from transformers.models.t5.modeling_flax_t5 import shift_tokens_right
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
+
+@dataclass
+class TrainingArguments:
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
+    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
+    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
+    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    push_to_hub: bool = field(
+        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+    )
+    hub_model_id: str = field(
+        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+    )
+    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+
+    def __post_init__(self):
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+
+    def to_dict(self):
+        """
+        Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
+        the token values by removing their value.
+        """
+        d = asdict(self)
+        for k, v in d.items():
+            if isinstance(v, Enum):
+                d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
+            if k.endswith("_token"):
+                d[k] = f"<{k.upper()}>"
+        return d
 
 
 @dataclass
@@ -290,7 +355,7 @@ class FlaxDataCollatorForT5MLM:
         start_indices[:, 0] = mask_indices[:, 0]
 
         sentinel_ids = np.where(start_indices != 0, np.cumsum(start_indices, axis=-1), start_indices)
-        sentinel_ids = np.where(sentinel_ids != 0, (sentinel_ids + self.tokenizer.vocab_size - 1), 0)
+        sentinel_ids = np.where(sentinel_ids != 0, (len(self.tokenizer) - sentinel_ids), 0)
         sentinel_ids -= mask_indices - start_indices
 
         return sentinel_ids
@@ -400,7 +465,7 @@ def write_eval_metric(summary_writer, eval_metrics, step):
         summary_writer.scalar(f"eval_{metric_name}", value, step)
 
 
-if __name__ == "__main__":
+def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -521,9 +586,7 @@ if __name__ == "__main__":
             model_args.config_name, cache_dir=model_args.cache_dir, vocab_size=len(tokenizer)
         )
     elif model_args.model_name_or_path:
-        config = T5Config.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, vocab_size=len(tokenizer)
-        )
+        config = T5Config.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
@@ -563,7 +626,7 @@ if __name__ == "__main__":
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of expanded_inputs_length.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
@@ -616,6 +679,7 @@ if __name__ == "__main__":
             model_args.model_name_or_path, config=config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype)
         )
     else:
+        config.vocab_size = len(tokenizer)
         model = FlaxT5ForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype))
 
     # Data collator
@@ -807,3 +871,33 @@ if __name__ == "__main__":
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
                         repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+
+    # Eval after training
+    if training_args.do_eval:
+        num_eval_samples = len(tokenized_datasets["validation"])
+        eval_samples_idx = jnp.arange(num_eval_samples)
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+
+        eval_metrics = []
+        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+            samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples)
+
+            # Model forward
+            model_inputs = shard(model_inputs.data)
+            metrics = p_eval_step(state.params, model_inputs)
+            eval_metrics.append(metrics)
+
+        # get eval metrics
+        eval_metrics = get_metrics(eval_metrics)
+        eval_metrics = jax.tree_map(lambda metric: jnp.mean(metric).item(), eval_metrics)
+
+        if jax.process_index() == 0:
+            eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}
+            path = os.path.join(training_args.output_dir, "eval_results.json")
+            with open(path, "w") as f:
+                json.dump(eval_metrics, f, indent=4, sort_keys=True)
+
+
+if __name__ == "__main__":
+    main()
