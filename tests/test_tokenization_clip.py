@@ -77,36 +77,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [10, 2, 16, 9, 3, 2, 16, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            return
-
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-
-        sequence = "lower newer"
-
-        # Testing tokenization
-        tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        # Testing conversion to ids without special tokens
-        ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        # Testing conversion to ids with special tokens
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-        ids = tokenizer.encode(sequence, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
-        # Testing the unknown token
-        input_tokens = tokens + [rust_tokenizer.unk_token]
-        input_bpe_tokens = [10, 2, 16, 9, 3, 2, 16, 20]
-        self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
         # And get both CLIP and Roberta to work at the same time (mostly an issue of adding a space before the string)

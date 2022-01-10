@@ -101,19 +101,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
     """
     Construct a CLIP tokenizer. Based on byte-level Byte-Pair-Encoding.
 
-    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
-    be encoded differently whether it is at the beginning of the sentence (without space) or not:
-
-
-    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
-    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
-
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
-
-    </Tip>
-
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
 
@@ -132,9 +119,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (CLIP tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -151,7 +135,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        add_prefix_space=False,
         do_lower_case=True,
         **kwargs
     ):
@@ -165,7 +148,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
             do_lower_case=do_lower_case,
             **kwargs,
         )
@@ -190,7 +172,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {"<|startoftext|>": "<|startoftext|>", "<|endoftext|>": "<|endoftext|>"}
-        self.add_prefix_space = add_prefix_space
 
         self.pat = re.compile(
             r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
@@ -386,9 +367,3 @@ class CLIPTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
-
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_split_into_words or add_prefix_space:
-            text = " " + text
-        return (text, kwargs)
