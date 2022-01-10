@@ -65,15 +65,22 @@ class ViTMAEConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-
+        decoder_num_attention_heads (`int`, *optional*, defaults to `12`):
+            Number of attention heads for each attention layer in the decoder.
+        decoder_hidden_size (`int`, *optional*, defaults to `512`):
+            Dimensionality of the decoder.
+        decoder_num_hidden_layers (`int`, *optional*, defaults to `8`):
+            Number of hidden layers in the decoder.
+        decoder_intermediate_size (`int`, *optional*, defaults to `2048`):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
 
     Example:
 
     ```python
-    >>> from transformers import ViTModel, ViTConfig
+    >>> from transformers import ViTMAEModel, ViTMAEConfig
 
     >>> # Initializing a ViT MAE vit-mae-base style configuration
-    >>> configuration = ViTConfig()
+    >>> configuration = ViTMAEConfig()
 
     >>> # Initializing a model from the vit-mae-base style configuration
     >>> model = ViTMAEModel(configuration)
@@ -99,6 +106,10 @@ class ViTMAEConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
+        decoder_num_attention_heads=16,
+        decoder_hidden_size=512,
+        decoder_num_hidden_layers=8,
+        decoder_intermediate_size=2048,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -112,8 +123,11 @@ class ViTMAEConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+        self.decoder_num_attention_heads = decoder_num_attention_heads
+        self.decoder_hidden_size = decoder_hidden_size
+        self.decoder_num_hidden_layers = decoder_num_hidden_layers
+        self.decoder_intermediate_size = decoder_intermediate_size
