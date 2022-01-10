@@ -17,21 +17,21 @@ Processor class for TrOCR.
 """
 from contextlib import contextmanager
 
+from transformers import AutoFeatureExtractor, AutoTokenizer
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.models.roberta.tokenization_roberta import RobertaTokenizer
 from transformers.models.roberta.tokenization_roberta_fast import RobertaTokenizerFast
 from transformers.models.xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
 from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
-from transformers import AutoTokenizer, AutoFeatureExtractor
-
 
 class TrOCRProcessor:
     r"""
     Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
 
-    [`TrOCRProcessor`] offers all the functionalities of [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] and [`RobertaTokenizer`/`XLMRobertaTokenizer`]. See the
-    [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for more information.
+    [`TrOCRProcessor`] offers all the functionalities of [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] and
+    [`RobertaTokenizer`/`XLMRobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for
+    more information.
 
     Args:
         feature_extractor ([`ViTFeatureExtractor`/`DeiTFeatureExtractor`]):
@@ -45,7 +45,9 @@ class TrOCRProcessor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {FeatureExtractionMixin.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, (RobertaTokenizer, RobertaTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast)):
+        if not isinstance(
+            tokenizer, (RobertaTokenizer, RobertaTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast)
+        ):
             raise ValueError(
                 f"`tokenizer` has to be of type {RobertaTokenizer.__class__} or {RobertaTokenizerFast.__class__} or {XLMRobertaTokenizer.__class__} or {XLMRobertaTokenizerFast.__class__}, but is {type(tokenizer)}"
             )
