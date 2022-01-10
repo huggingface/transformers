@@ -2281,7 +2281,7 @@ class Trainer:
             self.deepspeed = deepspeed_engine
 
         if self.args.deepspeed_inference:
-            deepspeed_inference_engine = deepspeed_inference_init(self, self.args.deepspeed_inference)
+            deepspeed_inference_engine = deepspeed_inference_init(self)
             self.model = deepspeed_inference_engine.module
             self.model_wrapped = deepspeed_inference_engine
             self.deepspeed = deepspeed_inference_engine

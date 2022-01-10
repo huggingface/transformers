@@ -44,10 +44,10 @@ inference_custom_map = dict(
     wav2vec2=dict(Wav2Vec2EncoderLayer=("attention.out_proj", "feed_forward.output_dense")),
 )
 
-inference_auto = ["gpt_neo", "gptj", "gpt2", "bert"]
+inference_auto_map = ["gpt_neo", "gptj", "gpt2", "bert"]
 
 
-def deepspeed_inference_init(trainer, model_arch):
+def deepspeed_inference_init(trainer):
     """
     XXX:
     """
@@ -57,7 +57,9 @@ def deepspeed_inference_init(trainer, model_arch):
 
     args = trainer.args
 
-    if model_arch in inference_auto:
+    model_arch = trainer.model.config.model_type
+
+    if model_arch in inference_auto_map:
         kwargs = dict(
             replace_method="auto",
             replace_with_kernel_inject=True,
